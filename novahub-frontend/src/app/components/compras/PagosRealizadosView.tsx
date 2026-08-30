@@ -29,6 +29,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface Props {
   data: PaymentMade[];
@@ -109,7 +110,7 @@ function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate
 
 export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-payments-layout', 'table', 24 * 365);
   const [highlightedTargetId, setHighlightedTargetId] = useState<string | null>(null);
@@ -292,6 +293,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         title: 'Pagos realizados',
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.payment-made',
         columns: [
@@ -330,7 +332,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
       render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
     { key: 'expectedPayment', header: 'Importe comprometido', width: '155px',
-      render: (val, row) => (
+      render: (_val, row) => (
         <CurrencyValuationAmount amount={expectedPaymentAmount(row)} sourceCurrency={paymentExpectedCurrency(row)} sourceExchangeRate={paymentExpectedRate(row)} className="font-black text-amber-600 dark:text-amber-400" />
       ) },
     { key: 'paidAmount', header: 'Pagado', width: '130px',
@@ -482,6 +484,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       const paymentRows = payment.payments?.length ? payment.payments : [payment];
       await generatePurchaseRecordPDF({
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.payment-made',
         document: {
@@ -740,22 +743,24 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     (acc, payment) => acc + toDisplayAmount(Number(payment.amount ?? payment.baseAmount ?? 0), payment.currency, payment.exchangeRate),
     0,
   );
+  const originalPaidAmounts = summarizeAmountsByCurrency(
+    data.filter((payment) => payment.isActive !== false),
+    (payment) => Number(payment.amount ?? payment.baseAmount ?? 0),
+    (payment) => payment.currency,
+    baseCurrency,
+  );
 
   const kpis = [
     { title: 'Transacciones',   value: groupedPayments.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    {
-      title: `Pagos Realizados (${displayCurrency}${valuationModeSuffix})`,
-      value: formatCurrentAmount(paidTotalInDisplayCurrency, displayCurrency),
-      icon: TrendingDown,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10',
-    },
     { title: 'Conciliados',     value: groupedPayments.length,                   icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+        {displayMode === 'ORIGINAL'
+          ? originalPaidAmounts.map((summary) => <PurchaseKpiCard key={`paid-${summary.currency}`} title={`Pagos Realizados (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />)
+          : <PurchaseKpiCard title={`Pagos Realizados (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(paidTotalInDisplayCurrency, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="indicator" />
         ))}
@@ -811,6 +816,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           hideCustomer: true,
           status: detailPayment.isActive === false ? 'VOIDED' : 'PAID',
           totalLabel: formatCurrentAmount(Number(detailPayment.amount || 0), detailPayment.currency || displayCurrency),
+          sourceCurrency: detailPayment.currency || displayCurrency,
+          sourceExchangeRate: detailPayment.exchangeRate,
           summaryDetails: [{ label: 'Tipo', value: detailPayment.paymentLabel || 'Pago único' }, { label: 'Método', value: getMethodLabel(detailPayment.method) }],
           metadata: [{ label: 'Fecha', value: detailPayment.date ? formatDateEs(detailPayment.date) : 'No disponible' }, { label: 'Factura', value: linkedInvoiceForPayment(detailPayment)?.number || 'Sin factura asociada' }, { label: 'Referencia', value: detailPayment.displayReference || paymentReferenceLabel(detailPayment) }],
           lines: (detailPayment.payments?.length ? detailPayment.payments : [detailPayment]).map((payment, index) => ({ id: String(payment.id || index), description: getMethodLabel(payment.method), quantity: 1, unitPriceLabel: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency), totalLabel: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency), secondaryLabel: `Referencia: ${paymentReferenceLabel(payment)}${payment.bankAccountId ? ` · Banco: ${payment.bankAccountId}` : ''}` })),

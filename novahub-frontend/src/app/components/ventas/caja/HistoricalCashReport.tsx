@@ -77,7 +77,7 @@ export function HistoricalCashReport({ initialRegisterId }: { initialRegisterId?
   const exportPdf = async () => {
     setExporting(true);
     try {
-      await generateHistoricalCashReportPDF({ report, tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa' });
+      await generateHistoricalCashReportPDF({ report, tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa', tenantLogo: user?.sessionBranding?.logo || null });
     } catch (err) {
       setError(getApiErrorMessage(err, 'No se pudo generar el PDF del reporte.'));
     } finally {
@@ -104,7 +104,7 @@ export function HistoricalCashReport({ initialRegisterId }: { initialRegisterId?
     setDetailExporting(true);
     try {
       const { generateCashClosureReportPDF } = await import('../../../utils/pdfGenerator');
-      await generateCashClosureReportPDF({ detail: sessionDetail, tenantName: user?.tenantName || 'Nuestra Empresa' });
+      await generateCashClosureReportPDF({ detail: sessionDetail, tenantName: user?.tenantName || 'Nuestra Empresa', tenantLogo: user?.sessionBranding?.logo || null });
     } catch (err) {
       setError(getApiErrorMessage(err, 'No se pudo generar el cierre gerencial en PDF.'));
     } finally {

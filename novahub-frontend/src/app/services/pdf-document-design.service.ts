@@ -5,6 +5,8 @@ export type PdfDocumentType = string;
 
 export interface PdfDocumentDesignRecord {
   id: string;
+  /** ClientTenant activo; en NovaHub representa la sucursal operativa. */
+  clientTenantId?: string;
   name: string;
   description?: string | null;
   templateKey?: string | null;

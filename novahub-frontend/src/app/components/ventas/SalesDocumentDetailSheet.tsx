@@ -8,6 +8,7 @@ import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getSalesStatusColor } from '../../utils/salesStatus';
+import { CurrencyRateDetails } from '../ui/CurrencyValuation';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -32,6 +33,8 @@ export interface SalesDocumentPanelData {
   status: string;
   sourceLabel?: string;
   totalLabel: string;
+  sourceCurrency?: string;
+  sourceExchangeRate?: number;
   summaryDetails?: SalesDocumentPanelMeta[];
   metadata?: SalesDocumentPanelMeta[];
   lines?: SalesDocumentPanelLine[];
@@ -148,6 +151,7 @@ export function SalesDocumentDetailSheet({
               <section className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total del documento</p>
                 <p className="mt-1 text-3xl font-black tabular-nums text-primary">{document.totalLabel}</p>
+                <CurrencyRateDetails sourceCurrency={document.sourceCurrency} sourceExchangeRate={document.sourceExchangeRate} className="mt-3 border-t border-primary/15 pt-2" />
                 {!!document.summaryDetails?.length && (
                   <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
                     {document.summaryDetails.map((detail) => (

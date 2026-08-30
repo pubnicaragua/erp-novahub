@@ -5,6 +5,7 @@ export type PdfTemplateModule =
   | 'ventas'
   | 'compras'
   | 'finanzas'
+  | 'contabilidad'
   | 'inventario'
   | 'recursos-humanos'
   | 'reportes'
@@ -41,6 +42,7 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'ventas.cash-session', module: 'ventas', moduleLabel: 'Ventas', label: 'Resumen de sesión de caja', structure: 'receipt', source: 'generateSessionSummaryPDF' },
   { key: 'ventas.cash-ticket', module: 'ventas', moduleLabel: 'Ventas', label: 'Ticket de caja', structure: 'print', source: 'printPosTicket' },
   { key: 'ventas.cash-historical-report', module: 'ventas', moduleLabel: 'Ventas', label: 'Reporte histórico de caja', structure: 'report', family: 'cash', source: 'generateHistoricalCashReportPDF' },
+  { key: 'ventas.customer-history', module: 'ventas', moduleLabel: 'Ventas', label: 'Historial de cliente', structure: 'history', source: 'customerTransactionsExport' },
 
   { key: 'compras.list', module: 'compras', moduleLabel: 'Compras', label: 'Listado de compras', structure: 'report', source: 'generatePurchaseListPDF' },
   { key: 'compras.purchase-record', module: 'compras', moduleLabel: 'Compras', label: 'Registro de compra', structure: 'transaction', source: 'generatePurchaseRecordPDF' },
@@ -56,8 +58,11 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'compras.purchase-receipt', module: 'compras', moduleLabel: 'Compras', label: 'Recepción de compra', structure: 'receipt', source: 'generatePurchaseRecordPDF' },
   { key: 'compras.purchase-request', module: 'compras', moduleLabel: 'Compras', label: 'Solicitud de compra', structure: 'administrative', source: 'generatePurchaseRequestPDF' },
 
+  { key: 'inventario.product-labels', module: 'inventario', moduleLabel: 'Inventario', label: 'Etiquetas de productos', structure: 'print', family: 'label', source: 'LabelPrintModal.handlePrint' },
+
   { key: 'finanzas.balance', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Balance general', structure: 'report', source: 'FinanceBalanceView.exportPDF' },
   { key: 'finanzas.transactions', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Tabla financiera', structure: 'report', source: 'FinanceTableView.exportPDF' },
+  { key: 'contabilidad.trial-balance', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Balance de comprobación', structure: 'report', source: 'BalanceComprobacionView.handlePrint' },
   { key: 'recursos-humanos.payrolls', module: 'recursos-humanos', moduleLabel: 'Recursos Humanos', label: 'Reporte de nóminas', structure: 'report', source: 'NominasView.handleExportPDF' },
 
   { key: 'reportes.customers', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de clientes', structure: 'report', source: 'CustomersReportTab.exportPDF' },
@@ -70,6 +75,110 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'reportes.subscriptions', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de suscripciones', structure: 'report', source: 'SubscriptionsReportTab.exportPDF' },
   { key: 'dashboard.tenant-overview', module: 'dashboard', moduleLabel: 'Dashboard', label: 'Reporte del dashboard', structure: 'dashboard', source: 'TenantOverview.handleExport' },
 ];
+
+export type PdfTemplatePartyMode = 'customer' | 'supplier' | 'requester' | 'payee' | 'none';
+
+export interface PdfTemplatePartyConfig {
+  mode: PdfTemplatePartyMode;
+  sectionLabel: string;
+  nameLabel: string;
+  tokenPrefix: 'customer' | 'supplier' | 'party';
+  labels: {
+    taxId: string;
+    address: string;
+    phone: string;
+    email: string;
+    contact: string;
+  };
+}
+
+const partyConfig = (mode: PdfTemplatePartyMode): PdfTemplatePartyConfig => {
+  if (mode === 'customer') {
+    return {
+      mode,
+      sectionLabel: 'Datos del cliente',
+      nameLabel: 'Cliente',
+      tokenPrefix: 'customer',
+      labels: {
+        taxId: 'Identificación del cliente',
+        address: 'Dirección del cliente',
+        phone: 'Teléfono del cliente',
+        email: 'Correo del cliente',
+        contact: 'Contacto del cliente',
+      },
+    };
+  }
+  if (mode === 'supplier') {
+    return {
+      mode,
+      sectionLabel: 'Datos del proveedor',
+      nameLabel: 'Proveedor',
+      tokenPrefix: 'supplier',
+      labels: {
+        taxId: 'Identificación del proveedor',
+        address: 'Dirección del proveedor',
+        phone: 'Teléfono del proveedor',
+        email: 'Correo del proveedor',
+        contact: 'Contacto del proveedor',
+      },
+    };
+  }
+  if (mode === 'requester') {
+    return {
+      mode,
+      sectionLabel: 'Datos de la solicitud',
+      nameLabel: 'Solicitante',
+      tokenPrefix: 'party',
+      labels: {
+        taxId: 'Identificación del solicitante',
+        address: 'Área solicitante',
+        phone: 'Teléfono del solicitante',
+        email: 'Correo del solicitante',
+        contact: 'Responsable',
+      },
+    };
+  }
+  if (mode === 'payee') {
+    return {
+      mode,
+      sectionLabel: 'Datos del pago',
+      nameLabel: 'Beneficiario',
+      tokenPrefix: 'party',
+      labels: {
+        taxId: 'Identificación del beneficiario',
+        address: 'Dirección del beneficiario',
+        phone: 'Teléfono del beneficiario',
+        email: 'Correo del beneficiario',
+        contact: 'Contacto del beneficiario',
+      },
+    };
+  }
+  return {
+    mode,
+    sectionLabel: '',
+    nameLabel: '',
+    tokenPrefix: 'party',
+    labels: { taxId: '', address: '', phone: '', email: '', contact: '' },
+  };
+};
+
+/**
+ * Define la entidad que puede aparecer en la ficha superior de cada PDF.
+ * No se infiere desde los datos recibidos: se fija por destino para evitar
+ * que una cotización termine presentando campos de proveedor o viceversa.
+ */
+export function getPdfTemplatePartyConfig(key: string | null | undefined): PdfTemplatePartyConfig {
+  const target = getPdfTemplateTarget(key);
+  if (target.module === 'ventas' && !['ventas.cash-session', 'ventas.cash-ticket', 'ventas.cash-historical-report'].includes(target.key)) {
+    return partyConfig('customer');
+  }
+  if (target.module === 'compras') {
+    if (target.key === 'compras.purchase-request') return partyConfig('requester');
+    if (target.key === 'compras.expense' || target.key === 'compras.recurring-expense') return partyConfig('payee');
+    return partyConfig('supplier');
+  }
+  return partyConfig('none');
+}
 
 export const PDF_TEMPLATE_MODULES = Array.from(
   new Map(PDF_TEMPLATE_TARGETS.map(target => [target.module, { id: target.module, label: target.moduleLabel }])).values(),

@@ -285,9 +285,9 @@ export function EntregasView({ branchId }: EntregasViewProps) {
 
       {showPayment && holdToPay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-xl rounded-2xl border bg-background p-6 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between">
-              <div>
+          <div className="max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-xl overflow-y-auto rounded-2xl border bg-background p-4 shadow-2xl sm:p-6">
+            <div className="mb-5 flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
                 <h2 className="text-lg font-black">Cobrar venta suspendida</h2>
                 <p className="text-xs font-bold text-primary">{holdToPay.number} · {holdToPay.customer?.name || holdToPay.customCustomerName || 'Cliente General'}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">Entrega desde {holdToPay.deliveryBranch?.name || 'la sucursal de entrega'}</p>
@@ -317,7 +317,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
             <div className="space-y-3">
               {payments.map((payment, index) => (
                 <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
-                  <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                     <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' || value === 'CHECK' ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value) ? item.bankAccountId : undefined, cardCommissionPercent: value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: value === 'CARD' ? item.cardCommissionAmount : 0 } : item))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>

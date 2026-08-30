@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface FacturasLegalesViewProps {
   data: LegalInvoice[];
@@ -21,7 +22,7 @@ interface FacturasLegalesViewProps {
 }
 
 export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, loading, onRefresh }) => {
-  const { formatConvertedAmount, displayCurrency, baseCurrency, exchangeRate, valuationModeSuffix, valuationMode, convertAmount, convertCurrentAmount } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, exchangeRate, valuationModeSuffix, valuationMode, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const { canPerform } = useAuth();
 
@@ -59,8 +60,15 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
       : convertAmount(Number(invoice.amount || 0), invoice.currency || baseCurrency, invoice.exchangeRate)),
     0,
   );
+  const originalCurrencies = summarizeAmountsByCurrency(data, (invoice) => Number(invoice.amount || 0), (invoice) => invoice.currency || baseCurrency).map((item) => item.currency);
+  const originalTotal = (currency: SupportedCurrency) => data
+    .filter((invoice) => normalizeCurrency(invoice.currency || baseCurrency) === currency)
+    .reduce((sum, invoice) => sum + (Number(invoice.amount || 0) || 0), 0);
+  const amountKpis = displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => ({ title: `Total Emitido (${currency})`, value: formatExplicitAmount(originalTotal(currency), currency), icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-500/10' }))
+    : [{ title: `Total Emitido (${displayCurrency}${valuationModeSuffix})`, value: formatExplicitAmount(totalConverted, displayCurrency), icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-500/10' }];
   const kpis = [
-    { title: `Total Emitido (${displayCurrency}${valuationModeSuffix})`, value: formatConvertedAmount(totalConverted, displayCurrency), icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    ...amountKpis,
     { title: 'Facturas',        value: data.length,                                                                    icon: FileText,      color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Pagadas',         value: data.filter(f => (f.status||'').toUpperCase() === 'PAID').length,               icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Vencidas',        value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,            icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },

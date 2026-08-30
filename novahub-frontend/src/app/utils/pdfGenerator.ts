@@ -11,7 +11,7 @@ import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
-import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
+import { createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
 
 type PdfRgb = [number, number, number];
 
@@ -25,6 +25,8 @@ function basePdfPageSizeMm(paperSize: unknown): PdfPageSizeMm {
       return { width: 216, height: 356 };
     case 'OFICIO':
       return { width: 216, height: 330 };
+    case 'LABEL':
+      return { width: 70, height: 38 };
     case 'LETTER':
     default:
       return { width: 216, height: 279 };
@@ -48,9 +50,33 @@ function pdfHexToRgb(value: unknown, fallback: PdfRgb): PdfRgb {
 export async function getPdfDesign(targetKey: string) {
   try {
     const target = getPdfTemplateTarget(targetKey);
-    return await pdfDocumentDesignService.active(target.key);
+    const savedDesign = await pdfDocumentDesignService.active(target.key);
+    if (savedDesign) {
+      // Diseños SYSTEM de versiones anteriores solo guardaban settings. Los
+      // elevamos al contrato semántico para que también sean editables y no
+      // vuelvan a caer en un exportador nativo aislado.
+      if (!savedDesign.layoutZones?.definition && savedDesign.sourceType === 'SYSTEM') {
+        const settings = createSystemDefaultPdfSettings((savedDesign.settings || {}) as Record<string, unknown>);
+        return {
+          ...savedDesign,
+          settings,
+          layoutZones: {
+            ...(savedDesign.layoutZones || {}),
+            status: 'system-default-upgraded',
+            definition: createSystemDefaultPdfDesign(target.key, settings).layoutZones.definition,
+          },
+          engine: 'HTML_TEMPLATE',
+        };
+      }
+      return savedDesign;
+    }
+    // El default es por destino, no un registro compartido. La API seguirá
+    // resolviendo cualquier diseño guardado dentro del clientTenant activo.
+    return createSystemDefaultPdfDesign(target.key);
   } catch {
-    return null;
+    // El exportador conserva una salida editable aun cuando la consulta de
+    // diseños no esté disponible momentáneamente.
+    return createSystemDefaultPdfDesign(targetKey);
   }
 }
 
@@ -63,6 +89,16 @@ export function pdfDesignColor(value: unknown, fallback: PdfRgb): PdfRgb {
   return pdfHexToRgb(value, fallback);
 }
 
+function rememberedPdfSessionLogo(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const branding = JSON.parse(window.localStorage.getItem('nh-session-branding') || 'null');
+    return typeof branding?.logo === 'string' ? branding.logo : '';
+  } catch {
+    return '';
+  }
+}
+
 export function pdfDesignPaper(settings: Record<string, any>) {
   const paperSize = String(settings.paperSize || 'LETTER').toUpperCase();
   return {
@@ -72,6 +108,8 @@ export function pdfDesignPaper(settings: Record<string, any>) {
         ? 'legal'
         : paperSize === 'OFICIO'
           ? [216, 330]
+          : paperSize === 'LABEL'
+            ? [70, 38]
           : 'letter',
     orientation: String(settings.orientation || 'portrait').toLowerCase() === 'landscape' ? 'landscape' : 'portrait',
   } as any;
@@ -172,8 +210,9 @@ function escapeHtml(value: unknown) {
 
 function commercialItemDescription(item: any, fallback = 'Producto') {
   const description = String(item?.description || item?.name || fallback);
+  const code = String(item?.code || item?.sku || item?.product?.code || '').trim();
   const note = String(item?.commercialNoteSnapshot || item?.commercialNote || '').trim();
-  return note ? `${description}\nNota: ${note}` : description;
+  return [description, code ? `Código: ${code}` : '', note ? `Nota: ${note}` : ''].filter(Boolean).join('\n');
 }
 
 function htmlFieldStyle(field: any) {
@@ -185,6 +224,7 @@ function getSalesPdfAdditionalCharges(transaction: any): Array<{ label: string; 
 }
 
 async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo, documentType, format = 'configured', save }: { savedDesign: any; estimate: any; tenantName: string; formatAmount: (amount: number, currency: string, rate: number) => string; tenantLogo?: string; documentType: string; format?: PdfDownloadFormat; save: boolean }): Promise<{ doc: jsPDF; blob: Blob }> {
+  void format;
   const design = savedDesign.settings || {};
   const fields = Array.isArray(savedDesign.layoutZones?.fields) ? savedDesign.layoutZones.fields : [];
   const field = (id: string, fallback: any) => fields.find((item: any) => item.id === id) || { id, x: fallback.x, y: fallback.y, width: fallback.width, height: fallback.height, enabled: true };
@@ -301,16 +341,29 @@ interface PDFGeneratorParams {
 
 export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true, designOverride, format: downloadFormat = 'configured' }: PDFGeneratorParams): Promise<{ doc: jsPDF | null; blob: Blob }> => {
   const savedDesign = designOverride || await getPdfDesign(documentType);
-  const resolvedTenantLogo = tenantLogo || await getNovaHubLogoPng();
+  // Las vistas antiguas todavía pueden pasar el logo del tema global. Cuando
+  // no lo hacen, el branding de sesión representa la sucursal activa y debe
+  // ganar al fallback genérico de NovaHub.
+  const resolvedTenantLogo = tenantLogo || rememberedPdfSessionLogo() || await getNovaHubLogoPng();
   if (savedDesign?.layoutZones?.definition) {
     const design = savedDesign.settings || {};
     const targetKey = getPdfTemplateTarget(documentType).key;
+    const configuredItems = Array.isArray(estimate.items) ? estimate.items : Array.isArray(estimate.lines) ? estimate.lines : [];
+    const extraCharges = getSalesAdditionalCharges(estimate)
+      .filter((charge) => Number(charge.amount || 0) > 0)
+      .map((charge) => `${charge.description}: ${formatAmount(Number(charge.amount || 0), estimate.currency, estimate.exchangeRate)}`);
+    const configuredNotes = [
+      estimate.notes || design.defaultNotes || '',
+      estimate.expiryDate || estimate.validUntil ? `Validez: ${new Date(estimate.expiryDate || estimate.validUntil).toLocaleDateString('es-NI')}` : '',
+      estimate.currency ? `Moneda: ${String(estimate.currency).toUpperCase()}` : '',
+      extraCharges.length ? `Cargos adicionales: ${extraCharges.join(' · ')}` : '',
+    ].filter(Boolean).join(' · ');
     const data: PdfTemplateData = {
       logo: design.logoUrl || resolvedTenantLogo,
       company: { name: design.companyName || tenantName, fiscalInfo: design.fiscalInfo, address: design.address, phone: design.phone, email: design.email, logo: design.logoUrl || resolvedTenantLogo },
-      document: { title: ({ estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', 'credit-note': 'NOTA DE CRÉDITO' } as Record<string, string>)[documentType] || documentType.toUpperCase(), number: estimate.number || 'N/A', date: estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : 'N/A', status: estimate.status || '', notes: estimate.notes || design.defaultNotes || '', terms: design.terms || '', legal: design.legalText || '' },
-      customer: { name: estimate.customer?.name || estimate.client?.name || 'Cliente sin registrar', taxId: estimate.customer?.taxId || estimate.customer?.ruc || '', address: estimate.customer?.address || '', phone: estimate.customer?.phone || '', email: estimate.customer?.email || '' },
-      items: (Array.isArray(estimate.items) ? estimate.items : []).map((item: any) => ({ description: commercialItemDescription(item), quantity: item.quantity || 0, unitPrice: formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate), total: formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate) })),
+      document: { title: ({ estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', 'credit-note': 'NOTA DE CRÉDITO' } as Record<string, string>)[documentType] || documentType.toUpperCase(), number: estimate.number || 'N/A', date: estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : 'N/A', status: estimate.status || '', notes: configuredNotes, terms: design.terms || '', legal: design.legalText || '' },
+      customer: { name: estimate.customer?.name || estimate.client?.name || 'Cliente sin registrar', taxId: estimate.customer?.taxId || estimate.customer?.ruc || '', address: estimate.customer?.address || estimate.client?.address || '', phone: estimate.customer?.phone || estimate.customer?.telephone || estimate.client?.phone || '', email: estimate.customer?.email || estimate.client?.email || '', contact: estimate.customer?.contact || estimate.customer?.contactName || estimate.client?.contact || '' },
+      items: configuredItems.map((item: any) => ({ description: commercialItemDescription(item), quantity: item.quantity || 0, unitPrice: formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate), total: formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate) })),
       totals: { subtotal: formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate), tax: formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate), discount: formatAmount(Number(estimate.discount || 0), estimate.currency, estimate.exchangeRate), total: formatAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate) },
     };
     const settings = { ...design, paperSize: downloadFormat === 'configured' ? design.paperSize : paperSettingForDownload(downloadFormat as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>), orientation: design.orientation || 'portrait' };
@@ -699,7 +752,7 @@ function getPaymentVoucherContext(transaction: any) {
   const financialTotal = Number(financialDocument?.total || documentTotal || 0);
   const financialCurrency = String(financialDocument?.currency || linkedDocument?.currency || transaction?.currency || 'NIO').toUpperCase();
   const financialRate = Number(financialDocument?.exchangeRate || linkedDocument?.exchangeRate || transaction?.exchangeRate || 1) || 1;
-  const financialRows = [
+  const financialRows: Array<{ label: string; amount: number; negative?: boolean }> = [
     { label: 'Subtotal', amount: Math.max(0, Number(financialDocument?.subtotal || 0)) },
     { label: 'Descuento', amount: Math.max(0, Number(financialDocument?.discountAmount || 0)), negative: true },
     { label: 'IVA', amount: Math.max(0, Number(financialDocument?.taxAmount || 0)) },
@@ -1390,9 +1443,37 @@ export async function generateSalesTransactionPDF({
   designOverride?: any;
 }) {
   const target = getPdfTemplateTarget(documentType).key;
-  const design = designOverride || await pdfDocumentDesignService.active(target).catch(() => null);
+  const design = designOverride || await getPdfDesign(target);
   if (documentType === 'payment') {
     const paymentDesign = format === 'configured' ? design : withPdfDownloadFormat(design, format);
+    if (format !== 'roll-58' && format !== 'roll-80') {
+      const paymentContext = getPaymentVoucherContext(transaction);
+      const paymentRows = getPaymentVoucherRows(transaction).map((row: any) => ({
+        description: paymentMethodLabel(String(row.method || transaction?.method || '').toUpperCase()),
+        quantity: row.currency || transaction?.currency || 'NIO',
+        unitPrice: formatAmount(Number(row.amount || 0), row.currency || transaction?.currency || 'NIO', Number(row.exchangeRate || transaction?.exchangeRate || 1)),
+        total: formatAmount(Number(row.amount || 0), row.currency || transaction?.currency || 'NIO', Number(row.exchangeRate || transaction?.exchangeRate || 1)),
+      }));
+      const configured = await renderConfiguredDefinition({
+        targetKey: target,
+        tenantName,
+        tenantLogo,
+        format,
+        designOverride: paymentDesign,
+        fileName: buildSalesPdfFileName(documentType, transaction?.number, format),
+        data: {
+          company: { name: tenantName, logo: tenantLogo },
+          document: { title: SALES_TRANSACTION_TITLES[documentType], number: transaction?.number || transaction?.id || 'N/A', date: transaction?.date || new Date().toLocaleDateString('es-NI'), status: paymentContext.statusLabel, notes: transaction?.notes || paymentContext.settlementLabel },
+          party: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general' },
+          customer: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general', taxId: transaction?.customer?.taxId || transaction?.customer?.ruc || '', address: transaction?.customer?.address || '', phone: transaction?.customer?.phone || '' },
+          rows: paymentRows,
+          items: paymentRows,
+          totals: { subtotal: formatAmount(paymentContext.financialTotal, paymentContext.financialCurrency, paymentContext.financialRate), tax: formatAmount(paymentContext.effectiveBalance, paymentContext.financialCurrency, paymentContext.financialRate), total: formatAmount(Number(transaction?.total ?? transaction?.amount ?? 0), transaction?.currency || paymentContext.financialCurrency, Number(transaction?.exchangeRate || paymentContext.financialRate || 1)) },
+        },
+        save,
+      });
+      if (configured) return configured;
+    }
     return generateSalesPaymentVoucherPDF({
       document: transaction,
       tenantName,
@@ -1430,6 +1511,7 @@ export interface ConfiguredHistoryPdfOptions {
   subtitle?: string;
   subjectLabel: string;
   subjectName: string;
+  subjectData?: Record<string, unknown>;
   tenantName: string;
   rows: any[];
   columns: ConfiguredHistoryPdfColumn[];
@@ -1456,14 +1538,32 @@ const configuredHistoryPaper = (settings: Record<string, any>, format: PdfDownlo
   };
 };
 
-async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format = 'configured', fileName, designOverride }: { targetKey: string; data: PdfTemplateData; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; fileName: string; designOverride?: any }) {
+async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format = 'configured', fileName, designOverride, save = true }: { targetKey: string; data: PdfTemplateData; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; fileName: string; designOverride?: any; save?: boolean }) {
   if (format === 'roll-58' || format === 'roll-80') return null;
   const design = designOverride || await getPdfDesign(targetKey);
   if (!design?.layoutZones?.definition) return null;
   const baseSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
   const settings = configuredHistoryPaper(baseSettings, format);
-  const enrichedData: PdfTemplateData = { ...data, logo: tenantLogo || undefined, company: { ...(data.company || {}), name: data.company?.name || tenantName, logo: tenantLogo || data.company?.logo } };
-  return renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(design.layoutZones.definition, targetKey, settings), settings, targetKey, data: enrichedData, fileName, save: true });
+  const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...settings };
+  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : '';
+  const resolvedLogo = configuredLogo || tenantLogo || (typeof data.company?.logo === 'string' ? data.company.logo : undefined);
+  const sourceCompany = data.company || {};
+  const enrichedData: PdfTemplateData = {
+    ...data,
+    logo: resolvedLogo,
+    company: {
+      ...sourceCompany,
+      name: sourceCompany.name || settings.companyName || tenantName,
+      fiscalInfo: sourceCompany.fiscalInfo || settings.fiscalInfo,
+      address: sourceCompany.address || settings.address,
+      phone: sourceCompany.phone || settings.phone,
+      email: sourceCompany.email || settings.email,
+      slogan: sourceCompany.slogan || settings.slogan,
+      website: sourceCompany.website || settings.website,
+      logo: resolvedLogo,
+    },
+  };
+  return renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(design.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data: enrichedData, fileName, save });
 }
 
 export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; fileName: string; designOverride?: any }) {
@@ -1474,8 +1574,91 @@ export async function generateConfiguredReportTemplate({ targetKey, title, tenan
   });
   const rendered = await renderConfiguredDefinition({ targetKey, tenantName, tenantLogo, fileName, designOverride, data: {
     company: { name: tenantName }, document: { title, number: `${rows.length} registro(s)` }, rows: mappedRows, totals: totals || {}, items: mappedRows,
+    tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' })),
   } });
   return rendered?.doc || null;
+}
+
+/** Genera el balance de comprobación con el diseño específico de Contabilidad. */
+export async function generateTrialBalancePDF({
+  rows,
+  tenantName,
+  tenantLogo,
+  dateFrom,
+  dateTo,
+  totals,
+}: {
+  rows: Array<{ codigo: string; cuenta: string; tipo: string; debitos: number; creditos: number; saldo: number }>;
+  tenantName: string;
+  tenantLogo?: string | null;
+  dateFrom?: string;
+  dateTo?: string;
+  totals?: Record<string, unknown>;
+}) {
+  const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
+  const formatAmount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const accountTypeLabel = (value: unknown) => ({
+    ASSET: 'ACTIVOS',
+    LIABILITY: 'PASIVOS',
+    EQUITY: 'PATRIMONIO',
+    INCOME: 'INGRESOS',
+    EXPENSE: 'GASTOS',
+  } as Record<string, string>)[String(value || '')] || String(value || '');
+  const doc = await generateConfiguredReportTemplate({
+    targetKey: 'contabilidad.trial-balance',
+    title: period ? `Balance de comprobación · ${period}` : 'Balance de comprobación',
+    tenantName,
+    tenantLogo,
+    rows,
+    columns: [
+      { header: 'Código', value: row => row.codigo },
+      { header: 'Cuenta', value: row => row.cuenta },
+      { header: 'Tipo', value: row => accountTypeLabel(row.tipo) },
+      { header: 'Débitos', value: row => formatAmount(row.debitos), align: 'right' },
+      { header: 'Créditos', value: row => formatAmount(row.creditos), align: 'right' },
+      { header: 'Saldo', value: row => formatAmount(row.saldo), align: 'right' },
+    ],
+    totals,
+    fileName: buildDateFilteredPdfFileName(['balance_comprobacion'], 'pdf', dateFrom, dateTo),
+  });
+  return doc;
+}
+
+export async function generateProductLabelsPDF({ products, configs, tenantName, tenantLogo }: {
+  products: any[];
+  configs: Map<string, { productId: string; quantity: number; showName: boolean; showPrice: boolean; showCompany: boolean; showDate: boolean }>;
+  tenantName: string;
+  tenantLogo?: string | null;
+}) {
+  const targetKey = 'inventario.product-labels';
+  const design = await getPdfDesign(targetKey);
+  const settings = { paperSize: 'LABEL', orientation: 'portrait' as const, ...(design?.settings || {}) };
+  const rows = products.flatMap(product => {
+    const config = configs.get(product.id);
+    if (!config) return [];
+    const quantity = Math.max(0, Math.min(500, Math.floor(Number(config.quantity) || 0)));
+    const barcode = product.barcode || product.sku || product.code || String(product.id || '').slice(0, 12) || '000000000000';
+    return Array.from({ length: quantity }, () => ({
+      barcode,
+      name: config.showName ? product.name || 'Producto' : '',
+      price: config.showPrice && product.salePrice != null ? `C$ ${Number(product.salePrice).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '',
+      company: config.showCompany ? tenantName : '',
+      date: config.showDate ? new Date().toLocaleDateString('es-NI') : '',
+      code: product.code || product.sku || '',
+    }));
+  });
+  const definition = sanitizeTemplateDefinition(design?.layoutZones?.definition, targetKey, settings);
+  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : '';
+  const resolvedLogo = configuredLogo || tenantLogo || undefined;
+  const rendered = await renderPdfTemplateToPdf({
+    definition,
+    settings,
+    targetKey,
+    data: { logo: resolvedLogo, company: { name: tenantName, logo: resolvedLogo }, items: rows, rows },
+    fileName: buildPdfFileName(['etiquetas_productos'], 'configured'),
+    save: true,
+  });
+  return rendered.doc;
 }
 
 /** Genera historiales con el mismo motor visual que las plantillas configurables. */
@@ -1485,6 +1668,7 @@ export const generateConfiguredHistoryPDF = async ({
   subtitle,
   subjectLabel,
   subjectName,
+  subjectData,
   tenantName,
   rows,
   columns,
@@ -1497,13 +1681,36 @@ export const generateConfiguredHistoryPDF = async ({
   const configuredDesign = designOverride || await getPdfDesign(targetKey);
   if (configuredDesign?.layoutZones?.definition) {
     const fetchedDesignSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object' ? configuredDesign.settings : {};
-    const renderSettings = configuredHistoryPaper(fetchedDesignSettings as Record<string, any>, format);
+    const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...configuredHistoryPaper(fetchedDesignSettings as Record<string, any>, format) };
     const mappedRows = rows.map(row => {
       const mapped: Record<string, unknown> = { description: columns[0] ? columns[0].value(row) : '', quantity: columns[1] ? columns[1].value(row) : '', unitPrice: columns[2] ? columns[2].value(row) : '', total: columns[3] ? columns[3].value(row) : '' };
       columns.forEach((column, index) => { mapped[`column-${index}`] = column.value(row); mapped[column.header.toLowerCase().replace(/\s+/g, '_')] = column.value(row); });
       return mapped;
     });
-    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data: { logo: tenantLogo || undefined, company: { name: tenantName }, document: { title, notes: subtitle || '' }, party: { name: subjectName }, customer: { name: subjectName }, items: mappedRows, rows: mappedRows }, fileName, save });
+    const configuredLogo = typeof renderSettings.logoUrl === 'string' ? renderSettings.logoUrl : '';
+    const resolvedLogo = configuredLogo || tenantLogo || undefined;
+    const subject = { ...(subjectData || {}), name: subjectName };
+    const company = {
+      name: tenantName,
+      fiscalInfo: fetchedDesignSettings.fiscalInfo,
+      address: fetchedDesignSettings.address,
+      phone: fetchedDesignSettings.phone,
+      email: fetchedDesignSettings.email,
+      slogan: fetchedDesignSettings.slogan,
+      website: fetchedDesignSettings.website,
+      logo: resolvedLogo,
+    };
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data: {
+      logo: resolvedLogo,
+      company,
+      document: { title, notes: subtitle || '' },
+      party: subject,
+      customer: subject,
+      supplier: subject,
+      items: mappedRows,
+      rows: mappedRows,
+      tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' })),
+    }, fileName, save });
     return rendered;
   }
   const fetchedSettings = designOverride
@@ -1683,7 +1890,7 @@ export const generateConfiguredHistoryPDF = async ({
     alternateRowStyles: ['striped', 'ledger', 'accent', 'cards'].includes(tableLayout) ? { fillColor: [248, 250, 252] } : undefined,
   });
 
-  const pageCount = doc.internal.getNumberOfPages();
+  const pageCount = (doc.internal as any).getNumberOfPages();
   const footerText = String(settings.footerText || `Documento generado por ${tenantName || 'Nuestra Empresa'}`);
   for (let page = 1; page <= pageCount; page += 1) {
     doc.setPage(page);
@@ -1712,6 +1919,7 @@ export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, 
   subtitle: outputCurrency ? `Productos y servicios adquiridos · Moneda: ${String(outputCurrency).toUpperCase()}` : 'Productos y servicios adquiridos',
   subjectLabel: 'Proveedor',
   subjectName: supplier?.name || 'N/A',
+  subjectData: supplier || undefined,
   tenantName: tenantName || 'Nuestra Empresa',
   rows: items,
   tenantLogo,
@@ -1731,15 +1939,17 @@ export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, 
 export const generateExpensePDF = async ({
   expense,
   tenantName,
+  tenantLogo,
   formatAmount,
   targetKey = 'compras.expense',
 }: {
   expense: any;
   tenantName: string;
+  tenantLogo?: string | null;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
   targetKey?: string;
 }) => {
-  const configured = await renderConfiguredDefinition({ targetKey, tenantName, fileName: buildPdfFileName(['comprobante_gasto', expense.number || 'sin_numero']), data: { document: { title: 'COMPROBANTE DE GASTO', number: expense.number || expense.id || 'N/A', date: expense.date, status: expense.status, notes: expense.description || expense.notes || '' }, party: { name: expense.supplier?.name || expense.vendor?.name || expense.payee || '' }, rows: [{ description: expense.description || expense.concept || 'Gasto', total: expense.amount || expense.total || '' }], items: [{ description: expense.description || expense.concept || 'Gasto', quantity: 1, total: expense.amount || expense.total || '' }], totals: { total: expense.amount || expense.total || '' } } });
+  const configured = await renderConfiguredDefinition({ targetKey, tenantName, tenantLogo, fileName: buildPdfFileName(['comprobante_gasto', expense.number || 'sin_numero']), data: { document: { title: 'COMPROBANTE DE GASTO', number: expense.number || expense.id || 'N/A', date: expense.date, status: expense.status, notes: expense.description || expense.notes || '' }, party: { ...(expense.supplier || expense.vendor || {}), name: expense.supplier?.name || expense.vendor?.name || expense.payee || '' }, rows: [{ description: expense.description || expense.concept || 'Gasto', quantity: 1, unitPrice: expense.category === 'OTRO' ? (expense.categoryCustom || 'OTRO') : (expense.category || ''), total: expense.amount || expense.total || '' }], items: [{ description: expense.description || expense.concept || 'Gasto', quantity: 1, total: expense.amount || expense.total || '' }], totals: { total: expense.amount || expense.total || '' } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings(targetKey);
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -1798,14 +2008,16 @@ export const generateExpensePDF = async ({
 export const generatePurchaseOrderPDF = async ({
   order,
   tenantName,
+  tenantLogo,
   formatAmount,
 }: {
   order: any;
   tenantName: string;
+  tenantLogo?: string | null;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
 }) => {
   const orderLines = Array.isArray(order.items) ? order.items : Array.isArray(order.lines) ? order.lines : [];
-  const configured = await renderConfiguredDefinition({ targetKey: 'compras.purchase-order', tenantName, fileName: buildPdfFileName(['orden_de_compra', order.number || 'sin_numero']), data: { document: { title: 'ORDEN DE COMPRA', number: order.number || order.id || 'N/A', date: order.date, status: order.status, notes: order.notes || '' }, party: { name: order.supplier?.name || order.supplierName || '' }, items: orderLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), order.currency, order.exchangeRate), total: formatAmount(Number(line.total || 0), order.currency, order.exchangeRate) })), totals: { subtotal: formatAmount(Number(order.subtotal || 0), order.currency, order.exchangeRate), tax: formatAmount(Number(order.taxAmount || order.tax || 0), order.currency, order.exchangeRate), total: formatAmount(Number(order.total || 0), order.currency, order.exchangeRate) } } });
+  const configured = await renderConfiguredDefinition({ targetKey: 'compras.purchase-order', tenantName, tenantLogo, fileName: buildPdfFileName(['orden_de_compra', order.number || 'sin_numero']), data: { document: { title: 'ORDEN DE COMPRA', number: order.number || order.id || 'N/A', date: order.date, status: order.status, notes: [order.notes, order.purchaseRequestNumber ? `Solicitud: ${order.purchaseRequestNumber}` : '', order.expectedDelivery ? `Entrega: ${new Date(order.expectedDelivery).toLocaleDateString('es-NI')}` : ''].filter(Boolean).join(' · ') }, party: { ...(order.supplier || {}), name: order.supplier?.name || order.supplierName || '' }, items: orderLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), order.currency, order.exchangeRate), total: formatAmount(Number(line.total || 0), order.currency, order.exchangeRate) })), totals: { subtotal: formatAmount(Number(order.subtotal || 0), order.currency, order.exchangeRate), tax: formatAmount(Number(order.taxAmount || order.tax || 0), order.currency, order.exchangeRate), discount: formatAmount(Number(order.withholdingAmount || 0), order.currency, order.exchangeRate), total: formatAmount(Number(order.total || 0), order.currency, order.exchangeRate) } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('compras.purchase-order');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -1920,14 +2132,16 @@ export const generatePurchaseOrderPDF = async ({
 export const generatePurchaseRequestPDF = async ({
   request,
   tenantName,
+  tenantLogo,
   formatAmount,
 }: {
   request: any;
   tenantName: string;
+  tenantLogo?: string | null;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
 }) => {
   const requestLines = Array.isArray(request.items) ? request.items : Array.isArray(request.lines) ? request.lines : [];
-  const configured = await renderConfiguredDefinition({ targetKey: 'compras.purchase-request', tenantName, fileName: buildPdfFileName(['solicitud_de_compra', request.number || 'sin_numero']), data: { document: { title: 'SOLICITUD DE COMPRA', number: request.number || request.id || 'N/A', date: request.createdAt || request.date, status: request.status, notes: request.justification || request.notes || '' }, party: { name: request.requester?.name || request.requestedBy?.name || '' }, items: requestLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: line.unitPrice || '', total: line.total || '' })), totals: { total: formatAmount(Number(request.total || 0), request.currency, request.exchangeRate) } } });
+  const configured = await renderConfiguredDefinition({ targetKey: 'compras.purchase-request', tenantName, tenantLogo, fileName: buildPdfFileName(['solicitud_de_compra', request.number || 'sin_numero']), data: { document: { title: 'SOLICITUD DE COMPRA', number: request.number || request.id || 'N/A', date: request.createdAt || request.date, status: request.status, notes: [request.justification, request.notes, request.requiredDate ? `Fecha requerida: ${new Date(request.requiredDate).toLocaleDateString('es-NI')}` : ''].filter(Boolean).join(' · ') }, party: { ...(request.requester || request.requestedBy || {}), name: request.requester?.name || request.requestedBy?.name || '' }, items: requestLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: line.unitPrice || '', total: line.total || '' })), totals: { total: formatAmount(Number(request.total || 0), request.currency, request.exchangeRate) } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('compras.purchase-request');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -2028,14 +2242,16 @@ export const generatePurchaseRequestPDF = async ({
 export const generateRecurringInvoicePDF = async ({
   recurringInvoice,
   tenantName,
+  tenantLogo,
   formatAmount,
 }: {
   recurringInvoice: any;
   tenantName: string;
+  tenantLogo?: string | null;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
 }) => {
   const recurringLines = Array.isArray(recurringInvoice.items) ? recurringInvoice.items : Array.isArray(recurringInvoice.lines) ? recurringInvoice.lines : [];
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.recurring', tenantName, fileName: buildPdfFileName(['factura_recurrente', recurringInvoice.number || 'sin_numero']), data: { document: { title: 'FACTURA RECURRENTE', number: recurringInvoice.number || recurringInvoice.id || 'N/A', date: recurringInvoice.startDate || recurringInvoice.date, status: recurringInvoice.status, notes: recurringInvoice.notes || '' }, party: { name: recurringInvoice.customer?.name || recurringInvoice.client?.name || '' }, items: recurringLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(line.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(recurringInvoice.subtotal || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), tax: formatAmount(Number(recurringInvoice.taxAmount || recurringInvoice.tax || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(recurringInvoice.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) } } });
+  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.recurring', tenantName, tenantLogo, fileName: buildPdfFileName(['factura_recurrente', recurringInvoice.number || 'sin_numero']), data: { document: { title: 'FACTURA RECURRENTE', number: recurringInvoice.number || recurringInvoice.id || 'N/A', date: recurringInvoice.startDate || recurringInvoice.date, status: recurringInvoice.status, notes: [recurringInvoice.notes, recurringInvoice.frequency ? `Frecuencia: ${recurringInvoice.frequency}` : '', recurringInvoice.nextInvoiceDate ? `Próxima factura: ${new Date(recurringInvoice.nextInvoiceDate).toLocaleDateString('es-NI')}` : ''].filter(Boolean).join(' · ') }, party: { ...(recurringInvoice.customer || recurringInvoice.client || {}), name: recurringInvoice.customer?.name || recurringInvoice.client?.name || '' }, items: recurringLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(line.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(recurringInvoice.subtotal || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), tax: formatAmount(Number(recurringInvoice.taxAmount || recurringInvoice.tax || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(recurringInvoice.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.recurring');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -2143,14 +2359,16 @@ export const generateRecurringInvoicePDF = async ({
 export const generateSupplierInvoicePDF = async ({
   invoice,
   tenantName,
+  tenantLogo,
   formatAmount,
 }: {
   invoice: any;
   tenantName: string;
+  tenantLogo?: string | null;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
 }) => {
   const invoiceLines = Array.isArray(invoice.items) ? invoice.items : Array.isArray(invoice.lines) ? invoice.lines : [];
-  const configured = await renderConfiguredDefinition({ targetKey: 'compras.supplier-invoice', tenantName, fileName: buildPdfFileName(['factura_de_proveedor', invoice.number || 'sin_numero']), data: { document: { title: 'FACTURA DE PROVEEDOR', number: invoice.number || invoice.id || 'N/A', date: invoice.date, status: invoice.status, notes: invoice.notes || '' }, party: { name: invoice.supplier?.name || invoice.supplierName || '' }, items: invoiceLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), invoice.currency, invoice.exchangeRate), total: formatAmount(Number(line.total || 0), invoice.currency, invoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate), tax: formatAmount(Number(invoice.taxAmount || invoice.tax || 0), invoice.currency, invoice.exchangeRate), total: formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate) } } });
+  const configured = await renderConfiguredDefinition({ targetKey: 'compras.supplier-invoice', tenantName, tenantLogo, fileName: buildPdfFileName(['factura_de_proveedor', invoice.number || 'sin_numero']), data: { document: { title: 'FACTURA DE PROVEEDOR', number: invoice.number || invoice.id || 'N/A', date: invoice.date, status: invoice.status, notes: [invoice.notes, invoice.dueDate ? `Vencimiento: ${new Date(invoice.dueDate).toLocaleDateString('es-NI')}` : ''].filter(Boolean).join(' · ') }, party: { ...(invoice.supplier || {}), name: invoice.supplier?.name || invoice.supplierName || '' }, items: invoiceLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), invoice.currency, invoice.exchangeRate), total: formatAmount(Number(line.total || 0), invoice.currency, invoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate), tax: formatAmount(Number(invoice.taxAmount || invoice.tax || 0), invoice.currency, invoice.exchangeRate), total: formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate) } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('compras.supplier-invoice');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -2269,7 +2487,17 @@ export const generateSessionSummaryPDF = async ({
   }
   hideSystemAmounts?: boolean;
 }) => {
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-session', tenantName, tenantLogo, fileName: buildPdfFileName(['arqueo_de_caja', session.register?.code || 'sin_caja']), data: { document: { title: 'RESUMEN DE SESIÓN DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.openedAt || session.createdAt, status: session.status, notes: `Moneda: ${displayCurrency}` }, party: { name: session.user?.name || session.cashier?.name || '' }, rows: (logs || []).map((log: any) => ({ description: log.description || log.type || 'Movimiento', quantity: log.amount || log.total || '', total: log.amount || log.total || '' })), totals: { subtotal: totals.ventas, tax: totals.gastos, total: totals.diferencia } } });
+  const configuredRows = (logs || []).map((log: any) => ({
+    reference: log.reference || (log.type === 'SALE' ? `TKT-${String(log.id || '').slice(0, 4).toUpperCase()}` : `MOV-${String(log.id || '').slice(0, 4).toUpperCase()}`),
+    type: log.type === 'SALE' ? 'Venta' : log.type === 'EXIT' ? 'Gasto' : log.type === 'ENTRY' ? 'Entrada' : log.type === 'OPEN' ? 'Apertura' : log.type || 'Movimiento',
+    description: log.description || 'Sin descripción',
+    time: log.createdAt ? new Date(log.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '—',
+    amount: `${log.type === 'EXIT' ? '-' : '+'}${isUSD ? '$' : 'C$'} ${Number(isUSD ? (Number(log.amountUSD || 0) + Number(log.amountNIO || 0) / sessionRate) : (Number(log.amountNIO || 0) + Number(log.amountUSD || 0) * sessionRate)).toFixed(2)}`,
+  }));
+  const configuredColumns = hideSystemAmounts
+    ? [{ id: 'reference', label: 'Referencia', token: 'reference', width: 22, align: 'left' as const }, { id: 'type', label: 'Tipo', token: 'type', width: 18, align: 'left' as const }, { id: 'description', label: 'Descripción', token: 'description', width: 42, align: 'left' as const }, { id: 'time', label: 'Hora', token: 'time', width: 18, align: 'right' as const }]
+    : [{ id: 'reference', label: 'Referencia', token: 'reference', width: 22, align: 'left' as const }, { id: 'type', label: 'Tipo', token: 'type', width: 16, align: 'left' as const }, { id: 'description', label: 'Descripción', token: 'description', width: 34, align: 'left' as const }, { id: 'time', label: 'Hora', token: 'time', width: 12, align: 'center' as const }, { id: 'amount', label: `Monto (${displayCurrency})`, token: 'amount', width: 16, align: 'right' as const }];
+  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-session', tenantName, tenantLogo, fileName: buildPdfFileName(['arqueo_de_caja', session.register?.code || 'sin_caja']), data: { document: { title: 'RESUMEN DE SESIÓN DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.openedAt || session.createdAt, status: session.status, notes: `Moneda: ${displayCurrency}` }, party: { name: session.user?.name || session.cashier?.name || '' }, rows: configuredRows, items: configuredRows, tableColumns: configuredColumns, totals: { subtotal: totals.ventas, tax: totals.gastos, total: totals.diferencia } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-session');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -2389,13 +2617,26 @@ export const generateSessionSummaryPDF = async ({
 export const generateHistoricalCashReportPDF = async ({
   report,
   tenantName,
+  tenantLogo,
 }: {
   report: { summary: any; items: any[]; filters?: any };
   tenantName: string;
+  tenantLogo?: string | null;
 }) => {
   const summary = report.summary || {};
   const money = (value: any) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-historical-report', tenantName, fileName: buildDateFilteredPdfFileName(['reporte_historico_de_caja'], 'configured', report.filters?.dateFrom, report.filters?.dateTo), data: { document: { title: 'REPORTE HISTÓRICO DE CAJA', date: new Date().toLocaleDateString('es-NI'), notes: `Periodo: ${report.filters?.dateFrom || '—'} al ${report.filters?.dateTo || '—'}` }, rows: (report.items || []).map((item: any) => ({ description: item.register ? `${item.register.code} · ${item.register.name}` : 'Sin caja', quantity: item.saleCount || 0, unitPrice: item.branch?.name || 'Sin sucursal', total: `C$ ${money(item.salesNIO)}` })), totals: { subtotal: `C$ ${money(summary.salesNIO)}`, tax: `$ ${money(summary.salesUSD)}`, total: `C$ ${money(summary.differenceNIO)}` } } });
+  const configuredRows = (report.items || []).map((item: any) => ({
+    date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '—',
+    branch: item.branch?.name || 'Sin sucursal',
+    register: item.register ? `${item.register.code} · ${item.register.name}` : 'Sin caja',
+    cashier: item.openedBy?.name || '—',
+    status: item.status === 'CLOSED' ? 'Cerrada' : item.status === 'COUNTING' ? 'En arqueo' : item.status || 'Abierta',
+    sales: String(item.saleCount || 0),
+    salesNio: `C$ ${money(item.salesNIO)}`,
+    salesUsd: `$ ${money(item.salesUSD)}`,
+    difference: `C$ ${money(item.differenceNIO)}`,
+  }));
+  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-historical-report', tenantName, tenantLogo, fileName: buildDateFilteredPdfFileName(['reporte_historico_de_caja'], 'configured', report.filters?.dateFrom, report.filters?.dateTo), data: { document: { title: 'REPORTE HISTÓRICO DE CAJA', date: new Date().toLocaleDateString('es-NI'), notes: `Periodo: ${report.filters?.dateFrom || '—'} al ${report.filters?.dateTo || '—'}` }, rows: configuredRows, items: configuredRows, tableColumns: [{ id: 'date', label: 'Fecha', token: 'date', width: 11, align: 'left' }, { id: 'branch', label: 'Sucursal', token: 'branch', width: 16, align: 'left' }, { id: 'register', label: 'Caja', token: 'register', width: 16, align: 'left' }, { id: 'cashier', label: 'Cajero', token: 'cashier', width: 15, align: 'left' }, { id: 'status', label: 'Estado', token: 'status', width: 12, align: 'left' }, { id: 'sales', label: 'Ventas', token: 'sales', width: 8, align: 'right' }, { id: 'salesNio', label: 'Ventas NIO', token: 'salesNio', width: 11, align: 'right' }, { id: 'difference', label: 'Diferencia', token: 'difference', width: 11, align: 'right' }], totals: { subtotal: `C$ ${money(summary.salesNIO)}`, tax: `$ ${money(summary.salesUSD)}`, total: `C$ ${money(summary.differenceNIO)}` } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-historical-report');
   const doc = new jsPDF(pdfDesignPaper({ ...settings, orientation: 'landscape' }));
@@ -2485,14 +2726,17 @@ export const generateHistoricalCashReportPDF = async ({
 export const generateCashClosureReportPDF = async ({
   detail,
   tenantName,
+  tenantLogo,
 }: {
   detail: any;
   tenantName: string;
+  tenantLogo?: string | null;
 }) => {
   const session = detail.session || {};
   const invoices = detail.invoices || { rows: [], totals: {} };
   const payments = detail.payments || { rows: [], summary: {} };
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-historical-report', tenantName, fileName: buildPdfFileName(['cierre_gerencial_de_caja', session.register?.code || 'sin_caja']), data: { document: { title: 'CIERRE GERENCIAL DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.closedAt || session.openedAt, status: session.status, notes: `Pagos registrados: ${payments.rows?.length || 0}` }, party: { name: session.openedBy?.name || '' }, rows: [...(invoices.rows || []), ...(payments.rows || [])].slice(0, 30).map((row: any) => ({ description: row.description || row.number || row.reference || 'Movimiento', quantity: row.quantity || row.count || 1, unitPrice: row.currency || '', total: row.amount || row.total || '' })), totals: { subtotal: invoices.totals?.subtotal || payments.summary?.total || '', tax: invoices.totals?.tax || '', total: invoices.totals?.total || payments.summary?.total || '' } } });
+  const closureRows = [...(invoices.rows || []), ...(payments.rows || [])].slice(0, 30).map((row: any) => ({ reference: row.number || row.reference || '—', type: row.type || (row.number ? 'Factura' : 'Pago'), description: row.description || row.number || 'Movimiento', currency: row.currency || '—', amount: row.amount || row.total || '—' }));
+  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-historical-report', tenantName, tenantLogo, fileName: buildPdfFileName(['cierre_gerencial_de_caja', session.register?.code || 'sin_caja']), data: { document: { title: 'CIERRE GERENCIAL DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.closedAt || session.openedAt, status: session.status, notes: `Pagos registrados: ${payments.rows?.length || 0}` }, party: { name: session.openedBy?.name || '' }, rows: closureRows, items: closureRows, tableColumns: [{ id: 'reference', label: 'Referencia', token: 'reference', width: 20, align: 'left' }, { id: 'type', label: 'Tipo', token: 'type', width: 18, align: 'left' }, { id: 'description', label: 'Descripción', token: 'description', width: 34, align: 'left' }, { id: 'currency', label: 'Moneda', token: 'currency', width: 12, align: 'center' }, { id: 'amount', label: 'Monto', token: 'amount', width: 16, align: 'right' }], totals: { subtotal: invoices.totals?.subtotal || payments.summary?.total || '', tax: invoices.totals?.tax || '', total: invoices.totals?.total || payments.summary?.total || '' } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-historical-report');
   const width = 338.666;
@@ -2502,7 +2746,6 @@ export const generateCashClosureReportPDF = async ({
   const dark: PdfRgb = [15, 55, 48];
   const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
   const line: PdfRgb = [218, 231, 225];
-  const pale: PdfRgb = [241, 249, 245];
   const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const date = (value: unknown) => value ? new Date(String(value)).toLocaleDateString('es-NI') : 'No aplica';
   const time = (value: unknown) => value ? new Date(String(value)).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : 'No aplica';

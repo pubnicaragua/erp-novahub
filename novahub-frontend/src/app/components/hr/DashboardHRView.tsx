@@ -4,6 +4,7 @@ import { Badge } from '../ui/badge';
 import { motion } from 'motion/react';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { HRViewTutorial } from './HRViewTutorial';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const DEPT_COLORS = [
   'from-indigo-500 to-purple-600',
@@ -17,7 +18,7 @@ const DEPT_COLORS = [
 ];
 
 export function DashboardHRView({ employees, departments, leaveRequests, reviews }: any) {
-  const { displayCurrency, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount } = useCurrency();
+  const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
   const activeEmployees = employees.filter((e: any) => e.employmentStatus === 'ACTIVE').length;
   const inactiveEmployees = employees.filter((e: any) => e.employmentStatus !== 'ACTIVE').length;
   const pendingLeaves = leaveRequests.filter((l: any) => l.status === 'PENDING').length;
@@ -30,10 +31,17 @@ export function DashboardHRView({ employees, departments, leaveRequests, reviews
   }, 0);
 
   const formattedPayroll = formatCurrentAmount(totalPayroll, displayCurrency);
+  const payrollCurrencies = summarizeAmountsByCurrency(employees, () => 0, (employee: any) => employee.currency || 'USD').map((item) => item.currency);
+  const originalPayroll = (currency: SupportedCurrency) => employees
+    .filter((employee: any) => normalizeCurrency(employee.currency || 'USD') === currency)
+    .reduce((sum: number, employee: any) => sum + (Number(employee.salary ?? employee.salaryBase ?? 0) || 0), 0);
+  const payrollCards = displayMode === 'ORIGINAL'
+    ? payrollCurrencies.map((currency) => ({ label: `Planilla Mensual (${currency})`, value: formatExplicitAmount(originalPayroll(currency), currency), sub: 'Costo total nómina', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }))
+    : [{ label: `Planilla Mensual${valuationModeSuffix}`, value: formattedPayroll, sub: 'Costo total nómina', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }];
 
   const statCards = [
     { label: 'Total Empleados', value: employees.length, sub: `${activeEmployees} activos · ${inactiveEmployees} inactivos`, icon: Users, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
-    { label: `Planilla Mensual${valuationModeSuffix}`, value: formattedPayroll, sub: 'Costo total nómina', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+    ...payrollCards,
     { label: 'Ausencias Pendientes', value: pendingLeaves, sub: 'Por aprobar', icon: Clock, color: pendingLeaves > 0 ? 'text-orange-500' : 'text-emerald-500', bg: pendingLeaves > 0 ? 'bg-orange-500/10' : 'bg-emerald-500/10', border: pendingLeaves > 0 ? 'border-orange-500/20' : 'border-emerald-500/20' },
     { label: 'Departamentos', value: departments.length, sub: 'Áreas activas', icon: Briefcase, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
   ];

@@ -5,16 +5,17 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, Printer, Filter, X, ChevronDown, ChevronUp, Scale, CheckCircle2, AlertTriangle, Settings2 } from 'lucide-react';
+import { Search, Download, Filter, X, ChevronDown, ChevronUp, Scale, CheckCircle2, AlertTriangle, Settings2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { AccountChecklistDialog } from './AccountChecklistDialog';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { DateField } from '../ui/DateField';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { generateTrialBalancePDF } from '../../utils/pdfGenerator';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -39,6 +40,7 @@ interface TrialBalanceRow {
 }
 
 export function BalanceComprobacionView() {
+  const { user } = useAuth();
   const today = new Date();
   const [dateFrom, setDateFrom] = useState(`${today.getFullYear()}-01-01`);
   const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10));
@@ -115,7 +117,6 @@ export function BalanceComprobacionView() {
 
   const totalDebitos = data.reduce((s, r) => s + r.debitos, 0);
   const totalCreditos = data.reduce((s, r) => s + r.creditos, 0);
-  const totalSaldos = data.reduce((s, r) => s + Math.abs(r.saldo), 0);
   const isBalanced = Math.abs(totalDebitos - totalCreditos) < 0.01;
   const difference = totalDebitos - totalCreditos;
   const differenceAbs = Math.abs(difference);
@@ -131,74 +132,28 @@ export function BalanceComprobacionView() {
     setExpandedAccountId(current => current === row.accountId ? null : row.accountId);
   };
 
-  const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { toast.error('Permita ventanas emergentes para imprimir'); return; }
-    const style = `
-      <style>
-        @page { margin: 15mm; size: landscape; }
-        body { font-family: Arial, sans-serif; font-size: 10px; color: #333; }
-        h1 { font-size: 16px; margin-bottom: 2px; text-align: center; }
-        h2 { font-size: 12px; color: #666; text-align: center; margin-top: 0; font-weight: normal; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        th { background: #1e3a5f; color: white; padding: 6px 8px; text-align: left; font-size: 9px; text-transform: uppercase; }
-        td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; }
-        .group-header { background: #f0f4f8; font-weight: bold; font-size: 10px; text-transform: uppercase; color: #1e3a5f; }
-        .total-row { background: #e8f0fe; font-weight: bold; border-top: 2px solid #1e3a5f; }
-        .balanced { color: #059669; }
-        .not-balanced { color: #dc2626; }
-        .positive { color: #059669; }
-        .negative { color: #dc2626; }
-        .text-right { text-align: right; }
-      </style>`;
-    const title = 'Balance de Comprobación';
-    const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
-    const buildRows = () => {
-      let html = '';
-      grouped.forEach(g => {
-        html += `<tr class="group-header"><td colspan="6">${g.label}</td></tr>`;
-        g.rows.forEach(r => {
-          const saldoClass = r.saldo >= 0 ? 'positive' : 'negative';
-          html += `<tr>
-            <td>${r.codigo}</td>
-            <td>${r.cuenta}</td>
-            <td>${accountTypeLabel(r.tipo)}</td>
-            <td class="text-right">${fmt(r.debitos)}</td>
-            <td class="text-right">${fmt(r.creditos)}</td>
-            <td class="text-right ${saldoClass}">${fmt(r.saldo)}</td>
-          </tr>`;
-        });
+  const handlePrint = async () => {
+    const exportRows = grouped.flatMap(group => group.rows);
+    const exportTotalDebitos = exportRows.reduce((sum, row) => sum + row.debitos, 0);
+    const exportTotalCreditos = exportRows.reduce((sum, row) => sum + row.creditos, 0);
+    const exportTotalSaldos = exportRows.reduce((sum, row) => sum + Math.abs(row.saldo), 0);
+    try {
+      await generateTrialBalancePDF({
+        rows: exportRows,
+        tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub',
+        tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
+        dateFrom,
+        dateTo,
+        totals: {
+          subtotal: fmt(exportTotalDebitos),
+          tax: fmt(exportTotalCreditos),
+          total: fmt(exportTotalSaldos),
+        },
       });
-      return html;
-    };
-    const printFileName = buildDateFilteredDownloadFileName(['balance_comprobacion'], 'pdf', dateFrom, dateTo);
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>${printFileName}</title>${style}</head><body>
-      <h1>${title}</h1>
-      ${period ? `<h2>${period}</h2>` : ''}
-      <table>
-        <thead><tr>
-          <th>Código</th><th>Cuenta</th><th>Tipo</th>
-          <th class="text-right">Débitos</th><th class="text-right">Créditos</th><th class="text-right">Saldo</th>
-        </tr></thead>
-        <tbody>${buildRows()}</tbody>
-        <tfoot>
-          <tr class="total-row"><td colspan="3">TOTALES</td>
-            <td class="text-right">${fmt(totalDebitos)}</td>
-            <td class="text-right">${fmt(totalCreditos)}</td>
-            <td class="text-right">${fmt(totalSaldos)}</td>
-          </tr>
-          <tr class="total-row"><td colspan="6" class="${isBalanced ? 'balanced' : 'not-balanced'}">
-            ${isBalanced ? '✓ BALANCEADO — Débitos = Créditos' : `✗ NO BALANCEADO — Diferencia de C$ ${fmt(differenceAbs)} (${higherSide})`}
-          </td></tr>
-        </tfoot>
-      </table>
-      <p style="text-align:center;color:#999;font-size:8px;margin-top:16px;">
-        Generado el ${new Date().toLocaleDateString('es-NI')} a las ${new Date().toLocaleTimeString('es-NI')}
-      </p>
-    </body></html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 500);
+      toast.success('Balance de comprobación generado con la plantilla de esta vista');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el balance de comprobación');
+    }
   };
 
   return (
@@ -228,7 +183,7 @@ export function BalanceComprobacionView() {
             <Input placeholder="Buscar cuenta..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="h-9 w-full pl-9 sm:w-[220px]" />
           </div>
           <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
-            <Printer className="size-4" /> Imprimir
+            <Download className="size-4" /> Descargar PDF
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración

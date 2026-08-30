@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getPdfDesign, getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
+import { getPdfTemplatePartyConfig } from '../services/pdf-document-catalog';
 import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildPdfFileName } from './exportFileNames';
@@ -27,6 +28,7 @@ export interface PurchasePdfDocument {
   date?: string;
   status?: string;
   supplier?: string;
+  supplierData?: Record<string, unknown>;
   fields?: PurchasePdfField[];
   lines?: PurchasePdfLine[];
   totals?: PurchasePdfField[];
@@ -129,25 +131,41 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
   return doc;
 }
 
-export async function generatePurchaseRecordPDF({ document, tenantName, format = 'configured', targetKey = 'compras.purchase-record' }: { document: PurchasePdfDocument; tenantName: string; format?: PdfDownloadFormat; targetKey?: string }) {
+export async function generatePurchaseRecordPDF({ document, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.purchase-record' }: { document: PurchasePdfDocument; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string }) {
   const configuredDesign = await getPdfDesign(targetKey);
   const settings = await getPdfDesignSettings(targetKey);
+  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : undefined;
+  const resolvedLogo = configuredLogo || tenantLogo || (typeof document.supplierData?.logo === 'string' ? document.supplierData.logo : undefined);
   if (!isRoll(format) && configuredDesign?.layoutZones?.definition) {
     const paperSettings = withPaperFormat(settings, format);
+    const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...paperSettings };
     const fieldData = Object.fromEntries((document.fields || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
     const totalsData = Object.fromEntries((document.totals || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
     if (document.total) totalsData.total = document.total;
+    const fieldSummary = (document.fields || []).map(field => `${field.label}: ${valueText(field.value)}`).join(' · ');
+    const notes = [document.notes, fieldSummary].filter(Boolean).join(' · ');
+    const supplier = { ...(document.supplierData || {}), name: document.supplier || document.supplierData?.name || '' };
+    const requester = (document.fields || []).find(field => /solicitante|solicitado por|responsable/i.test(field.label));
+    const party = targetKey === 'compras.purchase-request'
+      ? { ...supplier, name: valueText(requester?.value || document.supplier || supplier.name) }
+      : supplier;
     const data: PdfTemplateData = {
-      company: { name: tenantName },
-      document: { title: document.title, number: document.number, date: document.date, status: document.status, notes: document.notes || '' },
-      supplier: { name: document.supplier || '' },
-      party: { name: document.supplier || '' },
+      company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: resolvedLogo },
+      document: { title: document.title, number: document.number, date: document.date, status: document.status, notes },
+      supplier,
+      party,
       items: (document.lines || []).map(line => ({ description: purchaseLineDescription(line), quantity: line.quantity || '', unitPrice: line.unitPrice || '', total: line.total || '' })),
       rows: (document.lines || []).map(line => ({ description: purchaseLineDescription(line), quantity: line.quantity || '', unitPrice: line.unitPrice || '', total: line.total || '' })),
       totals: { subtotal: totalsData.subtotal || '', tax: totalsData.tax || totalsData.impuesto || '', discount: totalsData.discount || totalsData.descuento || '', total: totalsData.total || '' },
+      tableColumns: [
+        { id: 'description', label: 'Descripción', token: 'description', width: 48, align: 'left' },
+        { id: 'quantity', label: 'Cant.', token: 'quantity', width: 14, align: 'right' },
+        { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 19, align: 'right' },
+        { id: 'total', label: 'Total', token: 'total', width: 19, align: 'right' },
+      ],
       ...fieldData,
     };
-    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, paperSettings), settings: paperSettings, targetKey, data, fileName: buildPdfFileName([document.title, document.number || 'sin_numero'], format), save: true });
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildPdfFileName([document.title, document.number || 'sin_numero'], format), save: true });
     return rendered.doc;
   }
   const doc = isRoll(format)
@@ -164,8 +182,17 @@ export async function generatePurchaseRecordPDF({ document, tenantName, format =
     doc.setTextColor(...text); doc.setFontSize(12); doc.text(document.title, margin, 30);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`Nº: ${document.number || 'N/A'}`, pageWidth - margin, 22, { align: 'right' }); doc.text(`Fecha: ${document.date || 'N/A'}`, pageWidth - margin, 28, { align: 'right' });
     if (document.status) doc.text(`Estado: ${document.status}`, pageWidth - margin, 34, { align: 'right' });
-    const fields = [{ label: 'Proveedor', value: document.supplier || '—' }, ...(document.fields || [])].filter((field, index, all) => field.value !== undefined && (index === 0 || `${field.label}:${field.value}` !== `${all[index - 1].label}:${all[index - 1].value}`));
-    autoTable(doc, { startY: 45, head: [['Campo', 'Detalle']], body: fields.map((field) => [field.label, valueText(field.value)]), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' }, bodyStyles: { textColor: text }, columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } }, styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' } });
+    const partyConfig = getPdfTemplatePartyConfig(targetKey);
+    const requester = (document.fields || []).find(field => /solicitante|solicitado por|responsable/i.test(field.label));
+    const partyName = partyConfig.mode === 'requester'
+      ? valueText(requester?.value || document.supplier || '')
+      : valueText(document.supplier || '');
+    const partyLabel = partyConfig.nameLabel || 'Proveedor';
+    const fields = partyConfig.mode === 'none'
+      ? [...(document.fields || [])]
+      : [{ label: partyLabel, value: partyName }, ...(document.fields || [])];
+    const uniqueFields = fields.filter((field, index, all) => field.value !== undefined && (index === 0 || `${field.label}:${field.value}` !== `${all[index - 1].label}:${all[index - 1].value}`));
+    autoTable(doc, { startY: 45, head: [['Campo', 'Detalle']], body: uniqueFields.map((field) => [field.label, valueText(field.value)]), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' }, bodyStyles: { textColor: text }, columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } }, styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' } });
     let currentY = ((doc as any).lastAutoTable?.finalY || 45) + 8;
     if (document.lines?.length) {
       autoTable(doc, { startY: currentY, head: [['Descripción', 'Cant.', 'Precio U.', 'Total']], body: document.lines.map((line) => [purchaseLineDescription(line), valueText(line.quantity), line.unitPrice || '—', line.total || '—']), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 20, halign: 'right' }, 2: { cellWidth: 34, halign: 'right' }, 3: { cellWidth: 34, halign: 'right' } }, styles: { cellPadding: 3, overflow: 'linebreak' } });
@@ -183,19 +210,22 @@ export async function generatePurchaseRecordPDF({ document, tenantName, format =
   return doc;
 }
 
-export async function generatePurchaseListPDF({ title, rows, columns, tenantName, format = 'configured', targetKey = 'compras.list' }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; format?: PdfDownloadFormat; targetKey?: string }) {
+export async function generatePurchaseListPDF({ title, rows, columns, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.list' }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string }) {
   if (isRoll(format)) throw new Error('Los reportes generales solo están disponibles en tamaños de página PDF.');
   const configuredDesign = await getPdfDesign(targetKey);
   const settings = await getPdfDesignSettings(targetKey);
+  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : undefined;
+  const resolvedLogo = configuredLogo || tenantLogo;
   const paperSettings = withPaperFormat(settings, format === 'configured' ? 'configured' : format);
   if (configuredDesign?.layoutZones?.definition) {
+    const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...paperSettings };
     const mappedRows = rows.map(row => {
       const mapped: Record<string, unknown> = { description: columns[0] ? valueText(columns[0].value(row)) : '', quantity: columns[1] ? valueText(columns[1].value(row)) : '', unitPrice: columns[2] ? valueText(columns[2].value(row)) : '', total: columns[3] ? valueText(columns[3].value(row)) : '' };
       columns.forEach((column, index) => { mapped[`column-${index}`] = valueText(column.value(row)); mapped[column.label.toLowerCase().replace(/\s+/g, '_')] = valueText(column.value(row)); });
       return mapped;
     });
-    const data: PdfTemplateData = { company: { name: tenantName }, document: { title, number: `${rows.length} registro(s)` }, rows: mappedRows, items: mappedRows };
-    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, paperSettings), settings: paperSettings, targetKey, data, fileName: buildPdfFileName([title], format), save: true });
+    const data: PdfTemplateData = { logo: resolvedLogo, company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: resolvedLogo }, document: { title, number: `${rows.length} registro(s)` }, rows: mappedRows, items: mappedRows, tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.label, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' })) };
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildPdfFileName([title], format), save: true });
     return rendered.doc;
   }
   const doc = new jsPDF(pdfDesignPaper(paperSettings));

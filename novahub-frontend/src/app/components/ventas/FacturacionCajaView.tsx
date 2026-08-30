@@ -2722,9 +2722,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         )}
       {createdInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="invoice-result-title">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-border/50 pb-4">
-              <div>
+          <div className="max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-4 shadow-2xl sm:p-6">
+            <div className="flex min-w-0 items-start justify-between gap-4 border-b border-border/50 pb-4">
+              <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">{createdOperationLabel}</p>
                 <h2 id="invoice-result-title" className="mt-1 text-2xl font-black uppercase italic tracking-tight">{createdInvoice.number}</h2>
                 <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${createdInvoice.customer.phone}` : ''}</p>
@@ -2738,7 +2738,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 <span>Artículo</span><span>Cant.</span><span>Total</span>
               </div>
               {createdTicketCart.map((item) => (
-                <div key={item.productId} className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-border/30 px-4 py-3 text-sm last:border-0">
+                <div key={item.productId} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-border/30 px-4 py-3 text-sm last:border-0">
                   <span className="min-w-0"><span className="block font-bold">{item.description}</span>{item.commercialNoteSnapshot && <span className="block truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}</span>
                   <span className="font-mono text-muted-foreground">{item.quantity}</span>
                   <span className="font-mono font-bold">{formatCurrency(item.lineTotal)}</span>
@@ -2786,9 +2786,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       )}
       {showPayment && activeSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl border bg-background p-5 shadow-2xl sm:p-6">
-            <div className="mb-5 flex items-start justify-between">
-              <div>
+          <div className="max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-xl overflow-y-auto rounded-2xl border bg-background p-4 shadow-2xl sm:p-6">
+            <div className="mb-5 flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
                 <h2 className="text-lg font-black">Checkout / Pago</h2>
                 {holdCreateDto && <p className="text-xs font-bold text-primary">Reserva con cobro inmediato</p>}
               </div>
@@ -2945,9 +2945,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         };
         return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="queue-payment-title">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-5 shadow-2xl sm:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Cobro desde cola de caja</p><h2 id="queue-payment-title" className="mt-1 text-xl font-black uppercase tracking-tight">{isCreditQueue ? 'Crédito' : 'Factura'} {document.number}</h2><p className="mt-1 text-sm text-muted-foreground">{document.customer?.name || document.customCustomerName || GENERAL_CUSTOMER_NAME}</p></div>
+          <div className="max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6">
+            <div className="flex min-w-0 items-start justify-between gap-4">
+              <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Cobro desde cola de caja</p><h2 id="queue-payment-title" className="mt-1 text-xl font-black uppercase tracking-tight">{isCreditQueue ? 'Crédito' : 'Factura'} {document.number}</h2><p className="mt-1 break-words text-sm text-muted-foreground">{document.customer?.name || document.customCustomerName || GENERAL_CUSTOMER_NAME}</p></div>
                <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={() => { if (!queueSubmitting) { setQueueInvoice(null); setQueuePayments([]); setQueueMixedPaymentEnabled(false); } }} aria-label="Cerrar cobro">×</Button>
             </div>
             <div className="mt-5 rounded-2xl bg-primary/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p><p className="mt-1 font-mono text-2xl font-black text-primary">{document.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(document.balance || 0))}</p>{isCreditQueue && <p className="mt-1 text-xs font-semibold text-muted-foreground">Puedes registrar un abono o cancelar todo el saldo.</p>}</div>

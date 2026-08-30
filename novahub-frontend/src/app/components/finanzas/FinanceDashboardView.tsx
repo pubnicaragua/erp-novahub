@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   TrendingUp, TrendingDown, DollarSign, Landmark, BarChart3, ArrowUpRight, ArrowDownRight,
@@ -15,13 +15,13 @@ import { supplierInvoicesService } from '../../services/compras.service';
 import { accountsService } from '../../services/finanzas.service';
 import { toast } from 'sonner';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface Props {
   incomes: any[];
   expenses: any[];
   recurringExpenses: any[];
   recurringIncomes?: any[];
-  accounts?: any[];
   onNavigate?: (tab: string) => void;
 }
 
@@ -29,8 +29,8 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 
 const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
 
-export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, accounts, onNavigate }: Props) {
-  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, onNavigate }: Props) {
+  const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const canReadSales = canPerform('SALES', 'view');
   const canReadPurchases = canPerform('PURCHASES', 'view');
@@ -85,26 +85,36 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
       ? convertCurrentAmount(amount, item.currency)
       : convertAmount(amount, item.currency, item.exchangeRate);
   };
-  const totalIncome = useMemo(() => incomes.reduce((a, i) => a + cv(i), 0), [incomes, valuationMode, convertAmount, convertCurrentAmount]);
-  const totalExpense = useMemo(() => expenses.reduce((a, e) => a + cv(e), 0), [expenses, valuationMode, convertAmount, convertCurrentAmount]);
+  const rawDocBalance = (item: any) => Number(item.balance ?? item.balanceDue ?? (Number(item.total || 0) - Number(item.amountPaid || 0)));
+  const totalIncome = useMemo(() => incomes.reduce((a: number, i: any) => a + cv(i), 0), [incomes, valuationMode, convertAmount, convertCurrentAmount]);
+  const totalExpense = useMemo(() => expenses.reduce((a: number, e: any) => a + cv(e), 0), [expenses, valuationMode, convertAmount, convertCurrentAmount]);
   const netCashFlow = totalIncome - totalExpense;
-  const marginPct = totalIncome > 0 ? ((netCashFlow / totalIncome) * 100) : 0;
 
   const pendingSalesInvoices = useMemo(() => salesInvoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' }), [salesInvoices]);
   const pendingSupplierInvoices = useMemo(() => supplierInvoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' }), [supplierInvoices]);
-  const totalCxc = useMemo(() => pendingSalesInvoices.reduce((a, inv: any) => a + docBalance(inv), 0), [pendingSalesInvoices, valuationMode, convertAmount, convertCurrentAmount]);
-  const totalCxp = useMemo(() => pendingSupplierInvoices.reduce((a, inv: any) => a + docBalance(inv), 0), [pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
-  const cxcOverdue = useMemo(() => pendingSalesInvoices.filter((inv: any) => {
-    const due = inv.dueDate ? new Date(inv.dueDate) : null;
-    return due && due < new Date() && docBalance(inv) > 0;
-  }).reduce((a, inv: any) => a + docBalance(inv), 0), [pendingSalesInvoices, valuationMode, convertAmount, convertCurrentAmount]);
-  const cxpOverdue = useMemo(() => pendingSupplierInvoices.filter((inv: any) => {
-    const due = inv.dueDate ? new Date(inv.dueDate) : null;
-    return due && due < new Date() && docBalance(inv) > 0;
-  }).reduce((a, inv: any) => a + docBalance(inv), 0), [pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
-  const bankBalance = useMemo(() => bankAccounts.reduce((a, acc: any) => a + (valuationMode === 'CURRENT'
+  const totalCxc = useMemo(() => pendingSalesInvoices.reduce((a: number, inv: any) => a + docBalance(inv), 0), [pendingSalesInvoices, valuationMode, convertAmount, convertCurrentAmount]);
+  const totalCxp = useMemo(() => pendingSupplierInvoices.reduce((a: number, inv: any) => a + docBalance(inv), 0), [pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
+  const bankBalance = useMemo(() => bankAccounts.reduce((a: number, acc: any) => a + (valuationMode === 'CURRENT'
     ? convertCurrentAmount(Number(acc.balance || 0), acc.currency)
     : convertAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate)), 0), [bankAccounts, valuationMode, convertAmount, convertCurrentAmount]);
+
+  const originalCurrencies = useMemo<SupportedCurrency[]>(() => summarizeAmountsByCurrency(
+    [...incomes, ...expenses, ...bankAccounts, ...pendingSalesInvoices, ...pendingSupplierInvoices],
+    () => 0,
+    (row: any) => row.currency,
+  ).map((item) => item.currency), [incomes, expenses, bankAccounts, pendingSalesInvoices, pendingSupplierInvoices]);
+  const originalSum = (rows: any[], amountOf: (row: any) => number, currency: SupportedCurrency) => rows
+    .filter((row) => normalizeCurrency(row.currency) === currency)
+    .reduce((sum, row) => sum + (Number.isFinite(amountOf(row)) ? amountOf(row) : 0), 0);
+  const originalIncome = (currency: SupportedCurrency) => originalSum(incomes, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
+  const originalExpense = (currency: SupportedCurrency) => originalSum(expenses, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
+  const originalBank = (currency: SupportedCurrency) => originalSum(bankAccounts, (row) => Number(row.balance || 0), currency);
+  const originalCxc = (currency: SupportedCurrency) => originalSum(pendingSalesInvoices, rawDocBalance, currency);
+  const originalCxp = (currency: SupportedCurrency) => originalSum(pendingSupplierInvoices, rawDocBalance, currency);
+  const originalOverdue = (rows: any[], currency: SupportedCurrency) => originalSum(rows.filter((inv: any) => {
+    const due = inv.dueDate ? new Date(inv.dueDate) : null;
+    return due && due < new Date() && rawDocBalance(inv) > 0;
+  }), rawDocBalance, currency);
 
   const activeRecurringExpenses = useMemo(() => recurringExpenses.filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringExpenses]);
   const activeRecurringIncomes = useMemo(() => (recurringIncomes || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringIncomes]);
@@ -116,9 +126,6 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
     activeRecurringIncomes.reduce((a, r) => a + cv(r), 0),
     [activeRecurringIncomes, valuationMode, convertAmount, convertCurrentAmount]
   );
-  const next7d = monthlyRecurring * (7 / 30);
-  const next15d = monthlyRecurring * (15 / 30);
-  const next30d = monthlyRecurring;
   const projected30 = netCashFlow + monthlyRecurringIncome - monthlyRecurring;
   const projected60 = projected30 + monthlyRecurringIncome - monthlyRecurring;
   const projected90 = projected60 + monthlyRecurringIncome - monthlyRecurring;
@@ -158,16 +165,41 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
     if (Math.abs(displayed) >= 1_000) return sym + (displayed / 1_000).toFixed(1) + 'K';
     return sym + displayed.toLocaleString(undefined, { minimumFractionDigits: 0 });
   };
+  const renderKpi = (
+    label: string,
+    icon: any,
+    total: number,
+    amountByCurrency: (currency: SupportedCurrency) => number,
+    onClick?: () => void,
+    subByCurrency?: (currency: SupportedCurrency) => string,
+  ) => displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => (
+      <KpiCard
+        key={`${label}-${currency}`}
+        icon={icon}
+        label={`${label} (${currency})`}
+        value={formatExplicitAmount(amountByCurrency(currency), currency)}
+        sub={subByCurrency?.(currency)}
+        onClick={onClick}
+      />
+    ))
+    : <KpiCard icon={icon} label={`${label}${valuationModeSuffix}`} value={fmt(total)} onClick={onClick} />;
 
   return (
     <div className="min-w-0 space-y-6">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiCard icon={Landmark} label={`Saldo Disponible${valuationModeSuffix}`} value={fmt(bankBalance)} onClick={() => onNavigate?.('caja-bancos')} />
-        <KpiCard icon={TrendingUp} label={`Ingresos Cobrados${valuationModeSuffix}`} value={fmt(totalIncome)} onClick={() => onNavigate?.('ingresos')} />
-        <KpiCard icon={TrendingDown} label={`Pagos Realizados${valuationModeSuffix}`} value={fmt(totalExpense)} onClick={() => onNavigate?.('gastos')} />
-        <KpiCard icon={DollarSign} label={`Flujo Neto${valuationModeSuffix}`} value={fmt(netCashFlow)} />
-        <KpiCard icon={BarChart3} label={`Total por Cobrar${valuationModeSuffix}`} value={fmt(totalCxc)} sub={`${cxcOverdue > 0 ? fmt(cxcOverdue) + ' vencido' : 'Sin vencidos'}`} onClick={() => onNavigate?.('cuentas-cobrar')} />
-        <KpiCard icon={BarChart3} label={`Total por Pagar${valuationModeSuffix}`} value={fmt(totalCxp)} sub={`${cxpOverdue > 0 ? fmt(cxpOverdue) + ' vencido' : 'Sin vencidos'}`} onClick={() => onNavigate?.('cuentas-pagar')} />
+        {renderKpi('Saldo Disponible', Landmark, bankBalance, originalBank, () => onNavigate?.('caja-bancos'))}
+        {renderKpi('Ingresos Cobrados', TrendingUp, totalIncome, originalIncome, () => onNavigate?.('ingresos'))}
+        {renderKpi('Pagos Realizados', TrendingDown, totalExpense, originalExpense, () => onNavigate?.('gastos'))}
+        {renderKpi('Flujo Neto', DollarSign, netCashFlow, (currency) => originalIncome(currency) - originalExpense(currency))}
+        {renderKpi('Total por Cobrar', BarChart3, totalCxc, originalCxc, () => onNavigate?.('cuentas-cobrar'), (currency) => {
+          const overdue = originalOverdue(pendingSalesInvoices, currency);
+          return overdue > 0 ? `${formatExplicitAmount(overdue, currency)} vencido` : 'Sin vencidos';
+        })}
+        {renderKpi('Total por Pagar', BarChart3, totalCxp, originalCxp, () => onNavigate?.('cuentas-pagar'), (currency) => {
+          const overdue = originalOverdue(pendingSupplierInvoices, currency);
+          return overdue > 0 ? `${formatExplicitAmount(overdue, currency)} vencido` : 'Sin vencidos';
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

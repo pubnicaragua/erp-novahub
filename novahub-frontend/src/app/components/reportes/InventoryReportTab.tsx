@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Scale, Warehouse, Tag, ShieldAlert, Gauge, Layers, Upload, CalendarClock, Download, Loader2, CheckCircle2 } from 'lucide-react';
+import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Warehouse, Tag, ShieldAlert, Gauge, Layers, Upload, CalendarClock, Download, Loader2, CheckCircle2 } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
@@ -28,6 +28,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86_400_000;
@@ -175,6 +176,8 @@ interface ProdRow {
   categoryName: string;
   costPrice: number;
   salePrice: number;
+  salePriceOriginal: number;
+  priceCurrency: SupportedCurrency;
   minStock: number;
   qty: number;
   reserved: number;
@@ -197,7 +200,7 @@ const TH = 'px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wide
 const TD = 'px-3 py-2 text-xs whitespace-nowrap';
 
 export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, baseCurrency, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationModeLabel, formatConvertedAmount: formatAmountBySource, formatExplicitAmount } = useCurrency();
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
   const canViewInventory = canPerform('INVENTORY', 'view');
@@ -248,6 +251,13 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const qty = levels.length > 0 ? levels.reduce((a: any, l: any) => a + l.quantity, 0) : Number(p.stock || 0);
         const mainLevel = levels.length > 0 ? levels.reduce((a: any, b: any) => (b.quantity > a.quantity ? b : a)) : null;
         const overstock = levels.some((l: any) => l.maxStock != null && l.quantity > l.maxStock);
+        const priceCurrency = normalizeCurrency(p.priceCurrency || baseCurrency);
+        const storedSalePriceOriginal = Number(p.salePriceOriginal || 0);
+        const salePriceOriginal = storedSalePriceOriginal > 0
+          ? storedSalePriceOriginal
+          : priceCurrency === normalizeCurrency(baseCurrency)
+            ? Number(p.salePrice || 0)
+            : Number(p.salePrice || 0) / Math.max(0.000001, Number(p.priceExchangeRate || 1));
         return {
           id: p.id,
           code: p.code || p.sku || '',
@@ -258,6 +268,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           categoryName: p.category?.name || (typeof p.category === 'string' ? p.category : 'Sin categoría'),
           costPrice: Number(p.costPrice || 0),
           salePrice: Number(p.salePrice || 0),
+          salePriceOriginal,
+          priceCurrency,
           minStock: Number(p.minStock ?? 0),
           qty,
           reserved: levels.reduce((a: any, l: any) => a + Number(l.quantity > 0 ? (p.reserved || 0) : 0), 0),
@@ -515,6 +527,39 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const margin = complete ? totalSaleValue - valuation.totalValue : null;
     return { totalSaleValue, withoutPrice, margin };
   }, [valuation]);
+
+  const originalCostCurrencies: SupportedCurrency[] = [normalizeCurrency(baseCurrency)];
+  const originalSaleCurrencies = summarizeAmountsByCurrency(
+    valuation.withStock,
+    (row) => row.qty * row.salePriceOriginal,
+    (row) => row.priceCurrency,
+    baseCurrency,
+  ).map((item) => item.currency);
+  const originalInventoryCost = (currency: SupportedCurrency) => currency === normalizeCurrency(baseCurrency) ? valuation.totalValue : 0;
+  const originalInventorySale = (currency: SupportedCurrency) => valuation.withStock
+    .filter((row) => row.priceCurrency === currency)
+    .reduce((sum, row) => sum + row.qty * row.salePriceOriginal, 0);
+  const renderInventoryMoneyKpi = (
+    title: string,
+    total: number,
+    currencies: SupportedCurrency[],
+    amountByCurrency: (currency: SupportedCurrency) => number,
+    color: string,
+    Icon: any,
+    detail: (currency: SupportedCurrency) => string,
+  ) => displayMode === 'ORIGINAL'
+    ? currencies.map((currency) => (
+      <Card key={`${title}-${currency}`} className="relative overflow-hidden border-border/40 bg-card transition-all hover:shadow-lg">
+        <div className="absolute top-2 right-2 opacity-10"><Icon className="size-10" /></div>
+        <CardHeader className="pb-1"><CardTitle className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><Icon className={`size-3.5 ${color}`} /> {title} ({currency})</CardTitle></CardHeader>
+        <CardContent><p className={`text-xl font-black ${color}`}>{formatExplicitAmount(amountByCurrency(currency), currency)}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{detail(currency)}</p></CardContent>
+      </Card>
+    ))
+    : <Card className="relative overflow-hidden border-border/40 bg-card transition-all hover:shadow-lg">
+      <div className="absolute top-2 right-2 opacity-10"><Icon className="size-10" /></div>
+      <CardHeader className="pb-1"><CardTitle className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><Icon className={`size-3.5 ${color}`} /> {title} ({displayCurrency})</CardTitle></CardHeader>
+      <CardContent><p className={`text-xl font-black ${color}`}>{formatConvertedAmount(total, baseCurrency)}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{valuationModeLabel}</p></CardContent>
+    </Card>;
 
   // ── KPI: Rotación de inventario ──
   const rotation = useMemo(() => {
@@ -806,7 +851,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.inventory', title: 'Reporte de inventario', tenantName: companyName, rows: effectiveRows, columns: [{ header: 'Producto', value: row => row.name || row.product?.name || '—' }, { header: 'Código', value: row => row.code || row.sku || '—' }, { header: 'Existencia', value: row => row.qty ?? row.quantity ?? 0, align: 'right' }, { header: 'Valor', value: row => row.value ?? row.stockValue ?? 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange) });
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.inventory', title: 'Reporte de inventario', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: effectiveRows, columns: [{ header: 'Producto', value: row => row.name || row.product?.name || '—' }, { header: 'Código', value: row => row.code || row.sku || '—' }, { header: 'Categoría', value: row => row.category?.name || row.category || '—' }, { header: 'Bodega', value: row => row.warehouse?.name || row.warehouseName || '—' }, { header: 'Existencia', value: row => row.qty ?? row.quantity ?? 0, align: 'right' }, { header: 'Valor', value: row => row.value ?? row.stockValue ?? 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange) });
         if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
@@ -1120,28 +1165,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       {/* ═══ KPI Cards ═══ */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Valor del inventario a costo */}
-        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Warehouse className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <DollarSign className="size-3.5 text-emerald-500" /> Valor del inventario a costo
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(valuation.totalValue, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {fmtQty(valuation.totalUnits)} unidades · {valuation.productsWithStock} productos con existencia{valuationModeSuffix ? ` · Vista ${valuationModeLabel.toLowerCase()}` : ''}
-            </p>
-            {valuation.status === 'PARTIAL' && (
-              <p className="text-[10px] font-bold text-amber-500 mt-1">
-                Calculado parcialmente · {valuation.withoutCost.length} productos sin costo registrado
-              </p>
-            )}
-            {valuation.status === 'UNAVAILABLE' && (
-              <p className="text-[10px] font-bold text-amber-500 mt-1">Sin existencias valorizadas</p>
-            )}
-          </CardContent>
-        </Card>
+        {renderInventoryMoneyKpi('Valor del inventario a costo', valuation.totalValue, originalCostCurrencies, originalInventoryCost, 'text-emerald-500', Warehouse, (currency) => `${fmtQty(valuation.totalUnits)} unidades · ${valuation.productsWithStock} productos · Base ${currency}`)}
 
         {/* Productos en riesgo de abastecimiento */}
         <button type="button" onClick={() => setRiskGroup('riesgo')} className="text-left">
@@ -1192,23 +1216,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         </Card>
 
         {/* Valor potencial a precio de venta */}
-        <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Tag className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Scale className="size-3.5 text-amber-500" /> Valor potencial a precio de venta
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-amber-500">{formatConvertedAmount(potential.totalSaleValue, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Existencia × precio vigente — no representa ingreso ni utilidad hasta vender</p>
-            {potential.margin !== null ? (
-              <p className="text-[10px] font-bold text-emerald-500 mt-1">Margen bruto potencial: {formatConvertedAmount(potential.margin, 'NIO')}</p>
-            ) : (
-              <p className="text-[10px] text-muted-foreground/70 mt-1">Margen no calculable: hay productos sin costo o sin precio</p>
-            )}
-          </CardContent>
-        </Card>
+        {renderInventoryMoneyKpi('Valor potencial a precio de venta', potential.totalSaleValue, originalSaleCurrencies, originalInventorySale, 'text-amber-500', Tag, (currency) => `Existencia × precio vigente · ${valuation.productsWithStock} productos · ${currency}`)}
       </div>
 
       {/* ═══ Franja operativa ═══ */}

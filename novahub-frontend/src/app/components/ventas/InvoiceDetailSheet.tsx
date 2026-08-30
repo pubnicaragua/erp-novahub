@@ -3,7 +3,7 @@ import { Clock3, Eye, FileText, History, UserRound, Wallet } from 'lucide-react'
 import type { Invoice, PaymentReceived } from '../../types';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
@@ -11,6 +11,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
+import { CurrencyRateDetails } from '../ui/CurrencyValuation';
 
 type InvoiceSourceBadge = {
   label: string;
@@ -131,6 +132,7 @@ export function InvoiceDetailSheet({
               <span>Pagado: <strong className="text-foreground">{formatAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate)}</strong></span>
               <span>Moneda: <strong className="text-foreground">{currencyLabels[String(invoice.currency || 'NIO').toUpperCase()] || 'No especificada'}</strong></span>
             </div>
+            <CurrencyRateDetails sourceCurrency={invoice.currency} sourceExchangeRate={invoice.exchangeRate} className="mt-3 border-t border-primary/15 pt-2" />
           </section>
 
           <section className="flex flex-wrap gap-2">
@@ -257,6 +259,9 @@ export function InvoiceDetailSheet({
             </TabsContent>
           </Tabs>
         </div>
+        <SheetFooter className="flex-row flex-wrap justify-end border-t border-border/50 px-5 py-3 sm:px-6">
+          <Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={onClose}>Cerrar</Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

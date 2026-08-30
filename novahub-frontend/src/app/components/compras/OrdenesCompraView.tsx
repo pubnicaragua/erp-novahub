@@ -1227,6 +1227,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         title: 'Órdenes de compra',
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-order',
         columns: [
@@ -1361,6 +1362,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           notes: order.notes,
         },
         tenantName: user?.tenantName || 'Nova Hub',
+        tenantLogo: user?.sessionBranding?.logo || null,
       });
       toast.success('PDF descargado', { id: pdfToastId });
     } catch (e: any) {
@@ -1377,6 +1379,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     status: normalizePurchaseOrderStatus(order.status),
     sourceLabel: order.purchaseRequestId || order.purchaseRequestNumber ? 'Desde solicitud de compra' : undefined,
     totalLabel: formatConvertedAmount(Number(order.total || 0), order.currency, order.exchangeRate || globalRate),
+    sourceCurrency: order.currency,
+    sourceExchangeRate: order.exchangeRate || globalRate,
     summaryDetails: [
       { label: 'Líneas', value: String(order.items?.length || 0) },
       { label: 'Bodega', value: order.warehouse?.name || 'No indicada' },

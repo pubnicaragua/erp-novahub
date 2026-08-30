@@ -13,6 +13,7 @@ const PERSISTED_UI_KEYS = new Set([
   'novahub:manager-sidebar-collapsed',
   'novahub-pos-catalog-view',
   'novahub-pos-show-availability',
+  'erp-currency-display-mode',
 ]);
 
 // These settings are intentionally tenant-scoped by their callers. Keep them

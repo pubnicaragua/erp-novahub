@@ -13,6 +13,7 @@ import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { ReportSectionsDialog, type ReportSection, type ReportSign } from './ReportSectionsDialog';
 import { DateField } from '../ui/DateField';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 const BALANCE_SHEET_SECTIONS: ReportSection[] = [
   { id: 'activos-corrientes', label: 'Activos corrientes', sign: 'ASSET', accountIds: [] },
@@ -66,6 +67,7 @@ interface BSData {
 }
 
 export function BalanceGeneralView() {
+  const { baseCurrency, formatCurrentAmount } = useCurrency();
   const [dateFrom, setDateFrom] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -134,7 +136,7 @@ export function BalanceGeneralView() {
   const openingPasivos = data?.openingTotalLiabilities ?? (showOpening ? 0 : undefined);
   const openingPatrimonio = data?.openingTotalEquity ?? (showOpening ? 0 : undefined);
 
-  const fmt = (n: number) => n.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (n: number) => formatCurrentAmount(n, baseCurrency);
 
   const filterAccounts = (accounts: BSAccount[]) => {
     if (!searchTerm.trim()) return accounts;

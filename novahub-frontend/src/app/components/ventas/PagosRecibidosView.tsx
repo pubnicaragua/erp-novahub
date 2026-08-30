@@ -32,9 +32,10 @@ import { isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentRefer
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -129,7 +130,7 @@ function groupReceivedPayments(
 }
 
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('payment', user?.tenantId, user?.id);
@@ -534,6 +535,12 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       : toBaseAmount(payment.amount || 0, payment.currency, payment.exchangeRate || globalRate)),
     0,
   );
+  const originalCollectedAmounts = summarizeAmountsByCurrency(
+    data.filter((payment) => payment.isActive !== false),
+    (payment) => Number(payment.amount || 0),
+    (payment) => payment.currency,
+    baseCurrency,
+  );
 
   const detailDocument = detailPayment?.invoice || detailPayment?.creditNote?.invoice || detailPayment?.creditNote;
   const detailCharges = getSalesAdditionalCharges(detailDocument).filter((charge) => charge.amount > 0.001);
@@ -678,7 +685,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
+        {displayMode === 'ORIGINAL'
+          ? originalCollectedAmounts.map((summary) => <SalesKpiCard key={`collected-${summary.currency}`} title={`Total Recaudado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />)
+          : <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />}
         <SalesKpiCard title="Pagos" value={groupedPayments.length} icon={CheckCircle2} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Con documento" value={groupedPayments.filter(p => p.invoice?.number || p.creditNote?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
         <SalesKpiCard title="Método Principal" value={mainMethod} icon={Wallet} color="text-purple-500" bg="bg-purple-500/10" />
@@ -803,6 +812,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
               {detailPayment.notes && <div className="rounded-2xl border border-border/50 bg-muted/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{detailPayment.notes}</p></div>}
             </div>
           )}
+          <SheetFooter className="flex-row flex-wrap justify-end border-t border-border/50 px-5 py-3 sm:px-6">
+            <Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => setDetailPayment(null)}>Cerrar</Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
 

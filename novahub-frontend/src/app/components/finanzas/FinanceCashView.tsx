@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Landmark, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
@@ -12,11 +12,12 @@ import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, ComposedChart, Cell, Legend,
 } from 'recharts'
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme'
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency'
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316']
 
 export function FinanceCashView() {
-  const { displayCurrency, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount } = useCurrency()
+  const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency()
   const { user, canPerform } = useAuth()
   const canReadFinancial = canPerform('FINANCIAL', 'view')
   const canReadSales = canPerform('SALES', 'view')
@@ -49,11 +50,40 @@ export function FinanceCashView() {
   const invoiceBase = (invoice: any) => toDisplayAmount(Number(invoice.total || invoice.baseTotal || 0), invoice.currency, invoice.exchangeRate)
   const paymentBase = (payment: any) => toDisplayAmount(Number(payment.amount || payment.baseAmount || 0), payment.currency, payment.exchangeRate)
 
-  const totalBalance = bankAccounts.reduce((a, acc: any) => a + toDisplayAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate), 0)
+  const totalBalance = bankAccounts.reduce((a: number, acc: any) => a + toDisplayAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate), 0)
   const cashAccounts = bankAccounts.filter((a: any) => String(a.subtype || '').toUpperCase() === 'CASH')
   const bankAccs = bankAccounts.filter((a: any) => String(a.subtype || '').toUpperCase() !== 'CASH')
   const cashTotal = cashAccounts.reduce((a: number, ac: any) => a + toDisplayAmount(Number(ac.balance || 0), ac.currency, ac.exchangeRate), 0)
   const bankTotal = bankAccs.reduce((a: number, ac: any) => a + toDisplayAmount(Number(ac.balance || 0), ac.currency, ac.exchangeRate), 0)
+  const originalCurrencies = summarizeAmountsByCurrency(bankAccounts, (account: any) => Number(account.balance || 0), (account: any) => account.currency).map((item) => item.currency)
+  const originalAccountSum = (accountsToSum: any[], currency: SupportedCurrency) => accountsToSum
+    .filter((account: any) => normalizeCurrency(account.currency) === currency)
+    .reduce((sum: number, account: any) => sum + Number(account.balance || 0), 0)
+  const renderSummaryCard = (
+    label: string,
+    total: number,
+    colorClass: string,
+    amountByCurrency: (currency: SupportedCurrency) => number,
+    meta?: string,
+  ) => displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => (
+      <Card key={`${label}-${currency}`} className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
+        <CardContent className="p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label} ({currency})</p>
+          <p className={`text-2xl font-black tabular-nums ${colorClass}`}>{formatExplicitAmount(amountByCurrency(currency), currency)}</p>
+          {meta && <p className="text-[9px] text-muted-foreground mt-1">{meta}</p>}
+        </CardContent>
+      </Card>
+    ))
+    : (
+      <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
+        <CardContent className="p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}{valuationModeSuffix}</p>
+          <p className={`text-2xl font-black tabular-nums ${colorClass}`}>{fmt(total)}</p>
+          {meta && <p className="text-[9px] text-muted-foreground mt-1">{meta}</p>}
+        </CardContent>
+      </Card>
+    )
 
   // Aggregate real monthly data from invoices + payments
   const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -87,25 +117,9 @@ export function FinanceCashView() {
   return (
     <div className="min-w-0 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo Total Disponible{valuationModeSuffix}</p>
-            <p className="text-2xl font-black tabular-nums text-primary">{fmt(totalBalance)}</p>
-            <p className="text-[9px] text-muted-foreground mt-1">{bankAccounts.length} cuenta(s) · {cashAccounts.length} caja(s) · {bankAccs.length} banco(s)</p>
-          </CardContent>
-        </Card>
-        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">En Efectivo (Cajas){valuationModeSuffix}</p>
-            <p className="text-lg font-black tabular-nums text-emerald-500">{fmt(cashTotal)}</p>
-          </CardContent>
-        </Card>
-        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">En Bancos{valuationModeSuffix}</p>
-            <p className="text-lg font-black tabular-nums text-blue-500">{fmt(bankTotal)}</p>
-          </CardContent>
-        </Card>
+        {renderSummaryCard('Saldo Total Disponible', totalBalance, 'text-primary', (currency) => originalAccountSum(bankAccounts, currency), `${bankAccounts.length} cuenta(s) · ${cashAccounts.length} caja(s) · ${bankAccs.length} banco(s)`)}
+        {renderSummaryCard('En Efectivo (Cajas)', cashTotal, 'text-emerald-500', (currency) => originalAccountSum(cashAccounts, currency))}
+        {renderSummaryCard('En Bancos', bankTotal, 'text-blue-500', (currency) => originalAccountSum(bankAccs, currency))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -183,7 +197,7 @@ export function FinanceCashView() {
                       <td className="py-2 font-mono text-foreground">{acc.code} - {acc.name}</td>
                       <td className="py-2"><Badge variant="secondary" className="text-[10px]">{subtypeLabel(acc.subtype || acc.type)}</Badge></td>
                       <td className="py-2 text-muted-foreground">{acc.currency || 'NIO'}</td>
-                      <td className="py-2 text-right font-black tabular-nums text-foreground">{fmt(Number(acc.balance || 0))}</td>
+                      <td className="py-2 text-right font-black tabular-nums text-foreground">{displayMode === 'ORIGINAL' ? formatExplicitAmount(Number(acc.balance || 0), normalizeCurrency(acc.currency)) : fmt(toDisplayAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -197,7 +211,7 @@ export function FinanceCashView() {
                       <p className="break-words text-xs font-bold font-mono text-foreground">{acc.code} - {acc.name}</p>
                       <p className="mt-1 text-[10px] text-muted-foreground">{subtypeLabel(acc.subtype || acc.type)} · {acc.currency || 'NIO'}</p>
                     </div>
-                    <p className="shrink-0 text-right text-sm font-black tabular-nums text-foreground">{fmt(Number(acc.balance || 0))}</p>
+                    <p className="shrink-0 text-right text-sm font-black tabular-nums text-foreground">{displayMode === 'ORIGINAL' ? formatExplicitAmount(Number(acc.balance || 0), normalizeCurrency(acc.currency)) : fmt(toDisplayAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate))}</p>
                   </div>
                 </div>
               ))}

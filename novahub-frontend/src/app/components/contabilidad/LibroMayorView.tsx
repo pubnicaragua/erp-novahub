@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { referenceTypeLabel } from '../../utils/accountingLabels';
 import { DateField } from '../ui/DateField';
 // import { motion } from 'motion/react';
@@ -423,7 +423,7 @@ export function LibroMayorView() {
       </Card>
 
       <Sheet open={Boolean(selectedEntry)} onOpenChange={(open) => { if (!open) closeEntryDetail(); }}>
-        <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-xl">
+        <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
           <SheetHeader className="sticky top-0 z-10 border-b border-border/50 bg-background/95 px-5 py-5 backdrop-blur-md sm:px-6">
             <div className="flex items-start gap-3 pr-8">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -440,7 +440,7 @@ export function LibroMayorView() {
             </div>
           </SheetHeader>
 
-          <div className="space-y-5 px-5 py-5 sm:px-6">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
             {selectedEntry && (
               <div className="grid grid-cols-2 gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
                 <div className="min-w-0">
@@ -534,6 +534,9 @@ export function LibroMayorView() {
               </div>
             )}
           </div>
+          <SheetFooter className="flex-row flex-wrap justify-end border-t border-border/50 px-5 py-3 sm:px-6">
+            <Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={closeEntryDetail}>Cerrar</Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     </div>

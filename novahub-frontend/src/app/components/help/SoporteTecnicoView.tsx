@@ -225,12 +225,12 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
         {selectedTicket && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedTicket(null)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-2xl bg-background rounded-[32px] overflow-hidden shadow-2xl border border-border/40 p-8 my-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative my-4 max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-2xl overflow-y-auto rounded-[32px] border border-border/40 bg-background p-4 shadow-2xl sm:my-8 sm:max-h-[90vh] sm:p-8">
+              <div className="mb-6 flex min-w-0 items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="p-3 bg-primary/10 rounded-2xl"><Eye className="size-6 text-primary" /></div>
-                  <div>
-                    <h2 className="text-2xl font-black tracking-tighter uppercase italic leading-none">{selectedTicket.number}</h2>
+                  <div className="min-w-0">
+                    <h2 className="break-words text-xl font-black tracking-tighter uppercase italic leading-none sm:text-2xl">{selectedTicket.number}</h2>
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">Detalle del Ticket</p>
                   </div>
                 </div>
@@ -253,7 +253,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
                 {(selectedTicket.evidenceUrl1 || selectedTicket.evidenceUrl2) && (
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Evidencia</p>
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-3">
                       {[selectedTicket.evidenceUrl1, selectedTicket.evidenceUrl2].filter(Boolean).map((url: string, i: number) => (
                         <a key={i} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={`Evidencia ${i+1}`} className="h-32 rounded-xl border border-border/50 object-cover hover:scale-105 transition-transform shadow-sm" /></a>
                       ))}
@@ -267,7 +267,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
                     {selectedTicket.respondedBy && <p className="text-[10px] text-muted-foreground mt-3">Respondido por {selectedTicket.respondedBy} • {selectedTicket.respondedAt ? new Date(selectedTicket.respondedAt).toLocaleString() : ''}</p>}
                   </div>
                 )}
-                <div className="flex items-center gap-4 text-[10px] text-muted-foreground pt-4 border-t border-border/30">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground pt-4 border-t border-border/30">
                   <span>Creado: {new Date(selectedTicket.createdAt).toLocaleString()}</span>
                   <span>Por: {selectedTicket.createdByName}</span>
                 </div>

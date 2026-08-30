@@ -367,7 +367,7 @@ export function ActivosFijosView() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="p-4 space-y-5 max-h-[calc(100vh-12rem)] overflow-y-auto">
+              <CardContent className="min-w-0 max-h-[calc(100dvh-12rem)] space-y-5 overflow-y-auto p-4">
                 {detailLoading ? (
                   <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                     <RefreshCw className="size-8 animate-spin text-primary" />

@@ -235,7 +235,7 @@ const EMPTY_FORM: FormState = {
 
 export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?: string }) {
   const queryClient = useQueryClient();
-  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { displayMode, formatConvertedAmount } = useCurrency();
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
   const [search, setSearch] = useState('');
@@ -537,16 +537,12 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
 
   const renderCostCell = (asset: AssetRow) => {
     const original = `${currencySymbol(asset.currency || 'USD')} ${fmtCost(asset.cost)}`;
-    let equivalent: string | null = null;
-    if (asset.currency !== baseCurrency) {
-      try {
-        equivalent = formatConvertedAmount(asset.cost, asset.currency as any, asset.exchangeRate ?? undefined);
-      } catch { equivalent = null; }
-    }
+    const amount = displayMode === 'ORIGINAL'
+      ? original
+      : formatConvertedAmount(asset.cost, asset.currency as any, asset.exchangeRate ?? undefined);
     return (
       <div className="text-right">
-        <p className="font-mono text-xs">{original}</p>
-        {equivalent && <p className="font-mono text-[10px] text-muted-foreground">≈ {equivalent}</p>}
+        <p className="font-mono text-xs">{amount}</p>
       </div>
     );
   };
@@ -908,10 +904,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                 <div className="space-y-2 sm:col-span-2">
                   <Label>Tasa de cambio (C$ por US$)</Label>
                   <Input type="number" step="0.01" min="0" value={form.exchangeRate} onChange={e => set('exchangeRate', e.target.value)} placeholder="Ej: 36.5 (se sugiere automáticamente)" />
-                  <p className="text-[10px] text-muted-foreground">Se mostrará el costo también en dólares equivalentes.</p>
+                  {displayMode !== 'ORIGINAL' && <p className="text-[10px] text-muted-foreground">Se mostrará el costo también en dólares equivalentes.</p>}
                 </div>
               )}
-              {canViewInventoryCost && form.currency === 'NIO' && form.cost && Number(form.cost) > 0 && form.exchangeRate && Number(form.exchangeRate) > 0 && (
+              {canViewInventoryCost && displayMode !== 'ORIGINAL' && form.currency === 'NIO' && form.cost && Number(form.cost) > 0 && form.exchangeRate && Number(form.exchangeRate) > 0 && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-700 sm:col-span-2">
                   Equivalente: <strong>$ {fmtCost(Number(form.cost) / Number(form.exchangeRate))} USD</strong>
                   <span className="text-muted-foreground"> · Costo: C$ {fmtCost(Number(form.cost))}</span>

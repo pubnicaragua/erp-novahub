@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { ScrollArea } from '../ui/scroll-area';
 import { Skeleton } from '../ui/skeleton';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { hrService } from '../../services/hr.service';
@@ -222,6 +222,9 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
             </div>
           </ScrollArea>
         </Tabs>
+        <SheetFooter className="flex-row flex-wrap justify-end border-t border-border/50 px-5 py-3 sm:px-6">
+          <Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}>Cerrar</Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

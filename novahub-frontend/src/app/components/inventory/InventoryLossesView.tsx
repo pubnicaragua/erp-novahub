@@ -10,6 +10,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 const REASON_LABELS: Record<string, string> = {
@@ -29,7 +30,7 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
   const { user, canPerform } = useAuth();
   const canReadInventory = canPerform('INVENTORY', 'view');
   const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
-  const { formatCurrentAmount } = useCurrency();
+  const { baseCurrency, displayMode, formatExplicitAmount, formatConvertedAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'current';
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -55,6 +56,18 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
   const rows = data?.data || [];
   const meta = data?.meta || { total: 0, page: 1, totalPages: 1 };
   const totalLoss = rows.reduce((sum, row) => sum + Number(row.totalLoss || 0), 0);
+  const sourceLossRows = rows.flatMap((row: any) => Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
+    ? row.originalCurrencyBreakdown
+    : [{ amount: Number(row.totalLoss || 0), currency: row.currency || baseCurrency }]);
+  const lossBreakdown = summarizeAmountsByCurrency(
+    sourceLossRows,
+    (row: any) => Number(row.amount || 0),
+    (row: any) => row.currency,
+    baseCurrency,
+  ) as Array<{ currency: SupportedCurrency; amount: number; count: number }>;
+  const renderLossAmount = (amount: number, currency?: string) => displayMode === 'ORIGINAL'
+    ? formatExplicitAmount(amount, normalizeCurrency(currency || baseCurrency))
+    : formatConvertedAmount(amount, normalizeCurrency(currency || baseCurrency));
   const loading = lossesQuery.isLoading || lossesQuery.isFetching;
 
   const fmtQty = (n: number) => Number(n || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 });
@@ -94,7 +107,11 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
               <TrendingDown className="size-3.5 text-red-500" /> Valor total (página)
             </div>
-            <p className="mt-1 text-2xl font-black tabular-nums">{formatCurrentAmount(totalLoss)}</p>
+            <div className="mt-1 space-y-0.5">
+              {displayMode === 'ORIGINAL'
+                ? lossBreakdown.map((item) => <p key={item.currency} className="text-2xl font-black tabular-nums">{formatExplicitAmount(item.amount, item.currency)}</p>)
+                : <p className="text-2xl font-black tabular-nums">{formatConvertedAmount(totalLoss, baseCurrency)}</p>}
+            </div>
           </CardContent>
         </Card>}
         <Card className="rounded-2xl border-border/50">
@@ -170,7 +187,9 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Valor</p>
-                      <p className="mt-1 font-mono text-xs font-bold text-red-600">{formatCurrentAmount(Number(row.totalLoss || 0))}</p>
+                      <p className="mt-1 font-mono text-xs font-bold text-red-600">{displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
+                        ? row.originalCurrencyBreakdown.map((item: any) => <span key={item.currency} className="ml-2 inline-block">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency || baseCurrency))}</span>)
+                        : renderLossAmount(Number(row.totalLoss || 0), row.currency)}</p>
                     </div>
                   </div>
                 </div>
@@ -224,7 +243,9 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
                     ))}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs font-bold text-red-600">-{fmtQty(totalQty)}</TableCell>
-                   {canViewInventoryCost && <TableCell className="text-right font-mono text-xs font-bold text-red-600">{formatCurrentAmount(Number(row.totalLoss || 0))}</TableCell>}
+                   {canViewInventoryCost && <TableCell className="text-right font-mono text-xs font-bold text-red-600">{displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
+                     ? row.originalCurrencyBreakdown.map((item: any) => <span key={item.currency} className="ml-2 inline-block">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency || baseCurrency))}</span>)
+                     : renderLossAmount(Number(row.totalLoss || 0), row.currency)}</TableCell>}
                   <TableCell>
                     {row.account ? (
                       <button

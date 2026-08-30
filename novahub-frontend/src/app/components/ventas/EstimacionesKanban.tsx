@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GripVertical, Plus, Settings2, Trash2, Pencil, X, Check, Eye, Clock, FileText } from 'lucide-react';
 import { cn } from '../ui/utils';
@@ -6,8 +6,10 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent } from '../ui/card';
+import { FastColorInput } from '../ui/FastColorInput';
 import type { Estimate } from '../../types';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatDateEs } from '../../utils/dateFormat';
 
 export interface KanbanColumn {
@@ -26,6 +28,7 @@ const DEFAULT_COLUMNS: KanbanColumn[] = [
 ];
 
 const COLUMN_STORAGE_KEY = 'erp-kanban-columns-v2';
+const POSITION_STORAGE_KEY = 'erp-estimate-kanban-positions-v1';
 
 function loadColumns(): KanbanColumn[] {
   try {
@@ -42,6 +45,29 @@ function saveColumns(columns: KanbanColumn[]) {
   localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(columns));
 }
 
+function loadKanbanPositions(storageKey: string): Record<string, string> {
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveKanbanPositions(storageKey: string, positions: Record<string, string>) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(positions));
+  } catch { /* ignore */ }
+}
+
+function getInitialColumnId(status: unknown, columns: KanbanColumn[]): string {
+  const normalizedStatus = String(status || '').toUpperCase();
+  const visualValue = normalizedStatus === 'IN_PROCESS' ? 'IN_PROGRESS' : normalizedStatus;
+  return columns.find((column) => column.value === visualValue)?.id || columns[0]?.id || '';
+}
+
 function hexToRgba(hex: string, alpha: number) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -49,66 +75,58 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/* ── Drag Ghost Builder ─────────────────────────────────── */
-function buildDragGhost(estimate: Estimate, column: KanbanColumn, formatConvertedAmount: (a: number, c?: string, e?: number) => string): HTMLElement {
-  const ghost = document.createElement('div');
-  ghost.style.cssText = `
-    position: fixed; top: -9999px; left: -9999px; width: 280px; padding: 14px;
-    border-radius: 14px; border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(255,255,255,0.82); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    box-shadow: 0 12px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
-    font-family: system-ui, -apple-system, sans-serif; pointer-events: none; z-index: 99999;
-  `;
-  const borderColor = hexToRgba(column.color, 0.25);
-  ghost.style.borderLeft = `3px solid ${column.color}`;
-  ghost.innerHTML = `
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-      <span style="font-size:10px;font-weight:900;font-family:monospace;color:${column.color};">${estimate.number || ''}</span>
-    </div>
-    <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-      ${estimate.customer?.name || 'Varios'}
-    </div>
-    <div style="font-size:10px;color:#64748b;margin-bottom:8px;">
-      ${formatConvertedAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate)}
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;">
-      <span style="width:8px;height:8px;border-radius:50%;background:${column.color};display:inline-block;"></span>
-      <span style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:${column.color};">${column.label}</span>
-    </div>
-  `;
-  document.body.appendChild(ghost);
-  return ghost;
-}
-
 interface EstimacionesKanbanProps {
   data: Estimate[];
-  onRefresh: () => Promise<void> | void;
-  onStatusChange: (estimateId: string, newStatus: string, estimate: Estimate) => Promise<void>;
   onViewDetail: (estimate: Estimate) => void;
   canEdit: boolean;
 }
 
-export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDetail, canEdit }: EstimacionesKanbanProps) {
+export function EstimacionesKanban({ data, onViewDetail, canEdit }: EstimacionesKanbanProps) {
   const { formatConvertedAmount } = useCurrency();
+  const { user } = useAuth();
+  const positionStorageKey = `${POSITION_STORAGE_KEY}:${user?.tenantId || 'unknown'}:${user?.id || 'anonymous'}`;
   const [columns, setColumns] = useState<KanbanColumn[]>(loadColumns);
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editColor, setEditColor] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [kanbanPositions, setKanbanPositions] = useState<Record<string, string>>(() => loadKanbanPositions(positionStorageKey));
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [newColumnLabel, setNewColumnLabel] = useState('');
   const [newColumnColor, setNewColumnColor] = useState('#6366f1');
   const dragCounter = useRef<Record<string, number>>({});
 
-  const handleDragStart = useCallback((e: React.DragEvent, estimateId: string, estimate: Estimate, column: KanbanColumn) => {
-    e.dataTransfer.setData('text/plain', estimateId);
-    e.dataTransfer.effectAllowed = 'move';
-    const ghost = buildDragGhost(estimate, column, formatConvertedAmount);
-    e.dataTransfer.setDragImage(ghost, 140, 30);
-    requestAnimationFrame(() => { document.body.removeChild(ghost); });
+  useEffect(() => {
+    setKanbanPositions(loadKanbanPositions(positionStorageKey));
+  }, [positionStorageKey]);
+
+  useEffect(() => {
+    saveKanbanPositions(positionStorageKey, kanbanPositions);
+  }, [positionStorageKey, kanbanPositions]);
+
+  useEffect(() => {
+    setKanbanPositions((previous) => {
+      const next = { ...previous };
+      let changed = false;
+      data.forEach((estimate) => {
+        if (!next[estimate.id] || !columns.some((column) => column.id === next[estimate.id])) {
+          const initialColumnId = getInitialColumnId(estimate.status, columns);
+          if (next[estimate.id] !== initialColumnId) {
+            next[estimate.id] = initialColumnId;
+            changed = true;
+          }
+        }
+      });
+      return changed ? next : previous;
+    });
+  }, [columns, data]);
+
+  const handleDragStart = useCallback((event: React.DragEvent, estimateId: string) => {
+    event.dataTransfer.setData('text/plain', estimateId);
+    event.dataTransfer.effectAllowed = 'move';
     setDraggedItem(estimateId);
-  }, [formatConvertedAmount]);
+  }, []);
 
   const handleDragEnd = useCallback(() => {
     setDraggedItem(null);
@@ -116,50 +134,40 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
     dragCounter.current = {};
   }, []);
 
-  const handleDragEnter = useCallback((e: React.DragEvent, columnId: string) => {
-    e.preventDefault();
+  const handleDragEnter = useCallback((event: React.DragEvent, columnId: string) => {
+    event.preventDefault();
     dragCounter.current[columnId] = (dragCounter.current[columnId] || 0) + 1;
     setDragOverColumn(columnId);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent, columnId: string) => {
-    e.preventDefault();
+  const handleDragLeave = useCallback((event: React.DragEvent, columnId: string) => {
+    event.preventDefault();
     dragCounter.current[columnId] = (dragCounter.current[columnId] || 0) - 1;
     if (dragCounter.current[columnId] <= 0) {
       dragCounter.current[columnId] = 0;
-      setDragOverColumn((prev) => prev === columnId ? null : prev);
+      setDragOverColumn((previous) => previous === columnId ? null : previous);
     }
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent, targetColumn: KanbanColumn) => {
-    e.preventDefault();
-    const estimateId = e.dataTransfer.getData('text/plain');
-    if (!estimateId) return;
-    const estimate = data.find((item) => item.id === estimateId);
-    if (!estimate) return;
-    const currentStatus = String(estimate.status || '').toUpperCase();
-    if (currentStatus === targetColumn.value) return;
+  const handleDrop = useCallback((event: React.DragEvent, targetColumn: KanbanColumn) => {
+    event.preventDefault();
+    const estimateId = event.dataTransfer.getData('text/plain');
+    if (!estimateId || !data.some((estimate) => estimate.id === estimateId)) return;
+    setKanbanPositions((previous) => ({ ...previous, [estimateId]: targetColumn.id }));
     setDraggedItem(null);
     setDragOverColumn(null);
     dragCounter.current = {};
-    await onStatusChange(estimateId, targetColumn.value, estimate);
-  }, [data, onStatusChange]);
+  }, [data]);
 
   const columnEstimates = useMemo(() => {
     const grouped: Record<string, Estimate[]> = {};
-    columns.forEach((col) => { grouped[col.value] = []; });
-    grouped['CANCELLED'] = grouped['CANCELLED'] || [];
+    columns.forEach((col) => { grouped[col.id] = []; });
     data.forEach((estimate) => {
-      const status = String(estimate.status || '').toUpperCase();
-      if (grouped[status]) {
-        grouped[status].push(estimate);
-      } else {
-        grouped['DRAFT'] = grouped['DRAFT'] || [];
-        grouped['DRAFT'].push(estimate);
-      }
+      const position = kanbanPositions[estimate.id] || getInitialColumnId(estimate.status, columns);
+      if (grouped[position]) grouped[position].push(estimate);
     });
     return grouped;
-  }, [data, columns]);
+  }, [data, columns, kanbanPositions]);
 
   const handleAddColumn = () => {
     if (!newColumnLabel.trim()) return;
@@ -196,9 +204,10 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">Tablero Kanban</h3>
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary">{data.length} cotizaciones</span>
+          <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-bold text-muted-foreground" title="Mover tarjetas cambia solo la posición visual del tablero; no modifica el estado de la cotización.">Estado visual · no modifica el registro</span>
         </div>
         <div className="flex items-center gap-2">
           {canEdit && (
@@ -224,7 +233,7 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
                     <div key={col.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/80 p-2">
                       {editingColumn === col.id ? (
                         <>
-                          <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="size-6 cursor-pointer rounded border-0" />
+                          <FastColorInput value={editColor} onChange={setEditColor} className="size-6 cursor-pointer rounded border-0" />
                           <Input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} className="h-7 flex-1 text-xs" autoFocus />
                           <Button size="icon" variant="ghost" className="size-7" onClick={() => handleSaveEdit(col.id)}><Check className="size-3.5 text-emerald-500" /></Button>
                           <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingColumn(null)}><X className="size-3.5 text-red-500" /></Button>
@@ -242,7 +251,7 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
                   ))}
                 </div>
                 <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border/60 bg-card/70 p-2">
-                  <input type="color" value={newColumnColor} onChange={(e) => { setNewColumnColor(e.target.value); }} className="size-6 cursor-pointer rounded border-0" />
+                  <FastColorInput value={newColumnColor} onChange={setNewColumnColor} className="size-6 cursor-pointer rounded border-0" />
                   <Input value={newColumnLabel} onChange={(e) => setNewColumnLabel(e.target.value)} placeholder="Nueva columna..." className="h-7 flex-1 text-xs" onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()} />
                   <Button size="icon" variant="ghost" className="size-7" onClick={handleAddColumn} disabled={!newColumnLabel.trim()}><Plus className="size-3.5 text-primary" /></Button>
                 </div>
@@ -255,8 +264,8 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
       {/* Kanban Board */}
       <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 280px)' }}>
         {columns.map((col) => {
-          const estimates = columnEstimates[col.value] || [];
-          const isOver = dragOverColumn === col.value;
+          const estimates = columnEstimates[col.id] || [];
+          const isOver = dragOverColumn === col.id;
           return (
             <div
               key={col.id}
@@ -272,12 +281,11 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
                 boxShadow: isOver
                   ? `0 8px 32px ${hexToRgba(col.color, 0.12)}, 0 2px 8px rgba(0,0,0,0.04)`
                   : '0 1px 8px hsl(var(--foreground) / 0.06)',
-                ringColor: col.color,
               }}
-              onDragEnter={(e) => handleDragEnter(e, col.value)}
-              onDragLeave={(e) => handleDragLeave(e, col.value)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => handleDrop(e, col)}
+              onDragEnter={(event) => handleDragEnter(event, col.id)}
+              onDragLeave={(event) => handleDragLeave(event, col.id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => handleDrop(event, col)}
             >
               {/* Column Header */}
               <div className="flex items-center justify-between px-4 py-3">
@@ -329,7 +337,7 @@ interface KanbanCardProps {
   column: KanbanColumn;
   formatConvertedAmount: (amount: number, currency?: string, exchangeRate?: number) => string;
   onViewDetail: (estimate: Estimate) => void;
-  onDragStart: (e: React.DragEvent, id: string, estimate: Estimate, column: KanbanColumn) => void;
+  onDragStart: (event: React.DragEvent, estimateId: string) => void;
   onDragEnd: () => void;
   isDragging: boolean;
   canEdit: boolean;
@@ -348,8 +356,8 @@ function KanbanCard({ estimate, column, formatConvertedAmount, onViewDetail, onD
       animate={{ opacity: isDragging ? 0.4 : 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
-      draggable={canEdit}
-      onDragStart={(e) => onDragStart(e as any, estimate.id, estimate, column)}
+      draggable
+      onDragStart={(event) => onDragStart(event as any, estimate.id)}
       onDragEnd={onDragEnd}
       className={cn(
         'group cursor-grab active:cursor-grabbing rounded-xl p-3.5 transition-all duration-150',

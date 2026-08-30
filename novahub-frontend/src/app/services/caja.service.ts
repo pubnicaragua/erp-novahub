@@ -460,6 +460,8 @@ export interface HoldListResponse {
 export interface DashboardKPIs {
   totalRevenue: number;
   totalExpenses: number;
+  revenueOriginalCurrencyBreakdown?: { currency: 'NIO' | 'USD'; amount: number; count: number }[];
+  expenseOriginalCurrencyBreakdown?: { currency: 'NIO' | 'USD'; amount: number; count: number }[];
   ordersCount: number;
   pendingOrders: number;
   netMargin: number;
@@ -475,6 +477,8 @@ export interface ProductPerformanceItem {
   salePrice?: number;
   margin?: number;
   profit?: number;
+  revenueOriginalCurrencyBreakdown?: { currency: 'NIO' | 'USD'; amount: number; count: number }[];
+  profitOriginalCurrencyBreakdown?: { currency: 'NIO' | 'USD'; amount: number; count: number }[];
 }
 
 export interface RegisterSales {
@@ -483,6 +487,7 @@ export interface RegisterSales {
   registerName: string;
   total: number;
   count: number;
+  originalCurrencyBreakdown?: { currency: 'NIO' | 'USD'; amount: number; count: number }[];
 }
 
 export interface InventoryAlert {
@@ -511,10 +516,11 @@ export interface RecentTransaction {
 
 export interface DashboardData {
   kpis: DashboardKPIs;
+  baseCurrency?: 'NIO' | 'USD';
   productPerformance: {
     topSelling: ProductPerformanceItem[];
     topMargin: ProductPerformanceItem[];
-    noSaleProducts: { id: string; name: string; code: string; salePrice: number }[];
+    noSaleProducts: { id: string; name: string; code: string; salePrice: number; stock?: number }[];
   };
   salesByRegister: RegisterSales[];
   inventoryAlerts: InventoryAlert[];

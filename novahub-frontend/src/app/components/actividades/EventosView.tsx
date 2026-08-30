@@ -18,6 +18,7 @@ import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface EventosViewProps {
   data: Event[];
@@ -44,7 +45,7 @@ const buildInvitationText = (event: { title: string; startDate: string; endDate:
 
 export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { formatAmount, currency, displayCurrency, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount } = useCurrency();
+  const { currency, displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform } = useAuth();
   const canViewFinance = canPerform('FINANCIAL', 'view');
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -196,12 +197,29 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   const totalIncome = data.reduce((acc, row) => acc + toDisplayAmount(Number(row.income) || 0, row.currency || 'USD', row.exchangeRate), 0);
   const totalCost = data.reduce((acc, row) => acc + toDisplayAmount(Number(row.cost) || 0, row.currency || 'USD', row.exchangeRate), 0);
   const totalBalance = totalIncome - totalCost;
+  const originalCurrencies = summarizeAmountsByCurrency(data, () => 0, (row) => row.currency || 'USD').map((item) => item.currency);
+  const originalSum = (field: 'income' | 'cost', currencyCode: SupportedCurrency) => data
+    .filter((row) => normalizeCurrency(row.currency || 'USD') === currencyCode)
+    .reduce((sum, row) => sum + (Number(row[field]) || 0), 0);
+  const moneyKpis = displayMode === 'ORIGINAL'
+    ? originalCurrencies.flatMap((currencyCode) => {
+      const income = originalSum('income', currencyCode);
+      const cost = originalSum('cost', currencyCode);
+      return [
+        { title: `Ingresos Totales (${currencyCode})`, value: formatExplicitAmount(income, currencyCode), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+        { title: `Costos Totales (${currencyCode})`, value: formatExplicitAmount(cost, currencyCode), icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+        { title: `Balance General (${currencyCode})`, value: formatExplicitAmount(income - cost, currencyCode), icon: DollarSign, color: income - cost >= 0 ? 'text-emerald-500' : 'text-rose-500', bg: income - cost >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10' },
+      ];
+    })
+    : [
+      { title: `Ingresos Totales (${displayCurrency}${valuationModeSuffix})`, value: formatExplicitAmount(totalIncome, displayCurrency), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+      { title: `Costos Totales (${displayCurrency}${valuationModeSuffix})`, value: formatExplicitAmount(totalCost, displayCurrency), icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+      { title: `Balance General (${displayCurrency}${valuationModeSuffix})`, value: formatExplicitAmount(totalBalance, displayCurrency), icon: DollarSign, color: totalBalance >= 0 ? 'text-emerald-500' : 'text-rose-500', bg: totalBalance >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10' },
+    ];
 
   const kpis = [
     { title: 'Total Eventos', value: data.length, icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: `Ingresos Totales (${displayCurrency}${valuationModeSuffix})`, value: formatAmount(totalIncome, displayCurrency), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: `Costos Totales (${displayCurrency}${valuationModeSuffix})`, value: formatAmount(totalCost, displayCurrency), icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-    { title: `Balance General (${displayCurrency}${valuationModeSuffix})`, value: formatAmount(totalBalance, displayCurrency), icon: DollarSign, color: totalBalance >= 0 ? 'text-emerald-500' : 'text-rose-500', bg: totalBalance >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10' },
+    ...moneyKpis,
   ];
 
   const filtered = data.filter(e => e.title?.toLowerCase().includes(searchTerm.toLowerCase()) || e.location?.toLowerCase().includes(searchTerm.toLowerCase()));

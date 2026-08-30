@@ -37,15 +37,15 @@ const DialogContent = React.forwardRef<
       ref={ref}
       data-slot="dialog-content"
       className={cn(
-        "bg-background border-border data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] max-h-[min(88vh,calc(100dvh-3rem))] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-2xl border p-6 shadow-2xl duration-200 sm:max-w-lg",
+        "bg-background border-border data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid min-w-0 w-full max-w-[calc(100%-2rem)] max-h-[min(88vh,calc(100dvh-3rem))] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border p-4 shadow-2xl duration-200 sm:p-6 sm:max-w-lg",
         className
       )}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close aria-label="Cerrar diálogo" title="Cerrar" className="text-muted-foreground hover:bg-muted hover:text-foreground ring-offset-background focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-foreground absolute top-4 right-4 z-20 inline-flex size-9 items-center justify-center rounded-lg opacity-90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+      <DialogPrimitive.Close aria-label="Cerrar diálogo" title="Cerrar" className="text-muted-foreground hover:bg-muted hover:text-foreground ring-offset-background focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-foreground absolute top-3 right-3 z-20 inline-flex size-9 touch-manipulation items-center justify-center rounded-lg bg-background/80 opacity-90 backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none sm:top-4 sm:right-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
         <XIcon />
-        <span className="sr-only">Close</span>
+        <span className="sr-only">Cerrar diálogo</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
@@ -59,7 +59,7 @@ const DialogHeader = ({
   <div
     data-slot="dialog-header"
     className={cn(
-      "flex flex-col gap-2 text-center sm:text-left",
+      "flex min-w-0 flex-col gap-2 text-center sm:text-left",
       className
     )}
     {...props}
@@ -74,7 +74,7 @@ const DialogFooter = ({
   <div
     data-slot="dialog-footer"
     className={cn(
-      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      "flex min-w-0 flex-wrap flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-2 sm:gap-0",
       className
     )}
     {...props}

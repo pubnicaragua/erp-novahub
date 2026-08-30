@@ -25,6 +25,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -43,7 +44,7 @@ const statusOpts = [
 
 export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
@@ -95,6 +96,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
         title: 'Facturas recurrentes',
         rows: filtered,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.recurring-supplier-invoice',
         columns: [
@@ -116,6 +118,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     try {
       await generatePurchaseRecordPDF({
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.recurring-supplier-invoice',
         document: {
@@ -445,22 +448,24 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
       const sourceAmount = (recurring as any).total ?? (recurring as any).amount ?? 0;
       return acc + toDisplayAmount(Number(sourceAmount), recurring.currency, recurring.exchangeRate);
     }, 0);
+  const originalMonthlyAmounts = summarizeAmountsByCurrency(
+    data.filter(r => ((r as any).frequency || '').toLowerCase() === 'monthly'),
+    (recurring) => Number((recurring as any).total ?? (recurring as any).amount ?? 0),
+    (recurring) => recurring.currency,
+    baseCurrency,
+  );
   const kpis = [
     { title: 'Activas',         value: data.filter(r => ((r as any).status||'').toUpperCase()==='ACTIVE').length,  icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
     { title: 'Total Recurrentes', value: data.length,                                                                icon: RotateCcw,     color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    {
-      title: `Est. Mensual (${displayCurrency}${valuationModeSuffix})`,
-      value: formatCurrentAmount(monthly, displayCurrency),
-      icon: TrendingDown,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10', kind: 'indicator' as const,
-    },
     { title: 'Pausadas',        value: data.filter(r => ((r as any).status||'').toUpperCase()==='PAUSED').length,   icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'PAUSED' as const },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+        {displayMode === 'ORIGINAL'
+          ? originalMonthlyAmounts.map((summary) => <PurchaseKpiCard key={`monthly-${summary.currency}`} title={`Est. Mensual (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />)
+          : <PurchaseKpiCard title={`Est. Mensual (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthly, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
@@ -508,6 +513,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
             hideCustomer: true,
             status: String(detailInvoice.status || 'ACTIVE').toUpperCase(),
             totalLabel: formatCurrentAmount(Number(detailInvoice.total || (detailInvoice as any).amount || 0), detailInvoice.currency || displayCurrency),
+            sourceCurrency: detailInvoice.currency || displayCurrency,
+            sourceExchangeRate: detailInvoice.exchangeRate,
             summaryDetails: [{ label: 'Frecuencia', value: freqMap[String(detailInvoice.frequency || '').toLowerCase()] || detailInvoice.frequency || '—' }],
             metadata: [{ label: 'Proveedor', value: detailInvoice.supplier?.name || 'No disponible' }, { label: 'Próxima factura', value: detailInvoice.nextInvoiceDate ? new Date(detailInvoice.nextInvoiceDate).toLocaleDateString('es-NI') : 'No disponible' }, { label: 'Inicio', value: detailInvoice.startDate ? new Date(detailInvoice.startDate).toLocaleDateString('es-NI') : 'No disponible' }],
             lines: ((detailInvoice as any).items || []).map((item: any, index: number) => ({ id: String(item.id || index), description: item.description || 'Concepto sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: formatCurrentAmount(Number(item.unitPrice || 0), detailInvoice.currency || displayCurrency), totalLabel: formatCurrentAmount(Number(item.total || 0), detailInvoice.currency || displayCurrency), secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),

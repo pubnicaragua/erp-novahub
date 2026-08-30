@@ -1,4 +1,4 @@
-import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { subscriptionsService } from '../../services/subscriptions.service';
@@ -9,11 +9,12 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';
+import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, RefreshCw, UserMinus } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -64,7 +65,7 @@ function getRangeDates(range: string) {
 }
 
 export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
   const canViewSubscriptions = canPerform('SUBSCRIPTIONS', 'view');
@@ -97,6 +98,31 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
 
   const retentionRate = 96.5; // Proxy
   const ltv = mrr > 0 ? (mrr / (100 - retentionRate)) * 10 : 0;
+  const originalCurrencies = summarizeAmountsByCurrency(activeSubs, (subscription: any) => Number(subscription.customPrice || 49.99), (subscription: any) => subscription.currency || baseCurrency).map((item) => item.currency);
+  const originalMrr = (currency: SupportedCurrency) => activeSubs
+    .filter((subscription: any) => normalizeCurrency(subscription.currency || baseCurrency) === currency)
+    .reduce((sum: number, subscription: any) => sum + Number(subscription.customPrice || 49.99), 0);
+  const originalLtv = (currency: SupportedCurrency) => originalMrr(currency) > 0 ? (originalMrr(currency) / (100 - retentionRate)) * 10 : 0;
+  const renderSubscriptionMoneyKpi = (
+    title: string,
+    total: number,
+    amountByCurrency: (currency: SupportedCurrency) => number,
+    color: string,
+    Icon: any,
+    detail: string,
+  ) => displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => (
+      <Card key={`${title}-${currency}`} className="relative overflow-hidden border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent transition-all hover:shadow-lg">
+        <div className="absolute top-2 right-2 opacity-10"><Icon className="size-10" /></div>
+        <CardHeader className="pb-1"><CardTitle className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><Icon className={`size-3.5 ${color}`} /> {title} ({currency})</CardTitle></CardHeader>
+        <CardContent><p className={`text-xl font-black ${color}`}>{formatExplicitAmount(amountByCurrency(currency), currency)}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{detail}</p></CardContent>
+      </Card>
+    ))
+    : <Card className="relative overflow-hidden border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent transition-all hover:shadow-lg">
+      <div className="absolute top-2 right-2 opacity-10"><Icon className="size-10" /></div>
+      <CardHeader className="pb-1"><CardTitle className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><Icon className={`size-3.5 ${color}`} /> {title} ({displayCurrency})</CardTitle></CardHeader>
+      <CardContent><p className={`text-xl font-black ${color}`}>{formatConvertedAmount(total, 'NIO')}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{valuationModeLabel}</p></CardContent>
+    </Card>;
 
   // ── 2 Tops ──
   const topModules = useMemo(() => {
@@ -135,7 +161,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
         const pdfSettings = await getPdfDesignSettings('reportes.subscriptions');
         const doc = new jsPDF(pdfDesignPaper(pdfSettings));
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.subscriptions', title: 'Reporte de suscripciones', tenantName: companyName, rows: activeSubs, columns: [{ header: 'Cliente', value: row => row.clientTenant?.name || row.client?.name || row.name || '—' }, { header: 'Estado', value: row => row.status || '—' }, { header: 'Plan', value: row => row.plan?.name || row.planName || '—' }, { header: 'Monto', value: row => row.amount || row.price || 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_suscripciones'], 'pdf', dateRange) });
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.subscriptions', title: 'Reporte de suscripciones', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: activeSubs, columns: [{ header: 'Cliente', value: row => row.clientTenant?.name || row.client?.name || row.name || '—' }, { header: 'Estado', value: row => row.status || '—' }, { header: 'Plan', value: row => row.plan?.name || row.planName || '—' }, { header: 'Inicio', value: row => row.startDate || row.createdAt || '—' }, { header: 'Próxima fecha', value: row => row.nextBillingDate || row.nextInvoiceDate || '—' }, { header: 'Monto', value: row => row.amount || row.price || 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_suscripciones'], 'pdf', dateRange) });
         if (configured) return;
         const primaryHex = String(pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981');
         let currentY = 20;
@@ -217,18 +243,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
       {/* ═══ KPI Cards (Dashboard Style) ═══ */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* MRR */}
-        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><DollarSign className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <TrendingUp className="size-3.5 text-emerald-500" /> Ingreso Recurrente (MRR)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(mrr, 'NIO')}</p>{valuationModeSuffix && <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{valuationModeLabel}</span>}
-            <p className="text-[10px] text-muted-foreground mt-0.5">Cartera de suscripciones activa</p>
-          </CardContent>
-        </Card>
+        {renderSubscriptionMoneyKpi('Ingreso Recurrente (MRR)', mrr, originalMrr, 'text-emerald-500', TrendingUp, 'Cartera de suscripciones activa')}
 
         {/* Suscripciones Activas */}
         <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
@@ -259,18 +274,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
         </Card>
 
         {/* LTV */}
-        <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Scale className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <ArrowUpRight className="size-3.5 text-purple-500" /> Valor de Vida (LTV)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-purple-500">{formatConvertedAmount(ltv, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Retorno esperado por cliente</p>
-          </CardContent>
-        </Card>
+        {renderSubscriptionMoneyKpi('Valor de Vida (LTV)', ltv, originalLtv, 'text-purple-500', ArrowUpRight, 'Retorno esperado por cliente')}
       </div>
 
       {/* ═══ Charts Row ═══ */}

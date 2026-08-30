@@ -118,6 +118,8 @@ export interface Customer {
   /** Saldo calculado en moneda base; puede coexistir con saldo a favor. */
   balanceDue?: number;
   balanceFavor?: number;
+  balanceDueOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
+  balanceFavorOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
   availableCredit?: number;
   balance: number;
   status: EntityStatus;
@@ -564,6 +566,8 @@ export interface Supplier {
   contactPhone?: string;
   paymentTerms?: string;
   balance: number;
+  balanceOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
+  balanceFavorOriginalCurrencyBreakdown?: Array<{ currency: string; amount: number; count?: number }>;
   rating: number;
   status: EntityStatus;
   notes?: string;

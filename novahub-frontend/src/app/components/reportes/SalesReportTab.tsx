@@ -18,6 +18,7 @@ import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExpo
 import { cn } from '../ui/utils';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86400000;
@@ -186,7 +187,7 @@ const DARK_TOOLTIP = {
 } as const;
 
 export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
   const canViewSales = canPerform('SALES', 'view');
@@ -274,11 +275,6 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     return !!d && d.getTime() >= currentStart.getTime();
   }), [payments, currentStart]);
 
-  const pPay = useMemo(() => (cPrevStart && cPrevEnd) ? payments.filter(p => {
-    const d = toDate(p.date || p.createdAt);
-    return !!d && d.getTime() >= cPrevStart.getTime() && d.getTime() <= cPrevEnd.getTime();
-  }) : [], [payments, cPrevStart, cPrevEnd]);
-
   const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
   const toNio = (inv: any) => toNioAmt(Number(inv.total ?? inv.baseTotal ?? 0), inv.currency, inv.exchangeRate);
   const toNioAmt = (amt: number | null | undefined, currency: string | undefined, rate: number | undefined) =>
@@ -298,15 +294,14 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     return { ventasBrutas: brutas, descuentos: desc, devoluciones: dev, notasCredito: nc, ajustes: desc + dev + nc, ventasNetas: netas, facturasValidas: fInv.length };
   }, [fInv, fRet, fCN, exchangeRate, baseCurrency]);
 
+  const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + toNioAmt(Number(p.amount ?? p.baseAmount ?? 0), p.currency, p.exchangeRate), 0), [fPay, exchangeRate, baseCurrency, valuationMode]);
+
   const { pVentasNetas } = useMemo(() => {
     const pDev = pRet.reduce((a, r) => a + toNioAmt(r.total, r.currency, r.exchangeRate), 0);
     const pNC = pCN.reduce((a, c) => a + toNioAmt(c.total, c.currency, c.exchangeRate), 0);
     const pNetas = Math.max(0, pInv.reduce((a, i) => a + toNio(i), 0) - pDev - pNC);
     return { pVentasNetas: pNetas };
   }, [pInv, pRet, pCN, exchangeRate, baseCurrency]);
-
-  const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + toNioAmt(Number(p.amount ?? p.baseAmount ?? 0), p.currency, p.exchangeRate), 0), [fPay, exchangeRate, baseCurrency, valuationMode]);
-  const prevTotalPaid = useMemo(() => pPay.reduce((acc, p) => acc + toNioAmt(Number(p.amount ?? p.baseAmount ?? 0), p.currency, p.exchangeRate), 0), [pPay, exchangeRate, baseCurrency, valuationMode]);
 
   const invoiceDateById = useMemo(() => {
     const map = new Map<string, Date>();
@@ -381,11 +376,31 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     return { pct, diff, text: `${pct >= 0 ? '↑' : '↓'} ${Math.abs(pct).toFixed(1)}% vs. ${comparativoLabel}` };
   };
 
-  const netTrend = getTrendInfo(ventasNetas, pVentasNetas);
-  const payTrend = getTrendInfo(totalPaid, prevTotalPaid);
   const ticketTrend = getTrendInfo(avgTicket, facturasValidas > 0 && pInv.length > 0 ? pVentasNetas / pInv.length : 0);
 
   const pagosDelPeriodo = fPay.length;
+
+  const originalRows = [...fInv, ...fRet, ...fCN, ...fPay, ...fInv.filter((invoice) => String(invoice.status || '').toUpperCase() !== 'PAID')];
+  const originalCurrencies = summarizeAmountsByCurrency(originalRows, () => 0, (row: any) => row.currency || baseCurrency).map((item) => item.currency);
+  const originalSum = (rows: any[], amountOf: (row: any) => number, currency: SupportedCurrency) => rows
+    .filter((row) => normalizeCurrency(row.currency || baseCurrency) === currency)
+    .reduce((sum, row) => sum + (Number.isFinite(amountOf(row)) ? amountOf(row) : 0), 0);
+  const originalNet = (currency: SupportedCurrency) => Math.max(0,
+    originalSum(fInv, (row) => Number(row.total ?? row.baseTotal ?? 0), currency)
+      - originalSum(fRet, (row) => Number(row.total || 0), currency)
+      - originalSum(fCN, (row) => Number(row.total || 0), currency));
+  const originalPaid = (currency: SupportedCurrency) => originalSum(fPay, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
+  const originalPending = (currency: SupportedCurrency) => originalSum(
+    fInv.filter((invoice) => String(invoice.status || '').toUpperCase() !== 'PAID'),
+    (row) => Number(row.balanceDue ?? row.balance ?? (Number(row.total || 0) - Number(row.amountPaid || 0))),
+    currency,
+  );
+  const originalCost = (currency: SupportedCurrency) => originalSum(fInv, (invoice) => {
+    let cost = Number(invoice.totalCost || 0);
+    if (!cost && Array.isArray(invoice.items)) cost = invoice.items.reduce((sum: number, item: any) => sum + Number(item.costPrice || item.product?.costPrice || 0) * Number(item.quantity || 1), 0);
+    return cost;
+  }, currency);
+  const originalCount = (rows: any[], currency: SupportedCurrency) => rows.filter((row) => normalizeCurrency(row.currency || baseCurrency) === currency).length;
 
   const serie = useMemo(() => {
     const mode = durationDays ? getBucketMode(durationDays) : 'month' as BucketMode;
@@ -675,7 +690,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: 'Reporte de ventas', tenantName: companyName, tenantLogo: logoUrl, rows: sortedInvoices, columns: [{ header: 'Documento', value: row => row.number || row.id || '—' }, { header: 'Cliente', value: row => row.customer?.name || row.client?.name || '—' }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Total', value: row => row.total || 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange) });
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: 'Reporte de ventas', tenantName: companyName, tenantLogo: logoUrl, rows: sortedInvoices, columns: [{ header: 'Documento', value: row => row.number || row.id || '—' }, { header: 'Cliente', value: row => row.customer?.name || row.client?.name || '—' }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Vencimiento', value: row => row.dueDate || row.validUntil || '—' }, { header: 'Estado', value: row => row.status || '—' }, { header: 'Total', value: row => row.total || 0, align: 'right' }, { header: 'Saldo', value: row => row.balance ?? row.balanceDue ?? '—', align: 'right' }], fileName: buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange) });
         if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
@@ -894,21 +909,38 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     );
   }
 
-  const trendBadge = (t: { pct: number | null; diff: number | null; text: string }) => {
-    if (t.pct === null) return <span className="text-[9px] text-muted-foreground">Sin base comparable</span>;
-    return (
-      <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-bold", t.pct >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
-        {t.pct >= 0 ? '↑' : '↓'} {Math.abs(t.pct).toFixed(1)}%
-      </span>
-    );
-  };
-
   const statusBadge = (status: string) => {
     const s = String(status || '').toUpperCase();
     const label = STATUS_LABEL[s] || 'Pendiente';
     const color = STATUS_COLOR[s] || 'bg-slate-400/10 text-slate-400';
     return <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap", color)}>{label}</span>;
   };
+
+  const renderSalesMoneyKpi = (
+    key: string,
+    title: string,
+    Icon: any,
+    total: number | null,
+    amountByCurrency: (currency: SupportedCurrency) => number,
+    className: string,
+    valueClass: string,
+    detailByCurrency: (currency: SupportedCurrency) => string,
+    onClick?: () => void,
+  ) => displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => (
+      <Card key={`${key}-${currency}`} className={`${className} relative overflow-hidden group hover:shadow-lg transition-all ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
+        <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Icon className="size-10" /></div>
+        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><Icon className={cn('size-3.5', valueClass)} /> {title} ({currency})</CardTitle></CardHeader>
+        <CardContent><p className={cn('text-xl font-black', valueClass)}>{total === null ? 'N/D' : formatExplicitAmount(amountByCurrency(currency), currency)}</p><p className="text-[10px] text-muted-foreground mt-0.5">{detailByCurrency(currency)}</p></CardContent>
+      </Card>
+    ))
+    : (
+      <Card className={`${className} relative overflow-hidden group hover:shadow-lg transition-all ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
+        <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Icon className="size-10" /></div>
+        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><Icon className={cn('size-3.5', valueClass)} /> {title}{valuationModeSuffix ? ` (${displayCurrency} · ${valuationModeLabel})` : ` (${displayCurrency})`}</CardTitle></CardHeader>
+        <CardContent><p className={cn('text-xl font-black', valueClass)}>{total === null ? 'N/D' : formatConvertedAmount(total, 'NIO')}</p><p className="text-[10px] text-muted-foreground mt-0.5">{detailByCurrency(baseCurrency)}</p></CardContent>
+      </Card>
+    );
 
   const canShowDona = catComposition.validCount >= 2 || (catComposition.data.length >= 2 && !catComposition.onlyUncategorized);
 
@@ -932,64 +964,11 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
 
       {/* ═══ KPI Cards (Dashboard Style) ═══ */}
       <div id="sales-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        {/* Ventas Netas */}
-        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer" onClick={() => setModal({ type: 'invoices' })}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ShoppingCart className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <ArrowUpRight className="size-3.5 text-emerald-500" /> Ventas Netas
-              <span className="ml-auto">{trendBadge(netTrend)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(ventasNetas, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{facturasValidas} facturas válidas · {netTrend.text}{valuationModeSuffix ? ` · Vista ${valuationModeLabel.toLowerCase()}` : ''}</p>
-            <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title={`Ventas brutas: ${formatConvertedAmount(ventasBrutas, 'NIO')} · Descuentos: -${formatConvertedAmount(descuentos, 'NIO')} · Devoluciones: -${formatConvertedAmount(devoluciones, 'NIO')} · Notas de crédito: -${formatConvertedAmount(notasCredito, 'NIO')} · Ventas netas: ${formatConvertedAmount(ventasNetas, 'NIO')} · Comparado: ${prevLabel}`}>
-              <Info className="size-3 shrink-0" /> Conciliación: brutas − ajustes
-            </p>
-          </CardContent>
-        </Card>
+        {renderSalesMoneyKpi('net', 'Ventas Netas', ShoppingCart, ventasNetas, originalNet, 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent', 'text-emerald-500', (currency) => `${originalCount(fInv, currency)} facturas válidas · brutas − devoluciones − notas de crédito`, () => setModal({ type: 'invoices' }))}
 
-        {/* Cobranza del Período */}
-        <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Scale className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Scale className="size-3.5 text-blue-500" /> Cobranza del Período
-              <span className="ml-auto">{trendBadge(payTrend)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-blue-500">{formatConvertedAmount(totalPaid, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{pagosDelPeriodo} cobros recibidos</p>
-            <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title="Incluye todos los cobros recibidos durante el período seleccionado, aunque correspondan a facturas emitidas anteriormente.">
-              <Info className="size-3 shrink-0" /> Puede incluir cartera anterior
-            </p>
-          </CardContent>
-        </Card>
+        {renderSalesMoneyKpi('paid', 'Cobranza del Período', Scale, totalPaid, originalPaid, 'border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent', 'text-blue-500', (currency) => `${originalCount(fPay, currency)} cobros recibidos`)}
 
-        {/* Utilidad Bruta */}
-        <Card className="border-cyan-500/20 bg-gradient-to-br from-cyan-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><DollarSign className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <DollarSign className="size-3.5 text-cyan-500" /> Utilidad Bruta
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-cyan-500">{grossProfit === null ? 'N/D' : formatConvertedAmount(grossProfit, 'NIO')}</p>
-            {costMissing > 0 ? (
-              <div className="mt-1.5">
-                <p className="text-[10px] text-amber-500">{costMissing} producto(s) vendidos sin costo registrado</p>
-                <button onClick={() => setModal({ type: 'costs' })} className="mt-1 text-[10px] font-black uppercase tracking-wider text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
-                  Completar costos <ArrowUpRight className="size-3" />
-                </button>
-              </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground mt-0.5">Ventas netas − costo de venta</p>
-            )}
-          </CardContent>
-        </Card>
+        {renderSalesMoneyKpi('gross', 'Utilidad Bruta', DollarSign, grossProfit, (currency) => originalNet(currency) - originalCost(currency), 'border-cyan-500/20 bg-gradient-to-br from-cyan-500/5 to-transparent', 'text-cyan-500', (currency) => costMissing > 0 ? `${costMissing} producto(s) sin costo registrado` : `Ventas netas − costo · ${originalCount(fInv, currency)} facturas`)}
 
         {/* Margen Bruto */}
         <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
@@ -1007,22 +986,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           </CardContent>
         </Card>
 
-        {/* Saldo Pendiente por Cobrar */}
-        <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer" onClick={() => setModal({ type: 'cxc' })}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Clock className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Clock className="size-3.5 text-rose-500" /> Saldo Pendiente por Cobrar
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(totalPending, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {pendingCount === 0 ? 'Sin facturas pendientes' : `${pendingCount} facturas pendientes`}
-              {vencido > 0 && <span className="text-rose-400 font-bold"> · {formatConvertedAmount(vencido, 'NIO')} vencidos</span>}
-            </p>
-          </CardContent>
-        </Card>
+        {renderSalesMoneyKpi('pending', 'Saldo Pendiente por Cobrar', Clock, totalPending, originalPending, 'border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent', 'text-rose-500', (currency) => `${originalCount(fInv.filter((invoice) => String(invoice.status || '').toUpperCase() !== 'PAID'), currency)} facturas pendientes`, () => setModal({ type: 'cxc' }))}
       </div>
 
       {/* ═══ Charts Row: Proyección + Composición ═══ */}

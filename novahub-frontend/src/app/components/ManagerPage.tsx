@@ -35,6 +35,7 @@ import { parseSpreadsheetInWorker } from '../utils/import-spreadsheet';
 import { VirtualizedImportList } from './ui/VirtualizedImportList';
 import { Input } from './ui/input';
 import { buildDownloadFileName } from '../utils/exportFileNames';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
@@ -72,6 +73,7 @@ async function readSpreadsheet(file: File) {
 }
 
 export function ManagerPage() {
+  const { displayMode, baseCurrency } = useCurrency();
   const [section, setSection] = useState<ManagerSection>('overview');
   const [inventoryView, setInventoryView] = useState<ManagerInventoryView>('products');
   const [salesView, setSalesView] = useState<ManagerSalesView>('overview');
@@ -136,6 +138,10 @@ export function ManagerPage() {
   }, [groupId, selectedBusinessUnitId, selectedBranchId, businessUnits, group?.branches, branchOptions, allowedSections, section]);
 
   const effectiveSelectedBranchId = selectedBranchId && branchOptions.some((branch) => branch.id === selectedBranchId) ? selectedBranchId : '';
+
+  const activeManagerCurrency = displayMode === 'DEFAULT' || displayMode === 'ORIGINAL'
+    ? (group?.consolidationCurrency || baseCurrency || managerReportCurrency || 'NIO')
+    : displayMode;
 
   useEffect(() => {
     setManagerReportCurrency('');
@@ -316,7 +322,7 @@ export function ManagerPage() {
       allowedSections={allowedSections}
       selectedBranchId={effectiveSelectedBranchId}
       onBranchChange={setSelectedBranchId}
-      reportCurrency={managerReportCurrency || group?.consolidationCurrency || 'NIO'}
+      reportCurrency={activeManagerCurrency}
       onReportCurrencyChange={setManagerReportCurrency}
     >
       <div className="min-w-0 space-y-6">
@@ -331,9 +337,9 @@ export function ManagerPage() {
         {!loading && groupId && !allowedSections.includes(section) && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">Este acceso Manager no tiene permisos para esta vista.</CardContent></Card>}
         {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
         {section === 'inventory' && allowedSections.includes('inventory') && <ManagerInventoryModule view={inventoryView} onViewChange={setInventoryView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} warehouses={scopedWarehouses} businessUnits={businessUnits} canCreateTransfers={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} canImportInventory={Boolean(!group?.managerAccess || group.managerAccess.isOwner || group.managerAccess.canEdit) && managerAccessAllowsAction(group?.managerAccess, 'MANAGER_INVENTORY', 'create')} canViewInventoryCost={managerAccessCanViewInventoryCost(group?.managerAccess)} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} onRefreshScope={() => groupsQuery.refetch()} corporateWarehouseContent={<WarehouseContent overview={overview} inventoryWarehouses={inventoryWarehousesQuery.data?.data || []} warehousesLoading={inventoryWarehousesQuery.isLoading} branches={branchOptions} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />} />}
-        {section === 'sales' && allowedSections.includes('sales') && <ManagerSalesModule view={salesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={managerReportCurrency} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
-        {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={purchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={managerReportCurrency} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
-        {section === 'finances' && allowedSections.includes('finances') && <ManagerFinanceModule view={financeView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={managerReportCurrency} />}
+        {section === 'sales' && allowedSections.includes('sales') && <ManagerSalesModule view={salesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
+        {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={purchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
+        {section === 'finances' && allowedSections.includes('finances') && <ManagerFinanceModule view={financeView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} />}
         {section === 'accounting' && allowedSections.includes('accounting') && <ManagerAccountingModule view={accountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} />}
         {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={reportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} />}
         {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={hrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} />}

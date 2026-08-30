@@ -18,6 +18,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
 import { cn } from '../ui/utils';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {
   HEALTH: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
@@ -44,7 +45,7 @@ type BenefitFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
-  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<any>(EMPTY_FORM);
@@ -132,6 +133,13 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       : convertAmount(cost, b.currency || 'USD', b.exchangeRate);
     return sum + displayed * count;
   }, 0);
+  const benefitCurrencies = summarizeAmountsByCurrency(benefits, () => 0, (benefit: any) => benefit.currency || 'USD').map((item) => item.currency);
+  const originalBenefitCost = (currency: SupportedCurrency) => benefits
+    .filter((benefit: any) => normalizeCurrency(benefit.currency || 'USD') === currency)
+    .reduce((sum: number, benefit: any) => {
+      const assignedCount = benefit.employeeBenefits?.length || benefit.assignments?.length || 0;
+      return sum + (Number(benefit.cost ?? benefit.baseCost ?? 0) || 0) * assignedCount;
+    }, 0);
 
   const totalBenefits = benefits.length;
   const activeBenefits = benefits.filter((b: any) => b.isActive !== false).length;
@@ -195,15 +203,28 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           active={filter === 'INACTIVE'}
           onClick={() => setFilter('INACTIVE')}
         />
-        <StatCard
-          label={`Costo total${valuationModeSuffix}`}
-          value={formatCurrentAmount(totalCost, displayCurrency)}
-          icon={DollarSign}
-          tone="amber"
-          sub="Por mes, según asignaciones"
-          valueClassName="text-xl"
-          onClick={() => setFilter('ALL')}
-        />
+        {displayMode === 'ORIGINAL'
+          ? benefitCurrencies.map((currency) => (
+            <StatCard
+              key={`benefit-cost-${currency}`}
+              label={`Costo total (${currency})`}
+              value={formatExplicitAmount(originalBenefitCost(currency), currency)}
+              icon={DollarSign}
+              tone="amber"
+              sub="Por mes, según asignaciones"
+              valueClassName="text-xl"
+              onClick={() => setFilter('ALL')}
+            />
+          ))
+          : <StatCard
+            label={`Costo total${valuationModeSuffix}`}
+            value={formatCurrentAmount(totalCost, displayCurrency)}
+            icon={DollarSign}
+            tone="amber"
+            sub="Por mes, según asignaciones"
+            valueClassName="text-xl"
+            onClick={() => setFilter('ALL')}
+          />}
       </div>
 
       {/* Toolbar */}

@@ -29,6 +29,7 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -109,7 +110,7 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
-  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount } = useCurrency();
   const { canPerform, user } = useAuth();
   const tenantKey = user?.tenantId || 'anonymous';
   const [searchTerm, setSearchTerm] = useState('');
@@ -517,6 +518,20 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
   }
 
+  const renderCustomerAmount = (
+    breakdown: Array<{ currency: string; amount: number }> | undefined,
+    fallback: number,
+  ) => {
+    if (displayMode === 'ORIGINAL' && breakdown?.length) {
+      return breakdown.map((item) => (
+        <span key={item.currency} className="ml-2 inline-block">
+          {formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency, baseCurrency) as SupportedCurrency)}
+        </span>
+      ));
+    }
+    return formatConvertedAmount(fallback, baseCurrency);
+  };
+
   const columns: ColumnDef<Customer>[] = [
     { 
       key: 'code', 
@@ -605,8 +620,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         }
         return (
           <div className="min-w-[11rem] space-y-1 leading-tight">
-            {debt > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className="text-[12px] font-black tabular-nums text-rose-600 dark:text-rose-400">{formatConvertedAmount(debt, baseCurrency)}</span></div>}
-            {favor > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">A favor</span><span className="text-[12px] font-black tabular-nums text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(favor, baseCurrency)}</span></div>}
+            {debt > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className="text-[12px] font-black tabular-nums text-rose-600 dark:text-rose-400">{renderCustomerAmount(row.balanceDueOriginalCurrencyBreakdown, debt)}</span></div>}
+            {favor > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">A favor</span><span className="text-[12px] font-black tabular-nums text-emerald-600 dark:text-emerald-400">{renderCustomerAmount(row.balanceFavorOriginalCurrencyBreakdown, favor)}</span></div>}
           </div>
         );
       },
@@ -633,6 +648,21 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   ];
 
   const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(String(column.key)));
+  const totalDue = data.reduce((acc, customer) => acc + getCustomerDebtAmount(customer), 0);
+  const totalDueBreakdown = summarizeAmountsByCurrency(
+    data.flatMap((customer) => customer.balanceDueOriginalCurrencyBreakdown || []),
+    (item) => Number(item.amount || 0),
+    (item) => item.currency,
+  );
+  const dueBreakdown = totalDueBreakdown.length
+    ? totalDueBreakdown
+    : [{ currency: baseCurrency as SupportedCurrency, amount: totalDue, count: 0 }];
+  const dueKpis = displayMode === 'ORIGINAL'
+    ? dueBreakdown.map((item) => ({
+      title: `Cartera pendiente (${item.currency})`,
+      value: formatExplicitAmount(item.amount, normalizeCurrency(item.currency, baseCurrency) as SupportedCurrency),
+    }))
+    : [{ title: 'Cartera pendiente', value: formatConvertedAmount(totalDue, baseCurrency) }];
   const columnOptions = [
     { key: 'code', label: 'Código' },
     { key: 'name', label: 'Nombre' },
@@ -656,10 +686,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <SalesKpiCard title="Total Clientes" value={data.length} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
         <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
         <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
-        {(() => {
-          const totalDue = data.reduce((acc, customer) => acc + getCustomerDebtAmount(customer), 0);
-          return <SalesKpiCard title="Cartera pendiente" value={formatConvertedAmount(totalDue, baseCurrency)} icon={CreditCard} color="text-rose-500" bg="bg-rose-500/10" />;
-        })()}
+        {dueKpis.map((kpi) => <SalesKpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={CreditCard} color="text-rose-500" bg="bg-rose-500/10" />)}
       </div>
 
       {/* Main Content */}

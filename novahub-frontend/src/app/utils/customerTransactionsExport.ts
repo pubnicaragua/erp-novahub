@@ -3,6 +3,7 @@ import { generateConfiguredHistoryPDF } from './pdfGenerator';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { formatCurrencyAmount } from './currency';
 import { buildDownloadFileName, sanitizeDownloadPart } from './exportFileNames';
+import type { CurrencyDisplayMode } from '../contexts/CurrencyContext';
 
 export interface CustomerTransactionExportRow {
   id?: string;
@@ -23,6 +24,7 @@ export interface CustomerTransactionExportRow {
 interface CustomerTransactionsExportOptions {
   rows: CustomerTransactionExportRow[];
   customerName: string;
+  customerData?: Record<string, unknown>;
   tenantName: string;
   tenantLogo?: string | null;
   primaryColor?: string | null;
@@ -30,6 +32,7 @@ interface CustomerTransactionsExportOptions {
   pdfDesign?: { settings?: Record<string, any> } | Record<string, any> | null;
   pdfFormat?: PdfDownloadFormat;
   outputCurrency?: string | null;
+  displayMode?: CurrencyDisplayMode;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -71,24 +74,26 @@ function fileStem(customerName: string) {
 
 export async function exportCustomerTransactionsExcel(options: CustomerTransactionsExportOptions) {
   const primary = safeHex(options.primaryColor);
+  const originalOnly = options.displayMode === 'ORIGINAL';
+  const amountHeader = originalOnly ? 'Monto original' : options.outputCurrency ? `Monto (${String(options.outputCurrency).toUpperCase()})` : 'Monto';
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'NovaHub';
   workbook.created = new Date();
   const worksheet = workbook.addWorksheet('Historial', { views: [{ state: 'frozen', ySplit: 4 }] });
-  worksheet.mergeCells('A1:G1');
+  worksheet.mergeCells('A1:F1');
   const title = worksheet.getCell('A1');
   title.value = 'HISTORIAL DE TRANSACCIONES DEL CLIENTE';
   title.font = { bold: true, size: 15, color: { argb: 'FFFFFFFF' } };
   title.alignment = { horizontal: 'center', vertical: 'middle' };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(primary) } };
   worksheet.getRow(1).height = 28;
-  worksheet.mergeCells('A2:G2');
+  worksheet.mergeCells('A2:F2');
   worksheet.getCell('A2').value = `${options.customerName} · ${options.branchName || 'Sucursal no identificada'} · ${options.tenantName}`;
   worksheet.getCell('A2').font = { italic: true, color: { argb: 'FF64748B' } };
-  worksheet.mergeCells('A3:G3');
+  worksheet.mergeCells('A3:F3');
   worksheet.getCell('A3').value = `Registros: ${options.rows.length} · Generado: ${new Date().toLocaleString('es-NI')}`;
   worksheet.getCell('A3').font = { bold: true, color: { argb: hexToArgb(primary) } };
-  worksheet.addRow(['Tipo', 'Número', 'Fecha', 'Estado', 'Monto', 'Equivalencia', 'Descripción / sucursal']);
+  worksheet.addRow(['Tipo', 'Número', 'Fecha', 'Estado', amountHeader, 'Descripción / sucursal']);
   const header = worksheet.getRow(4);
   header.height = 22;
   header.eachCell((cell) => {
@@ -99,8 +104,7 @@ export async function exportCustomerTransactionsExcel(options: CustomerTransacti
   options.rows.forEach((row, index) => {
     const excelRow = worksheet.addRow([
       row.kind || 'Transacción', row.number || '—', formatDate(row.date), statusLabel(row.status),
-      formatMoney(row.amount, row.currency),
-      row.reportAmount == null ? '—' : `${formatMoney(row.reportAmount, row.reportCurrency)}${row.reportRateLabel ? `\n${row.reportRateLabel}` : ''}`,
+      originalOnly || row.reportAmount == null ? formatMoney(row.amount, row.currency) : formatMoney(row.reportAmount, row.reportCurrency),
       `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}`,
     ]);
     excelRow.eachCell((cell) => {
@@ -110,8 +114,8 @@ export async function exportCustomerTransactionsExcel(options: CustomerTransacti
     excelRow.getCell(1).font = { bold: true, color: { argb: hexToArgb(primary) } };
     excelRow.getCell(5).font = { bold: true };
   });
-  worksheet.columns = [{ width: 22 }, { width: 18 }, { width: 15 }, { width: 16 }, { width: 22 }, { width: 28 }, { width: 48 }];
-  worksheet.autoFilter = { from: 'A4', to: 'G4' };
+  worksheet.columns = [{ width: 22 }, { width: 18 }, { width: 15 }, { width: 16 }, { width: 28 }, { width: 48 }];
+  worksheet.autoFilter = { from: 'A4', to: 'F4' };
   const buffer = await workbook.xlsx.writeBuffer();
   downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), buildDownloadFileName([fileStem(options.customerName)], 'xlsx'));
 }
@@ -119,12 +123,15 @@ export async function exportCustomerTransactionsExcel(options: CustomerTransacti
 export async function exportCustomerTransactionsPdf(options: CustomerTransactionsExportOptions) {
   const rows = Array.isArray(options.rows) ? options.rows : [];
   const outputCurrency = options.outputCurrency ? String(options.outputCurrency).toUpperCase() : null;
+  const originalOnly = options.displayMode === 'ORIGINAL';
+  const amountHeader = originalOnly ? 'Monto original' : outputCurrency ? `Monto (${outputCurrency})` : 'Monto';
   await generateConfiguredHistoryPDF({
-    targetKey: 'reportes.customers',
+    targetKey: 'ventas.customer-history',
     title: 'Historial de transacciones',
     subtitle: [options.branchName || 'Sucursal no identificada', outputCurrency ? `Moneda: ${outputCurrency}` : ''].filter(Boolean).join(' · '),
     subjectLabel: 'Cliente',
     subjectName: options.customerName || 'Cliente',
+    subjectData: options.customerData,
     tenantName: options.tenantName || 'NovaHub',
     tenantLogo: options.tenantLogo,
     format: options.pdfFormat || 'configured',
@@ -136,7 +143,7 @@ export async function exportCustomerTransactionsPdf(options: CustomerTransaction
       { header: 'Número', value: (row) => row.number || '—' },
       { header: 'Fecha', align: 'center', value: (row) => formatDate(row.date) },
       { header: 'Estado', value: (row) => statusLabel(row.status) },
-      { header: outputCurrency ? `Monto (${outputCurrency})` : 'Monto', align: 'right', value: (row) => `${formatMoney(row.amount, row.currency)}${row.reportAmount == null ? '' : `\n≈ ${formatMoney(row.reportAmount, row.reportCurrency)}`}` },
+      { header: amountHeader, align: 'right', value: (row) => originalOnly || row.reportAmount == null ? formatMoney(row.amount, row.currency) : formatMoney(row.reportAmount, row.reportCurrency) },
       { header: 'Tasa aplicada', value: (row) => row.reportRateLabel || '—' },
       { header: 'Descripción / sucursal', value: (row) => `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}` },
     ],

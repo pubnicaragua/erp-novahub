@@ -28,6 +28,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF } from '../../utils/purchaseExports';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { getSupplierDebtAmount, getSupplierFavorAmount } from '../../utils/supplierBalance';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; isSidebarCollapsed?: boolean; }
 
@@ -58,7 +59,7 @@ const supplierCodeNumber = (supplier: Supplier) => {
 
 export function ProveedoresView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ProveedoresViewProps) {
   const { canPerform, user } = useAuth();
-  const { baseCurrency, valuationModeSuffix, formatConvertedAmount } = useCurrency();
+  const { baseCurrency, displayMode, valuationModeSuffix, formatConvertedAmount, formatExplicitAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-suppliers-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
@@ -268,6 +269,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         title: 'Proveedores',
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.supplier',
         columns: [
@@ -275,8 +277,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           { label: 'Nombre', value: (row) => row.name || '—' },
           { label: 'Contacto', value: (row) => row.contactName || '—' },
           { label: 'Teléfono', value: (row) => row.phone || '—' },
-          { label: 'Saldo pendiente', align: 'right', value: (row) => formatConvertedAmount(getSupplierDebtAmount(row), baseCurrency) },
-          { label: 'Saldo a favor', align: 'right', value: (row) => formatConvertedAmount(getSupplierFavorAmount(row), baseCurrency) },
+          { label: 'Saldo pendiente', align: 'right', value: (row) => renderSupplierAmount(row.balanceOriginalCurrencyBreakdown, getSupplierDebtAmount(row)) },
+          { label: 'Saldo a favor', align: 'right', value: (row) => renderSupplierAmount(row.balanceFavorOriginalCurrencyBreakdown, getSupplierFavorAmount(row)) },
           { label: 'Estado', align: 'center', value: (row) => isSupplierInactive(row) ? 'Inactivo' : 'Activo' },
         ],
       });
@@ -295,6 +297,18 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     { label: 'Activo',   value: 'ACTIVE',   color: 'bg-emerald-500/10 text-emerald-500' },
     { label: 'Inactivo', value: 'INACTIVE', color: 'bg-muted/20 text-muted-foreground' },
   ];
+
+  const renderSupplierAmount = (
+    breakdown: Array<{ currency: string; amount: number }> | undefined,
+    fallback: number,
+  ) => {
+    if (displayMode === 'ORIGINAL' && breakdown?.length) {
+      return breakdown
+        .map((item) => formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency, baseCurrency) as SupportedCurrency))
+        .join(' · ');
+    }
+    return formatConvertedAmount(fallback, baseCurrency);
+  };
 
   const columns: ColumnDef<Supplier>[] = [
     { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
@@ -326,8 +340,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         }
         return (
           <div className="min-w-[11rem] space-y-1 leading-tight">
-            {debt > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className="text-[12px] font-black tabular-nums text-rose-600 dark:text-rose-400">{formatConvertedAmount(debt, baseCurrency)}</span></div>}
-            {favor > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">A favor</span><span className="text-[12px] font-black tabular-nums text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(favor, baseCurrency)}</span></div>}
+            {debt > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className="text-[12px] font-black tabular-nums text-rose-600 dark:text-rose-400">{renderSupplierAmount(row.balanceOriginalCurrencyBreakdown, debt)}</span></div>}
+            {favor > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">A favor</span><span className="text-[12px] font-black tabular-nums text-emerald-600 dark:text-emerald-400">{renderSupplierAmount(row.balanceFavorOriginalCurrencyBreakdown, favor)}</span></div>}
           </div>
         );
       }
@@ -439,10 +453,26 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     }
   };
 
+  const totalSupplierDebt = data.reduce((acc, supplier) => acc + getSupplierDebtAmount(supplier), 0);
+  const totalSupplierDebtBreakdown = summarizeAmountsByCurrency(
+    data.flatMap((supplier) => supplier.balanceOriginalCurrencyBreakdown || []),
+    (item) => Number(item.amount || 0),
+    (item) => item.currency,
+  );
+  const supplierDebtRows = totalSupplierDebtBreakdown.length
+    ? totalSupplierDebtBreakdown
+    : [{ currency: baseCurrency as SupportedCurrency, amount: totalSupplierDebt, count: 0 }];
+  const supplierDebtKpis = displayMode === 'ORIGINAL'
+    ? supplierDebtRows.map((item) => ({
+      title: `Cartera pendiente (${item.currency})`,
+      value: formatExplicitAmount(item.amount, normalizeCurrency(item.currency, baseCurrency) as SupportedCurrency),
+    }))
+    : [{ title: `Cartera pendiente${valuationModeSuffix}`, value: formatConvertedAmount(totalSupplierDebt, baseCurrency) }];
+
   const kpis = [
     { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
     { title: 'Activos',   value: data.filter(s => (s as any).isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
-    { title: `Cartera pendiente${valuationModeSuffix}`, value: formatConvertedAmount(data.reduce((a, s) => a + getSupplierDebtAmount(s), 0), baseCurrency), icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'indicator' as const },
+    ...supplierDebtKpis.map((item) => ({ title: item.title, value: item.value, icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'indicator' as const })),
   ];
 
   if (importPreviewOpen) {
@@ -453,7 +483,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
-          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={'filter' in k && k.filter === statusFilter} onClick={'filter' in k && k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
       </div>
 

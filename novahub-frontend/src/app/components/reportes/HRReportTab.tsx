@@ -13,12 +13,13 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, Scale, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
+import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -219,7 +220,7 @@ function makeBuckets(start: Date, end: Date): EvoBucket[] {
 type ListRow = { label: string; sub?: string; right?: string; rightClass?: string; tag?: string };
 
 export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
   const canViewHr = canPerform('HR', 'view');
@@ -443,7 +444,17 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const costoPorColaborador = payrollTotals.empleados > 0 ? payrollTotals.total / payrollTotals.empleados : 0;
 
   const prevPayrollTotals = useMemo(() => prevWin ? sumTotals(fPayrolls.filter(p => isPayrollInWindow(p, prevWin.startMs, prevWin.endMs))) : sumTotals([]), [fPayrolls, prevWin]);
-  const prevCostoPorColaborador = prevPayrollTotals.empleados > 0 ? prevPayrollTotals.total / prevPayrollTotals.empleados : 0;
+  const employerCostOriginal = (p: any) => {
+    if (p.costoTotalEmpresa !== null && p.costoTotalEmpresa !== undefined) return Number(p.costoTotalEmpresa ?? p.costoTotalEmpresaBase ?? 0);
+    return Number(p.grossPay ?? p.grossPayBase ?? 0) + Number(p.inssPatronal ?? p.inssPatronalBase ?? 0) + Number(p.inatec ?? p.inatecBase ?? 0) + Number(p.trecenoMes ?? p.trecenoMesBase ?? 0) + Number(p.vacacionesProv ?? p.vacacionesProvBase ?? 0) + Number(p.indemnizacion ?? p.indemnizacionBase ?? 0);
+  };
+  const originalPayrollCurrencies = summarizeAmountsByCurrency(fPay, employerCostOriginal, (row: any) => row.currency || baseCurrency).map((item) => item.currency);
+  const originalPayrollTotal = (currency: SupportedCurrency) => fPay.filter((row: any) => normalizeCurrency(row.currency || baseCurrency) === currency).reduce((sum: number, row: any) => sum + employerCostOriginal(row), 0);
+  const originalPayrollEmployees = (currency: SupportedCurrency) => new Set(fPay.filter((row: any) => normalizeCurrency(row.currency || baseCurrency) === currency).map((row: any) => row.employeeId || row.employee?.id).filter(Boolean)).size;
+  const originalPayrollCharges = (currency: SupportedCurrency) => fPay.filter((row: any) => normalizeCurrency(row.currency || baseCurrency) === currency).reduce((sum: number, row: any) => sum + Number(row.inssPatronal ?? row.inssPatronalBase ?? 0) + Number(row.inatec ?? row.inatecBase ?? 0) + Number(row.trecenoMes ?? row.trecenoMesBase ?? 0) + Number(row.vacacionesProv ?? row.vacacionesProvBase ?? 0) + Number(row.indemnizacion ?? row.indemnizacionBase ?? 0), 0);
+  const renderPayrollMoneyKpi = (title: string, total: number, amountByCurrency: (currency: SupportedCurrency) => number, detailByCurrency: (currency: SupportedCurrency) => string) => displayMode === 'ORIGINAL'
+    ? originalPayrollCurrencies.map((currency) => <Card key={`${title}-${currency}`} className="border-blue-500/20 relative overflow-hidden transition-all hover:shadow-lg"><CardHeader className="pb-1"><CardTitle className="text-[13px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><DollarSign className="size-4 text-blue-500" /> {title} ({currency})</CardTitle></CardHeader><CardContent><p className="text-xl font-black text-blue-500">{formatExplicitAmount(amountByCurrency(currency), currency)}</p><p className="text-xs text-muted-foreground mt-0.5">{detailByCurrency(currency)}</p></CardContent></Card>)
+    : <Card className="border-blue-500/20 relative overflow-hidden transition-all hover:shadow-lg"><CardHeader className="pb-1"><CardTitle className="text-[13px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><DollarSign className="size-4 text-blue-500" /> {title} ({displayCurrency})</CardTitle></CardHeader><CardContent><p className="text-xl font-black text-blue-500">{formatConvertedAmount(total, 'NIO')}</p><p className="text-xs text-muted-foreground mt-0.5">{valuationModeLabel}</p></CardContent></Card>;
 
   const costoPorEmp = useMemo(() => {
     const fallback = new Map<string, string>();
@@ -957,7 +968,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.hr', title: 'Reporte de capital humano', tenantName: companyName, rows: fEmployees, columns: [{ header: 'Colaborador', value: row => row.name || [row.firstName, row.lastName].filter(Boolean).join(' ') || '—' }, { header: 'Cargo', value: row => row.position?.name || row.position || '—' }, { header: 'Estado', value: row => row.employmentStatus || 'Activo' }, { header: 'Ingreso', value: row => row.hireDate || '—' }], fileName: buildReportDownloadFileName(['reporte_rrhh'], 'pdf', dateRange) });
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.hr', title: 'Reporte de capital humano', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: fEmployees, columns: [{ header: 'Colaborador', value: row => row.name || [row.firstName, row.lastName].filter(Boolean).join(' ') || '—' }, { header: 'Identificación', value: row => row.taxId || row.identification || '—' }, { header: 'Cargo', value: row => row.position?.name || row.position || '—' }, { header: 'Departamento', value: row => row.department?.name || row.department || '—' }, { header: 'Estado', value: row => row.employmentStatus || 'Activo' }, { header: 'Ingreso', value: row => row.hireDate || '—' }], fileName: buildReportDownloadFileName(['reporte_rrhh'], 'pdf', dateRange) });
         if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
@@ -1361,33 +1372,11 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           </Card>
         </button>
 
-        <Card className="border-blue-500/20 relative overflow-hidden transition-all hover:shadow-lg">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[13px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <DollarSign className="size-4 text-blue-500" /> Costo total de nómina
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-blue-500">{formatConvertedAmount(payrollTotals.total, 'NIO')}</p>
-            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-              Cargas patronales: {formatConvertedAmount(payrollTotals.cargas + payrollTotals.prestaciones, 'NIO')} {varBadge(payrollTotals.total, prevPayrollTotals.total, false)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-blue-500/20 relative overflow-hidden transition-all hover:shadow-lg">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[13px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Scale className="size-4 text-blue-500" /> Costo por colaborador
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-blue-500">{formatConvertedAmount(costoPorColaborador, 'NIO')}</p>
-            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-              Promedio del período {varBadge(costoPorColaborador, prevCostoPorColaborador, false)}
-            </p>
-          </CardContent>
-        </Card>
+        {renderPayrollMoneyKpi('Costo total de nómina', payrollTotals.total, originalPayrollTotal, (currency) => `Cargas patronales: ${formatExplicitAmount(originalPayrollCharges(currency), currency)}`)}
+        {renderPayrollMoneyKpi('Costo por colaborador', costoPorColaborador, (currency) => {
+          const employees = originalPayrollEmployees(currency);
+          return employees > 0 ? originalPayrollTotal(currency) / employees : 0;
+        }, (currency) => `${originalPayrollEmployees(currency)} colaborador(es) · promedio del período`)}
 
         <Card className="border-emerald-500/20 relative overflow-hidden transition-all hover:shadow-lg">
           <CardHeader className="pb-1">

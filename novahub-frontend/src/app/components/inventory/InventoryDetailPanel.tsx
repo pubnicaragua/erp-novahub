@@ -231,12 +231,12 @@ export function InventoryDetailPanel({ kind, data, onClose }: InventoryDetailPan
 
   return (
     <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start">
-      <Card className="overflow-hidden">
-        <CardHeader className="py-3 px-4" data-tour="inventory-detail-title">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="min-w-0 px-4 py-3" data-tour="inventory-detail-title">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <Info className="w-4 h-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium">{isTransfer ? 'Detalle de Transferencia' : 'Detalle de Ajuste'}</CardTitle>
+              <CardTitle className="truncate text-sm font-medium">{isTransfer ? 'Detalle de Transferencia' : 'Detalle de Ajuste'}</CardTitle>
             </div>
             <div className="flex items-center gap-1" data-tour="inventory-detail-actions">
             <InventoryViewTutorial label={isTransfer ? 'Cómo consultar transferencia' : 'Cómo consultar ajuste'} targetPrefix="inventory-detail" stepKeys={['title', 'data']} copy={{ data: { description: isTransfer ? 'Revisa origen, destino, unidades y artículos transferidos.' : 'Revisa almacén, razón, cantidades, costos y diferencias del ajuste.' } }} />
@@ -247,7 +247,7 @@ export function InventoryDetailPanel({ kind, data, onClose }: InventoryDetailPan
           </div>
         </CardHeader>
         <Separator />
-        <CardContent className="max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto p-4 sm:p-5" data-tour="inventory-detail-data">
+        <CardContent className="max-h-[calc(100dvh-6rem)] min-w-0 space-y-5 overflow-y-auto p-4 sm:p-5" data-tour="inventory-detail-data">
           {data && (isTransfer ? <TransferDetail data={data} /> : <AdjustmentDetail data={data} canViewInventoryCost={canViewInventoryCost} />)}
         </CardContent>
       </Card>

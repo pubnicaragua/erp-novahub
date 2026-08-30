@@ -32,6 +32,7 @@ import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/s
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 
 const toWholeQuantity = (value: string | number, max?: number) => {
   const parsed = Number(value);
@@ -154,7 +155,7 @@ const statusOptions = [
 ];
 
 export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: DevolucionesViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('sales-return', user?.tenantId, user?.id);
@@ -346,6 +347,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     status: String(row.status || ''),
     sourceLabel: row.invoice?.number ? `Factura origen: ${row.invoice.number}` : undefined,
     totalLabel: formatConvertedAmount(Number(row.total || 0), row.currency, row.exchangeRate),
+    sourceCurrency: row.currency,
+    sourceExchangeRate: row.exchangeRate,
     summaryDetails: [
       { label: 'Tipo', value: isReturnPartial(row) ? 'Parcial' : 'Total' },
       { label: 'Moneda', value: row.currency || 'NIO' },
@@ -418,6 +421,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       : toBaseAmount(salesReturn.total || 0, (salesReturn as any).currency, (salesReturn as any).exchangeRate || globalRate)),
     0,
   );
+  const originalReturnedAmounts = summarizeAmountsByCurrency(data, (salesReturn) => Number((salesReturn as any).total || 0), (salesReturn) => (salesReturn as any).currency, baseCurrency);
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
@@ -562,7 +566,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title="Saldo a favor generado" value={formatConvertedAmount(totalReturnedInDisplayCurrency, baseCurrency)} icon={FileOutput} color="text-rose-500" bg="bg-rose-500/10" />
+        {displayMode === 'ORIGINAL'
+          ? originalReturnedAmounts.map((summary) => <SalesKpiCard key={`returned-${summary.currency}`} title={`Saldo a favor generado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileOutput} color="text-rose-500" bg="bg-rose-500/10" />)
+          : <SalesKpiCard title={`Saldo a favor generado (${displayCurrency})`} value={formatConvertedAmount(totalReturnedInDisplayCurrency, baseCurrency)} icon={FileOutput} color="text-rose-500" bg="bg-rose-500/10" />}
         <SalesKpiCard title="Pendientes" value={data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
         <SalesKpiCard title="Aprobadas" value={data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
         <SalesKpiCard title="Rechazadas" value={data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length} icon={XCircle} color="text-rose-500" bg="bg-rose-500/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />

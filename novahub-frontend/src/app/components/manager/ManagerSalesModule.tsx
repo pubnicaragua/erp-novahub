@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Skeleton } from '../ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency, type CurrencyDisplayMode } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateSalesTransactionPDF } from '../../utils/pdfGenerator';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -26,6 +27,7 @@ import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsE
 import { formatCurrencyAmount, formatCurrencyDescriptor, getCurrencyMetadata } from '../../utils/currency';
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
+import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { ColumnFilterMenu, type ColumnSort, type ColumnSortType } from '../ui/ColumnFilterMenu';
 import { toast } from 'sonner';
@@ -129,6 +131,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
   const effectiveLayoutMode: LayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
   const [exporting, setExporting] = useState(false);
   const { user } = useAuth();
+  const { displayMode } = useCurrency();
   const { themeConfig } = useTheme();
   const isInvoiceSeriesView = view === 'invoice-series';
   const query = useTenantQuery<ManagerSalesModuleResponse>(
@@ -141,7 +144,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
   const metrics = response?.metrics || {};
   const multipleBranches = !branchId && branches.length > 1;
   const activeReportCurrency = reportCurrency || metrics.consolidationCurrency || 'NIO';
-  const displayColumns = useMemo(() => tableColumns(view, multipleBranches, activeReportCurrency, priceListMode), [view, multipleBranches, activeReportCurrency, priceListMode]);
+  const displayColumns = useMemo(() => tableColumns(view, multipleBranches, activeReportCurrency, priceListMode, displayMode), [view, multipleBranches, activeReportCurrency, priceListMode, displayMode]);
   const displayRows = useMemo(() => sortRows(rows, displayColumns, columnSorts, view), [rows, displayColumns, columnSorts, view]);
   const activeStatusOptions = statusOptions[view] || [];
   const selectedQuoteBranchId = String(quoteDetail?.quote?.branchId || selectedQuote?.branchId || '');
@@ -283,12 +286,13 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
           dateFrom,
           dateTo,
           metrics: report.metrics,
+          displayMode,
         });
         return;
       }
       const report = await enterpriseGroupsService.getSalesModule(groupId, { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined, page: 1, pageSize: 5000, report: true });
-      const data = (report.data || []).map((row: any) => exportRow(view, row, reportCurrency || report.metrics?.amountCurrency || 'NIO'));
-      const options = { rows: data, tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: viewLabels[view], fileBase: `reporte_ventas_${viewLabels[view]}`, reportCurrency: reportCurrency || report.metrics?.amountCurrency || 'NIO', filterSummary: quoteFilterSummary, dateFrom, dateTo, metrics: report.metrics, extraSheets: view === 'cash' ? [{ name: 'Resumen por caja', rows: (report.metrics?.registerSummary || []).map((row: any) => cashSummaryExportRow(row, reportCurrency || report.metrics?.amountCurrency || 'NIO')) }] : undefined };
+      const data = (report.data || []).map((row: any) => exportRow(view, row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode));
+      const options = { rows: data, tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: viewLabels[view], fileBase: `reporte_ventas_${viewLabels[view]}`, reportCurrency: reportCurrency || report.metrics?.amountCurrency || 'NIO', filterSummary: quoteFilterSummary, dateFrom, dateTo, metrics: report.metrics, extraSheets: view === 'cash' ? [{ name: 'Resumen por caja', rows: (report.metrics?.registerSummary || []).map((row: any) => cashSummaryExportRow(row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode)) }] : undefined };
       await exportManagerSalesExcel(options);
     } finally {
       setExporting(false);
@@ -306,6 +310,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
         primaryColor: themeConfig?.colors?.primary,
         filterSummary: quoteFilterSummary,
         metrics: report.metrics,
+        displayMode,
       });
     } finally {
       setExporting(false);
@@ -387,11 +392,14 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
       const options = {
         rows,
         customerName: customer.name || selectedCustomer.name || 'Cliente',
+        customerData: customer,
         branchName: customer.branchName || selectedCustomer.branchName,
         tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
         primaryColor: themeConfig?.colors?.primary,
         pdfDesign: customer.pdfDesign,
+        outputCurrency: displayMode === 'ORIGINAL' ? null : activeReportCurrency,
+        displayMode,
       };
       await exportCustomerTransactionsPdf(options);
     } catch (error: any) {
@@ -425,7 +433,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
               setExporting(true);
               try {
       const report = await enterpriseGroupsService.getSalesModule(groupId, { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined, page: 1, pageSize: 5000, report: true });
-                const data = (report.data || []).map((row: any) => exportRow(view, row, reportCurrency || report.metrics?.amountCurrency || 'NIO'));
+                const data = (report.data || []).map((row: any) => exportRow(view, row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode));
                 await exportManagerSalesPdf({ rows: data, tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: viewLabels[view], fileBase: `reporte_ventas_${viewLabels[view]}`, reportCurrency: reportCurrency || report.metrics?.amountCurrency || 'NIO', filterSummary: quoteFilterSummary, dateFrom, dateTo, metrics: report.metrics });
               } finally { setExporting(false); }
             }}><FileText className="size-4 text-primary" /> PDF (.pdf)</DropdownMenuItem>
@@ -440,12 +448,12 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
       <SalesFilters view={view} search={search} setSearch={(value) => { setSearch(value); setPage(1); }} status={status} setStatus={(value) => { setStatus(value); setPage(1); }} customerType={customerType} setCustomerType={(value) => { setCustomerType(value); setPage(1); }} dateFrom={dateFrom} setDateFrom={(value) => { setDateFrom(value); setPage(1); }} dateTo={dateTo} setDateTo={(value) => { setDateTo(value); setPage(1); }} statusOptions={activeStatusOptions} layoutMode={effectiveLayoutMode} setLayoutMode={setLayoutMode} registerId={registerId} setRegisterId={(value) => { setRegisterId(value); setPage(1); }} registerOptions={metrics.registers || []} deliveryBranchId={deliveryBranchId} setDeliveryBranchId={(value) => { setDeliveryBranchId(value); setPage(1); }} branches={branches} paymentStatus={paymentStatus} setPaymentStatus={(value) => { setPaymentStatus(value); setPage(1); }} priceListMode={priceListMode} setPriceListMode={(value) => { setPriceListMode(value); setPage(1); }} />
       <SalesKpis view={view} metrics={metrics} reportCurrency={activeReportCurrency} status={status} onStatusChange={(value) => { setStatus(value); setPage(1); }} />
       {view === 'cash' && <CashRegisterSummary rows={metrics.registerSummary || []} reportCurrency={activeReportCurrency} />}
-      {query.isLoading ? <LoadingState /> : query.error ? <EmptyState title="No se pudo cargar la vista" description="Verifica el permiso Manager de Ventas y vuelve a actualizar." /> : effectiveLayoutMode === 'cards' ? <SalesCards view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} onDetail={openOperationalDetail} priceListMode={priceListMode} /> : <SalesTable view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} sortState={columnSorts} onSort={changeColumnSort} onDetail={openOperationalDetail} priceListMode={priceListMode} />}
+      {query.isLoading ? <LoadingState /> : query.error ? <EmptyState title="No se pudo cargar la vista" description="Verifica el permiso Manager de Ventas y vuelve a actualizar." /> : effectiveLayoutMode === 'cards' ? <SalesCards view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} onDetail={openOperationalDetail} priceListMode={priceListMode} /> : <SalesTable view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} displayMode={displayMode} sortState={columnSorts} onSort={changeColumnSort} onDetail={openOperationalDetail} priceListMode={priceListMode} />}
       <Pagination page={response?.meta.page || page} totalPages={response?.meta.totalPages || 1} total={response?.meta.total || 0} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} />
       <ManagerCustomerDetailSheet groupId={groupId} customer={selectedCustomer} reportCurrency={activeReportCurrency} onOpenChange={(open) => { if (!open) setSelectedCustomer(null); }} onEnterBranch={onEnterBranch} canEnterBranch={canEnterBranch} onExportHistory={() => { void downloadCustomerHistory(); }} exportingHistory={exportingCustomerHistory} />
       <SalesDocumentDetailSheet
         key={selectedQuote?.id || 'manager-quote-detail'}
-        document={selectedQuote ? buildManagerQuotePanel(quoteDetail?.quote || selectedQuote, quoteDetail?.history) : null}
+        document={selectedQuote ? buildManagerQuotePanel(quoteDetail?.quote || selectedQuote, quoteDetail?.history, displayMode) : null}
         entity="ESTIMATE"
         open={Boolean(selectedQuote)}
         onClose={() => { setSelectedQuote(null); setQuoteDetail(null); }}
@@ -454,7 +462,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
       />
       <SalesDocumentDetailSheet
         key={selectedSalesDocument ? `${selectedSalesDocument.entity}-${selectedSalesDocument.row.id}` : 'manager-sales-document-detail'}
-        document={selectedSalesDocument ? buildManagerSalesDocumentPanel(salesDocumentDetail?.document || selectedSalesDocument.row, selectedSalesDocument.entity, salesDocumentDetail?.history) : null}
+        document={selectedSalesDocument ? buildManagerSalesDocumentPanel(salesDocumentDetail?.document || selectedSalesDocument.row, selectedSalesDocument.entity, salesDocumentDetail?.history, displayMode) : null}
         entity={managerSalesAuditEntity(selectedSalesDocument?.entity)}
         open={Boolean(selectedSalesDocument)}
         onClose={() => { setSelectedSalesDocument(null); setSalesDocumentDetail(null); }}
@@ -463,14 +471,21 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
         onWhatsApp={openSalesDocumentWhatsApp}
         hasWhatsApp={Boolean(salesDocumentDetail?.document?.customerPhone || selectedSalesDocument?.row?.customerPhone || selectedSalesDocument?.row?.customer?.phone || selectedSalesDocument?.row?.customCustomerPhone)}
       />
-      <ManagerSalesDeliverySheet open={Boolean(selectedDelivery)} onOpenChange={(open) => { if (!open) { setSelectedDelivery(null); setDeliveryDetail(null); } }} loading={deliveryDetailLoading} delivery={deliveryDetail?.delivery || selectedDelivery} history={deliveryDetail?.history} reportCurrency={activeReportCurrency} onDownload={deliveryDetail?.delivery ? () => { void exportManagerSalesPdf({ rows: [exportRow('deliveries', deliveryDetail.delivery, activeReportCurrency)], tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: 'Detalle de entrega', fileBase: `detalle_entrega_${deliveryDetail.delivery.number || 'sin_numero'}`, reportCurrency: activeReportCurrency, metrics, pdfDesign: deliveryDetail.delivery.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} onWhatsApp={deliveryDetail?.delivery?.customerPhone ? () => { const phone = String(deliveryDetail.delivery.customerPhone).replace(/\D/g, ''); const phoneWithCode = phone.length === 8 ? `505${phone}` : (phone.startsWith('505') ? phone : `505${phone}`); window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(`Hola ${deliveryDetail.delivery.customerName || 'cliente'}, te compartimos la información de tu entrega ${deliveryDetail.delivery.number || ''}.`)}`, '_blank', 'noopener,noreferrer'); } : undefined} />
-      <ManagerSalesCashSheet open={Boolean(selectedCashSession)} onOpenChange={(open) => { if (!open) { setSelectedCashSession(null); setCashSessionDetail(null); } }} loading={cashSessionDetailLoading} session={cashSessionDetail?.session || selectedCashSession} invoices={cashSessionDetail?.invoices} log={cashSessionDetail?.log} reportCurrency={activeReportCurrency} onDownload={cashSessionDetail?.session ? () => { void exportManagerSalesPdf({ rows: [exportRow('cash', cashSessionDetail.session, activeReportCurrency)], tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: 'Detalle de sesión de caja', fileBase: `detalle_sesion_caja_${cashSessionDetail.session.register?.code || 'sin_caja'}`, reportCurrency: activeReportCurrency, metrics, pdfDesign: cashSessionDetail.session.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} />
-      <ManagerSalesPriceListSheet open={Boolean(selectedPriceList)} onOpenChange={(open) => { if (!open) { setSelectedPriceList(null); setPriceListDetail(null); } }} loading={priceListDetailLoading} priceList={priceListDetail?.priceList || selectedPriceList} items={priceListDetail?.items} reportCurrency={activeReportCurrency} onDownload={priceListDetail?.priceList ? () => { void exportManagerSalesPdf({ rows: (priceListDetail.items || []).map((item: any) => exportRow('pricelists', { ...item, priceListId: priceListDetail.priceList.id, branchName: priceListDetail.priceList.branchName }, activeReportCurrency)), tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: `Lista ${priceListDetail.priceList.name}`, fileBase: `lista_de_precios_${priceListDetail.priceList.code || priceListDetail.priceList.name || 'sin_codigo'}`, reportCurrency: activeReportCurrency, filterSummary: quoteFilterSummary, metrics, pdfDesign: priceListDetail.priceList.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} />
+      <ManagerSalesDeliverySheet open={Boolean(selectedDelivery)} onOpenChange={(open) => { if (!open) { setSelectedDelivery(null); setDeliveryDetail(null); } }} loading={deliveryDetailLoading} delivery={deliveryDetail?.delivery || selectedDelivery} history={deliveryDetail?.history} reportCurrency={activeReportCurrency} onDownload={deliveryDetail?.delivery ? () => { void exportManagerSalesPdf({ rows: [exportRow('deliveries', deliveryDetail.delivery, activeReportCurrency, displayMode)], tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: 'Detalle de entrega', fileBase: `detalle_entrega_${deliveryDetail.delivery.number || 'sin_numero'}`, reportCurrency: activeReportCurrency, metrics, pdfDesign: deliveryDetail.delivery.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} onWhatsApp={deliveryDetail?.delivery?.customerPhone ? () => { const phone = String(deliveryDetail.delivery.customerPhone).replace(/\D/g, ''); const phoneWithCode = phone.length === 8 ? `505${phone}` : (phone.startsWith('505') ? phone : `505${phone}`); window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(`Hola ${deliveryDetail?.delivery?.customerName || 'cliente'}, te compartimos la información de tu entrega ${deliveryDetail?.delivery?.number || ''}.`)}`, '_blank', 'noopener,noreferrer'); } : undefined} />
+      <ManagerSalesCashSheet open={Boolean(selectedCashSession)} onOpenChange={(open) => { if (!open) { setSelectedCashSession(null); setCashSessionDetail(null); } }} loading={cashSessionDetailLoading} session={cashSessionDetail?.session || selectedCashSession} invoices={cashSessionDetail?.invoices} log={cashSessionDetail?.log} reportCurrency={activeReportCurrency} onDownload={cashSessionDetail?.session ? () => { void exportManagerSalesPdf({ rows: [exportRow('cash', cashSessionDetail.session, activeReportCurrency, displayMode)], tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: 'Detalle de sesión de caja', fileBase: `detalle_sesion_caja_${cashSessionDetail.session.register?.code || 'sin_caja'}`, reportCurrency: activeReportCurrency, metrics, pdfDesign: cashSessionDetail.session.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} />
+      <ManagerSalesPriceListSheet open={Boolean(selectedPriceList)} onOpenChange={(open) => { if (!open) { setSelectedPriceList(null); setPriceListDetail(null); } }} loading={priceListDetailLoading} priceList={priceListDetail?.priceList || selectedPriceList} items={priceListDetail?.items} reportCurrency={activeReportCurrency} onDownload={priceListDetail?.priceList ? () => { void exportManagerSalesPdf({ rows: (priceListDetail.items || []).map((item: any) => exportRow('pricelists', { ...item, priceListId: priceListDetail.priceList.id, branchName: priceListDetail.priceList.branchName }, activeReportCurrency, displayMode)), tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: `Lista ${priceListDetail.priceList.name}`, fileBase: `lista_de_precios_${priceListDetail.priceList.code || priceListDetail.priceList.name || 'sin_codigo'}`, reportCurrency: activeReportCurrency, filterSummary: quoteFilterSummary, metrics, pdfDesign: priceListDetail.priceList.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} />
     </>}
   </div>;
 }
 
 function SalesOverview({ metrics, reportCurrency }: { metrics: Record<string, any>; reportCurrency: string }) {
+  const { displayMode } = useCurrency();
+  const amount = (value: unknown, currency = reportCurrency) => displayMode === 'ORIGINAL'
+    ? formatMoney(value, currency, true)
+    : <CurrencyDisplayAmount amount={Number(value || 0)} sourceCurrency={currency} selectedAmount={Number(value || 0)} selectedCurrency={currency} />;
+  const billedCards = displayMode === 'ORIGINAL' && Array.isArray(metrics.billedOriginalCurrencyBreakdown) && metrics.billedOriginalCurrencyBreakdown.length > 0
+    ? metrics.billedOriginalCurrencyBreakdown.map((item: any) => [`Facturado por caja · ${item.currency || 'NIO'}`, formatMoney(item.amount, item.currency || 'NIO', true), Receipt, 'text-primary bg-primary/10'] as const)
+    : [['Facturado por caja', amount(metrics.billed), Receipt, 'text-primary bg-primary/10'] as const];
   const cards = [
     ['Clientes', metrics.customers, UserRound, 'text-primary bg-primary/10'],
     ['Cotizaciones', metrics.quotes, FileText, 'text-primary bg-primary/10'],
@@ -478,10 +493,10 @@ function SalesOverview({ metrics, reportCurrency }: { metrics: Record<string, an
     ['Facturas', metrics.invoices, Receipt, 'text-primary bg-primary/10'],
     ['Pagos recibidos', metrics.payments, CreditCard, 'text-primary bg-primary/10'],
     ['Entregas', metrics.deliveries, Truck, 'text-primary bg-primary/10'],
-    ['Saldo de clientes', formatMoney(metrics.customerBalance, 'NIO', true), TrendingUp, 'text-primary bg-primary/10'],
-    ['Facturado por caja', formatMoney(metrics.billed, reportCurrency, true), Receipt, 'text-primary bg-primary/10'],
+    ['Saldo de clientes', amount(metrics.customerBalance, 'NIO'), TrendingUp, 'text-primary bg-primary/10'],
+    ...billedCards,
   ] as const;
-  return <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, Icon, tone]) => <Card key={label} className="rounded-2xl border-border/60 shadow-sm"><CardContent className="flex items-center gap-4 p-5"><div className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', tone)}><Icon className="size-5" /></div><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="mt-1 truncate text-2xl font-black tracking-tight">{typeof value === 'number' ? formatNumber(value) : value || '0'}</p></div></CardContent></Card>)}</div><p className="text-[10px] font-bold text-muted-foreground">Los importes de caja se muestran en {formatCurrencyDescriptor(reportCurrency)}; el saldo del cliente conserva la moneda funcional de su sucursal.</p><Card className="rounded-3xl border-primary/20 bg-primary/5"><CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Lectura del alcance</CardTitle></CardHeader><CardContent className="grid grid-cols-1 gap-4 text-sm md:grid-cols-3"><div><p className="text-muted-foreground">Sucursal con más clientes</p><p className="mt-1 font-black">{metrics.topBranchName || 'Sin datos'}{metrics.topBranchCount ? ` · ${formatNumber(metrics.topBranchCount)}` : ''}</p></div><div><p className="text-muted-foreground">Créditos pendientes</p><p className="mt-1 font-black">{formatNumber(metrics.credits || 0)}</p></div><div><p className="text-muted-foreground">Sesiones de caja</p><p className="mt-1 font-black">{formatNumber(metrics.cashSessions || 0)}</p></div></CardContent></Card></div>;
+  return <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, Icon, tone]) => <Card key={label} className="rounded-2xl border-border/60 shadow-sm"><CardContent className="flex items-center gap-4 p-5"><div className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', tone)}><Icon className="size-5" /></div><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="mt-1 truncate text-2xl font-black tracking-tight">{typeof value === 'number' ? formatNumber(value) : value || '0'}</p></div></CardContent></Card>)}</div><p className="text-[10px] font-bold text-muted-foreground">Los importes de caja se muestran en {formatCurrencyDescriptor(reportCurrency)}; el saldo del cliente conserva la moneda original de su sucursal.</p><Card className="rounded-3xl border-primary/20 bg-primary/5"><CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Lectura del alcance</CardTitle></CardHeader><CardContent className="grid grid-cols-1 gap-4 text-sm md:grid-cols-3"><div><p className="text-muted-foreground">Sucursal con más clientes</p><p className="mt-1 font-black">{metrics.topBranchName || 'Sin datos'}{metrics.topBranchCount ? ` · ${formatNumber(metrics.topBranchCount)}` : ''}</p></div><div><p className="text-muted-foreground">Créditos pendientes</p><p className="mt-1 font-black">{formatNumber(metrics.credits || 0)}</p></div><div><p className="text-muted-foreground">Sesiones de caja</p><p className="mt-1 font-black">{formatNumber(metrics.cashSessions || 0)}</p></div></CardContent></Card></div>;
 }
 
 function SalesFilters({ view, search, setSearch, status, setStatus, customerType, setCustomerType, dateFrom, setDateFrom, dateTo, setDateTo, statusOptions, layoutMode, setLayoutMode, registerId, setRegisterId, registerOptions, deliveryBranchId, setDeliveryBranchId, branches, paymentStatus, setPaymentStatus, priceListMode, setPriceListMode }: { view: ManagerSalesView; search: string; setSearch: (value: string) => void; status: string; setStatus: (value: string) => void; customerType: string; setCustomerType: (value: string) => void; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; statusOptions: Array<{ value: string; label: string }>; layoutMode: LayoutMode; setLayoutMode: (value: LayoutMode) => void; registerId: string; setRegisterId: (value: string) => void; registerOptions: any[]; deliveryBranchId: string; setDeliveryBranchId: (value: string) => void; branches: BranchOption[]; paymentStatus: string; setPaymentStatus: (value: string) => void; priceListMode: 'lists' | 'prices'; setPriceListMode: (value: 'lists' | 'prices') => void }) {
@@ -494,32 +509,48 @@ function SalesFilters({ view, search, setSearch, status, setStatus, customerType
 function DateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="min-w-0 space-y-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground lg:w-44"><span>{label}</span><div className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" /><Input type="date" value={value} onChange={(event) => onChange(event.target.value)} className="h-10 rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-wide" /></div></label>; }
 
 function SalesKpis({ view, metrics, reportCurrency, status, onStatusChange }: { view: ManagerSalesView; metrics: Record<string, any>; reportCurrency: string; status: string; onStatusChange: (value: string) => void }) {
+  const { displayMode } = useCurrency();
+  const amountCards = (label: string, value: unknown, breakdownKey = 'originalCurrencyBreakdown') => {
+    const breakdown = Array.isArray(metrics[breakdownKey]) ? metrics[breakdownKey] : [];
+    if (displayMode === 'ORIGINAL' && breakdown.length > 0) {
+      return breakdown.map((item: any) => [
+        `${label} · ${item.currency || 'NIO'}`,
+        formatMoney(item.amount, item.currency || 'NIO', true),
+      ] as [string, ReactNode]);
+    }
+    const currency = metrics.amountCurrency || reportCurrency;
+    return [[
+      `${label} · ${getCurrencyMetadata(currency).code}`,
+      <CurrencyDisplayAmount amount={Number(value || 0)} sourceCurrency={currency} selectedAmount={Number(value || 0)} selectedCurrency={currency} />,
+    ] as [string, ReactNode]];
+  };
   const cards = useMemo(() => {
     const total = Number(metrics.total || 0);
     if (view === 'customers') return [['Clientes', total], ['Particulares', metrics.individuals], ['Empresas', metrics.companies], ['Sucursal con más clientes', metrics.topBranchName || 'Sin datos']];
     if (view === 'quotes') return [];
-    if (view === 'cash') return [['Sesiones', total], ['Abiertas', metrics.openSessions], ['En conteo', metrics.countingSessions || 0], ['Cerradas', metrics.closedSessions], [`Facturado · ${getCurrencyMetadata(reportCurrency).code}`, formatMoney(metrics.billed, reportCurrency, true)]];
-    if (view === 'deliveries') return [['Entregas', total], ['Pendientes', metrics.pending], ['Listas', metrics.ready || 0], ['Entregadas', metrics.delivered || 0], [`Monto · ${getCurrencyMetadata(reportCurrency).code}`, formatMoney(metrics.amount, reportCurrency, true)]];
+    if (view === 'cash') return [['Sesiones', total], ['Abiertas', metrics.openSessions], ['En conteo', metrics.countingSessions || 0], ['Cerradas', metrics.closedSessions], ...amountCards('Facturado', metrics.billed, 'billedOriginalCurrencyBreakdown')];
+    if (view === 'deliveries') return [['Entregas', total], ['Pendientes', metrics.pending], ['Listas', metrics.ready || 0], ['Entregadas', metrics.delivered || 0], ...amountCards('Monto', metrics.amount)];
     if (view === 'pricelists') return [['Listas', total], ['Activas', metrics.activeLists || 0], ['Predeterminadas', metrics.defaultLists || 0], ['Productos con precio', metrics.productsWithPrice || metrics.totalPriceItems || 0]];
-    if (view === 'credits') return [['Créditos', total], [`Saldo pendiente · ${getCurrencyMetadata(reportCurrency).code}`, formatMoney(metrics.amount, reportCurrency, true)], ['Vencidos', metrics.overdue], ['Sucursal principal', metrics.topBranchName || 'Sin datos']];
-    return [['Registros', total], [`Monto total · ${getCurrencyMetadata(reportCurrency).code}`, formatMoney(metrics.amount, reportCurrency, true)], ['Sucursal principal', metrics.topBranchName || 'Sin datos'], ['Registros principales', metrics.topBranchCount || 0]];
-  }, [metrics, view, reportCurrency]);
+    if (view === 'credits') return [['Créditos', total], ...amountCards('Saldo pendiente', metrics.amount), ['Vencidos', metrics.overdue], ['Sucursal principal', metrics.topBranchName || 'Sin datos']];
+    return [['Registros', total], ...amountCards('Monto total', metrics.amount), ['Sucursal principal', metrics.topBranchName || 'Sin datos'], ['Registros principales', metrics.topBranchCount || 0]];
+  }, [displayMode, metrics, view, reportCurrency]);
   if (view === 'quotes') {
     const quoteStatusCards = [
       { key: '', label: 'Total de cotizaciones', value: Number(metrics.total || 0) },
-      { key: '__amount__', label: 'Monto total', value: formatMoney(metrics.amount, reportCurrency, true), detail: `Referencia: ${formatCurrencyDescriptor(reportCurrency)}${metrics.aggregationComplete === false ? ` · cálculo hasta ${metrics.aggregationLimit || 5000} registros` : ''}` },
+      ...amountCards('Monto total', metrics.amount).map(([label, value], index) => ({ key: `__amount__${index}`, label, value, detail: `Moneda: ${displayMode === 'ORIGINAL' ? label.split('·').pop()?.trim() || 'original' : formatCurrencyDescriptor(reportCurrency)}${metrics.aggregationComplete === false ? ` · cálculo hasta ${metrics.aggregationLimit || 5000} registros` : ''}` })),
       { key: 'APPROVED', label: 'Aprobadas', value: Number(metrics.statusCounts?.APPROVED || 0) },
       { key: 'DRAFT', label: 'Borradores', value: Number(metrics.statusCounts?.DRAFT || 0) },
       { key: 'IN_PROCESS', label: 'En proceso', value: Number(metrics.statusCounts?.IN_PROCESS || 0) },
       { key: 'CANCELLED', label: 'Canceladas', value: Number(metrics.statusCounts?.CANCELLED || 0) },
     ];
     return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{quoteStatusCards.map((card) => {
-      const isAmount = card.key === '__amount__';
+      const isAmount = card.key.startsWith('__amount__');
       const active = !isAmount && (status || '') === card.key;
+      const detail = 'detail' in card ? card.detail : undefined;
       return <button key={card.key || 'all'} type="button" disabled={isAmount} onClick={() => !isAmount && onStatusChange(active ? '' : card.key)} className={cn('rounded-2xl border bg-card p-4 text-left shadow-sm transition-colors', isAmount ? 'cursor-default border-primary/30 bg-primary/[0.04]' : 'border-border/60 hover:border-primary/40 hover:bg-primary/[0.04]', active && 'border-primary/60 bg-primary/10 ring-1 ring-primary/30')}>
         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p>
         <p className="mt-2 truncate text-xl font-black">{typeof card.value === 'number' ? formatNumber(card.value) : card.value}</p>
-        {isAmount ? <p className="mt-1 text-[10px] font-bold text-primary">{card.detail}</p> : <span className={cn('mt-2 inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider', card.key ? statusBadgeClass(card.key) : 'border-border/60 bg-muted/30 text-muted-foreground')}>{card.key ? statusLabel(card.key) : status ? 'Filtro activo' : 'Todos'}</span>}
+        {isAmount ? <p className="mt-1 text-[10px] font-bold text-primary">{detail}</p> : <span className={cn('mt-2 inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider', card.key ? statusBadgeClass(card.key) : 'border-border/60 bg-muted/30 text-muted-foreground')}>{card.key ? statusLabel(card.key) : status ? 'Filtro activo' : 'Todos'}</span>}
       </button>;
     })}</div>;
   }
@@ -528,11 +559,11 @@ function SalesKpis({ view, metrics, reportCurrency, status, onStatusChange }: { 
 
 function CashRegisterSummary({ rows, reportCurrency }: { rows: any[]; reportCurrency: string }) {
   if (!rows.length) return null;
-  return <Card className="rounded-3xl border-primary/20 bg-primary/[0.03] shadow-sm"><CardHeader className="border-b border-border/50"><CardTitle className="flex items-center gap-2 text-base font-black uppercase italic tracking-tight"><CreditCard className="size-4 text-primary" />Resumen por caja</CardTitle><p className="text-xs text-muted-foreground">Consolidado del alcance y período seleccionados. Los importes de facturación se muestran en la moneda del Topbar.</p></CardHeader><CardContent className="p-0"><div className="sales-responsive-table overflow-x-auto"><Table className="min-w-[920px]"><TableHeader><TableRow><TableHead>Caja</TableHead><TableHead>Sucursal</TableHead><TableHead className="text-right">Sesiones</TableHead><TableHead className="text-right">Facturas</TableHead><TableHead className="text-right">Facturado equivalente</TableHead><TableHead className="text-right">Esperado</TableHead><TableHead className="text-right">Diferencia</TableHead></TableRow></TableHeader><TableBody>{rows.map((row: any) => <TableRow key={`${row.branchId}-${row.registerId || 'none'}`}><TableCell><div className="font-semibold">{row.registerName}</div><div className="font-mono text-xs text-muted-foreground">{row.registerCode || 'Sin código'}</div></TableCell><TableCell>{row.branchName}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.sessions)}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.invoices)}</TableCell><TableCell className="text-right"><span className="font-black text-primary">{formatMoney(row.reportBilled, reportCurrency, true)}</span></TableCell><TableCell className="text-right"><span className="font-black">{formatMoney(row.expectedAmountNIO, 'NIO', true)}</span><span className="block text-[10px] font-bold text-primary">Equiv. {formatMoney(row.reportExpectedAmountNIO, reportCurrency, true)}</span></TableCell><TableCell className="text-right"><span className="font-black">{formatMoney(row.differenceNIO, 'NIO', true)}</span><span className="block text-[10px] font-bold text-primary">Equiv. {formatMoney(row.reportDifferenceNIO, reportCurrency, true)}</span></TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card>;
+  return <Card className="rounded-3xl border-primary/20 bg-primary/[0.03] shadow-sm"><CardHeader className="border-b border-border/50"><CardTitle className="flex items-center gap-2 text-base font-black uppercase italic tracking-tight"><CreditCard className="size-4 text-primary" />Resumen por caja</CardTitle><p className="text-xs text-muted-foreground">Consolidado del alcance y período seleccionados. La vista respeta la moneda configurada o conserva el importe original.</p></CardHeader><CardContent className="p-0"><div className="sales-responsive-table overflow-x-auto"><Table className="min-w-[1040px]"><TableHeader><TableRow><TableHead>Caja</TableHead><TableHead>Sucursal</TableHead><TableHead className="text-right">Sesiones</TableHead><TableHead className="text-right">Facturas</TableHead><TableHead className="text-right">Facturado</TableHead><TableHead className="text-right">Esperado</TableHead><TableHead className="text-right">Diferencia</TableHead></TableRow></TableHeader><TableBody>{rows.map((row: any) => { const cashRow = { ...row, currency: 'NIO', baseCurrency: 'NIO', reportRateLabel: row.reportRateLabel || (row.exchangeRate ? `1 USD = ${formatNumber(row.exchangeRate)} NIO` : undefined), reportRateSource: row.reportRateSource || 'TRANSACTION', reportRateEffectiveAt: row.reportRateEffectiveAt || row.openedAt }; return <TableRow key={`${row.branchId}-${row.registerId || 'none'}`}><TableCell><div className="font-semibold">{row.registerName}</div><div className="font-mono text-xs text-muted-foreground">{row.registerCode || 'Sin código'}</div></TableCell><TableCell>{row.branchName}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.sessions)}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.invoices)}</TableCell><TableCell className="text-right"><MoneyPair row={cashRow} original={row.billed} equivalent={row.reportBilled} reportCurrency={reportCurrency} compact /></TableCell><TableCell className="text-right"><MoneyPair row={cashRow} original={row.expectedAmountNIO} equivalent={row.reportExpectedAmountNIO} reportCurrency={reportCurrency} compact /></TableCell><TableCell className="text-right"><MoneyPair row={cashRow} original={row.differenceNIO} equivalent={row.reportDifferenceNIO} reportCurrency={reportCurrency} compact /></TableCell></TableRow>; })}</TableBody></Table></div></CardContent></Card>;
 }
 
-function SalesTable({ view, rows, showBranch, reportCurrency, sortState, onSort, onDetail, priceListMode = 'lists' }: { view: ManagerSalesView; rows: any[]; showBranch: boolean; reportCurrency: string; sortState: Record<string, ColumnSort>; onSort: (key: string, sort: ColumnSort) => void; onDetail?: (row: any) => void; priceListMode?: 'lists' | 'prices' }) {
-  const columns = tableColumns(view, showBranch, reportCurrency, priceListMode);
+function SalesTable({ view, rows, showBranch, reportCurrency, displayMode, sortState, onSort, onDetail, priceListMode = 'lists' }: { view: ManagerSalesView; rows: any[]; showBranch: boolean; reportCurrency: string; displayMode: CurrencyDisplayMode; sortState: Record<string, ColumnSort>; onSort: (key: string, sort: ColumnSort) => void; onDetail?: (row: any) => void; priceListMode?: 'lists' | 'prices' }) {
+  const columns = tableColumns(view, showBranch, reportCurrency, priceListMode, displayMode);
   const isCustomerTable = view === 'customers';
   const isQuoteTable = view === 'quotes';
   const isDocumentTable = ['orders', 'invoices', 'recurring', 'payments', 'creditnotes', 'credits'].includes(view);
@@ -603,17 +634,21 @@ const quoteRateText = (row: any) => row.reportRateLabel || `1 ${row.reportCurren
 const quoteRateSourceLabel = (value: unknown) => ({ HISTORICAL: 'Tasa histórica', CURRENT_CONFIGURATION: 'Tasa vigente de configuración', SAME_CURRENCY: 'Misma moneda', TRANSACTION: 'Tasa registrada en la operación' } as Record<string, string>)[String(value || '').toUpperCase()] || String(value || 'Tasa de la operación');
 const quoteRateSubtext = (row: any) => `${quoteRateText(row)} · ${quoteRateSourceLabel(row.reportRateSource)} · ${formatDate(row.reportRateEffectiveAt || row.date)}`;
 function MoneyPair({ row, original, equivalent, reportCurrency, compact = false }: { row: any; original: unknown; equivalent: unknown; reportCurrency: string; compact?: boolean }) {
+  const { displayMode } = useCurrency();
   const originalCurrency = row.currency || row.baseCurrency || 'NIO';
   const hasEquivalent = equivalent != null && Number.isFinite(Number(equivalent));
-  return <div className={cn('space-y-0.5', compact ? 'min-w-28' : 'min-w-36')}>
-    <span className="block font-black">{formatMoney(original, originalCurrency, true)}</span>
-    <span className="block text-[10px] font-bold text-primary">Equiv. {hasEquivalent ? formatMoney(equivalent, reportCurrency, true) : 'No disponible'}</span>
+  const amount = displayMode === 'ORIGINAL' || !hasEquivalent
+    ? formatMoney(original, originalCurrency, true)
+    : formatMoney(equivalent, reportCurrency, true);
+  return <div className={cn(compact ? 'min-w-28' : 'min-w-36')}>
+    <span className="block font-black tabular-nums">{amount}</span>
     <span className="block text-[9px] font-semibold leading-3 text-muted-foreground">{quoteRateSubtext({ ...row, reportCurrency })}</span>
   </div>;
 }
 
-function tableColumns(view: ManagerSalesView, showBranch: boolean, reportCurrency: string, priceListMode: 'lists' | 'prices' = 'lists'): TableColumn[] {
+function tableColumns(view: ManagerSalesView, showBranch: boolean, reportCurrency: string, priceListMode: 'lists' | 'prices' = 'lists', displayMode: CurrencyDisplayMode = 'DEFAULT'): TableColumn[] {
   const branch: TableColumn[] = showBranch ? [{ label: 'Sucursal', sortKey: 'branchName', sortType: 'text', render: (row: any) => <Badge variant="secondary" className="max-w-44 truncate">{row.branchName}</Badge> }] : [];
+  const quoteMoneyColumns: TableColumn[] = [{ label: displayMode === 'ORIGINAL' ? 'Total original' : `Total ${getCurrencyMetadata(reportCurrency).code}`, sortKey: 'reportTotal', sortType: 'number', numeric: true, render: (row) => <MoneyPair row={row} original={row.total} equivalent={row.reportTotal} reportCurrency={reportCurrency} /> }];
   if (view === 'customers') return [
     { label: 'Código / sucursal', sortKey: 'code', sortType: 'text', render: (row) => <div className="min-w-40 space-y-1"><span className="block font-mono font-bold">{customerValue(row.code, row.id?.slice(0, 8) || '—')}</span><span className="flex items-start gap-1.5 text-xs font-semibold text-primary"><Building2 className="mt-0.5 size-3.5 shrink-0" /> <span className="break-words">{customerValue(row.branchName, 'Sucursal no identificada')}</span></span></div> },
     { label: 'Cliente', sortKey: 'name', sortType: 'text', render: (row) => <span className="font-semibold">{customerValue(row.name)}</span> },
@@ -630,8 +665,7 @@ function tableColumns(view: ManagerSalesView, showBranch: boolean, reportCurrenc
     { label: 'Número', sortKey: 'number', sortType: 'text', render: (row) => <div className="min-w-40"><span className="block font-mono font-bold text-primary">{row.number || '—'}</span><span className="mt-1 flex items-start gap-1.5 text-xs font-semibold text-primary"><Building2 className="mt-0.5 size-3.5 shrink-0" /><span className="break-words">{row.branchName || 'Sucursal no identificada'}</span></span></div> },
     { label: 'Cliente', sortKey: 'customerName', sortType: 'text', render: (row) => row.customerName || 'Cliente ocasional' },
     { label: 'Fecha de emisión', sortKey: 'date', sortType: 'date', getSortValue: (row) => dateSortValue(row.date), render: (row) => formatDate(row.date) },
-    { label: 'Total original', sortKey: 'total', sortType: 'number', numeric: true, render: (row) => <div><span className="block font-black">{formatMoney(row.total, row.currency, true)}</span><span className="text-[10px] font-normal text-muted-foreground">{formatCurrencyDescriptor(row.currency)}</span></div> },
-    { label: `Equivalencia ${getCurrencyMetadata(reportCurrency).symbol}`, sortKey: 'reportTotal', sortType: 'number', numeric: true, render: (row) => <div><span className="block font-black text-primary">{row.reportTotal == null ? 'No disponible' : formatMoney(row.reportTotal, reportCurrency, true)}</span><span className="block text-[10px] font-bold text-muted-foreground">{quoteRateSubtext(row)}</span></div> },
+    ...quoteMoneyColumns,
     { label: 'Estado', sortKey: 'status', sortType: 'text', render: (row) => statusBadge(row.status) },
     { label: 'Validez', sortKey: 'expiryDate', sortType: 'date', getSortValue: (row) => dateSortValue(row.expiryDate), render: (row) => <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Calendar className="size-3.5" />{formatDate(row.expiryDate)}</div> },
   ];
@@ -679,18 +713,22 @@ function QuoteCard({ quote, onDetail, openingId }: { quote: any; onDetail?: (row
       </div>
       <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p><p className="mt-1 truncate text-sm font-bold">{quote.customerName || 'Cliente ocasional'}</p></div>
       <div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-xs text-muted-foreground">Emisión</p><p className="font-semibold">{formatDate(quote.date)}</p></div><div><p className="text-xs text-muted-foreground">Validez</p><p className="font-semibold">{formatDate(quote.expiryDate)}</p></div></div>
-      <div className="space-y-2 border-t border-border/50 pt-3"><div className="flex items-center justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total original</span><span className="font-black">{formatMoney(quote.total, quote.currency, true)}</span></div><div className="flex items-center justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Equivalencia</span><span className="font-black text-primary">{quote.reportTotal == null ? 'No disponible' : formatMoney(quote.reportTotal, quote.reportCurrency, true)}</span></div><p className="text-right text-[10px] font-bold text-muted-foreground">{quoteRateSubtext(quote)}</p></div>
+      <div className="space-y-2 border-t border-border/50 pt-3"><div className="flex items-center justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Importe</span><MoneyPair row={quote} original={quote.total} equivalent={quote.reportTotal} reportCurrency={quote.reportCurrency || 'NIO'} compact /></div><p className="text-right text-[10px] font-bold text-muted-foreground">{quoteRateSubtext(quote)}</p></div>
       {onDetail && <p className="text-[10px] font-black uppercase tracking-widest text-primary">Abrir detalle e historial</p>}
     </CardContent>
   </Card>;
 }
 
-function buildManagerQuotePanel(quote: any, history?: any[]): SalesDocumentPanelData {
+function buildManagerQuotePanel(quote: any, history?: any[], displayMode: string = 'DEFAULT'): SalesDocumentPanelData {
   const customerName = quote.customer?.name || quote.customerName || quote.customCustomerName || 'Cliente ocasional';
   const currency = quote.currency || 'NIO';
   const reportCurrency = quote.reportCurrency || 'NIO';
   const quoteFactor = Number(quote.total || 0) !== 0 && quote.reportTotal != null ? Number(quote.reportTotal) / Number(quote.total) : null;
   const lineEquivalent = (value: unknown) => quoteFactor == null ? 'No disponible' : formatMoney(Number(value || 0) * quoteFactor, reportCurrency, true);
+  const lineDisplay = (value: unknown) => displayMode === 'ORIGINAL' || quoteFactor == null ? formatMoney(value, currency) : lineEquivalent(value);
+  const panelAmount = (original: unknown, equivalent: unknown = quote.reportTotal) => displayMode === 'ORIGINAL' || equivalent == null
+    ? formatMoney(original, currency, true)
+    : formatMoney(equivalent, reportCurrency, true);
   return {
     id: quote.id,
     number: quote.number || 'Sin número',
@@ -698,12 +736,13 @@ function buildManagerQuotePanel(quote: any, history?: any[]): SalesDocumentPanel
     customerName,
     status: String(quote.status || ''),
     sourceLabel: quote.branchName || 'Sucursal no identificada',
-    totalLabel: formatMoney(quote.total, currency, true),
+    sourceCurrency: currency,
+    sourceExchangeRate: quote.exchangeRate,
+    totalLabel: panelAmount(quote.total),
     summaryDetails: [
       { label: 'Sucursal', value: quote.branchName || 'Sucursal no identificada' },
       { label: 'Moneda original', value: formatCurrencyDescriptor(currency) },
-      { label: 'Equivalencia', value: quote.reportTotal == null ? 'No disponible' : formatMoney(quote.reportTotal, reportCurrency, true) },
-      { label: 'Moneda de referencia', value: formatCurrencyDescriptor(reportCurrency) },
+      { label: 'Importe mostrado', value: panelAmount(quote.total) },
       { label: 'Moneda funcional', value: formatCurrencyDescriptor(quote.baseCurrency || 'NIO') },
       { label: 'Líneas', value: String(quote.items?.length || quote.itemCount || 0) },
     ],
@@ -724,8 +763,8 @@ function buildManagerQuotePanel(quote: any, history?: any[]): SalesDocumentPanel
       id: item.id,
       description: item.description,
       quantity: Number(item.quantity || 0),
-      unitPriceLabel: `${formatMoney(item.unitPrice, currency)} · Equiv. ${lineEquivalent(item.unitPrice)}`,
-      totalLabel: `${formatMoney(item.total, currency)} · Equiv. ${lineEquivalent(item.total)}`,
+      unitPriceLabel: lineDisplay(item.unitPrice),
+      totalLabel: lineDisplay(item.total),
     })),
     notes: quote.notes,
     history: history || [],
@@ -736,7 +775,7 @@ function managerSalesAuditEntity(entity?: string) {
   return ({ orders: 'SALES_ORDER', invoices: 'INVOICE', recurring: 'RECURRING_INVOICE', payments: 'PAYMENT_RECEIVED', creditnotes: 'CREDIT_NOTE', credits: 'INVOICE' } as Record<string, string>)[entity || ''] || 'INVOICE';
 }
 
-function buildManagerSalesDocumentPanel(document: any, entity: string, history?: any[]): SalesDocumentPanelData {
+function buildManagerSalesDocumentPanel(document: any, entity: string, history?: any[], displayMode: string = 'DEFAULT'): SalesDocumentPanelData {
   const title = document.title || ({ orders: 'Orden de venta', invoices: 'Factura', recurring: 'Factura recurrente', payments: 'Pago recibido', creditnotes: 'Nota de crédito', credits: 'Crédito' } as Record<string, string>)[entity] || 'Documento';
   const customerName = document.customerName || document.customer?.name || document.customCustomerName || 'Cliente ocasional';
   const currency = document.currency || 'NIO';
@@ -744,17 +783,20 @@ function buildManagerSalesDocumentPanel(document: any, entity: string, history?:
   const total = document.total ?? document.amount ?? 0;
   const status = document.status || (entity === 'payments' ? 'PAID' : '');
   const invoicedBy = document.invoicedByName || document.invoicedBy?.name || '—';
-  const detailMoney = (original: unknown, equivalent: unknown = document.reportTotal) => `${formatMoney(original, currency, true)} · Equiv. ${equivalent == null ? 'No disponible' : formatMoney(equivalent, reportCurrency, true)}`;
+  const detailMoney = (original: unknown, equivalent: unknown = document.reportTotal) => displayMode === 'ORIGINAL' || equivalent == null
+    ? formatMoney(original, currency, true)
+    : formatMoney(equivalent, reportCurrency, true);
   const documentFactor = Number(total || 0) !== 0 && document.reportTotal != null ? Number(document.reportTotal) / Number(total) : null;
   const lineEquivalent = (value: unknown) => documentFactor == null ? 'No disponible' : formatMoney(Number(value || 0) * documentFactor, reportCurrency, true);
+  const lineDisplay = (value: unknown) => displayMode === 'ORIGINAL' || documentFactor == null ? formatMoney(value, currency) : lineEquivalent(value);
   const summaryDetails = entity === 'orders'
-    ? [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Artículos', value: formatNumber(document.items?.length || document.itemCount) }, { label: 'Total original / equivalencia', value: detailMoney(document.total) }, { label: 'Facturado por', value: invoicedBy }]
+    ? [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Artículos', value: formatNumber(document.items?.length || document.itemCount) }, { label: 'Importe mostrado', value: detailMoney(document.total) }, { label: 'Facturado por', value: invoicedBy }]
     : entity === 'invoices'
       ? [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Total neto', value: detailMoney(document.subtotal ?? document.total, document.reportSubtotal ?? document.reportTotal) }, { label: 'Saldo pendiente', value: detailMoney(document.balance, document.reportBalance) }]
       : entity === 'recurring'
         ? [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Frecuencia', value: statusLabel(document.frequency) }, { label: 'Monto de ciclo', value: detailMoney(total) }]
         : entity === 'payments'
-          ? [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Monto original / equivalencia', value: detailMoney(document.amount, document.reportAmount) }, { label: 'Forma de pago', value: statusLabel(document.method) }, { label: 'Documento', value: document.invoice?.number || document.creditNote?.number || document.relatedInvoiceNumber || document.reference || 'Anticipo' }]
+          ? [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Importe mostrado', value: detailMoney(document.amount, document.reportAmount) }, { label: 'Forma de pago', value: statusLabel(document.method) }, { label: 'Documento', value: document.invoice?.number || document.creditNote?.number || document.relatedInvoiceNumber || document.reference || 'Anticipo' }]
           : [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Saldo pendiente', value: detailMoney(document.balance, document.reportBalance) }, ...(document.relatedInvoiceNumber ? [{ label: 'Factura origen', value: document.relatedInvoiceNumber }] : [])];
   const chargeMetadata = additionalChargesLabel(document) !== '—' ? [{ label: 'Cargos adicionales', value: additionalChargesLabel(document) }] : [];
   const metadata = entity === 'orders'
@@ -764,13 +806,13 @@ function buildManagerSalesDocumentPanel(document: any, entity: string, history?:
       : entity === 'recurring'
         ? [{ label: 'Fecha de inicio', value: formatDate(document.startDate) }, { label: 'Próxima fecha', value: formatDate(document.nextInvoiceDate) }, { label: 'Fecha final', value: formatDate(document.endDate) }, { label: 'Subtotal neto', value: detailMoney(document.subtotal, document.reportSubtotal) }, { label: 'Impuestos', value: detailMoney(document.taxAmount, document.reportTaxAmount) }]
         : entity === 'payments'
-          ? [{ label: 'Fecha del pago', value: formatDate(document.date) }, { label: 'Monto original / equivalencia', value: detailMoney(document.amount, document.reportAmount) }, { label: 'Forma de pago', value: statusLabel(document.method) }, { label: 'Referencia', value: document.reference || 'Sin referencia' }, { label: 'Documento relacionado', value: document.invoice?.number || document.creditNote?.number || document.relatedInvoiceNumber || 'Anticipo' }, { label: 'Cuenta contable', value: document.account?.name || document.accountId || 'No especificada' }, { label: 'Banco', value: document.bankAccount?.bankName || document.bankAccountId || 'No especificado' }]
+          ? [{ label: 'Fecha del pago', value: formatDate(document.date) }, { label: 'Importe mostrado', value: detailMoney(document.amount, document.reportAmount) }, { label: 'Forma de pago', value: statusLabel(document.method) }, { label: 'Referencia', value: document.reference || 'Sin referencia' }, { label: 'Documento relacionado', value: document.invoice?.number || document.creditNote?.number || document.relatedInvoiceNumber || 'Anticipo' }, { label: 'Cuenta contable', value: document.account?.name || document.accountId || 'No especificada' }, { label: 'Banco', value: document.bankAccount?.bankName || document.bankAccountId || 'No especificado' }]
           : [{ label: 'Fecha', value: formatDate(document.date) }, { label: 'Fecha de vencimiento', value: formatDate(document.dueDate) }, { label: 'Subtotal neto', value: detailMoney(document.subtotal, document.reportSubtotal) }, { label: 'Impuestos', value: detailMoney(document.taxAmount, document.reportTaxAmount) }, { label: 'Monto aplicado', value: detailMoney(document.amountPaid, document.reportAmountPaid) }, ...(document.relatedInvoiceNumber ? [{ label: 'Factura origen', value: document.relatedInvoiceNumber }] : [])];
   const lines = entity === 'payments'
-    ? [{ id: document.id, description: `Pago ${statusLabel(document.method)}${document.reference ? ` · Ref. ${document.reference}` : ''}`, quantity: 1, totalLabel: `${formatMoney(document.amount, currency, true)} · Equiv. ${formatMoney(document.reportAmount, reportCurrency, true)}` }]
-    : (document.items || []).map((item: any) => ({ id: item.id, description: item.description || 'Artículo sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: `${formatMoney(item.unitPrice, currency)} · Equiv. ${lineEquivalent(item.unitPrice)}`, totalLabel: `${formatMoney(item.total, currency)} · Equiv. ${lineEquivalent(item.total)}` }));
+    ? [{ id: document.id, description: `Pago ${statusLabel(document.method)}${document.reference ? ` · Ref. ${document.reference}` : ''}`, quantity: 1, totalLabel: detailMoney(document.amount, document.reportAmount) }]
+    : (document.items || []).map((item: any) => ({ id: item.id, description: item.description || 'Artículo sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: lineDisplay(item.unitPrice), totalLabel: lineDisplay(item.total) }));
   const currencyMetadata = [{ label: 'Moneda original', value: formatCurrencyDescriptor(currency) }, { label: 'Moneda de referencia', value: formatCurrencyDescriptor(reportCurrency) }, { label: 'Tasa utilizada', value: document.reportRateLabel || '1:1' }, { label: 'Fuente de tasa', value: quoteRateSourceLabel(document.reportRateSource) }, { label: 'Tipo de valoración', value: document.reportValuationLabel || 'Valor histórico' }, { label: 'Fecha de tasa', value: formatDate(document.reportRateEffectiveAt || document.date) }];
-  return { id: document.id, number: document.number || 'Sin número', title, customerName, status: String(status), sourceLabel: document.branchName || 'Sucursal no identificada', totalLabel: detailMoney(total), summaryDetails, metadata: [...currencyMetadata, ...metadata], lines, notes: document.notes, reason: document.reason, history: history || [] };
+  return { id: document.id, number: document.number || 'Sin número', title, customerName, status: String(status), sourceLabel: document.branchName || 'Sucursal no identificada', sourceCurrency: currency, sourceExchangeRate: document.exchangeRate, totalLabel: detailMoney(total), summaryDetails, metadata: [...currencyMetadata, ...metadata], lines, notes: document.notes, reason: document.reason, history: history || [] };
 }
 
 function CustomerCard({ customer, onDetail, openingId }: { customer: any; onDetail?: (row: any) => void; openingId?: string | number | null }) {
@@ -902,13 +944,17 @@ function DuplicateCustomerSection({ matches, loading, hasIdentifiers }: { matche
 }
 
 function ManagerCustomerInvoices({ invoices, loading, reportCurrency }: { invoices: any[]; loading: boolean; reportCurrency: string }) {
+  const { displayMode, lockedDisplayCurrency } = useCurrency();
+  const amountLabel = displayMode === 'ORIGINAL'
+    ? 'Total original'
+    : `Total ${displayMode === 'DEFAULT' ? lockedDisplayCurrency : getCurrencyMetadata(reportCurrency).code}`;
   if (loading) return <div className="space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div>;
   if (!invoices.length) return <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 px-5 text-center"><FileText className="size-8 text-muted-foreground/40" /><p className="mt-3 font-black">Sin facturas registradas</p><p className="mt-1 text-xs text-muted-foreground">Este cliente aún no registra facturas de venta en su sucursal.</p></div>;
-  return <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm"><div className="hidden overflow-x-auto xl:block"><Table className="min-w-[800px]"><TableHeader><TableRow><TableHead>Factura</TableHead><TableHead>Fecha</TableHead><TableHead>Vencimiento</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Total original / equivalencia</TableHead></TableRow></TableHeader><TableBody>{invoices.map((invoice) => <TableRow key={invoice.id}><TableCell className="font-mono text-xs font-bold">{customerValue(invoice.number, 'Sin número')}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(invoice.date)}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(invoice.dueDate)}</TableCell><TableCell><Badge variant="outline" className="text-[9px] font-black">{statusLabel(invoice.status)}</Badge></TableCell><TableCell className="text-right"><MoneyPair row={invoice} original={invoice.total} equivalent={invoice.reportTotal} reportCurrency={reportCurrency} compact /></TableCell></TableRow>)}</TableBody></Table></div><div className="space-y-3 p-3 xl:hidden">{invoices.map((invoice) => <article key={invoice.id} className="rounded-xl border border-border/50 bg-muted/10 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-mono text-sm font-black">{customerValue(invoice.number, 'Sin número')}</p><p className="mt-1 text-[11px] text-muted-foreground">{formatDate(invoice.date)} · Vence {formatDate(invoice.dueDate)}</p></div><Badge variant="outline" className="shrink-0 text-[9px] font-black">{statusLabel(invoice.status)}</Badge></div><div className="mt-3 flex items-center justify-between border-t border-border/40 pt-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total original</span><MoneyPair row={invoice} original={invoice.total} equivalent={invoice.reportTotal} reportCurrency={reportCurrency} compact /></div></article>)}</div></Card>;
+  return <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm"><div className="hidden overflow-x-auto xl:block"><Table className="min-w-[800px]"><TableHeader><TableRow><TableHead>Factura</TableHead><TableHead>Fecha</TableHead><TableHead>Vencimiento</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">{amountLabel}</TableHead></TableRow></TableHeader><TableBody>{invoices.map((invoice) => <TableRow key={invoice.id}><TableCell className="font-mono text-xs font-bold">{customerValue(invoice.number, 'Sin número')}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(invoice.date)}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(invoice.dueDate)}</TableCell><TableCell><Badge variant="outline" className="text-[9px] font-black">{statusLabel(invoice.status)}</Badge></TableCell><TableCell className="text-right"><MoneyPair row={invoice} original={invoice.total} equivalent={invoice.reportTotal} reportCurrency={reportCurrency} compact /></TableCell></TableRow>)}</TableBody></Table></div><div className="space-y-3 p-3 xl:hidden">{invoices.map((invoice) => <article key={invoice.id} className="rounded-xl border border-border/50 bg-muted/10 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-mono text-sm font-black">{customerValue(invoice.number, 'Sin número')}</p><p className="mt-1 text-[11px] text-muted-foreground">{formatDate(invoice.date)} · Vence {formatDate(invoice.dueDate)}</p></div><Badge variant="outline" className="shrink-0 text-[9px] font-black">{statusLabel(invoice.status)}</Badge></div><div className="mt-3 flex items-center justify-between border-t border-border/40 pt-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{amountLabel}</span><MoneyPair row={invoice} original={invoice.total} equivalent={invoice.reportTotal} reportCurrency={reportCurrency} compact /></div></article>)}</div></Card>;
 }
 
 function ManagerCustomerHistory({ transactions, loading, reportCurrency }: { transactions: ManagerCustomerDetailResponse['transactions']; loading: boolean; reportCurrency: string }) {
-  return <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><Activity className="size-4 text-primary" /> Operaciones relacionadas</h3><p className="mt-1 text-[11px] text-muted-foreground">Cotizaciones, órdenes, facturas, pagos y notas vinculadas a este cliente.</p></div><Badge variant="outline" className="shrink-0 text-[9px] font-black">{loading ? '…' : transactions.length}</Badge></div>{loading ? <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div> : transactions.length === 0 ? <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Aún no hay operaciones comerciales registradas para este cliente.</p> : <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">{transactions.slice(0, 50).map((transaction) => <div key={`${transaction.kind}-${transaction.id}`} className="flex items-center justify-between gap-3 p-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div><div className="min-w-0"><p className="truncate text-xs font-bold">{transaction.kind}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{customerValue(transaction.number, 'Sin número')}{transaction.description ? ` · ${transaction.description}` : ''}</p></div></div><div className="shrink-0 text-right"><p className="text-[10px] font-bold text-muted-foreground">{formatDate(transaction.date)}</p><p className="text-[10px] font-black">{transaction.amount == null ? statusLabel(transaction.status) : formatMoney(transaction.amount, transaction.currency)}</p>{transaction.amount != null && <p className="text-[9px] font-bold text-primary">Equiv. {transaction.reportAmount == null ? 'No disponible' : formatMoney(transaction.reportAmount, reportCurrency, true)}</p>}<p className="text-[9px] text-muted-foreground">{statusLabel(transaction.status)}</p></div></div>)}</div>}</Card>;
+  return <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><Activity className="size-4 text-primary" /> Operaciones relacionadas</h3><p className="mt-1 text-[11px] text-muted-foreground">Cotizaciones, órdenes, facturas, pagos y notas vinculadas a este cliente.</p></div><Badge variant="outline" className="shrink-0 text-[9px] font-black">{loading ? '…' : transactions.length}</Badge></div>{loading ? <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div> : transactions.length === 0 ? <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Aún no hay operaciones comerciales registradas para este cliente.</p> : <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">{transactions.slice(0, 50).map((transaction) => <div key={`${transaction.kind}-${transaction.id}`} className="flex items-center justify-between gap-3 p-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div><div className="min-w-0"><p className="truncate text-xs font-bold">{transaction.kind}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{customerValue(transaction.number, 'Sin número')}{transaction.description ? ` · ${transaction.description}` : ''}</p></div></div><div className="shrink-0 text-right"><p className="text-[10px] font-bold text-muted-foreground">{formatDate(transaction.date)}</p>{transaction.amount == null ? <p className="text-[10px] font-black">{statusLabel(transaction.status)}</p> : <MoneyPair row={transaction} original={transaction.amount} equivalent={transaction.reportAmount} reportCurrency={reportCurrency} compact />}<p className="text-[9px] text-muted-foreground">{statusLabel(transaction.status)}</p></div></div>)}</div>}</Card>;
 }
 
 function DetailSection({ title, icon: Icon, children }: { title: string; icon: typeof FileText; children: ReactNode }) {
@@ -923,20 +969,27 @@ function CompactValue({ label, value, className }: { label: string; value: strin
   return <div className={cn('min-w-0', className)}><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="mt-1 break-words text-xs font-semibold">{value}</p></div>;
 }
 
-function cashSummaryExportRow(row: any, reportCurrency: string) {
-  return { Caja: row.registerName, Código: row.registerCode, Sucursal: row.branchName, Sesiones: row.sessions, Facturas: row.invoices, 'Facturado equivalente': formatMoney(row.reportBilled, reportCurrency, true), 'Monto esperado equivalente': formatMoney(row.reportExpectedAmountNIO, reportCurrency, true), 'Diferencia equivalente': formatMoney(row.reportDifferenceNIO, reportCurrency, true) };
+function cashSummaryExportRow(row: any, reportCurrency: string, displayMode: CurrencyDisplayMode = 'DEFAULT') {
+  const amount = (original: unknown, equivalent: unknown) => displayMode === 'ORIGINAL' || equivalent == null
+    ? formatMoney(original, 'NIO', true)
+    : formatMoney(equivalent, reportCurrency, true);
+  return { Caja: row.registerName, Código: row.registerCode, Sucursal: row.branchName, Sesiones: row.sessions, Facturas: row.invoices, Facturado: amount(row.billed, row.reportBilled), Esperado: amount(row.expectedAmountNIO, row.reportExpectedAmountNIO), Diferencia: amount(row.differenceNIO, row.reportDifferenceNIO) };
 }
 
-function exportRow(view: ManagerSalesView, row: any, reportCurrency: string) {
+function exportRow(view: ManagerSalesView, row: any, reportCurrency: string, displayMode: CurrencyDisplayMode = 'DEFAULT') {
   const currency = row.currency || 'NIO';
   const rateContext = { 'Tasa utilizada': row.reportRateLabel || '1:1', 'Fuente de tasa': quoteRateSourceLabel(row.reportRateSource), 'Fecha de tasa': formatDate(row.reportRateEffectiveAt || row.date || row.openedAt) };
   const base = { Sucursal: row.branchName, Fecha: formatDate(row.date || row.openedAt || row.nextInvoiceDate), Estado: statusLabel(row.status || row.deliveryStatus), ...rateContext };
+  const displayAmount = (original: unknown, equivalent: unknown) => displayMode === 'ORIGINAL' || equivalent == null
+    ? formatMoney(original, currency, true)
+    : formatMoney(equivalent, reportCurrency, true);
+  const amountLabel = displayMode === 'ORIGINAL' ? 'Monto original' : `Monto ${getCurrencyMetadata(reportCurrency).code}`;
   if (view === 'customers') return { Código: row.code, Cliente: row.name, Tipo: customerTypeLabel(row.type), Cédula: row.taxId, RUC: row.ruc, 'Régimen fiscal': row.fiscalRegime, Correo: row.email, Teléfono: row.phone, Departamento: row.department, Estado: customerStatusInfo(row.status).label, Sucursal: row.branchName };
-  if (view === 'payments') return { Pago: row.number, Cliente: row.customerName, Método: row.method, Documento: row.documentNumber, 'Monto original': formatMoney(row.amount, currency, true), Equivalencia: row.reportAmount == null ? 'No disponible' : formatMoney(row.reportAmount, reportCurrency, true), ...base };
-  if (view === 'cash') return { Caja: row.registerName, Código: row.registerCode, Apertura: formatDate(row.openedAt, true), Cierre: formatDate(row.closedAt, true), 'Abrió': row.openedByName, 'Cerró': row.closedByName, Facturas: row.invoiceCount, 'Diferencia original': formatMoney(row.differenceNIO, 'NIO', true), Equivalencia: row.reportDifferenceNIO == null ? 'No disponible' : formatMoney(row.reportDifferenceNIO, reportCurrency, true), ...base };
-  if (view === 'deliveries') return { Entrega: row.number, Cliente: row.customerName, Facturación: row.billingBranchName, 'Entrega en': row.deliveryBranchName, Factura: row.invoiceNumber, Artículos: row.itemCount, Cobro: statusLabel(row.paymentStatus), 'Monto original': formatMoney(row.total, currency, true), Equivalencia: row.reportTotal == null ? 'No disponible' : formatMoney(row.reportTotal, reportCurrency, true), ...base };
-  if (view === 'pricelists') return row.productName ? { Lista: row.listName, Código: row.listCode, Sucursal: row.branchName, SKU: row.productCode, Producto: row.productName, Variante: row.variantName, 'Precio original': formatMoney(row.price, currency, true), 'Costo referencia': formatMoney(row.costPrice, currency, true), Equivalencia: row.reportPrice == null ? 'No disponible' : formatMoney(row.reportPrice, reportCurrency, true), 'Tasa aplicada': row.reportRateLabel || '—', Estado: statusLabel(row.listActive ? 'ACTIVE' : 'INACTIVE'), Actualizada: formatDate(row.updatedAt) } : { Código: row.code, Lista: row.name, Sucursal: row.branchName, Productos: row.itemCount, 'Precios en': row.currencies?.join(' / ') || row.currency, Predeterminada: row.isDefault ? 'Sí' : 'No', Estado: statusLabel(row.isActive ? 'ACTIVE' : 'INACTIVE'), Actualizada: formatDate(row.updatedAt) };
-  return { Número: row.number, Cliente: row.customerName, 'Total original': formatMoney(row.total, currency, true), Equivalencia: row.reportTotal == null ? 'No disponible' : formatMoney(row.reportTotal, reportCurrency, true), 'Cargos adicionales': additionalChargesLabel(row), 'Saldo original': row.balance == null ? '—' : formatMoney(row.balance, currency, true), 'Saldo equivalente': row.reportBalance == null ? '—' : formatMoney(row.reportBalance, reportCurrency, true), ...base };
+  if (view === 'payments') return { Pago: row.number, Cliente: row.customerName, Método: row.method, Documento: row.documentNumber, [amountLabel]: displayAmount(row.amount, row.reportAmount), ...base };
+  if (view === 'cash') return { Caja: row.registerName, Código: row.registerCode, Apertura: formatDate(row.openedAt, true), Cierre: formatDate(row.closedAt, true), 'Abrió': row.openedByName, 'Cerró': row.closedByName, Facturas: row.invoiceCount, Diferencia: displayMode === 'ORIGINAL' ? formatMoney(row.differenceNIO, 'NIO', true) : displayAmount(row.differenceNIO, row.reportDifferenceNIO), ...base };
+  if (view === 'deliveries') return { Entrega: row.number, Cliente: row.customerName, Facturación: row.billingBranchName, 'Entrega en': row.deliveryBranchName, Factura: row.invoiceNumber, Artículos: row.itemCount, Cobro: statusLabel(row.paymentStatus), [amountLabel]: displayAmount(row.total, row.reportTotal), ...base };
+  if (view === 'pricelists') return row.productName ? { Lista: row.listName, Código: row.listCode, Sucursal: row.branchName, SKU: row.productCode, Producto: row.productName, Variante: row.variantName, Precio: displayAmount(row.price, row.reportPrice), 'Costo referencia': formatMoney(row.costPrice, currency, true), 'Tasa aplicada': row.reportRateLabel || '—', Estado: statusLabel(row.listActive ? 'ACTIVE' : 'INACTIVE'), Actualizada: formatDate(row.updatedAt) } : { Código: row.code, Lista: row.name, Sucursal: row.branchName, Productos: row.itemCount, 'Precios en': row.currencies?.join(' / ') || row.currency, Predeterminada: row.isDefault ? 'Sí' : 'No', Estado: statusLabel(row.isActive ? 'ACTIVE' : 'INACTIVE'), Actualizada: formatDate(row.updatedAt) };
+  return { Número: row.number, Cliente: row.customerName, Total: displayAmount(row.total, row.reportTotal), 'Cargos adicionales': additionalChargesLabel(row), Saldo: row.balance == null ? '—' : displayAmount(row.balance, row.reportBalance), ...base };
 }
 
 function Pagination({ page, totalPages, total, pageSize, onPageChange, onPageSizeChange }: { page: number; totalPages: number; total: number; pageSize: number; onPageChange: (page: number) => void; onPageSizeChange: (pageSize: number) => void }) { return <div className="flex flex-wrap items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">{formatNumber(total)} registro(s) · Página {page} de {totalPages}</span><div className="flex flex-wrap items-center gap-2"><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-9 rounded-lg border border-border bg-background px-2 text-xs"><option value={25}>25 por página</option><option value={50}>50 por página</option><option value={100}>100 por página</option></select><Button variant="outline" size="icon" className="size-9 rounded-lg" disabled={page <= 1} onClick={() => onPageChange(page - 1)} aria-label="Página anterior"><ChevronLeft className="size-4" /></Button><Button variant="outline" size="icon" className="size-9 rounded-lg" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} aria-label="Página siguiente"><ChevronRight className="size-4" /></Button></div></div>; }

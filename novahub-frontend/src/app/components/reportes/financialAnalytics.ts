@@ -654,13 +654,13 @@ export function buildLiquidez(efectivo: number, cxc: number, cxp: number, pagos3
 
 // ─── Efectivo y equivalentes desde el Balance General (Accounting) ────────────
 
-export function cashFromBalanceSheet(balanceSheet: any): { total: number; caja: number; bancos: number; cuentas: { code: string; name: string; balance: number; tipo: 'caja' | 'banco' }[] } {
+export function cashFromBalanceSheet(balanceSheet: any): { total: number; caja: number; bancos: number; cuentas: { code: string; name: string; balance: number; currency: string; tipo: 'caja' | 'banco' }[] } {
   const activos = balanceSheet?.current?.activos?.accounts || [];
   const cuentas = activos.filter((a: any) => String(a.code || '').startsWith('1000') || /caja|banco|efectivo/i.test(String(a.name || '')))
     .map((a: any) => {
       const balance = Number(a.balance || 0) + Number(a.calculatedBalance || 0);
       const tipo: 'caja' | 'banco' = /caja/i.test(String(a.name || '')) && !/banco/i.test(String(a.name || '')) ? 'caja' : 'banco';
-      return { code: a.code, name: a.name, balance, tipo };
+      return { code: a.code, name: a.name, balance, currency: String(a.currency || 'NIO').toUpperCase(), tipo };
     });
   const total = cuentas.reduce((acc: number, c: any) => acc + c.balance, 0);
   const caja = cuentas.filter((c: any) => c.tipo === 'caja').reduce((acc: number, c: any) => acc + c.balance, 0);

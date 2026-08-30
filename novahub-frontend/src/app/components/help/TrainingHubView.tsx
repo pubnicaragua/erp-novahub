@@ -408,7 +408,7 @@ export function TrainingHubView() {
       {/* Modales se mantienen igual */}
       <AnimatePresence>
         {selectedVideo && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-10">
+          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-3 sm:p-4 md:p-10">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -420,11 +420,14 @@ export function TrainingHubView() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-6xl aspect-video rounded-3xl overflow-hidden bg-black shadow-2xl border border-white/10"
+              className="relative my-auto aspect-video w-full max-w-6xl overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl"
             >
               <button 
                 onClick={() => setSelectedVideo(null)}
-                className="absolute top-6 right-6 z-10 size-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95"
+                type="button"
+                aria-label="Cerrar video"
+                title="Cerrar"
+                className="absolute right-3 top-3 z-10 flex size-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-md transition-all hover:scale-110 hover:bg-white/20 active:scale-95 sm:right-6 sm:top-6 sm:size-12"
               >
                 <X className="size-6" />
               </button>

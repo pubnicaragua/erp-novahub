@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Loader2, TrendingUp, TrendingDown, ShoppingCart, AlertTriangle,
-  DollarSign, Package, BarChart3, Clock, ArrowUpRight, Boxes,
+  DollarSign, Package, BarChart3, Clock, Boxes,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -10,9 +10,10 @@ import { Input } from '../ui/input';
 import { toast } from 'sonner';
 import { cajaService, type DashboardData } from '../../services/caja.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { normalizeCurrency, type SupportedCurrency } from '../../utils/currency';
 
 export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onNavigateToFacturacion?: () => void, registerId?: string }) {
-  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatExplicitAmount } = useCurrency();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -62,6 +63,13 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
   }
 
   const { kpis, productPerformance, salesByRegister, inventoryAlerts, recentTransactions } = data;
+  const fallbackCurrency = normalizeCurrency(data.baseCurrency || baseCurrency);
+  const revenueBreakdown = (kpis.revenueOriginalCurrencyBreakdown?.length ? kpis.revenueOriginalCurrencyBreakdown : [{ currency: fallbackCurrency, amount: kpis.totalRevenue, count: 0 }]) as { currency: SupportedCurrency; amount: number; count: number }[];
+  const expenseBreakdown = (kpis.expenseOriginalCurrencyBreakdown?.length ? kpis.expenseOriginalCurrencyBreakdown : [{ currency: fallbackCurrency, amount: kpis.totalExpenses, count: 0 }]) as { currency: SupportedCurrency; amount: number; count: number }[];
+  const breakdownOrBase = (value: unknown, fallback: number) => (Array.isArray(value) && value.length ? value : [{ currency: fallbackCurrency, amount: fallback, count: 0 }]) as { currency: SupportedCurrency; amount: number; count: number }[];
+  const dashboardMoney = (label: string, amount: number, breakdown: { currency: SupportedCurrency; amount: number; count: number }[], color: string, Icon: any, detail: string) => displayMode === 'ORIGINAL'
+    ? breakdown.map((item) => <Card key={`${label}-${item.currency}`} className="overflow-hidden border-cyan-500/15 shadow-sm bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_38%),linear-gradient(135deg,rgba(15,23,42,0.035),rgba(34,211,238,0.07))]"><CardContent className="p-5"><div className="flex items-start justify-between"><div><span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span><p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">{label} ({item.currency})</p><p className={`mt-1 text-2xl font-black ${color}`}>{formatExplicitAmount(item.amount, item.currency)}</p><p className="mt-1 text-[10px] text-muted-foreground">{detail}</p></div><div className="rounded-xl bg-cyan-500/10 p-2 ring-1 ring-cyan-500/15"><Icon className="size-5 text-cyan-600" /></div></div></CardContent></Card>)
+    : <Card className="overflow-hidden border-cyan-500/15 shadow-sm bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_38%),linear-gradient(135deg,rgba(15,23,42,0.035),rgba(34,211,238,0.07))]"><CardContent className="p-5"><div className="flex items-start justify-between"><div><span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span><p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">{label} ({displayCurrency})</p><p className={`mt-1 text-2xl font-black ${color}`}>{formatCurrency(amount)}</p><p className="mt-1 text-[10px] text-muted-foreground">{detail}</p></div><div className="rounded-xl bg-cyan-500/10 p-2 ring-1 ring-cyan-500/15"><Icon className="size-5 text-cyan-600" /></div></div></CardContent></Card>;
 
   const totalSalesByRegister = salesByRegister.reduce((s, r) => s + r.total, 0);
 
@@ -93,39 +101,8 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="overflow-hidden border-cyan-500/15 shadow-sm bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_38%),linear-gradient(135deg,rgba(15,23,42,0.035),rgba(34,211,238,0.07))]">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span>
-                <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Ingresos Totales</p>
-                <p className="text-2xl font-black mt-1">{formatCurrency(kpis.totalRevenue)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Consolidado en moneda funcional ({baseCurrency})</p>
-              </div>
-              <div className="p-2 bg-cyan-500/10 rounded-xl ring-1 ring-cyan-500/15">
-                <TrendingUp className="size-5 text-cyan-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden border-slate-500/15 shadow-sm bg-[radial-gradient(circle_at_top_right,rgba(100,116,139,0.14),transparent_38%),linear-gradient(135deg,rgba(15,23,42,0.035),rgba(100,116,139,0.07))]">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span>
-                <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Gastos Totales</p>
-                <p className="text-2xl font-black mt-1">{formatCurrency(kpis.totalExpenses)}</p>
-                <p className="text-[10px] text-foreground/70 mt-1 flex items-center gap-1">
-                  <ArrowUpRight className="size-3" /> Gastos del período
-                </p>
-              </div>
-              <div className="p-2 bg-slate-500/10 rounded-xl ring-1 ring-slate-500/15">
-                <TrendingDown className="size-5 text-foreground/70" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {dashboardMoney('Ingresos Totales', kpis.totalRevenue, revenueBreakdown, 'text-cyan-700', TrendingUp, `Consolidado en moneda funcional (${baseCurrency})`)}
+        {dashboardMoney('Gastos Totales', kpis.totalExpenses, expenseBreakdown, 'text-foreground', TrendingDown, 'Gastos del período')}
 
         <Card className="overflow-hidden border-indigo-500/15 shadow-sm bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.14),transparent_38%),linear-gradient(135deg,rgba(15,23,42,0.035),rgba(99,102,241,0.07))]">
           <CardContent className="p-5">
@@ -199,7 +176,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
                         <span className="text-xs font-bold">{p.name}</span>
                         <Badge className="bg-primary/10 text-primary text-[9px] font-mono">{p.totalQty} unid</Badge>
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Total: {formatCurrency(p.totalRevenue)}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Total: {displayMode === 'ORIGINAL' ? breakdownOrBase(p.revenueOriginalCurrencyBreakdown, p.totalRevenue).map((item) => <span key={item.currency} className="mr-2 inline-block">{formatExplicitAmount(item.amount, item.currency)}</span>) : formatCurrency(p.totalRevenue)}</p>
                     </div>
                   ))}
                 </div>
@@ -220,7 +197,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
                     <div key={p.productId} className="rounded-xl border border-indigo-500/15 bg-indigo-500/[0.04] px-3 py-2.5 hover:bg-indigo-500/[0.07] transition-colors cursor-pointer">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold">{p.name}</span>
-                        <span className="text-xs font-black text-emerald-600">+{formatCurrency(p.profit || 0)}</span>
+                        <span className="text-xs font-black text-emerald-600">+{displayMode === 'ORIGINAL' ? breakdownOrBase(p.profitOriginalCurrencyBreakdown, p.profit || 0).map((item) => <span key={item.currency} className="mr-2 inline-block">{formatExplicitAmount(item.amount, item.currency)}</span>) : formatCurrency(p.profit || 0)}</span>
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{(p.margin || 0).toFixed(0)}% Margen</p>
                     </div>
@@ -272,7 +249,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
                       <div key={reg.registerId} className="cursor-pointer hover:bg-muted/20 rounded-xl p-2 transition-colors">
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-xs font-bold">{reg.registerCode} - {reg.registerName}</span>
-                          <span className="text-xs font-mono font-bold">{formatCurrency(reg.total)}</span>
+                          <span className="text-xs font-mono font-bold">{displayMode === 'ORIGINAL' ? breakdownOrBase(reg.originalCurrencyBreakdown, reg.total).map((item) => <span key={item.currency} className="ml-2 inline-block">{formatExplicitAmount(item.amount, item.currency)}</span>) : formatCurrency(reg.total)}</span>
                         </div>
                         <div className="w-full h-2 bg-muted/30 rounded-full overflow-hidden">
                           <div
@@ -339,7 +316,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
                     <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Factura</th>
                     <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Caja</th>
                     <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Cliente</th>
-                    <th className="px-4 py-3 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Monto (C$)</th>
+                    <th className="px-4 py-3 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">{displayMode === 'ORIGINAL' ? 'Monto original' : `Monto (${displayCurrency})`}</th>
                     <th className="px-4 py-3 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Estado IVA</th>
                   </tr>
                 </thead>
@@ -351,7 +328,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
                         {tx.register ? `${tx.register.code} - ${tx.register.name}` : 'N/A'}
                       </td>
                       <td className="px-4 py-3 font-bold">{tx.customer}</td>
-                      <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrency(tx.total)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold">{displayMode === 'ORIGINAL' ? formatExplicitAmount(Number(tx.sourceTotal ?? tx.total ?? 0), normalizeCurrency(tx.currency || fallbackCurrency)) : formatCurrency(tx.total)}</td>
                       <td className="px-4 py-3 text-center">
                         {tx.hasIVA ? (
                           <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[9px]">15% IVA</Badge>

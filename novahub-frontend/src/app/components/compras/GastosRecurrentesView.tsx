@@ -26,6 +26,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -44,7 +45,7 @@ const statusOpts = [
 
 export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-expenses-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
@@ -94,6 +95,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
         title: 'Gastos recurrentes',
         rows: filtered,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.recurring-expense',
         columns: [
@@ -115,6 +117,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     try {
       await generatePurchaseRecordPDF({
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.recurring-expense',
         document: {
@@ -380,22 +383,24 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
   const monthly = data
     .filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY')
     .reduce((acc, e) => acc + toDisplayAmount(Number(e.amount ?? e.baseAmount ?? 0), e.currency, e.exchangeRate), 0);
+  const originalMonthlyAmounts = summarizeAmountsByCurrency(
+    data.filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY'),
+    (expense) => Number(expense.amount ?? expense.baseAmount ?? 0),
+    (expense) => expense.currency,
+    baseCurrency,
+  );
   const kpis = [
     { title: 'Total Recurrentes', value: data.length,                                                            icon: CalendarClock, color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
     { title: 'Activos',           value: data.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length,     icon: RotateCcw,     color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
-    {
-      title: `Est. Mensual (${displayCurrency}${valuationModeSuffix})`,
-      value: formatCurrentAmount(monthly, displayCurrency),
-      icon: TrendingDown,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10', kind: 'indicator' as const,
-    },
     { title: 'Pausados',        value: data.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length,     icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'PAUSED' as const },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+        {displayMode === 'ORIGINAL'
+          ? originalMonthlyAmounts.map((summary) => <PurchaseKpiCard key={`monthly-${summary.currency}`} title={`Est. Mensual (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />)
+          : <PurchaseKpiCard title={`Est. Mensual (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthly, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" kind="indicator" />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}

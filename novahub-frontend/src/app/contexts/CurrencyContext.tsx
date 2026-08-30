@@ -5,6 +5,7 @@ import { useAuth } from './AuthContext';
 
 export type Currency = 'USD' | 'NIO';
 export type ValuationMode = 'HISTORICAL' | 'CURRENT';
+export type CurrencyDisplayMode = 'DEFAULT' | 'ORIGINAL' | Currency;
 type MonetarySourceCurrency = string | undefined;
 type DisplayCurrency = 'USD' | 'NIO';
 
@@ -14,6 +15,7 @@ const STORAGE_LOCKED_DISPLAY_CURRENCY_KEY = 'erp-locked-display-currency';
 const STORAGE_BASE_CURRENCY_KEY = 'erp-base-currency';
 const STORAGE_VALUATION_MODE_KEY = 'erp-valuation-mode';
 const STORAGE_VALUATION_LEGEND_KEY = 'erp-currency-show-valuation-legend';
+const STORAGE_DISPLAY_MODE_KEY = 'erp-currency-display-mode';
 
 interface CurrencyContextType {
   currency: Currency;
@@ -22,6 +24,11 @@ interface CurrencyContextType {
   setValuationMode: (mode: ValuationMode) => void;
   valuationModeLabel: string;
   valuationModeSuffix: string;
+  displayMode: CurrencyDisplayMode;
+  setDisplayMode: (mode: CurrencyDisplayMode) => void;
+  displayModeLabel: string;
+  displayCurrencyLabel: string;
+  isDefaultDisplay: boolean;
   showValuationLegend: boolean;
   setShowValuationLegend: (show: boolean) => void;
   displayCurrency: DisplayCurrency;
@@ -31,6 +38,9 @@ interface CurrencyContextType {
   formatAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
   formatHistoricalAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
   formatCurrentAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency) => string;
+  formatSelectedAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
+  formatDefaultAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number, valuation?: ValuationMode) => string;
+  formatExplicitAmount: (amount: number, targetCurrency: Currency) => string;
   convertAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => number;
   convertCurrentAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency) => number;
   convertBetweenCurrencies: (amount: number, sourceCurrency: MonetarySourceCurrency, targetCurrency: MonetarySourceCurrency, sourceExchangeRate?: number, targetExchangeRate?: number) => number;
@@ -70,6 +80,10 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [valuationMode, setValuationModeState] = useState<ValuationMode>(() => {
     return localStorage.getItem(STORAGE_VALUATION_MODE_KEY) === 'CURRENT' ? 'CURRENT' : 'HISTORICAL';
   });
+  const [displayMode, setDisplayModeState] = useState<CurrencyDisplayMode>(() => {
+    const saved = (localStorage.getItem(STORAGE_DISPLAY_MODE_KEY) || '').toUpperCase();
+    return saved === 'USD' || saved === 'NIO' || saved === 'ORIGINAL' ? saved : 'DEFAULT';
+  });
   const [showValuationLegend, setShowValuationLegendState] = useState<boolean>(() => {
     return localStorage.getItem(STORAGE_VALUATION_LEGEND_KEY) === 'true';
   });
@@ -87,6 +101,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       setLockedDisplayCurrency(savedLockedCurrency === 'USD' ? 'USD' : 'NIO');
       setCurrencyInteractionEnabled(localStorage.getItem(STORAGE_CURRENCY_SWITCH_ENABLED_KEY) !== 'false');
       setValuationModeState(localStorage.getItem(STORAGE_VALUATION_MODE_KEY) === 'CURRENT' ? 'CURRENT' : 'HISTORICAL');
+      const savedDisplayMode = (localStorage.getItem(STORAGE_DISPLAY_MODE_KEY) || '').toUpperCase();
+      setDisplayModeState(savedDisplayMode === 'USD' || savedDisplayMode === 'NIO' || savedDisplayMode === 'ORIGINAL' ? savedDisplayMode : 'DEFAULT');
       setShowValuationLegendState(localStorage.getItem(STORAGE_VALUATION_LEGEND_KEY) === 'true');
       setExchangeRate(36.5);
     };
@@ -130,8 +146,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         setCurrencyInteractionEnabled(allowCurrencySwitch);
         safeSetItem(STORAGE_CURRENCY_SWITCH_ENABLED_KEY, allowCurrencySwitch ? 'true' : 'false');
 
-        // Aplicar la moneda global definida por configuración del tenant.
-        const configuredCurrency = toAppCurrency(nextLockedDisplayCurrency);
+        // La moneda configurada del tenant es el valor operativo por defecto,
+        // pero no debe sobrescribir una selección de presentación persistida.
+        const configuredCurrency = toAppCurrency(displayMode === 'DEFAULT' || displayMode === 'ORIGINAL' ? nextLockedDisplayCurrency : displayMode);
         setCurrencyState(configuredCurrency);
         safeSetItem(STORAGE_CURRENCY_KEY, configuredCurrency);
       }
@@ -171,17 +188,29 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     // conserva la tasa histórica de la operación. Si coincide con la base,
     // la tasa guardada no debe reinterpretarse (los registros antiguos de NIO
     // podían conservar 36.5 aunque NIO fuera la moneda funcional).
-    if (sourceCurrency !== baseCurrency && Number.isFinite(rate) && rate > 0) {
+    if (sourceCurrency !== baseCurrency && Number.isFinite(rate) && rate > 1) {
       return rate;
     }
 
     return exchangeRate > 0 ? exchangeRate : 36.5;
   };
 
+  // `displayCurrency` remains a concrete currency because transaction forms use
+  // it as their default. Presentation mode is intentionally separate so
+  // DEFAULT/ORIGINAL never leak into payloads or currency selectors.
   const displayCurrency: DisplayCurrency = currency === 'USD' ? 'USD' : 'NIO';
 
   const valuationModeLabel = valuationMode === 'CURRENT' ? 'Actual' : 'Histórico';
   const valuationModeSuffix = showValuationLegend ? ` · ${valuationModeLabel}` : '';
+  const displayModeLabel = displayMode === 'DEFAULT'
+    ? (lockedDisplayCurrency === 'USD' ? 'Dólar' : 'Córdoba')
+    : displayMode === 'ORIGINAL' ? 'Original'
+    : displayMode === 'USD' ? 'Dólar' : 'Córdoba';
+  const displayCurrencyLabel = displayMode === 'DEFAULT'
+    ? `${displayModeLabel} (${lockedDisplayCurrency})`
+    : displayMode === 'ORIGINAL' ? 'Moneda original de cada operación'
+    : `${displayModeLabel} (${displayMode})`;
+  const isDefaultDisplay = displayMode === 'DEFAULT';
 
   const convertAmount = (
     amount: number,
@@ -260,32 +289,116 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     return baseRate > 0 ? baseAmount / baseRate : baseAmount;
   };
 
-  const formatHistoricalAmount = (
+  const formatNumber = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const currencySymbol = (value: DisplayCurrency) => value === 'USD' ? '$' : 'C$';
+  const formatInCurrency = (amount: number, targetCurrency: DisplayCurrency): string => (
+    `${currencySymbol(targetCurrency)} ${formatNumber(amount)}`
+  );
+
+  // El valor 1 que acompaña a operaciones guardadas en la moneda base no es
+  // una tasa de conversión. Para no producir equivalencias falsas, solo se
+  // reutiliza como tasa histórica cuando tiene magnitud de cotización.
+  const historicalConversionRate = (sourceExchangeRate?: number): number | undefined => {
+    const rate = Number(sourceExchangeRate);
+    return Number.isFinite(rate) && rate > 1 ? rate : undefined;
+  };
+
+  // KPIs que ya vienen agregados en una moneda concreta deben conservar una
+  // sola cifra y no convertirse accidentalmente en una salida dual.
+  const formatExplicitAmount = (amount: number, targetCurrency: Currency): string => (
+    formatInCurrency(Number.isFinite(Number(amount)) ? Number(amount) : 0, targetCurrency)
+  );
+
+  const formatSelectedHistoricalAmount = (
     amount: number,
     sourceCurrency?: MonetarySourceCurrency,
     sourceExchangeRate?: number,
   ): string => {
-    const converted = convertAmount(amount, sourceCurrency, sourceExchangeRate);
-    const symbol = displayCurrency === 'USD' ? '$' : 'C$';
-    return `${symbol} ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const historicalRate = historicalConversionRate(sourceExchangeRate);
+    const converted = convertBetweenCurrencies(amount, sourceCurrency, displayCurrency, historicalRate, historicalRate);
+    return formatInCurrency(converted, displayCurrency);
   };
 
-  const formatCurrentAmount = (
+  const formatSelectedCurrentAmount = (
     amount: number,
     sourceCurrency?: MonetarySourceCurrency,
   ): string => {
     const converted = convertCurrentAmount(amount, sourceCurrency);
-    const symbol = displayCurrency === 'USD' ? '$' : 'C$';
-    return `${symbol} ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return formatInCurrency(converted, displayCurrency);
+  };
+
+  const formatDefaultAmount = (
+    amount: number,
+    sourceCurrency?: MonetarySourceCurrency,
+    sourceExchangeRate?: number,
+    valuation: ValuationMode = valuationMode,
+  ): string => {
+    const parsedAmount = Number(amount);
+    const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+    const source = normalizeCurrency(sourceCurrency);
+    const target = lockedDisplayCurrency;
+    const historicalRate = historicalConversionRate(sourceExchangeRate);
+    const converted = valuation === 'CURRENT'
+      ? convertBetweenCurrencies(safeAmount, source, target)
+      : convertBetweenCurrencies(safeAmount, source, target, historicalRate, historicalRate);
+
+    return formatInCurrency(converted, target);
+  };
+
+  const formatOriginalAmount = (amount: number, sourceCurrency?: MonetarySourceCurrency): string => {
+    const parsedAmount = Number(amount);
+    const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+    return formatInCurrency(safeAmount, normalizeCurrency(sourceCurrency));
+  };
+
+  const formatHistoricalAmount = (
+    amount: number,
+    sourceCurrency?: MonetarySourceCurrency,
+    sourceExchangeRate?: number,
+  ): string => displayMode === 'ORIGINAL'
+    ? formatOriginalAmount(amount, sourceCurrency)
+    : displayMode === 'DEFAULT'
+      ? formatDefaultAmount(amount, sourceCurrency, sourceExchangeRate, 'HISTORICAL')
+      : formatSelectedHistoricalAmount(amount, sourceCurrency, sourceExchangeRate);
+
+  const formatCurrentAmount = (
+    amount: number,
+    sourceCurrency?: MonetarySourceCurrency,
+  ): string => displayMode === 'ORIGINAL'
+    ? formatOriginalAmount(amount, sourceCurrency)
+    : displayMode === 'DEFAULT'
+      ? formatDefaultAmount(amount, sourceCurrency, undefined, 'CURRENT')
+      : formatSelectedCurrentAmount(amount, sourceCurrency);
+
+  const formatSelectedAmount = (
+    amount: number,
+    sourceCurrency?: MonetarySourceCurrency,
+    sourceExchangeRate?: number,
+  ): string => valuationMode === 'CURRENT'
+    ? formatSelectedCurrentAmount(amount, sourceCurrency)
+    : formatSelectedHistoricalAmount(amount, sourceCurrency, sourceExchangeRate);
+
+  const setDisplayMode = (mode: CurrencyDisplayMode) => {
+    if (!currencyInteractionEnabled) return;
+    setDisplayModeState(mode);
+    safeSetItem(STORAGE_DISPLAY_MODE_KEY, mode);
+
+    // Keep the existing operational default in sync when a user intentionally
+    // chooses a single display currency. DEFAULT returns to the tenant setting.
+    const nextCurrency = mode === 'DEFAULT' || mode === 'ORIGINAL' ? lockedDisplayCurrency : mode;
+    setCurrencyState(toAppCurrency(nextCurrency));
+    safeSetItem(STORAGE_CURRENCY_KEY, toAppCurrency(nextCurrency));
   };
 
   const formatConvertedAmount = (
     amount: number,
     sourceCurrency?: MonetarySourceCurrency,
     sourceExchangeRate?: number,
-  ): string => valuationMode === 'CURRENT'
-    ? formatCurrentAmount(amount, sourceCurrency)
-    : formatHistoricalAmount(amount, sourceCurrency, sourceExchangeRate);
+  ): string => displayMode === 'ORIGINAL'
+    ? formatOriginalAmount(amount, sourceCurrency)
+    : displayMode === 'DEFAULT'
+      ? formatDefaultAmount(amount, sourceCurrency, sourceExchangeRate, valuationMode)
+      : formatSelectedAmount(amount, sourceCurrency, sourceExchangeRate);
 
   const formatAmount = (
     amount: number,
@@ -314,6 +427,11 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         setValuationMode,
         valuationModeLabel,
         valuationModeSuffix,
+        displayMode,
+        setDisplayMode,
+        displayModeLabel,
+        displayCurrencyLabel,
+        isDefaultDisplay,
         showValuationLegend,
         setShowValuationLegend,
         displayCurrency,
@@ -323,6 +441,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         formatAmount,
         formatHistoricalAmount,
         formatCurrentAmount,
+        formatSelectedAmount,
+        formatDefaultAmount,
+        formatExplicitAmount,
         convertAmount,
         convertCurrentAmount,
         convertBetweenCurrencies,

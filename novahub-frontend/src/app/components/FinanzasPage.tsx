@@ -568,7 +568,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             <>
               <TabsContent value="resumen" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceDashboardView incomes={fIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} accounts={fAccounts} onNavigate={(tab) => handleTabChange(tab)} />
+                  <FinanceDashboardView incomes={fIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} onNavigate={(tab) => handleTabChange(tab)} />
                 </motion.div>
               </TabsContent>
 

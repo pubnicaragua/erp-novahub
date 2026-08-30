@@ -141,9 +141,14 @@ export async function exportManagerSalesExcel(options: ManagerSalesExportOptions
 }
 
 export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) {
-  const reportKeys = Object.keys(options.rows[0] || {}).slice(0, 4);
+  const availableKeys = Object.keys(options.rows[0] || {});
+  const preferredKeys = ['number', 'documentNumber', 'branchName', 'customerName', 'supplierName', 'date', 'dueDate', 'expiryDate', 'status', 'total', 'amount', 'balance', 'currency'];
+  const reportKeys = (options.rows.length
+    ? [...preferredKeys.filter(key => availableKeys.includes(key)), ...availableKeys.filter(key => !preferredKeys.includes(key))]
+    : ['Mensaje']).slice(0, 8);
+  const reportLabels: Record<string, string> = { number: 'Documento', documentNumber: 'Documento', branchName: 'Sucursal', customerName: 'Cliente', supplierName: 'Proveedor', date: 'Fecha', dueDate: 'Vencimiento', expiryDate: 'Validez', status: 'Estado', total: 'Total', amount: 'Monto', balance: 'Saldo', currency: 'Moneda' };
   const configured = options.pdfFormat !== 'roll-58' && options.pdfFormat !== 'roll-80'
-    ? await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: options.title, tenantName: options.tenantName, tenantLogo: options.tenantLogo, designOverride: options.pdfDesign, rows: options.rows, columns: reportKeys.map((key, index) => ({ header: key, value: row => row[key], align: index === 3 ? 'right' as const : 'left' as const })), fileName: buildDateFilteredPdfFileName([options.fileBase], 'configured', options.dateFrom, options.dateTo) })
+    ? await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: options.title, tenantName: options.tenantName, tenantLogo: options.tenantLogo, designOverride: options.pdfDesign, rows: options.rows, columns: reportKeys.map((key) => ({ header: reportLabels[key] || key, value: row => row[key], align: ['total', 'amount', 'balance'].includes(key) ? 'right' as const : 'left' as const })), fileName: buildDateFilteredPdfFileName([options.fileBase], 'configured', options.dateFrom, options.dateTo) })
     : null;
   if (configured) return configured;
   const configuredSettings = options.pdfDesign && typeof options.pdfDesign === 'object' && 'settings' in options.pdfDesign

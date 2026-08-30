@@ -11,11 +11,12 @@ import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell,
 } from 'recharts'
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme'
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency'
 
 const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6']
 
 export function FinanceReceivablesView() {
-  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency()
+  const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency()
   const { user, canPerform } = useAuth()
   const canReadSales = canPerform('SALES', 'view')
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current'
@@ -54,6 +55,15 @@ export function FinanceReceivablesView() {
   const overdue = pending.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; return due && due < new Date() })
   const totalOverdue = overdue.reduce((a: number, inv: any) => a + balanceOf(inv), 0)
   const notDue = totalPending - totalOverdue
+  const originalCurrencies = summarizeAmountsByCurrency(pending, () => 0, (inv: any) => inv.currency).map((item) => item.currency)
+  const originalSum = (rows: any[], currency: SupportedCurrency) => rows
+    .filter((inv) => normalizeCurrency(inv.currency) === currency)
+    .reduce((sum, inv) => sum + Number(inv.balance ?? inv.balanceDue ?? (Number(inv.total || 0) - Number(inv.amountPaid || 0))), 0)
+  const originalPending = (currency: SupportedCurrency) => originalSum(pending, currency)
+  const originalOverdue = (currency: SupportedCurrency) => originalSum(overdue, currency)
+  const renderMoneyKpi = (label: string, total: number, color: string, amountByCurrency: (currency: SupportedCurrency) => number) => displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => <Card key={`${label}-${currency}`} className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm"><CardContent className="p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label} ({currency})</p><p className={`text-2xl font-black tabular-nums ${color}`}>{formatExplicitAmount(amountByCurrency(currency), currency)}</p></CardContent></Card>)
+    : <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm"><CardContent className="p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}{valuationModeSuffix}</p><p className={`text-2xl font-black tabular-nums ${color}`}>{fmt(total)}</p></CardContent></Card>
 
   const agingData = ['0-30', '31-60', '61-90', '+90'].map(label => {
     const [min, max] = label === '+90' ? [91, Infinity] : label.split('-').map(Number)
@@ -61,7 +71,8 @@ export function FinanceReceivablesView() {
     return { label, amount: total }
   })
 
-  const topDebtors = Object.entries(pending.reduce((acc: Record<string, number>, inv: any) => { const name = inv.client?.name || inv.customerName || inv.customer?.name || 'Cliente'; acc[name] = (acc[name] || 0) + balanceOf(inv); return acc }, {})).sort(([, a], [, b]) => b - a).slice(0, 5).map(([name, amount]) => ({ name, amount }))
+  const debtorTotals = pending.reduce((acc: Record<string, number>, inv: any) => { const name = inv.client?.name || inv.customerName || inv.customer?.name || 'Cliente'; acc[name] = (acc[name] || 0) + balanceOf(inv); return acc }, {} as Record<string, number>)
+  const topDebtors = (Object.entries(debtorTotals) as [string, number][]).sort(([, a], [, b]) => b - a).slice(0, 5).map(([name, amount]) => ({ name, amount }))
 
   return (
     <div className="min-w-0 space-y-6">
@@ -72,24 +83,9 @@ export function FinanceReceivablesView() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total por Cobrar{valuationModeSuffix}</p>
-            <p className="text-2xl font-black tabular-nums text-amber-500">{fmt(totalPending)}</p>
-          </CardContent>
-        </Card>
-        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vencido</p>
-            <p className="text-2xl font-black tabular-nums text-rose-500">{fmt(totalOverdue)}</p>
-          </CardContent>
-        </Card>
-        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Por Vencer</p>
-            <p className="text-2xl font-black tabular-nums text-emerald-500">{fmt(notDue)}</p>
-          </CardContent>
-        </Card>
+        {renderMoneyKpi('Total por Cobrar', totalPending, 'text-amber-500', originalPending)}
+        {renderMoneyKpi('Vencido', totalOverdue, 'text-rose-500', originalOverdue)}
+        {renderMoneyKpi('Por Vencer', notDue, 'text-emerald-500', (currency) => originalPending(currency) - originalOverdue(currency))}
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Facturas</p>

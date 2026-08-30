@@ -38,6 +38,7 @@ import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDo
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { EstimacionesKanban } from './EstimacionesKanban';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
@@ -89,7 +90,7 @@ const actionIconClass = 'size-4 text-muted-foreground';
 export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
   const salesDraftStorageKey = getSalesEditorDraftKey('estimate', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<ViewLayoutMode>('sales-estimates-layout', 'table', 24 * 365);
@@ -233,59 +234,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
       throw e;
-    }
-  };
-
-  const handleKanbanStatusChange = async (estimateId: string, newStatus: string, estimate: Estimate) => {
-    if (savingEstimateRef.current) return;
-    savingEstimateRef.current = true;
-    const toastId = toast.loading(`Moviendo cotización a ${newStatus}...`);
-    try {
-      await estimatesService.update(estimateId, {
-        number: estimate.number,
-        customerId: estimate.customerId || null,
-        date: estimate.date,
-        expiryDate: estimate.expiryDate,
-        subtotal: estimate.subtotal,
-        taxAmount: estimate.taxAmount,
-        discountAmount: estimate.discountAmount,
-        irRate: 0,
-        irTaxId: null,
-        irAmount: 0,
-        priceListId: estimate.priceListId || null,
-        total: estimate.total,
-        extraCostDescription: estimate.extraCostDescription || null,
-        extraCostAmount: estimate.extraCostAmount || 0,
-        extraCharges: getSalesExtraChargesPayload(estimate),
-        deliveryDescription: estimate.deliveryDescription || null,
-        deliveryAmount: estimate.deliveryAmount || 0,
-        currency: estimate.currency,
-        exchangeRate: estimate.exchangeRate,
-        warehouseId: estimate.warehouseId || null,
-        status: newStatus as any,
-        notes: estimate.notes,
-        items: (estimate.items || []).map((item) => ({
-          id: item.id,
-          productId: item.productId,
-          productCode: (item as any).productCode || products.find((product) => product.id === item.productId)?.code,
-          description: item.description,
-          quantity: Number(item.quantity || 0),
-          unitPrice: Number(item.unitPrice || 0),
-          discount: Number((item as any).discount || 0),
-          taxRate: Number((item as any).taxRate || 0),
-          irRate: 0,
-          irAmount: 0,
-          total: Number(item.total || 0),
-          itemType: (item as any).itemType || 'PRODUCT',
-          priceListId: (item as any).priceListId || null,
-        })),
-      } as any);
-      toast.success(`Cotización movida a ${newStatus}`, { id: toastId });
-      onRefresh();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado', { id: toastId });
-    } finally {
-      savingEstimateRef.current = false;
     }
   };
 
@@ -454,6 +402,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     customerName: estimate.customer?.name || customers.find((customer) => customer.id === estimate.customerId)?.name || 'Varios',
     status: normalizeEstimateStatus(estimate.status),
     totalLabel: formatConvertedAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate),
+    sourceCurrency: estimate.currency,
+    sourceExchangeRate: estimate.exchangeRate,
     summaryDetails: [
       { label: 'Moneda', value: estimate.currency || 'NIO' },
       { label: 'Líneas', value: String(estimate.items?.length || 0) },
@@ -686,6 +636,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       : toBaseAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate || globalRate)),
     0,
   );
+  const originalQuotedTotals = summarizeAmountsByCurrency(data, (estimate) => Number(estimate.total || 0), (estimate) => estimate.currency, baseCurrency);
 
   if (editingId && localDoc) {
     return (
@@ -1139,7 +1090,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
+        {displayMode === 'ORIGINAL'
+          ? originalQuotedTotals.map((summary) => <SalesKpiCard key={`quoted-${summary.currency}`} title={`Total Cotizado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />)
+          : <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />}
         <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="En proceso" value={data.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
         <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
@@ -1174,8 +1127,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         {layoutMode === 'kanban' ? (
           <EstimacionesKanban
             data={data}
-            onRefresh={onRefresh}
-            onStatusChange={handleKanbanStatusChange}
             onViewDetail={(est) => { setDetailEstimate(null); setEditingId(est.id); }}
             canEdit={canPerform('SALES_QUOTES', 'edit')}
           />

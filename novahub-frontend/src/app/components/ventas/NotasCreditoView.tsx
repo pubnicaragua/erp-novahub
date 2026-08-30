@@ -39,6 +39,7 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getCustomerAvailableCreditAmount, getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 
@@ -105,7 +106,7 @@ const toWholeQuantity = (value: string | number) => {
 };
 
 export function NotasCreditoView({ data, loading, onRefresh, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, convertBetweenCurrencies } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, convertBetweenCurrencies } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('credit-note', user?.tenantId, user?.id);
@@ -549,6 +550,8 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     status: String(row.status || ''),
     sourceLabel: row.invoice?.number ? `Factura origen: ${row.invoice.number}` : undefined,
     totalLabel: formatConvertedAmount(Number(row.total || 0), row.currency, row.exchangeRate),
+    sourceCurrency: row.currency,
+    sourceExchangeRate: row.exchangeRate,
     summaryDetails: [
       { label: 'Pagado', value: formatConvertedAmount(Number(row.amountPaid || 0), row.currency, row.exchangeRate) },
       { label: 'Saldo', value: formatConvertedAmount(Number(row.balance ?? row.total ?? 0), row.currency, row.exchangeRate) },
@@ -610,6 +613,18 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
 
   const totalIssued = data.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
   const totalOpen = data.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
+  const originalIssuedAmounts = summarizeAmountsByCurrency(
+    data.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))),
+    (credit) => Number(credit.total || 0),
+    (credit) => credit.currency,
+    baseCurrency,
+  );
+  const originalOpenAmounts = summarizeAmountsByCurrency(
+    data.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))),
+    (credit) => Number(credit.balance ?? credit.total ?? 0),
+    (credit) => credit.currency,
+    baseCurrency,
+  );
   const overdueCount = data.filter((credit) => Number(credit.balance ?? 0) > 0 && credit.dueDate && new Date(credit.dueDate).getTime() < referenceNow).length;
 
   if ((editingId || isCreating) && localDoc) {
@@ -783,7 +798,16 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="sales-list-kpis"><SalesKpiCard title={`Crédito emitido (${baseCurrency})`} value={formatConvertedAmount(totalIssued, baseCurrency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" /><SalesKpiCard title={`Saldo abierto (${baseCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-amber-500" bg="bg-amber-500/10" /><SalesKpiCard title="Activos" value={data.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" /><SalesKpiCard title="Por vencer / vencidos" value={overdueCount} icon={Clock} color="text-rose-500" bg="bg-rose-500/10" /></div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="sales-list-kpis">
+        {displayMode === 'ORIGINAL'
+          ? originalIssuedAmounts.map((summary) => <SalesKpiCard key={`issued-${summary.currency}`} title={`Crédito emitido (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" />)
+          : <SalesKpiCard title={`Crédito emitido (${displayCurrency})`} value={formatConvertedAmount(totalIssued, baseCurrency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" />}
+        {displayMode === 'ORIGINAL'
+          ? originalOpenAmounts.map((summary) => <SalesKpiCard key={`open-${summary.currency}`} title={`Saldo abierto (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-amber-500" bg="bg-amber-500/10" />)
+          : <SalesKpiCard title={`Saldo abierto (${displayCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-amber-500" bg="bg-amber-500/10" />}
+        <SalesKpiCard title="Activos" value={data.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" />
+        <SalesKpiCard title="Por vencer / vencidos" value={overdueCount} icon={Clock} color="text-rose-500" bg="bg-rose-500/10" />
+      </div>
       <div className="flex flex-col gap-4"><div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center"><div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Créditos</h2><p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Productos y servicios entregados con límite y fecha de pago.</p></div><div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions"><SalesViewTutorial view="credit-notes" /><ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos" /><SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} /><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar crédito..." className="h-10 w-64 rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest" value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); onSearchChange?.(event.target.value); }} /></div><Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}><SelectTrigger aria-label="Filtrar créditos por estado" className="h-10 min-w-[8.5rem] rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"><SelectValue /></SelectTrigger><SelectContent align="end"><SelectItem value="ALL">Todos los estados</SelectItem>{statusOptions.filter((option) => option.value !== 'VOIDED').map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>{canPerform('SALES_CREDIT_NOTES', 'create') && <Button onClick={startNew} className="h-10 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground"><Plus className="mr-2 size-4" /> Nuevo Crédito</Button>}</div></div>
         <EditableDataTable data={filteredData} pagination={pagination} onBulkDelete={async (ids) => { const id = toast.loading(`Eliminando ${ids.length} crédito${ids.length === 1 ? '' : 's'}...`); try { for (const recordId of ids) await creditNotesService.delete(recordId as string); toast.success('Créditos eliminados', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudieron eliminar', { id }); } }} columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} actionsWidth="w-36" fitContent showHorizontalControls layoutMode={layoutMode} actions={(row) => { const activeQueue = ['PENDING', 'CLAIMED'].includes(normalizeStatus(row.cashQueue?.status)); return <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{canPerform('SALES_CREDIT_NOTES', 'approve') && normalizeStatus(row.status) === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}{canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(row.status)) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}{canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(row.status)) && Number(row.balance ?? row.total) > 0.01 && <Button title="Registrar pago" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}<Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>{canPerform('SALES_CREDIT_NOTES', 'delete') && <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>}</div>; }} />
       </div>

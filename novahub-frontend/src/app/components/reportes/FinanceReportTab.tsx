@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Percent, ArrowUpRight, ArrowDownRight, Activity, Scale, BarChart3, Wallet, TrendingUp, TrendingDown, Receipt, AlertTriangle, Target, CalendarDays, Info, CreditCard, PieChart as PieChartIcon, Layers, FileText, Banknote, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Percent, ArrowUpRight, Activity, Scale, BarChart3, Wallet, TrendingUp, TrendingDown, Receipt, AlertTriangle, Target, CalendarDays, Info, CreditCard, PieChart as PieChartIcon, Layers, FileText, Banknote, ShieldCheck, RefreshCw } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { getBase64Image, sanitizeHtml2CanvasOklch, downloadExcelWorkbook } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
@@ -25,12 +25,13 @@ import {
   toNioAmt, saldoOf, buildFinSerie, flowTotals, coberturaPagos, buildPosition, buildAging,
   buildIngresoComposition, buildPagoComposition, buildCashHistory, buildForecast,
   buildProfitability, buildLiquidez, cashFromBalanceSheet, buildBudget, buildRecurrentes,
-  buildCajaInfo, isPeriodClosed, buildBreakEven, buildIndicadores,
+  buildCajaInfo, isPeriodClosed, buildBreakEven, buildIndicadores, isTransfer, isPurchaseDerived, isValidExpense, isPendingDoc, isActivePayment,
 } from './financialAnalytics';
 import type { FinancialData, BreakEvenConfig, BreakEvenResult, CostBehavior } from './financialAnalytics';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const STATUS_LABEL: Record<string, string> = {
   PAID: 'Pagado',
@@ -80,7 +81,7 @@ const DARK_TOOLTIP = {
 } as const;
 
 export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
   const canViewSales = canPerform('SALES', 'view');
@@ -169,7 +170,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         recurringIncomes: asList(rincR).map(asBaseAmountRecord), recurringExpenses: asList(rexpR).map(asBaseAmountRecord), orders: [],
       } as FinancialData,
       profitLoss: plR, profitLossPrev: plPrevR, balanceSheet: bsR, balanceSheetStart: bsStartR,
-      trialRows: Array.isArray(tbR) ? tbR : (tbR?.rows || []), budgetItems: asList(bdR), budgetAccounts: flatAccounts,
+      trialRows: Array.isArray(tbR) ? tbR : (((tbR as any)?.rows || []) as any[]), budgetItems: asList(bdR), budgetAccounts: flatAccounts,
       periods: asList(perR), reconciliations: asList(recR), registers: asList(regR), sessions: arr2(sesR),
       journalsPending: journals.filter((j: any) => !['POSTED', 'APPROVED', 'VOIDED', 'CANCELLED', 'CANCELED'].includes(String(j.status || '').toUpperCase())).length,
     };
@@ -197,7 +198,6 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     return `${currencySymbol}${converted.toLocaleString('es-NI', { maximumFractionDigits: 0 })}`;
   };
 
-  const arr = (res: any) => Array.isArray(res) ? res : (res?.data || []);
   const arr2 = (res: any) => Array.isArray(res) ? res : (res?.items || res?.rows || []);
   const toIso = (d: Date) => d.toISOString();
 
@@ -218,7 +218,6 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   }, [prevStart, prevEnd, comparison]);
 
   const rangeLabel = useMemo(() => currentStart.getTime() > 0 ? fmtRange(currentStart, endOfDay(new Date())) : 'Todo el historial', [currentStart]);
-  const prevLabel = useMemo(() => fmtRange(cPrevStart, cPrevEnd), [cPrevStart, cPrevEnd]);
   const periodoCerrado = useMemo(() => isPeriodClosed(periods, new Date()), [periods]);
 
   const navigateContabilidad = (section: string) => {
@@ -237,6 +236,36 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     return flowTotals(raw, currentStart, endNow, exchangeRate);
   }, [raw, currentStart, endNow, exchangeRate]);
 
+  const originalFlow = useMemo(() => {
+    const empty = { income: 0, payments: 0, incomeMov: 0, paymentMov: 0 };
+    if (!raw) return { currencies: ['NIO'] as SupportedCurrency[], byCurrency: new Map<SupportedCurrency, typeof empty>() };
+    const inRange = (item: any) => {
+      const date = toDate(item.date || item.createdAt);
+      return !!date && date.getTime() >= currentStart.getTime() && date.getTime() <= endNow.getTime();
+    };
+    const incomeRows = [...raw.salesPayments.filter(isActivePayment), ...raw.incomes.filter((item) => !isTransfer(item))].filter(inRange);
+    const paymentRows = [...raw.purchasePayments.filter(isActivePayment), ...raw.expenses.filter((item) => !isTransfer(item) && !isPurchaseDerived(item) && isValidExpense(item.status))].filter(inRange);
+    const rows = [...incomeRows, ...paymentRows];
+    const currencies = summarizeAmountsByCurrency(rows, (row: any) => Number(row.amount || 0), (row: any) => row.currency || baseCurrency).map((item) => item.currency);
+    const byCurrency = new Map<SupportedCurrency, typeof empty>();
+    for (const currency of currencies) byCurrency.set(currency, { ...empty });
+    for (const row of incomeRows) {
+      const currency = normalizeCurrency(row.currency || baseCurrency);
+      const current = byCurrency.get(currency) || { ...empty };
+      current.income += Number(row.amount || 0) || 0;
+      current.incomeMov += 1;
+      byCurrency.set(currency, current);
+    }
+    for (const row of paymentRows) {
+      const currency = normalizeCurrency(row.currency || baseCurrency);
+      const current = byCurrency.get(currency) || { ...empty };
+      current.payments += Number(row.amount || 0) || 0;
+      current.paymentMov += 1;
+      byCurrency.set(currency, current);
+    }
+    return { currencies, byCurrency };
+  }, [raw, currentStart, endNow, baseCurrency]);
+
   const prevFlow = useMemo(() => {
     if (!raw || !cPrevStart || !cPrevEnd) return { ingresos: 0, pagos: 0, ingresosMov: 0, pagosMov: 0, flujoNeto: 0 };
     return flowTotals(raw, cPrevStart, cPrevEnd, exchangeRate);
@@ -250,6 +279,37 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   }, [raw, exchangeRate]);
 
   const cashInfo = useMemo(() => cashFromBalanceSheet(balanceSheet), [balanceSheet]);
+
+  const originalPosition = useMemo(() => {
+    const fallback = { cxc: 0, cxp: 0, cash: 0 };
+    if (!raw) return new Map<SupportedCurrency, typeof fallback>([['NIO', fallback]]);
+    const currencies = summarizeAmountsByCurrency([
+      ...raw.salesInvoices.filter(isPendingDoc),
+      ...raw.purchaseBills.filter(isPendingDoc),
+      ...(balanceSheet?.current?.activos?.accounts || []),
+    ], () => 0, (row: any) => row.currency || baseCurrency).map((item) => item.currency);
+    const result = new Map<SupportedCurrency, typeof fallback>();
+    for (const currency of currencies) result.set(currency, { ...fallback });
+    for (const invoice of raw.salesInvoices.filter(isPendingDoc)) {
+      const currency = normalizeCurrency(invoice.currency || baseCurrency);
+      const item = result.get(currency) || { ...fallback };
+      item.cxc += Number(invoice.balance ?? invoice.balanceDue ?? (Number(invoice.total || 0) - Number(invoice.amountPaid || 0))) || 0;
+      result.set(currency, item);
+    }
+    for (const bill of raw.purchaseBills.filter(isPendingDoc)) {
+      const currency = normalizeCurrency(bill.currency || baseCurrency);
+      const item = result.get(currency) || { ...fallback };
+      item.cxp += Number(bill.balance ?? bill.balanceDue ?? (Number(bill.total || 0) - Number(bill.amountPaid || 0))) || 0;
+      result.set(currency, item);
+    }
+    for (const account of cashInfo.cuentas || []) {
+      const currency = normalizeCurrency(account.currency || baseCurrency);
+      const item = result.get(currency) || { ...fallback };
+      item.cash += Number(account.balance || 0) || 0;
+      result.set(currency, item);
+    }
+    return result;
+  }, [raw, baseCurrency, balanceSheet, cashInfo]);
 
   const saldoInicial = useMemo(() => {
     const totalFlujo = serie.points.reduce((a, p) => a + p.flujo, 0);
@@ -328,23 +388,6 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
 
   const cajaInfo = useMemo(() => buildCajaInfo(registers, sessions, reconciliations), [registers, sessions, reconciliations]);
 
-  const getTrendInfo = (curr: number, prev: number) => {
-    if (!Number.isFinite(curr)) return { pct: null, diff: null, text: 'Sin base comparable' };
-    if (!(prev > 0) && curr === 0) return { pct: null, diff: null, text: 'Sin base comparable' };
-    if (!(prev > 0)) return { pct: null, diff: null, text: 'Sin base comparable' };
-    const pct = ((curr - prev) / prev) * 100;
-    return { pct, diff: curr - prev, text: `${pct >= 0 ? '↑' : '↓'} ${Math.abs(pct).toFixed(1)}% · ${pct >= 0 ? '+' : '-'}${formatConvertedAmount(Math.abs(curr - prev), 'NIO')} vs. ${prevLabel}` };
-  };
-
-  const trendBadge = (t: { pct: number | null; text: string }) => {
-    if (t.pct === null) return <span className="text-[9px] text-muted-foreground">Sin base comparable</span>;
-    return (
-      <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-bold", t.pct >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
-        {t.pct >= 0 ? '↑' : '↓'} {Math.abs(t.pct).toFixed(1)}%
-      </span>
-    );
-  };
-
   const statusBadge = (status: string) => {
     const s = String(status || '').toUpperCase();
     const label = STATUS_LABEL[s] || 'Registrado';
@@ -352,9 +395,35 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     return <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap", color)}>{label}</span>;
   };
 
-  const ingTrend = getTrendInfo(flow.ingresos, prevFlow.ingresos);
-  const pagTrend = getTrendInfo(flow.pagos, prevFlow.pagos);
-  const flujoTrend = getTrendInfo(flow.flujoNeto, prevFlow.flujoNeto);
+  const financeOriginalCurrencies = [...new Set([
+    ...originalFlow.currencies,
+    ...Array.from(originalPosition.keys()),
+  ])] as SupportedCurrency[];
+  const renderFinanceMoneyKpi = (
+    key: string,
+    title: string,
+    Icon: any,
+    total: number,
+    amountByCurrency: (currency: SupportedCurrency) => number,
+    className: string,
+    valueClass: string,
+    detailByCurrency: (currency: SupportedCurrency) => string,
+    onClick?: () => void,
+  ) => displayMode === 'ORIGINAL'
+    ? financeOriginalCurrencies.map((currency) => (
+      <Card key={`${key}-${currency}`} className={`${className} relative overflow-hidden group hover:shadow-lg transition-all ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
+        <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Icon className="size-10" /></div>
+        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><Icon className={cn('size-3.5', valueClass)} /> {title} ({currency})</CardTitle></CardHeader>
+        <CardContent><p className={cn('text-xl font-black', valueClass)}>{formatExplicitAmount(amountByCurrency(currency), currency)}</p><p className="text-[10px] text-muted-foreground mt-0.5">{detailByCurrency(currency)}</p></CardContent>
+      </Card>
+    ))
+    : (
+      <Card className={`${className} relative overflow-hidden group hover:shadow-lg transition-all ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
+        <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Icon className="size-10" /></div>
+        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><Icon className={cn('size-3.5', valueClass)} /> {title}{valuationModeSuffix ? ` (${displayCurrency} · ${valuationModeLabel})` : ` (${displayCurrency})`}</CardTitle></CardHeader>
+        <CardContent><p className={cn('text-xl font-black', valueClass)}>{formatConvertedAmount(total, 'NIO')}</p><p className="text-[10px] text-muted-foreground mt-0.5">{detailByCurrency(baseCurrency)}</p></CardContent>
+      </Card>
+    );
 
   const chartData = useMemo(() => {
     if (serieMode === 'acumulado') {
@@ -723,79 +792,10 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
 
       {/* ═══ KPI Cards (5) ═══ */}
       <div id="finance-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        {/* Ingresos Cobrados */}
-        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer" onClick={() => setModal({ type: 'ingresos' })}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <ArrowUpRight className="size-3.5 text-emerald-500" /> Ingresos Cobrados
-              <span className="ml-auto">{trendBadge(ingTrend)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(flow.ingresos, 'NIO')}</p>{valuationModeSuffix && <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{valuationModeLabel}</span>}
-            <p className="text-[10px] text-muted-foreground mt-0.5">{flow.ingresosMov} movimientos · {ingTrend.text}</p>
-            <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title="Cobros de clientes, otros ingresos cobrados e ingresos recurrentes ejecutados. Excluye facturas pendientes, transferencias internas y anulados.">
-              <Info className="size-3 shrink-0" /> Dinero realmente cobrado
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Pagos Realizados */}
-        <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer" onClick={() => setModal({ type: 'pagos' })}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingDown className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <ArrowDownRight className="size-3.5 text-rose-500" /> Pagos Realizados
-              <span className="ml-auto">{trendBadge(pagTrend)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(flow.pagos, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{flow.pagosMov} movimientos · {pagTrend.text}</p>
-            <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title="Proveedores, nómina pagada, gastos pagados, impuestos y otros egresos. El gasto contabilizado no se reconoce dos veces; solo sale dinero de caja.">
-              <Info className="size-3 shrink-0" /> Dinero realmente pagado
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Flujo Neto */}
-        <Card className={cn("bg-gradient-to-br to-transparent relative overflow-hidden group hover:shadow-lg transition-all", flow.flujoNeto >= 0 ? "border-emerald-500/20 from-emerald-500/5" : "border-rose-500/20 from-rose-500/5")}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Scale className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Scale className={cn("size-3.5", flow.flujoNeto >= 0 ? "text-emerald-500" : "text-rose-500")} /> Flujo Neto del Período
-              <span className="ml-auto">{trendBadge(flujoTrend)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={cn("text-xl font-black", flow.flujoNeto >= 0 ? "text-emerald-500" : "text-rose-500")}>{formatConvertedAmount(flow.flujoNeto, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{flow.flujoNeto >= 0 ? 'Excedente del período' : 'Déficit del período'} · {flujoTrend.text}</p>
-            <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title="Ingresos cobrados − pagos realizados. No es utilidad neta: la utilidad proviene del Estado de Resultados contable.">
-              <Info className="size-3 shrink-0" /> Cobrado − Pagado
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Saldo Disponible */}
-        <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer" onClick={() => setModal({ type: 'caja' })}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Wallet className="size-3.5 text-blue-500" /> Saldo Disponible
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-blue-500">{formatConvertedAmount(cashInfo.total, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Caja: <span className="font-black text-blue-500">{formatConvertedAmount(cashInfo.caja, 'NIO')}</span> · Bancos: <span className="font-black text-blue-500">{formatConvertedAmount(cashInfo.bancos, 'NIO')}</span>
-              {cajaInfo.cajasAbiertas.length > 0 && <span className="text-amber-500 font-bold"> · {cajaInfo.cajasAbiertas.length} caja(s) abierta(s)</span>}
-            </p>
-            <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title={`Conciliado: ${formatConvertedAmount(cajaInfo.montoConciliado, 'NIO')} · Conciliaciones pendientes: ${cajaInfo.pendientesConciliacion} · Efectivo contado C$0 significa que no hay arqueos registrados, no que la caja esté vacía.`}>
-              <Info className="size-3 shrink-0" /> Saldos contables de caja y bancos
-            </p>
-          </CardContent>
-        </Card>
+        {renderFinanceMoneyKpi('income', 'Ingresos Cobrados', TrendingUp, flow.ingresos, (currency) => originalFlow.byCurrency.get(currency)?.income || 0, 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent', 'text-emerald-500', (currency) => `${originalFlow.byCurrency.get(currency)?.incomeMov || 0} movimientos`, () => setModal({ type: 'ingresos' }))}
+        {renderFinanceMoneyKpi('payments', 'Pagos Realizados', TrendingDown, flow.pagos, (currency) => originalFlow.byCurrency.get(currency)?.payments || 0, 'border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent', 'text-rose-500', (currency) => `${originalFlow.byCurrency.get(currency)?.paymentMov || 0} movimientos`, () => setModal({ type: 'pagos' }))}
+        {renderFinanceMoneyKpi('net', 'Flujo Neto del Período', Scale, flow.flujoNeto, (currency) => (originalFlow.byCurrency.get(currency)?.income || 0) - (originalFlow.byCurrency.get(currency)?.payments || 0), flow.flujoNeto >= 0 ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent' : 'border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent', flow.flujoNeto >= 0 ? 'text-emerald-500' : 'text-rose-500', (currency) => (originalFlow.byCurrency.get(currency)?.income || 0) - (originalFlow.byCurrency.get(currency)?.payments || 0) >= 0 ? 'Excedente del período' : 'Déficit del período')}
+        {renderFinanceMoneyKpi('cash', 'Saldo Disponible', Wallet, cashInfo.total, (currency) => originalPosition.get(currency)?.cash || 0, 'border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent', 'text-blue-500', (currency) => `Saldo contable · ${originalPosition.get(currency)?.cash || 0 ? 'con movimiento' : 'sin saldo'}`, () => setModal({ type: 'caja' }))}
 
         {/* Cobertura de Pagos */}
         <Card className={cn("bg-gradient-to-br to-transparent relative overflow-hidden group hover:shadow-lg transition-all", cobertura === null ? "border-slate-500/20 from-slate-500/5" : cobertura >= 100 ? "border-emerald-500/20 from-emerald-500/5" : "border-rose-500/20 from-rose-500/5")}>

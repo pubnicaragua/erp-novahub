@@ -558,6 +558,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       receipt.currency,
       receipt.exchangeRate,
     ),
+    sourceCurrency: receipt.currency,
+    sourceExchangeRate: receipt.exchangeRate,
     summaryDetails: [
       { label: 'Moneda', value: String(receipt.currency || 'NIO').toUpperCase() },
       { label: 'Líneas', value: String(receipt.items?.length || 0) },
@@ -600,6 +602,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         title: 'Recepciones de compra',
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-receipt',
         columns: [
@@ -622,6 +625,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     try {
       await generatePurchaseRecordPDF({
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-receipt',
         document: {

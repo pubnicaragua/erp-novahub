@@ -20,9 +20,10 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { formatDateEs } from '../../utils/dateFormat';
 import { HRViewTutorial } from './HRViewTutorial';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
-  const { displayCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { displayCurrency, displayMode, valuationMode, valuationModeLabel, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -214,7 +215,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
   const handleExportPDF = async () => {
     try {
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', rows: filteredPayrolls, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Estado', value: row => row.status === 'PAID' ? 'Pagado' : row.status === 'PENDING' ? 'Pendiente' : row.status }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: filteredPayrolls, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => row.status === 'PAID' ? 'Pagado' : row.status === 'PENDING' ? 'Pendiente' : row.status }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
       if (configured) { toast.success('Reporte PDF descargado'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings)) as any;
@@ -249,6 +250,18 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'grossPay', 'grossPayBase'), 0);
   const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'netPay', 'netPayBase'), 0);
   const totalCostoEmpresa = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), 0);
+  const payrollCurrencies = summarizeAmountsByCurrency(filteredPayrolls, () => 0, (payroll: any) => payroll.currency || payroll.employee?.currency || 'USD').map((item) => item.currency);
+  const originalPayrollSum = (field: string, baseField: string, currency: SupportedCurrency) => filteredPayrolls
+    .filter((payroll: any) => normalizeCurrency(payroll.currency || payroll.employee?.currency || 'USD') === currency)
+    .reduce((sum: number, payroll: any) => sum + (Number(payroll[field] ?? payroll[baseField] ?? 0) || 0), 0);
+  const originalCompanyTax = (currency: SupportedCurrency) => filteredPayrolls
+    .filter((payroll: any) => normalizeCurrency(payroll.currency || payroll.employee?.currency || 'USD') === currency)
+    .reduce((sum: number, payroll: any) => sum + ((Number(payroll.costoTotalEmpresa ?? payroll.costoTotalEmpresaBase ?? 0) || 0) - (Number(payroll.grossPay ?? payroll.grossPayBase ?? 0) || 0)), 0);
+  const renderPayrollMoneyCard = (key: string, label: string, icon: any, tone: 'orange' | 'blue' | 'primary', total: number, amountByCurrency: (currency: SupportedCurrency) => number, onClick: () => void) => displayMode === 'ORIGINAL'
+    ? payrollCurrencies.map((currency) => (
+      <StatCard key={`${key}-${currency}`} label={`${label} (${currency})`} value={formatExplicitAmount(amountByCurrency(currency), currency)} icon={icon} tone={tone} valueClassName="text-xl" onClick={onClick} />
+    ))
+    : <StatCard label={`${label}${valuationModeSuffix}`} value={formatCurrentAmount(total, displayCurrency)} icon={icon} tone={tone} sub={key === 'company-cost' ? (valuationModeSuffix ? valuationModeLabel : undefined) : undefined} valueClassName="text-xl" onClick={onClick} />;
   const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING' && String(p.paymentStatus || 'PENDING') === 'PENDING').length;
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -271,31 +284,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-payroll-title">
-        <StatCard
-          label="Total Bruto (Costo Empresa)"
-          value={formatCurrentAmount(totalCostoEmpresa, displayCurrency)}
-          icon={Building2}
-          tone="orange"
-          sub={valuationModeSuffix ? valuationModeLabel : undefined}
-          valueClassName="text-xl"
-          onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
-        />
-        <StatCard
-          label="Total Neto (Recibido)"
-          value={formatCurrentAmount(totalNet, displayCurrency)}
-          icon={Wallet}
-          tone="blue"
-          valueClassName="text-xl"
-          onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
-        />
-        <StatCard
-          label="Total Impuestos Empresa"
-          value={formatCurrentAmount(totalCostoEmpresa - totalGross, displayCurrency)}
-          icon={Receipt}
-          tone="primary"
-          valueClassName="text-xl"
-          onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
-        />
+        {renderPayrollMoneyCard('company-cost', 'Total Bruto (Costo Empresa)', Building2, 'orange', totalCostoEmpresa, (currency) => originalPayrollSum('costoTotalEmpresa', 'costoTotalEmpresaBase', currency), () => { setFilterStatus('all'); setCurrentPage(1); })}
+        {renderPayrollMoneyCard('net', 'Total Neto (Recibido)', Wallet, 'blue', totalNet, (currency) => originalPayrollSum('netPay', 'netPayBase', currency), () => { setFilterStatus('all'); setCurrentPage(1); })}
+        {renderPayrollMoneyCard('tax', 'Total Impuestos Empresa', Receipt, 'primary', totalCostoEmpresa - totalGross, originalCompanyTax, () => { setFilterStatus('all'); setCurrentPage(1); })}
         <StatCard
           label={overdueCount > 0 ? 'Pendientes (Vencidas)' : 'Pendientes'}
           value={pendingCount}

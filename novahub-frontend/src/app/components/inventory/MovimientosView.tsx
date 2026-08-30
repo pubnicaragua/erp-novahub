@@ -13,6 +13,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface MovimientosViewProps {
   movements: any[];
@@ -72,13 +73,6 @@ function MovementDetailsPanel({ movement, onClose }: { movement: any; onClose: (
   const quantity = Number(movement.quantity || 0);
   const unitCost = Number(movement.baseCost ?? movement.unitCost ?? 0);
   const currency = String(movement.currency || 'NIO').toUpperCase();
-  const formatMoney = (value: number) => {
-    try {
-      return new Intl.NumberFormat('es-NI', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
-    } catch {
-      return `${currency} ${value.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`;
-    }
-  };
   const typeLabel = TYPE_OPTIONS.find((option) => option.value === movement.type)?.label || movement.type || 'Movimiento';
   const isEntry = movement.type === 'IN';
 
@@ -110,8 +104,8 @@ function MovementDetailsPanel({ movement, onClose }: { movement: any; onClose: (
           <div className="min-w-0"><p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Warehouse className="size-3" /> Bodega afectada</p><p className="mt-1 truncate font-semibold" title={movement.warehouse?.name || undefined}>{movement.warehouse?.name || '—'}</p></div>
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Cantidad</p><p className={`mt-1 font-mono font-bold ${isEntry ? 'text-emerald-600' : movement.type === 'OUT' ? 'text-rose-500' : 'text-primary'}`}>{movement.type === 'OUT' ? '-' : '+'}{quantity}</p></div>
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock</p><p className="mt-1 font-mono font-semibold">{movement.previousQty != null ? Number(movement.previousQty) : '—'} → {movement.resultingQty != null ? Number(movement.resultingQty) : '—'}</p></div>
-          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo unitario</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? formatMoney(unitCost) : '—'}</p></div>
-          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo total</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? formatMoney(unitCost * quantity) : '—'}</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo unitario</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? <CurrencyValuationAmount amount={unitCost} sourceCurrency={currency} sourceExchangeRate={movement.exchangeRate} showRate /> : '—'}</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo total</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? <CurrencyValuationAmount amount={unitCost * quantity} sourceCurrency={currency} sourceExchangeRate={movement.exchangeRate} showRate /> : '—'}</p></div>
         </div>
 
         <div className="space-y-2 rounded-xl border border-border/50 px-3 py-3 text-xs">

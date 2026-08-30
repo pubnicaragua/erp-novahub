@@ -359,7 +359,7 @@ export function FinanceTableView({
       toast.info("Generando PDF, por favor espere...");
       const pdfSettings = await getPdfDesignSettings('finanzas.transactions');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings));
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, rows: filteredData, columns: columns.slice(0, 4).map(column => ({ header: column.label, value: row => row[column.key] })), fileName: buildDateFilteredDownloadFileName([title], 'pdf', dateRange.start, dateRange.end) });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: columns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), fileName: buildDateFilteredDownloadFileName([title], 'pdf', dateRange.start, dateRange.end) });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const pageWidth = doc.internal.pageSize.getWidth();
       const primaryColor = themeConfig.colors.primary || '#10b981';

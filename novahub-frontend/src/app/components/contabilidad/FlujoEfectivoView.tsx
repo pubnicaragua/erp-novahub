@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { useAccountingQuery, accountingList } from '../../hooks/useAccountingQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import { DateField } from '../ui/DateField';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface CashFlowTx {
   id: string;
@@ -75,6 +76,7 @@ const SECTION_CONFIG = [
 const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function FlujoEfectivoView() {
+  const { baseCurrency, formatCurrentAmount } = useCurrency();
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -196,10 +198,7 @@ export function FlujoEfectivoView() {
     }
   };
 
-  const fmt = (n: number) => {
-    const abs = Math.abs(n).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return n < 0 ? `(${abs})` : abs;
-  };
+  const fmt = (n: number) => formatCurrentAmount(n, baseCurrency);
 
   const filteredData = useMemo(() => {
     if (!data) return data;

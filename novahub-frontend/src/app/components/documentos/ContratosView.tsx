@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface ContratosViewProps {
   data: Contract[];
@@ -21,7 +22,7 @@ interface ContratosViewProps {
 }
 
 export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onRefresh }) => {
-  const { baseCurrency, displayCurrency, exchangeRate, formatConvertedAmount, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayMode, exchangeRate, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const { canPerform } = useAuth();
 
@@ -59,12 +60,19 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
       : convertAmount(Number(contract.value || 0), contract.currency || baseCurrency, contract.exchangeRate)),
     0,
   );
+  const originalCurrencies = summarizeAmountsByCurrency(data, (contract) => Number(contract.value || 0), (contract) => contract.currency || baseCurrency).map((item) => item.currency);
+  const originalTotal = (currency: SupportedCurrency) => data
+    .filter((contract) => normalizeCurrency(contract.currency || baseCurrency) === currency)
+    .reduce((sum, contract) => sum + (Number(contract.value || 0) || 0), 0);
+  const amountKpis = displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => ({ title: `Valor Total (${currency})`, value: formatExplicitAmount(originalTotal(currency), currency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' }))
+    : [{ title: `Valor Total (${displayCurrency}${valuationModeSuffix})`, value: formatExplicitAmount(totalValue, displayCurrency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' }];
 
   const kpis = [
     { title: 'Total Contratos', value: data.length,                                                                    icon: Scale,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Activos',         value: data.filter(c => (c.status||'').toUpperCase() === 'ACTIVE').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Por Vencer',      value: data.filter(c => c.endDate && new Date(c.endDate) < new Date(Date.now() + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: `Valor Total (${displayCurrency}${valuationModeSuffix})`, value: formatConvertedAmount(totalValue, displayCurrency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    ...amountKpis,
   ];
 
   const filtered = data.filter(c => c.title?.toLowerCase().includes(searchTerm.toLowerCase()) || c.number?.toLowerCase().includes(searchTerm.toLowerCase()));

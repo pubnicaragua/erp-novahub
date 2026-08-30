@@ -12,6 +12,7 @@ import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { ReportSectionsDialog } from './ReportSectionsDialog';
 import { DateField } from '../ui/DateField';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface PnLAccount {
   accountId: string;
@@ -39,6 +40,7 @@ interface PnLData {
 }
 
 export function EstadoResultadosView() {
+  const { baseCurrency, formatCurrentAmount } = useCurrency();
   const toLocalDate = (value: Date) => {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
@@ -98,7 +100,7 @@ export function EstadoResultadosView() {
   const netIncome = (data?.totalIngresos || 0) - (data?.totalGastos || 0);
   const isProfit = netIncome >= 0;
 
-  const fmt = (n: number) => n.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (n: number) => formatCurrentAmount(n, baseCurrency);
 
   const toggleAccount = (account: PnLAccount) => {
     setExpandedAccountId(current => current === account.accountId ? null : account.accountId);

@@ -366,7 +366,7 @@ export function ActivosFijosCategoriesTab() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="p-4 space-y-5 max-h-[calc(100vh-12rem)] overflow-y-auto">
+              <CardContent className="min-w-0 max-h-[calc(100dvh-12rem)] space-y-5 overflow-y-auto p-4">
                 {selectedCategory && (
                   <>
                     {/* Parámetros de Depreciación */}

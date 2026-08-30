@@ -47,6 +47,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -134,6 +135,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     valuationMode,
     valuationModeLabel,
     valuationModeSuffix,
+    displayMode,
     showValuationLegend,
     formatConvertedAmount,
     formatHistoricalAmount,
@@ -141,6 +143,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     convertAmount,
     convertCurrentAmount,
     convertBetweenCurrencies,
+    formatExplicitAmount,
     toBaseAmount,
   } = useCurrency();
   const { user, canPerform } = useAuth();
@@ -1507,6 +1510,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate),
     0,
   );
+  const originalBilled = summarizeAmountsByCurrency(data, (invoice) => Number(invoice.total ?? invoice.baseTotal ?? 0), (invoice) => invoice.currency, baseCurrency);
+  const originalReceivable = summarizeAmountsByCurrency(
+    data.filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes((invoice.status || '').toUpperCase())),
+    getInvoiceBalance,
+    (invoice) => invoice.currency,
+    baseCurrency,
+  );
+  const originalPaid = summarizeAmountsByCurrency(data, (invoice) => Number(invoice.amountPaid || 0), (invoice) => invoice.currency, baseCurrency);
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc && !paymentDialogOpen && !creditInvoice) {
@@ -2129,11 +2140,17 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`Facturado Total (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="sales-list-kpis">
+        {displayMode === 'ORIGINAL'
+          ? originalBilled.map((summary) => <SalesKpiCard key={`billed-${summary.currency}`} title={`Facturado Total (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileText} color="text-primary" bg="bg-primary/10" />)
+          : <SalesKpiCard title={`Facturado Total (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />}
+        {displayMode === 'ORIGINAL'
+          ? originalReceivable.map((summary) => <SalesKpiCard key={`receivable-${summary.currency}`} title={`Por Cobrar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />)
+          : <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />}
         <SalesKpiCard title="Vencidas" value={data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length} icon={AlertCircle} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
-        <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />
+        {displayMode === 'ORIGINAL'
+          ? originalPaid.map((summary) => <SalesKpiCard key={`paid-${summary.currency}`} title={`Cobrado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />)
+          : <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

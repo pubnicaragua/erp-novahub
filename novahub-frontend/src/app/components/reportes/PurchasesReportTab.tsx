@@ -12,13 +12,14 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { ShoppingBag, CreditCard, Wallet, Activity, Truck, TrendingUp, Package, Scale, PieChart as PieChartIcon, AlertTriangle, Clock, Receipt, Info, Target, CalendarDays, ArrowUpRight, Percent, BarChart3, ClipboardList, FileWarning } from 'lucide-react';
+import { CreditCard, Wallet, Activity, Truck, TrendingUp, Package, PieChart as PieChartIcon, AlertTriangle, Clock, Receipt, Target, CalendarDays, ArrowUpRight, Percent, BarChart3, ClipboardList, FileWarning } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { cn } from '../ui/utils';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86400000;
@@ -195,7 +196,7 @@ const DARK_TOOLTIP = {
 } as const;
 
 export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
   const canViewPurchases = canPerform('PURCHASES', 'view');
@@ -295,7 +296,6 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   }, [prevStart, prevEnd, comparison]);
 
   const rangeLabel = useMemo(() => currentStart.getTime() > 0 ? fmtRange(currentStart, endOfDay(new Date())) : 'Todo el historial', [currentStart]);
-  const prevLabel = useMemo(() => fmtRange(cPrevStart, cPrevEnd), [cPrevStart, cPrevEnd]);
   const comparativoLabel = comparison === 'anterior' ? 'período anterior' : 'mismo período del año anterior';
 
   const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
@@ -327,24 +327,13 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
   const fPay = useMemo(() => payments.filter(p => p.isActive !== false && !!toDate(p.date || p.createdAt) && toDate(p.date || p.createdAt)!.getTime() >= currentStart.getTime()), [payments, currentStart]);
 
-  const pPay = useMemo(() => (cPrevStart && cPrevEnd) ? payments.filter(p => {
-    const d = toDate(p.date || p.createdAt);
-    return p.isActive !== false && !!d && d.getTime() >= cPrevStart.getTime() && d.getTime() <= cPrevEnd.getTime();
-  }) : [], [payments, cPrevStart, cPrevEnd]);
-
   const { comprasNetas, facturadoBruto, notasCredito, facturasValidas } = useMemo(() => {
     const bruto = fBills.reduce((acc, i) => acc + toNio(i), 0);
     const nc = fCredits.reduce((a, c) => a + toNioAmt(c.total, c.currency, c.exchangeRate), 0);
     return { comprasNetas: Math.max(0, bruto - nc), facturadoBruto: bruto, notasCredito: nc, facturasValidas: fBills.length };
   }, [fBills, fCredits, exchangeRate]);
 
-  const { pComprasNetas, pFacturas } = useMemo(() => {
-    const pNC = pCredits.reduce((a, c) => a + toNioAmt(c.total, c.currency, c.exchangeRate), 0);
-    return { pComprasNetas: Math.max(0, pBills.reduce((a, i) => a + toNio(i), 0) - pNC), pFacturas: pBills.length };
-  }, [pBills, pCredits, exchangeRate]);
-
   const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + toNioAmt(p.amount, p.currency, p.exchangeRate), 0), [fPay, exchangeRate]);
-  const prevTotalPaid = useMemo(() => pPay.reduce((acc, p) => acc + toNioAmt(p.amount, p.currency, p.exchangeRate), 0), [pPay, exchangeRate]);
   const pagosCount = fPay.length;
 
   const invoiceDateById = useMemo(() => {
@@ -383,18 +372,18 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   }, [fBillsAll, exchangeRate]);
 
   const avgTicket = facturasValidas > 0 ? comprasNetas / facturasValidas : 0;
-  const prevAvgTicket = pFacturas > 0 ? pComprasNetas / pFacturas : 0;
 
-  const getTrendInfo = (curr: number, prev: number) => {
-    if (!Number.isFinite(curr)) return { pct: null, text: 'Sin base comparable' };
-    if (!(prev > 0)) return { pct: null, text: 'Sin base comparable' };
-    const pct = ((curr - prev) / prev) * 100;
-    return { pct, text: `${pct >= 0 ? '↑' : '↓'} ${Math.abs(pct).toFixed(1)}% vs. ${comparativoLabel}` };
-  };
-
-  const netTrend = getTrendInfo(comprasNetas, pComprasNetas);
-  const payTrend = getTrendInfo(totalPaid, prevTotalPaid);
-  const ticketTrend = getTrendInfo(avgTicket, prevAvgTicket);
+  const pendingBills = fBillsAll.filter(i => String(i.status || '').toUpperCase() !== 'PAID' && Number(i.balance ?? i.balanceDue ?? 0) > 0);
+  const originalRows = [...fBills, ...fCredits, ...fPay, ...pendingBills];
+  const originalCurrencies = summarizeAmountsByCurrency(originalRows, () => 0, (row: any) => row.currency || baseCurrency).map((item) => item.currency);
+  const originalSum = (rows: any[], amountOf: (row: any) => number, currency: SupportedCurrency) => rows
+    .filter((row) => normalizeCurrency(row.currency || baseCurrency) === currency)
+    .reduce((sum, row) => sum + (Number.isFinite(amountOf(row)) ? amountOf(row) : 0), 0);
+  const originalNet = (currency: SupportedCurrency) => Math.max(0, originalSum(fBills, (row) => Number(row.total ?? row.baseTotal ?? 0), currency) - originalSum(fCredits, (row) => Number(row.total || 0), currency));
+  const originalPaid = (currency: SupportedCurrency) => originalSum(fPay, (row) => Number(row.amount || 0), currency);
+  const originalPending = (currency: SupportedCurrency) => originalSum(pendingBills, (row) => Number(row.balance ?? row.balanceDue ?? (Number(row.total || 0) - Number(row.amountPaid || 0))), currency);
+  const originalOverdue = (currency: SupportedCurrency) => originalSum(pendingBills.filter((row) => { const due = toDate(row.dueDate); return due && due.getTime() < Date.now(); }), (row) => Number(row.balance ?? row.balanceDue ?? (Number(row.total || 0) - Number(row.amountPaid || 0))), currency);
+  const originalCount = (rows: any[], currency: SupportedCurrency) => rows.filter((row) => normalizeCurrency(row.currency || baseCurrency) === currency).length;
 
   const compromisos = useMemo(() => {
     const pend = fBillsAll.filter(i => Number(i.balance ?? i.balanceDue ?? 0) > 0);
@@ -940,7 +929,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.purchases', title: 'Reporte de compras', tenantName: companyName, tenantLogo: logoUrl, rows: fBills, columns: [{ header: 'Documento', value: row => row.number || row.id || '—' }, { header: 'Proveedor', value: row => row.supplier?.name || row.provider?.name || '—' }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Total', value: row => row.total || 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_compras'], 'pdf', dateRange) });
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.purchases', title: 'Reporte de compras', tenantName: companyName, tenantLogo: logoUrl, rows: fBills, columns: [{ header: 'Documento', value: row => row.number || row.id || '—' }, { header: 'Proveedor', value: row => row.supplier?.name || row.provider?.name || '—' }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Vencimiento', value: row => row.dueDate || '—' }, { header: 'Estado', value: row => row.status || '—' }, { header: 'Total', value: row => row.total || 0, align: 'right' }, { header: 'Saldo', value: row => row.balance ?? row.pendingAmount ?? '—', align: 'right' }], fileName: buildReportDownloadFileName(['reporte_compras'], 'pdf', dateRange) });
         if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
@@ -1245,21 +1234,38 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     );
   }
 
-  const trendBadge = (t: { pct: number | null; text: string }) => {
-    if (t.pct === null) return <span className="text-[9px] text-muted-foreground">Sin base comparable</span>;
-    return (
-      <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-bold", t.pct >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
-        {t.pct >= 0 ? '↑' : '↓'} {Math.abs(t.pct).toFixed(1)}%
-      </span>
-    );
-  };
-
   const statusBadge = (status: string) => {
     const s = String(status || '').toUpperCase();
     const label = STATUS_LABEL[s] || 'Pendiente';
     const color = STATUS_COLOR[s] || 'bg-slate-400/10 text-slate-400';
     return <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap", color)}>{label}</span>;
   };
+
+  const renderPurchaseMoneyKpi = (
+    key: string,
+    title: string,
+    Icon: any,
+    total: number,
+    amountByCurrency: (currency: SupportedCurrency) => number,
+    className: string,
+    valueClass: string,
+    detailByCurrency: (currency: SupportedCurrency) => string,
+    onClick?: () => void,
+  ) => displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => (
+      <Card key={`${key}-${currency}`} className={`${className} relative overflow-hidden group hover:shadow-lg transition-all ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
+        <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Icon className="size-10" /></div>
+        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><Icon className={cn('size-3.5', valueClass)} /> {title} ({currency})</CardTitle></CardHeader>
+        <CardContent><p className={cn('text-xl font-black', valueClass)}>{formatExplicitAmount(amountByCurrency(currency), currency)}</p><p className="text-[10px] text-muted-foreground mt-0.5">{detailByCurrency(currency)}</p></CardContent>
+      </Card>
+    ))
+    : (
+      <Card className={`${className} relative overflow-hidden group hover:shadow-lg transition-all ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
+        <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Icon className="size-10" /></div>
+        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><Icon className={cn('size-3.5', valueClass)} /> {title}{valuationModeSuffix ? ` (${displayCurrency} · ${valuationModeLabel})` : ` (${displayCurrency})`}</CardTitle></CardHeader>
+        <CardContent><p className={cn('text-xl font-black', valueClass)}>{formatConvertedAmount(total, 'NIO')}</p><p className="text-[10px] text-muted-foreground mt-0.5">{detailByCurrency(baseCurrency)}</p></CardContent>
+      </Card>
+    );
 
   const stageItem = (icon: React.ReactNode, label: string, value: number, color: string, tooltip?: string) => (
     <div className="p-3 rounded-xl bg-muted/30 border border-border/50 text-center" title={tooltip}>
@@ -1291,76 +1297,16 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
       {/* ═══ KPI Cards ═══ */}
       <div id="purchases-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Compras Netas del Período */}
-        <Card className="border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer" onClick={() => setModal({ type: 'facturas' })}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ShoppingBag className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Truck className="size-3.5 text-orange-500" /> Compras Netas del Período
-              <span className="ml-auto">{trendBadge(netTrend)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-orange-500">{formatConvertedAmount(comprasNetas, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{facturasValidas} facturas de proveedores · {netTrend.text}{valuationModeSuffix ? ` · Vista ${valuationModeLabel.toLowerCase()}` : ''}</p>
-            <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title={`Comparado: ${prevLabel} · Descuentos no registrados a nivel de factura en este sistema.`}>
-              <Info className="size-3 shrink-0" />
-              {facturadoBruto > 0
-                ? `Facturado ${formatConvertedAmount(facturadoBruto, 'NIO')} − NC ${formatConvertedAmount(notasCredito, 'NIO')} = Netas ${formatConvertedAmount(comprasNetas, 'NIO')}`
-                : 'Conciliación: facturado − notas de crédito'}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Pagos Efectuados */}
-        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><CreditCard className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Scale className="size-3.5 text-emerald-500" /> Pagos Efectuados
-              <span className="ml-auto">{trendBadge(payTrend)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(totalPaid, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{pagosCount} pagos realizados</p>
-            <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title="Los pagos pueden superar las compras del período porque pueden cancelar obligaciones de períodos anteriores.">
-              <Info className="size-3 shrink-0" /> Puede incluir deudas anteriores
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Saldo Pendiente por Pagar */}
-        <Card className={cn("bg-gradient-to-br to-transparent relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer", vencido > 0 ? "border-rose-500/20 from-rose-500/5" : "border-orange-500/20 from-orange-500/5")} onClick={() => setModal({ type: 'cxp' })}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Clock className={cn("size-3.5", vencido > 0 ? "text-rose-500" : "text-orange-500")} /> Saldo Pendiente por Pagar
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={cn("text-xl font-black", vencido > 0 ? "text-rose-500" : "text-orange-500")}>{formatConvertedAmount(totalPending, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {pendingCount === 0 ? 'Sin facturas pendientes' : `${pendingCount} facturas pendientes`}
-              {vencido > 0 && <span className="text-rose-400 font-bold"> · {formatConvertedAmount(vencido, 'NIO')} vencidos ({vencidoCount})</span>}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Ticket Promedio de Compra */}
-        <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Package className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Activity className="size-3.5 text-blue-500" /> Ticket Promedio de Compra
-              <span className="ml-auto">{trendBadge(ticketTrend)}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-blue-500">{formatConvertedAmount(avgTicket, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{facturasValidas === 0 ? 'Sin facturas válidas' : `Basado en ${facturasValidas} factura${facturasValidas === 1 ? '' : 's'} válida${facturasValidas === 1 ? '' : 's'}`} · Compras netas ÷ facturas</p>
-          </CardContent>
-        </Card>
+        {renderPurchaseMoneyKpi('net', 'Compras Netas del Período', Truck, comprasNetas, originalNet, 'border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent', 'text-orange-500', (currency) => `${originalCount(fBills, currency)} facturas · facturado − notas de crédito`, () => setModal({ type: 'facturas' }))}
+        {renderPurchaseMoneyKpi('paid', 'Pagos Efectuados', CreditCard, totalPaid, originalPaid, 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent', 'text-emerald-500', (currency) => `${originalCount(fPay, currency)} pagos realizados`)}
+        {renderPurchaseMoneyKpi('pending', 'Saldo Pendiente por Pagar', Wallet, totalPending, originalPending, vencido > 0 ? 'border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent' : 'border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent', vencido > 0 ? 'text-rose-500' : 'text-orange-500', (currency) => {
+          const overdue = originalOverdue(currency);
+          return `${originalCount(pendingBills, currency)} facturas pendientes${overdue > 0 ? ` · ${formatExplicitAmount(overdue, currency)} vencidos` : ''}`;
+        }, () => setModal({ type: 'cxp' }))}
+        {renderPurchaseMoneyKpi('ticket', 'Ticket Promedio de Compra', Activity, avgTicket, (currency) => {
+          const count = originalCount(fBills, currency);
+          return count > 0 ? originalNet(currency) / count : 0;
+        }, 'border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent', 'text-blue-500', (currency) => `${originalCount(fBills, currency)} factura${originalCount(fBills, currency) === 1 ? '' : 's'} válida${originalCount(fBills, currency) === 1 ? '' : 's'}`)}
       </div>
 
       {/* ═══ Compras Facturadas y Pagos + Estado del Ciclo ═══ */}

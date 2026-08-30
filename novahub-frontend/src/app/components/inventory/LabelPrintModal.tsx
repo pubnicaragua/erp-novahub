@@ -2,15 +2,14 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import { Search, Printer, Barcode, ChevronDown, ChevronUp } from 'lucide-react';
-import JsBarcode from 'jsbarcode';
-import jsPDF from 'jspdf';
-import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { generateProductLabelsPDF } from '../../utils/pdfGenerator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ============================================================================
 // Types
@@ -49,38 +48,12 @@ interface ProductLabelConfig {
 // Helpers
 // ============================================================================
 
-const formatPrice = (value: number) =>
-  new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-
-/**
- * Renders a JsBarcode onto an off-screen canvas and returns a data URL.
- */
-function generateBarcodeDataUrl(code: string, width = 2, height = 60): string {
-  const canvas = document.createElement('canvas');
-  try {
-    JsBarcode(canvas, code, {
-      format: 'CODE128',
-      width,
-      height,
-      displayValue: true,
-      fontSize: 12,
-      margin: 4,
-      textMargin: 2,
-      background: 'transparent',
-      lineColor: '#000000',
-    });
-    return canvas.toDataURL('image/png');
-  } catch {
-    // Fallback: use SKU text instead of barcode
-    return '';
-  }
-}
-
 // ============================================================================
 // Component
 // ============================================================================
 
 export function LabelPrintModal({ open, onClose, products, companyName = 'Nova Hub' }: LabelPrintModalProps) {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
@@ -170,82 +143,7 @@ export function LabelPrintModal({ open, onClose, products, companyName = 'Nova H
     setPrinting(true);
 
     try {
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [70, 38] });
-      const pageWidth = 70;
-      const pageHeight = 38;
-      let isFirstPage = true;
-
-      for (const product of filteredProducts) {
-        const config = configs.get(product.id);
-        if (!config) continue;
-
-        for (let i = 0; i < config.quantity; i++) {
-          if (!isFirstPage) {
-            doc.addPage([pageWidth, pageHeight], 'landscape');
-          }
-          isFirstPage = false;
-
-          let y = 4;
-          const centerX = pageWidth / 2;
-
-          // Generate barcode
-          const barcodeCode = product.barcode || product.sku || product.code || product.id.slice(0, 12);
-          const barcodeDataUrl = generateBarcodeDataUrl(barcodeCode);
-
-          if (barcodeDataUrl) {
-            try {
-              doc.addImage(barcodeDataUrl, 'PNG', 5, y, pageWidth - 10, 16);
-            } catch {
-              doc.setFontSize(8);
-              doc.text(barcodeCode, centerX, y + 8, { align: 'center' });
-            }
-            y += 17;
-          } else {
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'bold');
-            doc.text(barcodeCode, centerX, y + 6, { align: 'center' });
-            y += 12;
-          }
-
-          // Product name
-          if (config.showName) {
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'bold');
-            const name = product.name || 'Producto';
-            const maxChars = Math.floor((pageWidth - 6) / 3.5);
-            const truncated = name.length > maxChars ? name.slice(0, maxChars - 1) + '…' : name;
-            doc.text(truncated, centerX, y, { align: 'center' });
-            y += 3.5;
-          }
-
-          // Price
-          if (config.showPrice && product.salePrice) {
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            const priceText = `C$ ${formatPrice(product.salePrice)}`;
-            doc.text(priceText, centerX, y, { align: 'center' });
-            y += 3;
-          }
-
-          // Company name
-          if (config.showCompany) {
-            doc.setFontSize(5.5);
-            doc.setFont('helvetica', 'normal');
-            doc.text(companyName, centerX, y, { align: 'center' });
-            y += 2.5;
-          }
-
-          // Date
-          if (config.showDate) {
-            doc.setFontSize(5);
-            doc.setFont('helvetica', 'normal');
-            const today = new Date().toLocaleDateString('es-NI');
-            doc.text(today, centerX, y, { align: 'center' });
-          }
-        }
-      }
-
-      doc.save(buildDatedDownloadFileName(['etiquetas_productos'], 'pdf'));
+      await generateProductLabelsPDF({ products: filteredProducts, configs, tenantName: companyName || 'NovaHub', tenantLogo: user?.sessionBranding?.logo || null });
       toast.success(`PDF generado con ${selectedIds.size} producto(s)`);
       onClose();
     } catch (e: any) {
@@ -253,7 +151,7 @@ export function LabelPrintModal({ open, onClose, products, companyName = 'Nova H
     } finally {
       setPrinting(false);
     }
-  }, [filteredProducts, configs, selectedIds, companyName, onClose]);
+  }, [filteredProducts, configs, selectedIds, companyName, onClose, user?.sessionBranding?.logo]);
 
   // Count selected with quantities
   const totalLabels = useMemo(() => {

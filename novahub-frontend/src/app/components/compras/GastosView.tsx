@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, Pencil, X
+  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, Pencil
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -33,6 +33,7 @@ import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
 import { requiresPaymentReference } from '../../utils/paymentMethods';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
@@ -73,7 +74,7 @@ const statusOpts = [
 
 export function GastosView({ data, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -195,6 +196,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         title: 'Gastos',
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.expense',
         columns: [
@@ -551,6 +553,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     try {
       await generatePurchaseRecordPDF({
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.expense',
         document: {
@@ -775,12 +778,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                    </div>
                 </div>
 
-                <div className="flex justify-between items-center text-base pt-2">
+                {displayMode !== 'ORIGINAL' && <div className="flex justify-between items-center text-base pt-2">
                   <span className="font-black uppercase text-xs tracking-widest">Equivalente Estimado</span>
                   <span className="font-black text-muted-foreground tabular-nums text-right">
                      {localDoc.currency === 'USD' ? `C$ ${(Number(localDoc.amount||0) * (localDoc.exchangeRate || globalRate)).toLocaleString()}` : `$ ${(Number(localDoc.amount||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}`}
                   </span>
-                </div>
+                </div>}
               </div>
             </CardContent>
           </Card>
@@ -795,16 +798,15 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const monthlyTotalInDisplayCurrency = data
     .filter(g => new Date(g.date).getMonth() === new Date().getMonth())
     .reduce((acc, g) => acc + toDisplayAmount(Number(g.amount ?? g.baseAmount ?? 0), g.currency, g.exchangeRate), 0);
+  const originalMonthlyAmounts = summarizeAmountsByCurrency(
+    data.filter(g => new Date(g.date).getMonth() === new Date().getMonth()),
+    (expense) => Number(expense.amount ?? expense.baseAmount ?? 0),
+    (expense) => expense.currency,
+    baseCurrency,
+  );
 
   const kpis = [
-    { key: 'all', title: 'Gastos Operativos',  value: data.length,                                                                         icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },    {
-      key: 'month',
-      title: `Total del Mes (${displayCurrency}${valuationModeSuffix})`,
-      value: formatCurrentAmount(monthlyTotalInDisplayCurrency, displayCurrency),
-      icon: TrendingDown,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10',
-    },
+    { key: 'all', title: 'Gastos Operativos',  value: data.length,                                                                         icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
     { key: 'draft', title: 'Borradores', value: data.filter(g => (g.status || '').toUpperCase() === 'DRAFT').length, icon: FileText, color: 'text-slate-500', bg: 'bg-slate-500/10', interactive: true },
     { key: 'pending', title: 'Pendientes', value: data.filter(g => (g.status || '').toUpperCase() === 'PENDING').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', interactive: true },
     { key: 'category', title: 'Por Categoría', value: uniqueCategories.length, icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
@@ -819,6 +821,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     hideCustomer: true,
     status: String(expense.status || 'DRAFT').toUpperCase(),
     totalLabel: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate),
+    sourceCurrency: expense.currency,
+    sourceExchangeRate: expense.exchangeRate,
     summaryDetails: [
       { label: 'Categoría', value: String(expense.category || '').toUpperCase() === 'OTRO' ? expense.categoryCustom || 'Otro' : expense.category || '—' },
       { label: 'Método', value: paymentSourceLabel(expense.paymentSource) },
@@ -836,6 +840,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5" data-tour="purchases-list-kpis">
+        {displayMode === 'ORIGINAL'
+          ? originalMonthlyAmounts.map((summary) => <PurchaseKpiCard key={`month-${summary.currency}`} title={`Total del Mes (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" />)
+          : <PurchaseKpiCard title={`Total del Mes (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(monthlyTotalInDisplayCurrency, displayCurrency)} icon={TrendingDown} color="text-rose-500" bg="bg-rose-500/10" />}
         {kpis.map((k, i) => {
           const isActive =
             (k.key === 'pending' && activeKpiFilter.type === 'pending') ||

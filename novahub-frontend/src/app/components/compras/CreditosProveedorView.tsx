@@ -31,6 +31,7 @@ import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -59,7 +60,7 @@ const statusOpts = [
 
 export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-credits-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ISSUED' | 'APPLIED'>('ALL');
@@ -307,6 +308,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         title: 'Créditos de proveedor',
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.supplier-credit',
         columns: [
@@ -497,6 +499,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     try {
       await generatePurchaseRecordPDF({
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.supplier-credit',
         document: {
@@ -1021,16 +1024,32 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const aplicados = data
     .filter(c => ['applied', 'partial', 'paid'].includes((c.status || '').toLowerCase()))
     .reduce((a, c) => a + toDisplayAmount(Number((c as any).total ?? (c as any).baseTotal ?? 0), resolveSourceCurrency((c as any)?.currency), (c as any)?.exchangeRate), 0);
+  const originalDisponibleAmounts = summarizeAmountsByCurrency(
+    data.filter(c => (c.status || '').toLowerCase() === 'issued'),
+    (credit) => Number((credit as any).total ?? (credit as any).baseTotal ?? 0),
+    (credit) => resolveSourceCurrency((credit as any)?.currency),
+    baseCurrency,
+  );
+  const originalAplicadosAmounts = summarizeAmountsByCurrency(
+    data.filter(c => ['applied', 'partial', 'paid'].includes((c.status || '').toLowerCase())),
+    (credit) => Number((credit as any).total ?? (credit as any).baseTotal ?? 0),
+    (credit) => resolveSourceCurrency((credit as any)?.currency),
+    baseCurrency,
+  );
   const kpis = [
-    { title: `Crédito Disponible (${displayCurrency}${valuationModeSuffix})`, value: formatCurrentAmount(disponible, displayCurrency), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'indicator' as const },
     { title: 'Total Créditos', value: data.length, icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
     { title: 'Emitidos', value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length, icon: BadgeDollarSign, color: 'text-purple-500', bg: 'bg-purple-500/10', kind: 'filter' as const, filter: 'ISSUED' as const },
-    { title: `Pagados (${displayCurrency}${valuationModeSuffix})`, value: formatCurrentAmount(aplicados, displayCurrency), icon: CheckCircle2, color: 'text-teal-500', bg: 'bg-teal-500/10', kind: 'filter' as const, filter: 'APPLIED' as const },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+        {displayMode === 'ORIGINAL'
+          ? originalDisponibleAmounts.map((summary) => <PurchaseKpiCard key={`available-${summary.currency}`} title={`Crédito Disponible (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" kind="indicator" />)
+          : <PurchaseKpiCard title={`Crédito Disponible (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(disponible, displayCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" kind="indicator" />}
+        {displayMode === 'ORIGINAL'
+          ? originalAplicadosAmounts.map((summary) => <PurchaseKpiCard key={`applied-${summary.currency}`} title={`Pagados (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-teal-500" bg="bg-teal-500/10" kind="filter" active={statusFilter === 'APPLIED'} onClick={() => setStatusFilter(statusFilter === 'APPLIED' ? 'ALL' : 'APPLIED')} />)
+          : <PurchaseKpiCard title={`Pagados (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(aplicados, displayCurrency)} icon={CheckCircle2} color="text-teal-500" bg="bg-teal-500/10" kind="filter" active={statusFilter === 'APPLIED'} onClick={() => setStatusFilter(statusFilter === 'APPLIED' ? 'ALL' : 'APPLIED')} />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
@@ -1071,6 +1090,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           hideCustomer: true,
           status: String(detailCredit.status || '').toUpperCase(),
           totalLabel: formatConvertedAmount(Number(detailCredit.total || 0), resolveSourceCurrency((detailCredit as any).currency), (detailCredit as any).exchangeRate),
+          sourceCurrency: resolveSourceCurrency((detailCredit as any).currency),
+          sourceExchangeRate: (detailCredit as any).exchangeRate,
           summaryDetails: [{ label: 'Documento origen', value: detailCredit.supplierInvoice?.number || 'Sin factura' }, { label: 'Moneda', value: resolveSourceCurrency((detailCredit as any).currency) }],
           metadata: [{ label: 'Proveedor', value: detailCredit.supplier?.name || 'No disponible' }, { label: 'Fecha', value: detailCredit.date ? formatDateEs(detailCredit.date) : 'No disponible' }, { label: 'Estado', value: statusOpts.find((option) => option.value === String(detailCredit.status || '').toLowerCase())?.label || detailCredit.status || '—' }],
           lines: ((detailCredit as any).items || []).map((item: any, index: number) => ({ id: String(item.id || index), description: item.description || item.name || 'Artículo sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), resolveSourceCurrency((detailCredit as any).currency), (detailCredit as any).exchangeRate), totalLabel: formatConvertedAmount(Number(item.total || 0), resolveSourceCurrency((detailCredit as any).currency), (detailCredit as any).exchangeRate), secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),

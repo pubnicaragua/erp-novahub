@@ -431,6 +431,7 @@ export function CustomerDetailDrawer({
           currency: historyExportCurrency,
         })),
         customerName: customer.name || 'Cliente',
+        customerData: customer,
         branchName: customer.branchName,
         tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,

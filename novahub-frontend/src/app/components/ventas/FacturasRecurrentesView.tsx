@@ -34,6 +34,7 @@ import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDo
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -97,7 +98,7 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
 };
 
 export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasRecurrentesViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, displayMode, baseCurrency, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('recurring-invoice', user?.tenantId, user?.id);
@@ -273,6 +274,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     customerName: row.customer?.name || customers.find((customer) => customer.id === row.customerId)?.name || 'Varios',
     status: String(row.status || ''),
     totalLabel: formatConvertedAmount(Number(row.total || 0), row.currency, row.exchangeRate),
+    sourceCurrency: row.currency,
+    sourceExchangeRate: row.exchangeRate,
     summaryDetails: [
       { label: 'Moneda', value: row.currency || 'NIO' },
       { label: 'Frecuencia', value: String(row.frequency || '').toLowerCase() || 'No definida' },
@@ -489,11 +492,19 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{formatDateSafe(val)}</div> },
   ];
 
-  const activeRecurringInDisplayCurrency = data
-    .filter(recurring => (recurring.status || '').toUpperCase() === 'ACTIVE')
+  const activeRecurring = data.filter(recurring => (recurring.status || '').toUpperCase() === 'ACTIVE');
+  const activeRecurringInBaseCurrency = activeRecurring
     .reduce((acc, recurring) => acc + ((recurring as any).baseTotal !== null && (recurring as any).baseTotal !== undefined
       ? Number((recurring as any).baseTotal)
       : toBaseAmount(recurring.total || 0, (recurring as any).currency, (recurring as any).exchangeRate || globalRate)), 0);
+  const activeRecurringOriginalBreakdown = summarizeAmountsByCurrency(
+    activeRecurring,
+    (recurring) => Number(recurring.total || 0),
+    (recurring) => recurring.currency,
+  );
+  const recurringBreakdown = activeRecurringOriginalBreakdown.length
+    ? activeRecurringOriginalBreakdown
+    : [{ currency: baseCurrency as SupportedCurrency, amount: activeRecurringInBaseCurrency, count: 0 }];
   const sevenDaysAhead = new Date();
   sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7);
   const today = new Date();
@@ -506,7 +517,18 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     if (Number.isNaN(nextDate.getTime())) return false;
     return nextDate >= today && nextDate <= sevenDaysAhead;
   }).length;
-  const annualRunRateInDisplayCurrency = activeRecurringInDisplayCurrency * 12;
+  const annualRunRateInBaseCurrency = activeRecurringInBaseCurrency * 12;
+  const recurringMoneyKpis = displayMode === 'ORIGINAL'
+    ? recurringBreakdown.map((item) => ({
+      currency: normalizeCurrency(item.currency, baseCurrency) as SupportedCurrency,
+      mrr: formatExplicitAmount(item.amount, normalizeCurrency(item.currency, baseCurrency) as SupportedCurrency),
+      arr: formatExplicitAmount(item.amount * 12, normalizeCurrency(item.currency, baseCurrency) as SupportedCurrency),
+    }))
+    : [{
+      currency: displayCurrency,
+      mrr: formatConvertedAmount(activeRecurringInBaseCurrency, baseCurrency),
+      arr: formatConvertedAmount(annualRunRateInBaseCurrency, baseCurrency),
+    }];
   // ─── INLINE EDITOR ─────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
     return (
@@ -650,7 +672,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className={cn('col-span-4', pricingMode === 'individual' && 'col-span-3')}>Producto / Servicio</div>{pricingMode === 'individual' && <div className="col-span-2 flex gap-1.5"><span className="flex-1">Aplicar</span><span className="flex-1 text-right">Desc.</span></div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>{pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Total</div><div className="col-span-1"></div>
               </div>
-              {(localDoc.items || []).map((item: any, idx: number) => (
+              {(localDoc.items || []).map((item: any, idx: number) => {
+                const product = findProductForItem(item);
+                const itemType = resolveItemType(item);
+                return (
                 <div key={item.id || idx} data-item-layout="recurrent" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className={cn('min-w-0 xl:col-span-4', pricingMode === 'individual' && 'xl:col-span-3')}>
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -730,7 +755,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                   <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                     onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }}><Trash2 className="size-3" /></Button></div>
                 </div>
-              ))}
+                );
+              })}
               {(!localDoc.items || localDoc.items.length === 0) && <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">Sin ítems. Haz clic en "Agregar Item".</div>}
             </div>
           </CardContent>
@@ -745,10 +771,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`MRR Activo (${displayCurrency})`} value={formatConvertedAmount(activeRecurringInDisplayCurrency, baseCurrency)} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />
+        {recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`mrr-${kpi.currency}`} title={`MRR Activo (${kpi.currency})`} value={kpi.mrr} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />)}
         <SalesKpiCard title="Próximas 7 días" value={upcomingIn7Days} icon={Calendar} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Activas" value={data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length} icon={Clock} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />
-        <SalesKpiCard title={`ARR (${displayCurrency})`} value={formatConvertedAmount(annualRunRateInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-rose-500" bg="bg-primary/10" />
+        {recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`arr-${kpi.currency}`} title={`ARR (${kpi.currency})`} value={kpi.arr} icon={TrendingUp} color="text-rose-500" bg="bg-primary/10" />)}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

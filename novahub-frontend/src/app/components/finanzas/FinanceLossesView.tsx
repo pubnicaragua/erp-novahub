@@ -10,6 +10,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const REASON_LABELS: Record<string, string> = {
   DISCREPANCY: 'Discrepancia',
@@ -22,7 +23,7 @@ const REASON_LABELS: Record<string, string> = {
 export function FinanceLossesView() {
   const { user, canPerform } = useAuth();
   const canViewInventory = canPerform('INVENTORY', 'view');
-  const { formatCurrentAmount } = useCurrency();
+  const { baseCurrency, displayMode, formatExplicitAmount, formatConvertedAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'current';
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -47,6 +48,18 @@ export function FinanceLossesView() {
   const rows = data?.data || [];
   const meta = data?.meta || { total: 0, page: 1, totalPages: 1 };
   const totalLoss = rows.reduce((sum, row) => sum + Number(row.totalLoss || 0), 0);
+  const sourceLossRows = rows.flatMap((row: any) => Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
+    ? row.originalCurrencyBreakdown
+    : [{ amount: Number(row.totalLoss || 0), currency: row.currency || baseCurrency }]);
+  const lossBreakdown = summarizeAmountsByCurrency(
+    sourceLossRows,
+    (row: any) => Number(row.amount || 0),
+    (row: any) => row.currency,
+    baseCurrency,
+  ) as Array<{ currency: SupportedCurrency; amount: number; count: number }>;
+  const renderLossAmount = (amount: number, currency?: string) => displayMode === 'ORIGINAL'
+    ? formatExplicitAmount(amount, normalizeCurrency(currency || baseCurrency))
+    : formatConvertedAmount(amount, normalizeCurrency(currency || baseCurrency));
   const totalQty = rows.reduce((sum, row) => sum + (row.items || []).reduce((s: number, item: any) => s + Number(item.lossQuantity || 0), 0), 0);
   const loading = lossesQuery.isLoading || lossesQuery.isFetching;
 
@@ -89,7 +102,11 @@ export function FinanceLossesView() {
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
               <TrendingDown className="size-3.5 text-red-500" /> Valor total (página)
             </div>
-            <p className="mt-1 text-2xl font-black tabular-nums">{formatCurrentAmount(totalLoss)}</p>
+            <div className="mt-1 space-y-0.5">
+              {displayMode === 'ORIGINAL'
+                ? lossBreakdown.map((item) => <p key={item.currency} className="text-2xl font-black tabular-nums">{formatExplicitAmount(item.amount, item.currency)}</p>)
+                : <p className="text-2xl font-black tabular-nums">{formatConvertedAmount(totalLoss, baseCurrency)}</p>}
+            </div>
           </CardContent>
         </Card>
         <Card className="rounded-2xl border-border/50">
@@ -142,7 +159,11 @@ export function FinanceLossesView() {
                   </TableCell>
                   <TableCell className="text-xs">{row.warehouse?.name || '—'}</TableCell>
                   <TableCell className="text-right font-mono text-xs font-bold text-red-600">-{Number(qty).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold text-red-600">{formatCurrentAmount(Number(row.totalLoss || 0))}</TableCell>
+                  <TableCell className="text-right font-mono text-xs font-bold text-red-600">
+                    {displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
+                      ? row.originalCurrencyBreakdown.map((item: any) => <span key={item.currency} className="ml-2 inline-block">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency || baseCurrency))}</span>)
+                      : renderLossAmount(Number(row.totalLoss || 0), row.currency)}
+                  </TableCell>
                   <TableCell>
                     {row.account ? (
                       <button

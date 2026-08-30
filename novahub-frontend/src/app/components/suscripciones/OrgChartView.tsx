@@ -19,6 +19,7 @@ import {
   Users,
   ZoomIn,
   ZoomOut,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '../ui/badge';
@@ -681,8 +682,13 @@ export function OrgChartView({ tenantId, tenantName, employees, users, onBack, o
       {/* Modal edición de jefe */}
       {editingEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditingEmployee(null)}>
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-black uppercase tracking-wider">Jefe de {getEmployeeName(editingEmployee)}</h3>
+          <div className="relative max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-2xl sm:p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 pr-10">
+              <h3 className="break-words text-sm font-black uppercase tracking-wider">Jefe de {getEmployeeName(editingEmployee)}</h3>
+              <button type="button" onClick={() => setEditingEmployee(null)} className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Cerrar edición de jefe" title="Cerrar">
+                <X className="size-4" />
+              </button>
+            </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
               Puesto: <strong>{editingEmployee.position?.title || 'Sin puesto'}</strong> · Área: <strong>{editingEmployee.department?.name || 'Sin área'}</strong>
             </p>
@@ -705,7 +711,7 @@ export function OrgChartView({ tenantId, tenantName, employees, users, onBack, o
                 <span>Los subordinados actuales de {getEmployeeName(editingEmployee)} se mantienen con él.</span>
               </div>
             </div>
-            <div className="mt-5 flex items-center justify-end gap-2">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
               <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setEditingEmployee(null)}>Cancelar</Button>
               <Button
                 size="sm"

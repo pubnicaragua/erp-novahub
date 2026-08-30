@@ -6,6 +6,7 @@ import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignColor,
 import { formatCurrencyAmount, formatCurrencyDescriptor } from './currency';
 import { normalizeSalesExtraCharges } from './salesCharges';
 import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
+import type { CurrencyDisplayMode } from '../contexts/CurrencyContext';
 
 export interface ManagerQuoteExportRow {
   number?: string | null;
@@ -40,6 +41,7 @@ interface ManagerQuotesExportOptions {
   dateFrom?: unknown;
   dateTo?: unknown;
   metrics?: { total?: number; amount?: number; amountCurrency?: string | null; amountCurrencySymbol?: string | null; valuationLabel?: string | null; historicalRateFallbackCount?: number; aggregationComplete?: boolean; topBranchName?: string | null; topBranchCount?: number };
+  displayMode?: CurrencyDisplayMode;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -101,27 +103,54 @@ function additionalChargesLabel(row: ManagerQuoteExportRow) {
   return charges.join(' · ') || '—';
 }
 
+function excelColumnName(index: number) {
+  let value = index;
+  let result = '';
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    value = Math.floor((value - 1) / 26);
+  }
+  return result;
+}
+
+function displayedTotal(row: ManagerQuoteExportRow, displayMode: CurrencyDisplayMode = 'DEFAULT') {
+  if (displayMode === 'ORIGINAL' || row.reportTotal == null) return formatMoney(row.total, row.currency, true);
+  return formatMoney(row.reportTotal, row.reportCurrency, true);
+}
+
+function displayedTotalNumber(row: ManagerQuoteExportRow, displayMode: CurrencyDisplayMode = 'DEFAULT') {
+  if (displayMode === 'ORIGINAL' || row.reportTotal == null) return Number(row.total || 0);
+  return Number(row.reportTotal || 0);
+}
+
 export async function exportManagerQuotesExcel(options: ManagerQuotesExportOptions) {
   const primary = safeHex(options.primaryColor);
+  const displayMode = options.displayMode || 'DEFAULT';
+  const originalOnly = displayMode === 'ORIGINAL';
+  const headers = originalOnly
+    ? ['Número', 'Sucursal', 'Cliente', 'Fecha de emisión', 'Total original', 'Cargos adicionales', 'Tasa utilizada', 'Fuente / fecha', 'Estado', 'Validez']
+    : ['Número', 'Sucursal', 'Cliente', 'Fecha de emisión', `Total ${formatCurrencyDescriptor(options.metrics?.amountCurrency || 'NIO')}`, 'Cargos adicionales', 'Tasa utilizada', 'Fuente / fecha', 'Estado', 'Validez'];
+  const endColumn = excelColumnName(headers.length);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'NovaHub';
   workbook.created = new Date();
   const worksheet = workbook.addWorksheet('Cotizaciones', { views: [{ state: 'frozen', ySplit: 4 }] });
-  worksheet.mergeCells('A1:L1');
+  worksheet.mergeCells(`A1:${endColumn}1`);
   const title = worksheet.getCell('A1');
   title.value = 'COTIZACIONES MANAGER';
   title.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
   title.alignment = { horizontal: 'center', vertical: 'middle' };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(primary) } };
   worksheet.getRow(1).height = 28;
-  worksheet.mergeCells('A2:L2');
+  worksheet.mergeCells(`A2:${endColumn}2`);
   worksheet.getCell('A2').value = `${options.tenantName} · ${filteredContext(options.filterSummary)}`;
   worksheet.getCell('A2').font = { italic: true, color: { argb: 'FF64748B' } };
-  worksheet.mergeCells('A3:L3');
+  worksheet.mergeCells(`A3:${endColumn}3`);
   worksheet.getCell('A3').value = `Total de cotizaciones: ${options.metrics?.total || options.rows.length} · Monto total: ${formatMoney(options.metrics?.amount, options.metrics?.amountCurrency, true)} · ${reportContext(options)} · Sucursal con más cotizaciones: ${options.metrics?.topBranchName || 'Sin datos'}`;
   worksheet.getCell('A3').font = { bold: true, color: { argb: hexToArgb(primary) } };
 
-  worksheet.addRow(['Número', 'Sucursal', 'Cliente', 'Fecha de emisión', 'Total original', 'Cargos adicionales', 'Total funcional', 'Equivalencia', 'Tasa utilizada', 'Fuente / fecha', 'Estado', 'Validez']);
+  worksheet.addRow(headers);
   const header = worksheet.getRow(4);
   header.height = 22;
   header.eachCell((cell) => {
@@ -132,20 +161,9 @@ export async function exportManagerQuotesExcel(options: ManagerQuotesExportOptio
   });
 
   options.rows.forEach((row, index) => {
-    const excelRow = worksheet.addRow([
-      row.number || '—',
-      row.branchName || 'Sucursal',
-      row.customerName || 'Cliente ocasional',
-      formatDate(row.date),
-      formatMoney(row.total, row.currency, true),
-      additionalChargesLabel(row),
-      row.baseTotal == null ? '—' : formatMoney(row.baseTotal, row.baseCurrency, true),
-      row.reportTotal == null ? 'No disponible' : formatMoney(row.reportTotal, row.reportCurrency, true),
-      rateContext(row),
-      `${row.reportRateSource || '—'} · ${formatDate(row.reportRateEffectiveAt)}`,
-      statusLabel(row.status),
-      formatDate(row.expiryDate),
-    ]);
+    const excelRow = worksheet.addRow(originalOnly
+      ? [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), formatMoney(row.total, row.currency, true), additionalChargesLabel(row), rateContext(row), `${row.reportRateSource || '—'} · ${formatDate(row.reportRateEffectiveAt)}`, statusLabel(row.status), formatDate(row.expiryDate)]
+      : [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), displayedTotal(row, displayMode), additionalChargesLabel(row), rateContext(row), `${row.reportRateSource || '—'} · ${formatDate(row.reportRateEffectiveAt)}`, statusLabel(row.status), formatDate(row.expiryDate)]);
     excelRow.eachCell((cell) => {
       cell.alignment = { vertical: 'middle', wrapText: true };
       if (index % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
@@ -153,19 +171,22 @@ export async function exportManagerQuotesExcel(options: ManagerQuotesExportOptio
     excelRow.getCell(1).font = { bold: true, color: { argb: hexToArgb(primary) } };
     excelRow.getCell(5).font = { bold: true };
     excelRow.getCell(7).font = { bold: true, color: { argb: hexToArgb(primary) } };
-    excelRow.getCell(10).font = { bold: true, color: { argb: hexToArgb(primary) } };
+    excelRow.getCell(8).font = { bold: true, color: { argb: hexToArgb(primary) } };
   });
 
   worksheet.columns = [
-    { width: 18 }, { width: 24 }, { width: 30 }, { width: 18 }, { width: 20 }, { width: 38 }, { width: 20 }, { width: 21 }, { width: 24 }, { width: 28 }, { width: 16 }, { width: 16 },
+    { width: 18 }, { width: 24 }, { width: 30 }, { width: 18 }, { width: 22 }, { width: 38 }, { width: 24 }, { width: 28 }, { width: 16 }, { width: 16 },
   ];
-  worksheet.autoFilter = { from: 'A4', to: 'L4' };
+  worksheet.autoFilter = { from: 'A4', to: `${endColumn}4` };
   const buffer = await workbook.xlsx.writeBuffer();
   downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), buildDateFilteredDownloadFileName(['reporte_cotizaciones_consolidadas'], 'xlsx', options.dateFrom, options.dateTo));
 }
 
 export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions) {
-  const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: 'Cotizaciones consolidadas', tenantName: options.tenantName, tenantLogo: options.tenantLogo, rows: options.rows, columns: [{ header: 'Documento', value: row => row.number || '—' }, { header: 'Sucursal', value: row => row.branchName || '—' }, { header: 'Cliente', value: row => row.customerName || '—' }, { header: 'Total', value: row => row.reportTotal ?? row.total ?? 0, align: 'right' }], fileName: buildDateFilteredPdfFileName(['reporte_cotizaciones_consolidadas'], 'configured', options.dateFrom, options.dateTo) });
+  const displayMode = options.displayMode || 'DEFAULT';
+  const originalOnly = displayMode === 'ORIGINAL';
+  const amountHeader = originalOnly ? 'Total original' : `Total ${formatCurrencyDescriptor(options.metrics?.amountCurrency || 'NIO')}`;
+  const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: 'Cotizaciones consolidadas', tenantName: options.tenantName, tenantLogo: options.tenantLogo, rows: options.rows, columns: [{ header: 'Documento', value: row => row.number || '—' }, { header: 'Sucursal', value: row => row.branchName || '—' }, { header: 'Cliente', value: row => row.customerName || '—' }, { header: 'Fecha', value: row => formatDate(row.date) }, { header: 'Estado', value: row => statusLabel(row.status) }, { header: 'Validez', value: row => formatDate(row.expiryDate) }, { header: amountHeader, value: row => displayedTotal(row, displayMode), align: 'right' }, { header: 'Cargos adicionales', value: row => additionalChargesLabel(row) }], fileName: buildDateFilteredPdfFileName(['reporte_cotizaciones_consolidadas'], 'configured', options.dateFrom, options.dateTo) });
   if (configured) return configured;
   const settings = await getPdfDesignSettings('reportes.sales');
   const primary = pdfDesignColor(settings.primaryColor || options.primaryColor, [16, 185, 129]);
@@ -207,16 +228,20 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
   currentY += 7;
 
   autoTable(doc, {
-    head: [['Número', 'Sucursal', 'Cliente', 'Fecha emisión', 'Total original', 'Cargos adicionales', 'Equivalencia', 'Tasa utilizada', 'Estado', 'Validez']],
-    body: options.rows.map((row) => [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), `${formatMoney(row.total, row.currency, true)}\n${formatCurrencyDescriptor(row.currency)}`, additionalChargesLabel(row), row.reportTotal == null ? 'No disponible' : `${formatMoney(row.reportTotal, row.reportCurrency, true)}\n${formatCurrencyDescriptor(row.reportCurrency)}`, rateContext(row), statusLabel(row.status), formatDate(row.expiryDate)]),
+    head: [originalOnly
+      ? ['Número', 'Sucursal', 'Cliente', 'Fecha emisión', 'Total original', 'Cargos adicionales', 'Tasa utilizada', 'Estado', 'Validez']
+      : ['Número', 'Sucursal', 'Cliente', 'Fecha emisión', amountHeader, 'Cargos adicionales', 'Tasa utilizada', 'Estado', 'Validez']],
+    body: options.rows.map((row) => originalOnly
+      ? [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), `${formatMoney(row.total, row.currency, true)}\n${formatCurrencyDescriptor(row.currency)}`, additionalChargesLabel(row), rateContext(row), statusLabel(row.status), formatDate(row.expiryDate)]
+      : [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), displayedTotal(row, displayMode), additionalChargesLabel(row), rateContext(row), statusLabel(row.status), formatDate(row.expiryDate)]),
     startY: currentY,
     margin: { left: margin, right: margin, bottom: 16 },
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, textColor: [51, 65, 85], overflow: 'linebreak' },
     headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 0: { fontStyle: 'bold' }, 4: { halign: 'right', fontStyle: 'bold' }, 5: { halign: 'left' }, 6: { halign: 'right', fontStyle: 'bold' }, 8: { halign: 'center' } },
+    columnStyles: { 0: { fontStyle: 'bold' }, 4: { halign: 'right', fontStyle: 'bold' }, 5: { halign: 'left' }, 7: { halign: 'center' } },
     didParseCell: (hook) => {
-      if (hook.section === 'body' && hook.column.index === 6) hook.cell.styles.textColor = primary;
+      if (hook.section === 'body' && hook.column.index === 4) hook.cell.styles.textColor = primary;
     },
   });
 

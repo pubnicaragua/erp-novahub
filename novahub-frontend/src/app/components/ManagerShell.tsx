@@ -55,6 +55,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useCurrency, type CurrencyDisplayMode } from "../contexts/CurrencyContext";
 import { type ManagerGroup } from "../services/enterprise-groups.service";
 import { safeGetItem, safeSetItem } from "../services/safe-storage";
 import { persistThemeMode, readPersistedDarkMode } from "../utils/theme-mode";
@@ -454,7 +455,6 @@ export function ManagerShell({
   onHrViewChange,
   selectedBranchId,
   onBranchChange,
-  reportCurrency,
   onReportCurrencyChange,
   allowedSections,
 }: ManagerShellProps) {
@@ -466,6 +466,7 @@ export function ManagerShell({
     () => (section === "inventory" || section === "sales" || section === "purchases" || section === "finances" || section === "accounting" || section === "reports" || section === "hr" ? section : null),
   );
   const { user, logout } = useAuth();
+  const { currency, displayMode, setDisplayMode, displayModeLabel } = useCurrency();
   const { theme, setTheme } = useManagerTheme();
   const managerBranding = user?.sessionBranding?.kind === "group" ? user.sessionBranding : undefined;
   const displayGroupName = group?.name || managerBranding?.name || "Grupo empresarial";
@@ -597,6 +598,11 @@ export function ManagerShell({
   const updateSection = (next: ManagerSection) => {
     onSectionChange(next);
     setSidebarOpen(false);
+  };
+
+  const updateCurrencyDisplay = (mode: CurrencyDisplayMode) => {
+    setDisplayMode(mode);
+    if (mode !== "DEFAULT" && mode !== "ORIGINAL") onReportCurrencyChange(mode);
   };
 
   const handleSectionClick = (next: ManagerSection) => {
@@ -739,40 +745,43 @@ export function ManagerShell({
                 </select>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                {(section === "sales" || section === "purchases") && (
-                  <div className="hidden items-center gap-0.5 rounded-xl border border-border bg-background p-0.5 md:flex" title="Moneda de referencia de ventas">
+                <div className="flex items-center gap-0.5 rounded-xl border border-border bg-background p-0.5" title="Moneda de presentación del Manager">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onReportCurrencyChange(reportCurrency === "USD" ? "NIO" : "USD")}
+                      onClick={() => updateCurrencyDisplay(displayMode === "ORIGINAL" ? "NIO" : displayMode === "NIO" ? "USD" : "ORIGINAL")}
                       className="h-8 gap-2 rounded-lg px-2.5 hover:bg-muted"
-                      title={`Cambiar moneda de referencia · ${formatCurrencyDescriptor(reportCurrency)}`}
+                      title={`Cambiar moneda de presentación · ${displayModeLabel}`}
                     >
-                      {reportCurrency === "USD" ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
-                      <span className="text-xs font-bold">{getCurrencyMetadata(reportCurrency).code}</span>
+                      {displayMode === "ORIGINAL" ? <FileText className="size-4 text-primary" /> : displayMode === "USD" ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
+                      <span className="text-xs font-bold">{displayMode === "ORIGINAL" ? "ORIGINAL" : displayMode === "DEFAULT" ? currency : getCurrencyMetadata(displayMode).code}</span>
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted" aria-label="Cambiar moneda de referencia" title="Cambiar moneda de referencia">
+                          <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted" aria-label="Cambiar moneda de presentación" title="Cambiar moneda de presentación">
                           <ChevronDown className="size-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-64 rounded-xl border-border/60 p-2">
-                        <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda de referencia</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => onReportCurrencyChange("NIO")} className="gap-2 rounded-lg p-2.5 text-xs font-bold">
+                        <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda de presentación</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => updateCurrencyDisplay("ORIGINAL")} className="gap-2 rounded-lg p-2.5 text-xs font-bold">
+                          <FileText className="size-4 text-primary" />
+                          <span className="flex-1">Original · sin equivalente</span>
+                          {displayMode === "ORIGINAL" && <span className="text-primary">Activo</span>}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateCurrencyDisplay("NIO")} className="gap-2 rounded-lg p-2.5 text-xs font-bold">
                           <Wallet className="size-4 text-orange-500" />
                           <span className="flex-1">{formatCurrencyDescriptor("NIO")}</span>
-                          {reportCurrency === "NIO" && <span className="text-primary">Activo</span>}
+                          {(displayMode === "NIO" || (displayMode === "DEFAULT" && currency === "NIO")) && <span className="text-primary">Activo</span>}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onReportCurrencyChange("USD")} className="gap-2 rounded-lg p-2.5 text-xs font-bold">
+                        <DropdownMenuItem onClick={() => updateCurrencyDisplay("USD")} className="gap-2 rounded-lg p-2.5 text-xs font-bold">
                           <CircleDollarSign className="size-4 text-emerald-500" />
                           <span className="flex-1">{formatCurrencyDescriptor("USD")}</span>
-                          {reportCurrency === "USD" && <span className="text-primary">Activo</span>}
+                          {(displayMode === "USD" || (displayMode === "DEFAULT" && currency === "USD")) && <span className="text-primary">Activo</span>}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button

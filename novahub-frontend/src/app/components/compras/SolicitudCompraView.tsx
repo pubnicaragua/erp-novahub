@@ -146,6 +146,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         title: 'Solicitudes de compra',
         rows: filtered,
         tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-request',
         columns: [
@@ -466,6 +467,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           notes: request.notes || request.justification,
         },
         tenantName: user?.tenantName || 'Nova Hub',
+        tenantLogo: user?.sessionBranding?.logo || null,
       });
       toast.success('PDF descargado', { id: pdfToastId });
     } catch (e: any) {
@@ -484,6 +486,8 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       status: normalizeRequestStatus(request.status),
       sourceLabel: management ? 'Gestión de compra' : undefined,
       totalLabel: management ? formatRequestAmount(management.total, management.currency, management.exchangeRate) : 'Sin cotización',
+      sourceCurrency: management?.currency,
+      sourceExchangeRate: management?.exchangeRate,
       summaryDetails: [
         { label: 'Artículos', value: String(request.items?.length || 0) },
         { label: 'Prioridad', value: getPurchasePriorityOption(request.priority).label },

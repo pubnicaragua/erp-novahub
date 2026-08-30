@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useAuth } from '../../contexts/AuthContext';
+import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 
 type RevaluationPreview = {
   asOfDate: string;
@@ -63,11 +64,6 @@ type RevaluationRun = {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function formatMoney(value: number, currency: string) {
-  const symbol = currency === 'USD' ? '$' : 'C$';
-  return `${symbol} ${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(value?: string | null) {
@@ -221,9 +217,9 @@ export function DiferenciasCambiariasView() {
       {preview && (
         <>
           <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard label="Ganancia no realizada" value={formatMoney(preview.totals.unrealizedGain, preview.baseCurrency)} tone="gain" icon={<TrendingUp className="size-4" />} />
-            <SummaryCard label="Pérdida no realizada" value={formatMoney(preview.totals.unrealizedLoss, preview.baseCurrency)} tone="loss" icon={<TrendingDown className="size-4" />} />
-            <SummaryCard label="Neto cambiario" value={formatMoney(preview.totals.net, preview.baseCurrency)} tone={preview.totals.net >= 0 ? 'gain' : 'loss'} icon={<ArrowLeftRight className="size-4" />} />
+            <SummaryCard label="Ganancia no realizada" value={<CurrencyDisplayAmount amount={preview.totals.unrealizedGain} sourceCurrency={preview.baseCurrency} />} tone="gain" icon={<TrendingUp className="size-4" />} />
+            <SummaryCard label="Pérdida no realizada" value={<CurrencyDisplayAmount amount={preview.totals.unrealizedLoss} sourceCurrency={preview.baseCurrency} />} tone="loss" icon={<TrendingDown className="size-4" />} />
+            <SummaryCard label="Neto cambiario" value={<CurrencyDisplayAmount amount={preview.totals.net} sourceCurrency={preview.baseCurrency} />} tone={preview.totals.net >= 0 ? 'gain' : 'loss'} icon={<ArrowLeftRight className="size-4" />} />
             <SummaryCard label="Saldos valorados" value={String(preview.totals.itemCount)} tone="neutral" icon={<Info className="size-4" />} />
           </div>
 
@@ -313,8 +309,8 @@ export function DiferenciasCambiariasView() {
                           </td>
                           <td className="px-4 py-3"><Badge variant="outline" className="text-[9px] uppercase tracking-wider">{statusLabel(row.status)}</Badge></td>
                           <td className="px-4 py-3 text-right font-semibold tabular-nums">{row.valuationRate} {row.baseCurrency || preview.baseCurrency}</td>
-                          <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600">{formatMoney(Number(row.totalUnrealizedGain || 0), row.baseCurrency || preview.baseCurrency)}</td>
-                          <td className="px-4 py-3 text-right font-bold tabular-nums text-red-600">{formatMoney(Number(row.totalUnrealizedLoss || 0), row.baseCurrency || preview.baseCurrency)}</td>
+                          <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600"><CurrencyDisplayAmount amount={Number(row.totalUnrealizedGain || 0)} sourceCurrency={row.baseCurrency || preview.baseCurrency} /></td>
+                          <td className="px-4 py-3 text-right font-bold tabular-nums text-red-600"><CurrencyDisplayAmount amount={Number(row.totalUnrealizedLoss || 0)} sourceCurrency={row.baseCurrency || preview.baseCurrency} /></td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">{row.journal ? `${row.journal.number} · ${statusLabel(row.journal.status)}` : 'Sin asiento'}</td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(row.createdAt)}</td>
                         </tr>
@@ -366,11 +362,11 @@ export function DiferenciasCambiariasView() {
                           </td>
                           <td className="max-w-[190px] truncate px-4 py-3 text-muted-foreground">{item.partyName || 'Sin tercero'}</td>
                           <td className="px-4 py-3 text-muted-foreground">{formatDate(item.dueDate)}</td>
-                          <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatMoney(item.balance, item.currency)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatMoney(item.historicalBaseAmount, preview.baseCurrency)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatMoney(item.valuationBaseAmount, preview.baseCurrency)}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums"><CurrencyDisplayAmount amount={item.balance} sourceCurrency={item.currency} sourceExchangeRate={item.historicalRate} showRate /></td>
+                          <td className="px-4 py-3 text-right tabular-nums"><CurrencyDisplayAmount amount={item.historicalBaseAmount} sourceCurrency={preview.baseCurrency} /></td>
+                          <td className="px-4 py-3 text-right tabular-nums"><CurrencyDisplayAmount amount={item.valuationBaseAmount} sourceCurrency={preview.baseCurrency} sourceExchangeRate={preview.valuationRate} /></td>
                           <td className={`px-4 py-3 text-right font-bold tabular-nums ${item.difference > 0 ? 'text-emerald-600' : item.difference < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
-                            {formatMoney(item.difference, preview.baseCurrency)}
+                            <CurrencyDisplayAmount amount={item.difference} sourceCurrency={preview.baseCurrency} />
                           </td>
                           <td className="px-4 py-3">
                             <Badge variant="outline" className={item.economicEffect === 'GAIN' ? 'border-emerald-500/30 text-emerald-600' : item.economicEffect === 'LOSS' ? 'border-red-500/30 text-red-600' : ''}>
@@ -403,7 +399,7 @@ function statusLabel(status?: string | null) {
   return status || 'Pendiente';
 }
 
-function SummaryCard({ label, value, tone, icon }: { label: string; value: string; tone: 'gain' | 'loss' | 'neutral'; icon: ReactNode }) {
+function SummaryCard({ label, value, tone, icon }: { label: string; value: ReactNode; tone: 'gain' | 'loss' | 'neutral'; icon: ReactNode }) {
   const color = tone === 'gain' ? 'text-emerald-600' : tone === 'loss' ? 'text-red-600' : 'text-primary';
   return (
     <Card className="rounded-2xl shadow-sm">

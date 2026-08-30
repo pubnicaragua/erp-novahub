@@ -19,6 +19,7 @@ import {
   Clock3,
   TrendingUp,
   ArrowLeft,
+  FileText,
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -401,7 +402,24 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     }
   };
 
-  const { currency, toggleCurrency, currencyInteractionEnabled, valuationMode, setValuationMode, valuationModeLabel, showValuationLegend, setShowValuationLegend } = useCurrency();
+  const {
+    currency,
+    currencyInteractionEnabled,
+    displayMode,
+    setDisplayMode,
+    displayModeLabel,
+    valuationMode,
+    setValuationMode,
+    valuationModeLabel,
+    showValuationLegend,
+    setShowValuationLegend,
+  } = useCurrency();
+
+  const cycleDisplayMode = () => {
+    if (displayMode === 'ORIGINAL') return setDisplayMode('NIO');
+    if (displayMode === 'NIO') return setDisplayMode('USD');
+    return setDisplayMode('ORIGINAL');
+  };
 
   const ROLE_LABELS: Record<string, string> = {
     superadmin: 'Super Administrador',
@@ -562,17 +580,19 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         )}
 
         {/* Currency and valuation view */}
-        <div className="hidden items-center gap-0.5 rounded-xl border border-border bg-card p-0.5 lg:flex" title="Moneda y modo de valoración">
+        <div className="hidden items-center gap-0.5 rounded-xl border border-border bg-card p-0.5 lg:flex" title="Moneda de presentación y modo de valoración">
           <Button
             variant="ghost"
             size="sm"
-            onClick={toggleCurrency}
+            onClick={cycleDisplayMode}
             className="h-8 gap-2 rounded-lg px-2.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            title={currencyInteractionEnabled ? 'Cambiar moneda de visualización' : 'Cambio de moneda bloqueado por configuración'}
+            title={currencyInteractionEnabled ? 'Cambiar moneda de presentación' : 'Cambio de moneda bloqueado por configuración'}
             disabled={!currencyInteractionEnabled}
           >
-            {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
-            <span className="text-xs font-bold">{currency}</span>
+            {displayMode === 'ORIGINAL'
+              ? <FileText className="size-4 text-primary" />
+              : currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
+            <span className="text-xs font-bold">{displayMode === 'ORIGINAL' ? 'ORIGINAL' : currency}</span>
             {showValuationLegend && <span className="hidden text-[9px] font-black uppercase tracking-wider text-muted-foreground xl:inline">{valuationModeLabel}</span>}
           </Button>
           <DropdownMenu>
@@ -583,7 +603,41 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80 rounded-xl border-border/60 p-2">
               <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Vista de importes
+                Moneda de presentación
+              </DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setDisplayMode('ORIGINAL')} className="items-start gap-3 rounded-lg p-3">
+                <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide">
+                    Original
+                    {displayMode === 'ORIGINAL' && <Check className="size-3.5 text-emerald-500" />}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Conserva la moneda de cada operación y no muestra equivalentes.</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDisplayMode('NIO')} className="items-start gap-3 rounded-lg p-3">
+                <Wallet className="mt-0.5 size-4 shrink-0 text-orange-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide">
+                    Córdoba (NIO)
+                    {(displayMode === 'NIO' || (displayMode === 'DEFAULT' && currency === 'NIO')) && <Check className="size-3.5 text-emerald-500" />}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Convierte los importes a córdobas para una lectura única.</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDisplayMode('USD')} className="items-start gap-3 rounded-lg p-3">
+                <CircleDollarSign className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide">
+                    Dólar (USD)
+                    {(displayMode === 'USD' || (displayMode === 'DEFAULT' && currency === 'USD')) && <Check className="size-3.5 text-emerald-500" />}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Convierte los importes a dólares para una lectura única.</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="my-1.5" />
+              <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                Valoración de tasas
               </DropdownMenuLabel>
               <DropdownMenuItem onClick={() => setValuationMode('HISTORICAL')} className="items-start gap-3 rounded-lg p-3">
                 <Clock3 className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -776,14 +830,25 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             </DropdownMenuItem>
             <div className="lg:hidden">
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!currencyInteractionEnabled}
-                onClick={toggleCurrency}
-                className="gap-2"
-              >
-                {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
-                <span>Moneda: {currency}</span>
-                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda de presentación</DropdownMenuLabel>
+              <DropdownMenuItem disabled={!currencyInteractionEnabled} onClick={() => setDisplayMode('ORIGINAL')} className="gap-2">
+                <FileText className="size-4 text-primary" />
+                <span>Original</span>
+                {displayMode === 'ORIGINAL' && <Check className="ml-auto size-3.5 text-emerald-500" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!currencyInteractionEnabled} onClick={() => setDisplayMode('NIO')} className="gap-2">
+                <Wallet className="size-4 text-orange-500" />
+                <span>Córdoba (NIO)</span>
+                {(displayMode === 'NIO' || (displayMode === 'DEFAULT' && currency === 'NIO')) && <Check className="ml-auto size-3.5 text-emerald-500" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!currencyInteractionEnabled} onClick={() => setDisplayMode('USD')} className="gap-2">
+                <CircleDollarSign className="size-4 text-emerald-500" />
+                <span>Dólar (USD)</span>
+                {(displayMode === 'USD' || (displayMode === 'DEFAULT' && currency === 'USD')) && <Check className="ml-auto size-3.5 text-emerald-500" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!currencyInteractionEnabled} onClick={cycleDisplayMode} className="gap-2 text-muted-foreground">
+                <span className="size-4 text-center text-[10px] font-black">↻</span>
+                <span>Vista actual: {displayModeLabel}</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setValuationMode(valuationMode === 'CURRENT' ? 'HISTORICAL' : 'CURRENT')}

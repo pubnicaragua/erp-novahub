@@ -27,6 +27,7 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { CurrencySelector } from '../ui/CurrencySelector';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface Props {
   data: SupplierInvoice[];
@@ -36,7 +37,6 @@ interface Props {
   onDraftConsumed?: () => void;
   onRegisterPaymentFromInvoice?: (draft: any) => void;
   supplierCatalog?: Supplier[];
-  accountCatalog?: any[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   onStatusChange?: (value: string) => void;
@@ -69,17 +69,19 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
   return { taxRate, taxBase, taxAmount: (taxBase * taxRate) / 100 };
 }
 
-export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], accountCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
+export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const {
     exchangeRate: globalRate,
     displayCurrency,
     baseCurrency,
+    displayMode,
     valuationMode,
     valuationModeLabel,
     valuationModeSuffix,
     showValuationLegend,
     formatConvertedAmount,
+    formatExplicitAmount,
     formatHistoricalAmount,
     formatCurrentAmount,
     convertAmount,
@@ -107,7 +109,6 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
@@ -117,8 +118,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
-    setAccounts(accountCatalog);
-  }, [supplierCatalog, accountCatalog]);
+  }, [supplierCatalog]);
 
   useEffect(() => {
     if (draftInvoiceFromOrder) {
@@ -225,7 +225,6 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierInvoice>) => {
     const currentInvoice = data.find((x) => x.id === id);
-    const previousStatus = String(currentInvoice?.status || '').toUpperCase();
     const statusToApply = (updates.status || currentInvoice?.status || '').toString();
     if (isPayingStatus(statusToApply) && currentInvoice?.supplierId && !isSupplierActive(currentInvoice.supplierId)) {
       toast.error('No se puede registrar pago en facturas de proveedores inactivos');
@@ -233,8 +232,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     }
     const updateToastId = toast.loading('Guardando cambios en la factura de proveedor...');
     try {
-      const updatedResponse = await billsService.update(id as string, updates);
-      const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
+      await billsService.update(id as string, updates);
       toast.success('Factura actualizada', { id: updateToastId });
       onRefresh();
     }
@@ -327,7 +325,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         openEditor(null);
         setLocalDoc(null);
       } else {
-        const updatedResponse = await billsService.update(editingId!, docToSave);
+        await billsService.update(editingId!, docToSave);
         if (attachmentFiles.length > 0 && editingId) await uploadInvoiceAttachments(String(editingId));
         toast.success('Factura guardada', { id: saveToastId });
       }
@@ -461,6 +459,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                  onClick={() => generateSupplierInvoicePDF({
                    invoice: localDoc,
                    tenantName: user?.tenantName || 'Nova Hub',
+                   tenantLogo: user?.sessionBranding?.logo || null,
                    formatAmount: (amount: number, currency?: string, rate?: number) =>
                      formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
                  })}
@@ -770,17 +769,15 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         : convertAmount(amount, invoice.currency, invoice.exchangeRate || globalRate);
       return acc + converted;
     }, 0);
+  const originalPendingAmounts = summarizeAmountsByCurrency(
+    data.filter(invoice => ['PENDING', 'PARTIAL'].includes((invoice.status || '').toUpperCase())),
+    (invoice) => Number(invoice.total ?? invoice.baseTotal ?? 0),
+    (invoice) => invoice.currency,
+    baseCurrency,
+  );
 
   const kpis = [
      { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10',    filter: 'ALL'       },
-     {
-       title: `Por Pagar (${displayCurrency}${valuationModeSuffix})`,
-       value: formatCurrentAmount(pendingTotalInDisplayCurrency, displayCurrency),
-       icon: Clock,
-       color: 'text-amber-500',
-       bg: 'bg-amber-500/10',
-       filter: 'PENDING',
-     },
      { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < nowMs && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', filter: 'OVERDUE' },
      { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', filter: 'PAID' },
   ];
@@ -788,6 +785,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+        {displayMode === 'ORIGINAL'
+          ? originalPendingAmounts.map((summary) => <PurchaseKpiCard key={`pending-${summary.currency}`} title={`Por Pagar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />)
+          : <PurchaseKpiCard title={`Por Pagar (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(pendingTotalInDisplayCurrency, displayCurrency)} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="filter" active={statusFilter === k.filter} onClick={() => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); }} />
         ))}

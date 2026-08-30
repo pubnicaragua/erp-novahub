@@ -4,6 +4,7 @@ export interface ManagerGroup {
   id: string;
   name: string;
   slug: string;
+  consolidationCurrency?: string | null;
   logo?: string | null;
   enabledModules?: string[];
   catalogMode: string;

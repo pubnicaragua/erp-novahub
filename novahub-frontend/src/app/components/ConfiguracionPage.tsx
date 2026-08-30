@@ -9,7 +9,7 @@ import {
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, MessageSquare
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -37,9 +37,10 @@ import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
-import { PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
+import { SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
 import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
 import { optimizeImageFile } from '../utils/image-optimization';
+import { FastColorInput } from './ui/FastColorInput';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -328,6 +329,11 @@ interface ColorFieldProps {
 
 function ColorField({ label, description, hexValue, onHexChange }: ColorFieldProps) {
   const validHex = /^#[0-9a-fA-F]{6}$/.test(hexValue) ? hexValue : '#000000';
+  const [draftHex, setDraftHex] = useState(hexValue);
+
+  useEffect(() => {
+    setDraftHex(hexValue);
+  }, [hexValue]);
 
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border/50 p-3 transition-colors hover:bg-muted/20">
@@ -337,10 +343,9 @@ function ColorField({ label, description, hexValue, onHexChange }: ColorFieldPro
           className="pointer-events-none absolute inset-0 rounded-lg border-2 border-border shadow-sm transition-transform hover:scale-105"
           style={{ backgroundColor: validHex }}
         />
-        <input
-          type="color"
+        <FastColorInput
           value={validHex}
-          onChange={e => onHexChange(e.target.value)}
+          onChange={value => onHexChange(value)}
           aria-label={`Elegir ${label.toLowerCase()}`}
           className="absolute inset-0 z-10 size-full cursor-pointer opacity-0"
         />
@@ -350,9 +355,20 @@ function ColorField({ label, description, hexValue, onHexChange }: ColorFieldPro
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       <Input
-        value={hexValue}
-        onChange={e => { if (/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) onHexChange(e.target.value); }}
-        onBlur={() => { if (!/^#[0-9a-fA-F]{6}$/.test(hexValue)) onHexChange(validHex); }}
+        value={draftHex}
+        onChange={e => {
+          const next = e.target.value;
+          if (/^#[0-9a-fA-F]{0,6}$/.test(next)) {
+            setDraftHex(next);
+            if (/^#[0-9a-fA-F]{6}$/.test(next)) onHexChange(next);
+          }
+        }}
+        onBlur={() => {
+          if (!/^#[0-9a-fA-F]{6}$/.test(draftHex)) {
+            setDraftHex(validHex);
+            onHexChange(validHex);
+          }
+        }}
         aria-label={`Código hexadecimal de ${label.toLowerCase()}`}
         className="w-28 font-mono text-xs"
       />
@@ -498,7 +514,7 @@ function auditTimeAgo(iso?: string | null) {
 
 export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
-  const { user, canPerform } = useAuth();
+  const { user, userBranches, canPerform } = useAuth();
   const { refreshRate: refreshCurrencyContext } = useCurrency();
   const scenario = getScenario(user?.role);
   const visibleTabs = ALL_TABS.filter(t => {
@@ -847,7 +863,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [roles, setRoles] = useState<RoleManagement[]>([]);
   // @ts-ignore
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
-  const [, setIsLoadingModules] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   const [pendingDeleteRole, setPendingDeleteRole] = useState<RoleManagement | null>(null);
 
@@ -1388,6 +1403,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         <TabsContent value="documentos-pdf" className="space-y-6 mt-0">
           <PdfDocumentCustomizer
             tenantId={user?.tenantId}
+            branchName={userBranches.find((branch) => branch.id === user?.clientTenantId)?.name || user?.clientTenant?.name || user?.tenantName || ''}
             companyName={companyName || user?.tenantName || ''}
             corporateColor={themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981'}
             logo={logoPreview || themeConfig.logo}

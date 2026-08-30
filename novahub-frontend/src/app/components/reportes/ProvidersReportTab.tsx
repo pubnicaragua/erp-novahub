@@ -1,4 +1,4 @@
-import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { suppliersService, billsService, paymentsMadeService, purchaseOrdersService } from '../../services/compras.service';
@@ -9,13 +9,13 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Users, Scale, TrendingUp, Package, Activity, Truck, ShoppingBag, Wallet, CreditCard } from 'lucide-react';
+import { Users, TrendingUp, Package, Activity, CreditCard, DollarSign } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { cn } from '../ui/utils';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -66,7 +66,7 @@ function getRangeDates(range: string) {
 }
 
 export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
   const canViewPurchases = canPerform('PURCHASES', 'view');
@@ -96,17 +96,12 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
-  const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
+  const { start: currentStart } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 
   const fBills = useMemo(() => bills.filter(i => {
     const d = toDate(i.date || i.createdAt);
     return d && d >= currentStart;
   }), [bills, currentStart]);
-
-  const pBills = useMemo(() => bills.filter(i => {
-    const d = toDate(i.date || i.createdAt);
-    return d && d >= prevStart && d <= prevEnd;
-  }), [bills, prevStart, prevEnd]);
 
   const fPay = useMemo(() => payments.filter(p => {
     const d = toDate(p.date || p.createdAt);
@@ -117,16 +112,18 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const documentTotal = (b: any) => toBaseAmount(Number(b.total ?? b.baseTotal ?? 0), b.currency, sourceRate(b.exchangeRate));
   const paymentAmount = (p: any) => toBaseAmount(Number(p.amount ?? p.baseAmount ?? 0), p.currency, sourceRate(p.exchangeRate));
   const totalPurchased = useMemo(() => fBills.reduce((acc, b) => acc + documentTotal(b), 0), [fBills, exchangeRate, baseCurrency, valuationMode]);
-  const prevTotalPurchased = useMemo(() => pBills.reduce((acc, b) => acc + documentTotal(b), 0), [pBills, exchangeRate, baseCurrency, valuationMode]);
   const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + paymentAmount(p), 0), [fPay, exchangeRate, baseCurrency, valuationMode]);
   
   const payRatio = totalPurchased > 0 ? Math.min(100, (totalPaid / totalPurchased) * 100) : 0;
   const avgPurchasePerSupp = suppliers.length > 0 ? (totalPurchased / suppliers.length) : 0;
-
-  const getTrendValue = (curr: number, prev: number) => {
-    if (prev === 0) return curr > 0 ? 100 : 0;
-    return ((curr - prev) / prev) * 100;
-  };
+  const originalRows = [...fBills, ...fPay];
+  const originalCurrencies = summarizeAmountsByCurrency(originalRows, () => 0, (row: any) => row.currency || baseCurrency).map((item) => item.currency);
+  const originalSum = (rows: any[], amountOf: (row: any) => number, currency: SupportedCurrency) => rows.filter((row) => normalizeCurrency(row.currency || baseCurrency) === currency).reduce((sum, row) => sum + (Number.isFinite(amountOf(row)) ? amountOf(row) : 0), 0);
+  const originalPurchased = (currency: SupportedCurrency) => originalSum(fBills, (row) => Number(row.total ?? row.baseTotal ?? 0), currency);
+  const originalPaid = (currency: SupportedCurrency) => originalSum(fPay, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
+  const renderProviderMoneyKpi = (title: string, total: number, amountByCurrency: (currency: SupportedCurrency) => number, color: string, detail: (currency: SupportedCurrency) => string) => displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => <Card key={`${title}-${currency}`} className="relative overflow-hidden border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent transition-all hover:shadow-lg"><CardHeader className="pb-1"><CardTitle className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><DollarSign className="size-3.5 text-orange-500" /> {title} ({currency})</CardTitle></CardHeader><CardContent><p className={`text-xl font-black ${color}`}>{formatExplicitAmount(amountByCurrency(currency), currency)}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{detail(currency)}</p></CardContent></Card>)
+    : <Card className="relative overflow-hidden border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent transition-all hover:shadow-lg"><CardHeader className="pb-1"><CardTitle className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><DollarSign className="size-3.5 text-orange-500" /> {title} ({displayCurrency})</CardTitle></CardHeader><CardContent><p className={`text-xl font-black ${color}`}>{formatConvertedAmount(total, 'NIO')}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{valuationModeLabel}</p></CardContent></Card>;
 
   // ── 2 Tops ──
   const topSuppliers = useMemo(() => {
@@ -185,7 +182,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.providers', title: 'Reporte de proveedores', tenantName: companyName, tenantLogo: logoUrl, rows: suppliers, columns: [{ header: 'Proveedor', value: row => row.name || row.businessName || '—' }, { header: 'Identificación', value: row => row.taxId || row.ruc || '—' }, { header: 'Teléfono', value: row => row.phone || '—' }, { header: 'Estado', value: row => row.status || 'Activo' }], fileName: buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange) });
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.providers', title: 'Reporte de proveedores', tenantName: companyName, tenantLogo: logoUrl, rows: suppliers, columns: [{ header: 'Proveedor', value: row => row.name || row.businessName || '—' }, { header: 'Identificación', value: row => row.taxId || row.ruc || '—' }, { header: 'Teléfono', value: row => row.phone || '—' }, { header: 'Correo', value: row => row.email || row.emailAddress || '—' }, { header: 'Dirección', value: row => row.address || '—' }, { header: 'Estado', value: row => row.status || 'Activo' }], fileName: buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange) });
         if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
@@ -534,24 +531,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     <div className="space-y-8 animate-in fade-in duration-700">
       {/* ═══ KPI Cards (Dashboard Style) ═══ */}
       <div id="providers-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Total Adquirido */}
-        <Card className="border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ShoppingBag className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Truck className="size-3.5 text-orange-500" /> Compras a proveedores
-              {getTrendValue(totalPurchased, prevTotalPurchased) !== 0 && (
-                <span className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold", getTrendValue(totalPurchased, prevTotalPurchased) > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500")}>
-                  {getTrendValue(totalPurchased, prevTotalPurchased) > 0 ? '+' : ''}{getTrendValue(totalPurchased, prevTotalPurchased).toFixed(1)}%
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-orange-500">{formatConvertedAmount(totalPurchased, 'NIO')}</p>{valuationModeSuffix && <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{valuationModeLabel}</span>}
-            <p className="text-[10px] text-muted-foreground mt-0.5">{suppliers.length} proveedores registrados</p>
-          </CardContent>
-        </Card>
+        {renderProviderMoneyKpi('Compras a proveedores', totalPurchased, originalPurchased, 'text-orange-500', () => `${suppliers.length} proveedores registrados`)}
 
         {/* Órdenes por Recibir */}
         <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
@@ -567,33 +547,9 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           </CardContent>
         </Card>
 
-        {/* Pasivos Exigibles */}
-        <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Scale className="size-3.5 text-rose-500" /> Cuentas por Pagar
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(Math.max(0, totalPurchased - totalPaid), 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{payRatio.toFixed(1)}% de deuda saldada</p>
-          </CardContent>
-        </Card>
+        {renderProviderMoneyKpi('Cuentas por Pagar', Math.max(0, totalPurchased - totalPaid), (currency) => Math.max(0, originalPurchased(currency) - originalPaid(currency)), 'text-rose-500', () => `${payRatio.toFixed(1)}% de deuda saldada`)}
 
-        {/* Salud Crediticia */}
-        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><CreditCard className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <TrendingUp className="size-3.5 text-emerald-500" /> Pagos realizados
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(totalPaid, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Total liquidado con terceros</p>
-          </CardContent>
-        </Card>
+        {renderProviderMoneyKpi('Pagos realizados', totalPaid, originalPaid, 'text-emerald-500', () => 'Total liquidado con terceros')}
       </div>
 
       {/* ═══ Charts Row ═══ */}

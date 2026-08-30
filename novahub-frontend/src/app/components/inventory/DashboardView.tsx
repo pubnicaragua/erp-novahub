@@ -2,12 +2,22 @@ import { Package, Warehouse, AlertTriangle, TrendingUp, Clock } from 'lucide-rea
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 export function DashboardView({ products, warehouses, movements = [], transfers = [], adjustments = [] }: any) {
-  const { formatConvertedAmount, baseCurrency } = useCurrency();
+  const { displayCurrency, displayMode, valuationMode, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
-  const totalValue = products.reduce((acc: number, p: any) => acc + ((p.stock || 0) * (p.costPrice || 0)), 0);
+  const productValue = (product: any) => Number(product.stock || 0) * Number(product.costPrice || 0);
+  const totalValue = products.reduce((acc: number, product: any) => {
+    const amount = productValue(product);
+    return acc + (valuationMode === 'CURRENT' ? convertCurrentAmount(amount, product.currency) : convertAmount(amount, product.currency, product.exchangeRate));
+  }, 0);
+  const originalCurrencies = summarizeAmountsByCurrency(products, productValue, (product: any) => product.currency).map((item) => item.currency);
+  const originalValue = (currency: SupportedCurrency) => products
+    .filter((product: any) => normalizeCurrency(product.currency) === currency)
+    .reduce((acc: number, product: any) => acc + productValue(product), 0);
+  const originalProductCount = (currency: SupportedCurrency) => products.filter((product: any) => normalizeCurrency(product.currency) === currency).length;
   const totalStockUnits = products.reduce((acc: number, p: any) => acc + Number(p.stock || 0), 0);
   const averageTicketValue = products.length > 0 ? totalValue / products.length : 0;
   const lowStockCount = products.filter((p: any) => (p.stock || 0) < 10 && (p.stock || 0) > 0).length;
@@ -48,23 +58,28 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        {stats.map((stat, i) => (
-          <Card key={i} className="border">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">{stat.label}</p>
-                  <h3 className="text-2xl font-black mt-1 tracking-tighter italic">
-                    {stat.isCurrency ? formatConvertedAmount(stat.value as number, baseCurrency) : stat.value}
-                  </h3>
+        {stats.flatMap((stat, statIndex) => {
+          const entries = stat.isCurrency && displayMode === 'ORIGINAL'
+            ? originalCurrencies.map((currency) => ({ ...stat, label: `${stat.label} (${currency})`, value: stat.label === 'Valor Total' ? originalValue(currency) : originalValue(currency) / Math.max(1, originalProductCount(currency)), sourceCurrency: currency }))
+            : [{ ...stat, sourceCurrency: displayCurrency }];
+          return entries.map((entry, entryIndex) => (
+            <Card key={`${entry.label}-${statIndex}-${entryIndex}`} className="border">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">{entry.label}</p>
+                    <h3 className="mt-1 text-2xl font-black tracking-tighter italic">
+                      {entry.isCurrency ? formatExplicitAmount(entry.value as number, entry.sourceCurrency) : entry.value}
+                    </h3>
+                  </div>
+                  <div className={`rounded-lg p-2 ${entry.bg}`}>
+                    <entry.icon className={`size-4 ${entry.color}`} />
+                  </div>
                 </div>
-                <div className={`p-2 rounded-lg ${stat.bg}`}>
-                  <stat.icon className={`size-4 ${stat.color}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ));
+        })}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

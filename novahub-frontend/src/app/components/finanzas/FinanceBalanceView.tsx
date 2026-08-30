@@ -24,6 +24,7 @@ import {
 } from 'recharts';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface FinanceBalanceViewProps {
   incomes: any[];
@@ -48,7 +49,7 @@ function sortByRecentRegistration(items: any[]): any[] {
 }
 
 export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurringExpenses }: FinanceBalanceViewProps) {
-  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user } = useAuth();
   const { themeConfig } = useTheme();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
@@ -93,6 +94,52 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   const showExpenseKPIs = viewType === 'general' || viewType === 'solo-gastos';
   const showRecurring = viewType === 'general' || viewType === 'recurrentes';
   const showBalanceKPI = viewType === 'general';
+
+  const originalRows = viewType === 'solo-ingresos'
+    ? fIncomes
+    : viewType === 'solo-gastos'
+      ? fExpenses
+      : viewType === 'recurrentes'
+        ? [...recIncActive, ...recExpActive]
+        : [...fIncomes, ...fExpenses, ...recIncActive, ...recExpActive];
+  const originalCurrencies = summarizeAmountsByCurrency(originalRows, () => 0, (row: any) => row.currency).map((item) => item.currency);
+  const originalSum = (rows: any[], currency: SupportedCurrency) => rows
+    .filter((row: any) => normalizeCurrency(row.currency) === currency)
+    .reduce((sum: number, row: any) => sum + Number(row.amount ?? row.baseAmount ?? 0), 0);
+  const originalIncome = (currency: SupportedCurrency) => originalSum(fIncomes, currency);
+  const originalExpense = (currency: SupportedCurrency) => originalSum(fExpenses, currency);
+  const originalRecurringIncome = (currency: SupportedCurrency) => originalSum(recIncActive, currency);
+  const originalRecurringExpense = (currency: SupportedCurrency) => originalSum(recExpActive, currency);
+  const renderMoneyKpi = (
+    key: string,
+    title: string,
+    Icon: any,
+    total: number,
+    amountByCurrency: (currency: SupportedCurrency) => number,
+    cardClass: string,
+    valueClass: string,
+    detail: string,
+  ) => displayMode === 'ORIGINAL'
+    ? originalCurrencies.map((currency) => (
+      <Card key={`${key}-${currency}`} className={`${cardClass} relative overflow-hidden`}>
+        <div className="absolute top-2 right-2 opacity-10"><Icon className="size-12" /></div>
+        <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Icon className="size-4" />{title} ({currency})</CardTitle></CardHeader>
+        <CardContent>
+          <p className={`text-2xl font-black ${valueClass}`}>{formatExplicitAmount(amountByCurrency(currency), currency)}</p>
+          <p className="text-[10px] text-muted-foreground mt-1">{detail}</p>
+        </CardContent>
+      </Card>
+    ))
+    : (
+      <Card className={`${cardClass} relative overflow-hidden`}>
+        <div className="absolute top-2 right-2 opacity-10"><Icon className="size-12" /></div>
+        <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Icon className="size-4" />{title}{valuationModeSuffix}</CardTitle></CardHeader>
+        <CardContent>
+          <p className={`text-2xl font-black ${valueClass}`}>{formatExplicitAmount(total, displayCurrency)}</p>
+          <p className="text-[10px] text-muted-foreground mt-1">{detail}</p>
+        </CardContent>
+      </Card>
+    );
 
   // ─── Monthly chart data ────────────────────────────
   const monthlyData = useMemo(() => {
@@ -1049,47 +1096,32 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
 
       {/* KPIs */}
       <div id="balance-kpis" className={`grid gap-4 ${showBalanceKPI ? 'md:grid-cols-2 lg:grid-cols-4' : showRecurring && viewType === 'recurrentes' ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
-        {showIncomeKPIs && (
-          <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden">
-            <div className="absolute top-2 right-2 opacity-10"><TrendingUp className="size-12" /></div>
-            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><ArrowUpRight className="size-4 text-emerald-500" />Total Ingresos</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-2xl font-black text-emerald-500">{sym}{totalIncome.toLocaleString(undefined,{maximumFractionDigits:2})}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">{fIncomes.length} registros</p>
-            </CardContent>
-          </Card>
-        )}
-        {showExpenseKPIs && (
-          <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden">
-            <div className="absolute top-2 right-2 opacity-10"><TrendingDown className="size-12" /></div>
-            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><ArrowDownRight className="size-4 text-rose-500" />Total Gastos</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-2xl font-black text-rose-500">{sym}{totalExpense.toLocaleString(undefined,{maximumFractionDigits:2})}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">{fExpenses.length} registros</p>
-            </CardContent>
-          </Card>
-        )}
-        {showBalanceKPI && (
-          <Card className={cn(balance >= 0 ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5' : 'border-rose-500/20 bg-gradient-to-br from-rose-500/5', 'to-transparent relative overflow-hidden')}>
-            <div className="absolute top-2 right-2 opacity-10"><Scale className="size-12" /></div>
-            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Wallet className="size-4" />Balance Neto{valuationModeSuffix}</CardTitle></CardHeader>
-            <CardContent>
-              <p className={`text-2xl font-black ${balance>=0?'text-emerald-500':'text-rose-500'}`}>{sym}{balance.toLocaleString(undefined,{maximumFractionDigits:2})}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">Margen: {margin}%</p>
-            </CardContent>
-          </Card>
-        )}
-        {showRecurring && (
-          <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent relative overflow-hidden">
-            <div className="absolute top-2 right-2 opacity-10"><CalendarClock className="size-12" /></div>
-            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Activity className="size-4 text-purple-500" />Recurrentes Activos</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-sm font-bold text-emerald-500">+{sym}{totalRecInc.toLocaleString(undefined,{maximumFractionDigits:0})}/ciclo</p>
-              <p className="text-sm font-bold text-rose-500">-{sym}{totalRecExp.toLocaleString(undefined,{maximumFractionDigits:0})}/ciclo</p>
-              <p className="text-[10px] text-muted-foreground mt-1">{recIncActive.length} ing. · {recExpActive.length} gto.</p>
-            </CardContent>
-          </Card>
-        )}
+        {showIncomeKPIs && renderMoneyKpi('income', 'Total Ingresos', TrendingUp, totalIncome, originalIncome, 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent', 'text-emerald-500', `${fIncomes.length} registros`)}
+        {showExpenseKPIs && renderMoneyKpi('expense', 'Total Gastos', TrendingDown, totalExpense, originalExpense, 'border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent', 'text-rose-500', `${fExpenses.length} registros`)}
+        {showBalanceKPI && renderMoneyKpi('balance', 'Balance Neto', Wallet, balance, (currency) => originalIncome(currency) - originalExpense(currency), balance >= 0 ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent' : 'border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent', balance >= 0 ? 'text-emerald-500' : 'text-rose-500', `Margen: ${margin}%`)}
+        {showRecurring && (displayMode === 'ORIGINAL'
+          ? originalCurrencies.map((currency) => (
+            <Card key={`recurring-${currency}`} className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent relative overflow-hidden">
+              <div className="absolute top-2 right-2 opacity-10"><CalendarClock className="size-12" /></div>
+              <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Activity className="size-4 text-purple-500" />Recurrentes Activos ({currency})</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm font-bold text-emerald-500">+{formatExplicitAmount(originalRecurringIncome(currency), currency)}/ciclo</p>
+                <p className="text-sm font-bold text-rose-500">-{formatExplicitAmount(originalRecurringExpense(currency), currency)}/ciclo</p>
+                <p className="text-[10px] text-muted-foreground mt-1">{recIncActive.filter((r: any) => normalizeCurrency(r.currency) === currency).length} ing. · {recExpActive.filter((r: any) => normalizeCurrency(r.currency) === currency).length} gto.</p>
+              </CardContent>
+            </Card>
+          ))
+          : (
+            <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent relative overflow-hidden">
+              <div className="absolute top-2 right-2 opacity-10"><CalendarClock className="size-12" /></div>
+              <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Activity className="size-4 text-purple-500" />Recurrentes Activos{valuationModeSuffix}</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm font-bold text-emerald-500">+{formatExplicitAmount(totalRecInc, displayCurrency)}/ciclo</p>
+                <p className="text-sm font-bold text-rose-500">-{formatExplicitAmount(totalRecExp, displayCurrency)}/ciclo</p>
+                <p className="text-[10px] text-muted-foreground mt-1">{recIncActive.length} ing. · {recExpActive.length} gto.</p>
+              </CardContent>
+            </Card>
+          ))}
       </div>
 
       <div id="balance-monthly-chart">

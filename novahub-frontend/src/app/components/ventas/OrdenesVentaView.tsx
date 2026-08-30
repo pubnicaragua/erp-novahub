@@ -38,6 +38,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
+import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
@@ -98,7 +99,7 @@ const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] 
 };
 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, formatAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
   const { themeConfig } = useTheme();
@@ -354,6 +355,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     status: String(order.status || ''),
     sourceLabel: order.estimateId ? 'Desde cotización' : undefined,
     totalLabel: formatConvertedAmount(Number(order.total || 0), order.currency, order.exchangeRate),
+    sourceCurrency: order.currency,
+    sourceExchangeRate: order.exchangeRate,
     summaryDetails: [
       { label: 'Moneda', value: order.currency || 'NIO' },
       { label: 'Líneas', value: String(order.items?.length || 0) },
@@ -773,9 +776,15 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const approvedAmountInDisplayCurrency = data
     .filter(order => normalizeOrderStatus(order.status) === 'APPROVED')
-    .reduce((acc, order) => acc + ((order as any).baseTotal !== null && (order as any).baseTotal !== undefined
-      ? Number((order as any).baseTotal)
-      : toBaseAmount(order.total || 0, order.currency, order.exchangeRate)), 0);
+    // `total` + la tasa histórica son la fuente de verdad. `baseTotal` puede
+    // pertenecer a registros antiguos que quedaron desfasados.
+    .reduce((acc, order) => acc + toBaseAmount(order.total || 0, order.currency, order.exchangeRate), 0);
+  const originalApprovedAmounts = summarizeAmountsByCurrency(
+    data.filter(order => normalizeOrderStatus(order.status) === 'APPROVED'),
+    (order) => Number(order.total || 0),
+    (order) => order.currency,
+    baseCurrency,
+  );
 
   if (editingId && localDoc) {
     return (
@@ -1373,7 +1382,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title="Órdenes en Proceso" value={data.filter(o => normalizeOrderStatus(o.status) === 'IN_PROCESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
-        <SalesKpiCard title={`Monto Aprobado (${baseCurrency})`} value={formatConvertedAmount(approvedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
+        {displayMode === 'ORIGINAL'
+          ? originalApprovedAmounts.map((summary) => <SalesKpiCard key={`approved-${summary.currency}`} title={`Monto Aprobado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />)
+          : <SalesKpiCard title={`Monto Aprobado (${displayCurrency})`} value={formatConvertedAmount(approvedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />}
         <SalesKpiCard title="Órdenes Aprobadas" value={data.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length} icon={Check} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
         <SalesKpiCard title="Órdenes en Borrador" value={data.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length} icon={Eye} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
       </div>
