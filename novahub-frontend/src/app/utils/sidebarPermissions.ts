@@ -40,7 +40,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_ORDERS', label: 'Órdenes de compra', parent: 'PURCHASES' },
   { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_INVOICES_REC', label: 'Facturas de proveedor rec.', parent: 'PURCHASES' },
+  { id: 'PURCHASES_INVOICES_REC', label: 'Compras recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos realizados', parent: 'PURCHASES' },
   { id: 'PURCHASES_RETURNS', label: 'Créditos del proveedor', parent: 'PURCHASES' },
 

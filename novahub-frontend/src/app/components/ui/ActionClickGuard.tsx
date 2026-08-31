@@ -16,6 +16,7 @@ interface ActionLockRecord {
   startedAt: number;
   sawMutation: boolean;
   fallbackTimer: number;
+  disableTimer: number;
   releaseTimer?: number;
 }
 
@@ -63,6 +64,7 @@ function isLockableAction(button: HTMLButtonElement): boolean {
 function restoreButton(record: ActionLockRecord) {
   const { button } = record;
   if (record.fallbackTimer) window.clearTimeout(record.fallbackTimer);
+  if (record.disableTimer) window.clearTimeout(record.disableTimer);
   if (record.releaseTimer) window.clearTimeout(record.releaseTimer);
   if (!button.isConnected) return;
 
@@ -103,15 +105,24 @@ export function ActionClickGuard() {
         startedAt: Date.now(),
         sawMutation: false,
         fallbackTimer: 0,
+        disableTimer: 0,
       };
       activeLocks.add(record);
       button.dataset.actionBusy = 'true';
       button.setAttribute('aria-busy', 'true');
-      // Let the current click reach React first. Disabling during capture can
-      // otherwise interfere with synthetic click handlers in some browsers.
-      queueMicrotask(() => {
+      // A submit button must remain enabled until the current click has
+      // completed its native default action and React has received onSubmit.
+      // Disabling it in a microtask can cancel that submit in some browsers,
+      // leaving forms (login, registration and module dialogs) stuck in the
+      // visual busy state without ever starting their request.
+      const disableButton = () => {
         if (activeLocks.has(record) && !record.wasDisabled) button.disabled = true;
-      });
+      };
+      if (button.type === 'submit') {
+        record.disableTimer = window.setTimeout(disableButton, 0);
+      } else {
+        queueMicrotask(disableButton);
+      }
       record.fallbackTimer = window.setTimeout(() => releaseIfReady(record), FALLBACK_LOCK_MS);
     };
 

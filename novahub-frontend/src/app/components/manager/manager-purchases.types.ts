@@ -19,7 +19,7 @@ export const MANAGER_PURCHASES_VIEWS: Array<{ id: ManagerPurchasesView; label: s
   { id: 'orders', label: 'Órdenes de compra' },
   { id: 'receipts', label: 'Recepciones' },
   { id: 'invoices', label: 'Facturas de proveedor' },
-  { id: 'recurring', label: 'Facturas recurrentes' },
+  { id: 'recurring', label: 'Compras recurrentes' },
   { id: 'payments', label: 'Pagos realizados' },
   { id: 'credits', label: 'Créditos de proveedor' },
   { id: 'expenses', label: 'Gastos' },

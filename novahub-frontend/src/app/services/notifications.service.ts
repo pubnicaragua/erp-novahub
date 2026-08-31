@@ -12,6 +12,7 @@ interface InboxNotificationDto {
   isRead: boolean;
   createdAt: string;
   link?: string | null;
+  dedupeKey?: string | null;
   metadata?: unknown;
 }
 
@@ -46,12 +47,35 @@ export type NotificationRecordLike = {
   timestamp?: string;
   userId?: string | null;
   type?: string | null;
+  link?: string | null;
+  dedupeKey?: string | null;
+};
+
+const stableJson = (value: unknown): string => {
+  const normalize = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(normalize);
+    if (input && typeof input === 'object') {
+      return Object.keys(input as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((result, key) => {
+          result[key] = normalize((input as Record<string, unknown>)[key]);
+          return result;
+        }, {});
+    }
+    return input;
+  };
+
+  try {
+    return JSON.stringify(normalize(value)) || '';
+  } catch {
+    return '';
+  }
 };
 
 /** Defensive client-side collapse for old rows and concurrent API responses. */
 export function notificationEventKey(item: NotificationRecordLike): string {
   const metadata = metadataObject(item.metadata);
-  const explicit = String(metadata.dedupeKey || '').trim();
+  const explicit = String(item.dedupeKey || metadata.dedupeKey || '').trim();
   if (explicit) return `key:${explicit}`;
 
   const kind = String(metadata.kind || '').trim();
@@ -65,7 +89,25 @@ export function notificationEventKey(item: NotificationRecordLike): string {
     || metadata.eventId
     || '',
   ).trim();
-  return kind && entityId ? `entity:${kind}:${entityId}` : `id:${item.id}`;
+  if (kind && entityId) return `entity:${kind}:${entityId}`;
+
+  const notificationType = String(item.type || '').trim().toUpperCase();
+  const isSystemNotification = notificationType === 'ALERT'
+    || notificationType === 'PUSH'
+    || item.type === 'warning'
+    || item.type === 'error';
+  if (!isSystemNotification) return `id:${item.id}`;
+
+  // Defensive fallback for old system rows that were created before the
+  // backend stored a business dedupe key. Scope it to the same calendar day
+  // so a legitimate reminder on a later day is not hidden.
+  const rawDate = item.createdAt || item.timestamp || '';
+  const parsedDate = new Date(rawDate);
+  const day = Number.isNaN(parsedDate.getTime()) ? 'unknown' : parsedDate.toISOString().slice(0, 10);
+  const title = String(item.title || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const content = String(item.content || item.message || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const link = String(item.link || '').trim().toLocaleLowerCase();
+  return `legacy:${day}:${title}:${content}:${link}:${stableJson(metadata)}`;
 }
 
 export function dedupeNotificationRecords<T extends NotificationRecordLike>(items: T[]): T[] {
@@ -139,6 +181,7 @@ const mapInboxNotification = (item: InboxNotificationDto): Notification => {
     timestamp: item.createdAt,
     read: item.isRead,
     link: item.link || null,
+    dedupeKey: item.dedupeKey || null,
     metadata: item.metadata,
   };
 };

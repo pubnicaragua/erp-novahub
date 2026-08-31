@@ -110,7 +110,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
   { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_INVOICES_REC', label: 'Facturas de Proveedor Rec.', parent: 'PURCHASES' },
+  { id: 'PURCHASES_INVOICES_REC', label: 'Compras Recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', parent: 'PURCHASES' },
   { id: 'PURCHASES_RETURNS', label: 'Créditos de Proveedor', parent: 'PURCHASES' },
 

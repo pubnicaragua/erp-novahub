@@ -111,7 +111,7 @@ const TUTORIALS: Record<PurchaseTutorialView, PurchaseTutorial> = {
     form: { label: 'Cómo registrar factura de proveedor', description: 'Registra una factura recibida y relaciona sus importes con el proveedor y la orden correspondiente.', data: 'Completa proveedor, número, fechas, orden de compra, moneda y condiciones de pago.', items: 'Agrega los productos o servicios facturados y revisa cantidades, precios, impuestos y descuentos.', summary: 'Confirma total, vencimiento, cuenta por pagar y comprobantes adjuntos.', actions: 'Guarda la factura y registra el pago desde el documento cuando corresponda.', tip: 'Relacionar la factura con su orden evita diferencias entre lo pedido, recibido y facturado.', steps: ['title', 'data', 'items', 'summary', 'actions'] },
   },
   'recurring-invoices': {
-    title: 'Facturas Recurrentes', listLabel: 'Cómo programar facturas de proveedor',
+    title: 'Compras Recurrentes', listLabel: 'Cómo programar compras recurrentes',
     description: 'Administra contratos y servicios que generan facturas de proveedor de forma periódica.',
     kpis: 'Activas y pausadas son filtros por estado; el monto recurrente y la próxima emisión funcionan como indicadores de planificación.',
     filters: 'Busca por proveedor, concepto o contrato y revisa la frecuencia antes de cambiar de página.',

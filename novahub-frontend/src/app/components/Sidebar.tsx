@@ -147,7 +147,7 @@ const menuItems: MenuItem[] = [
       { id: 'gastos-recurrentes', label: 'Gastos recurrentes', icon: <CalendarClock className="size-4" /> },
       { id: 'ordenes-compra', label: 'Órdenes de compra', icon: <ClipboardList className="size-4" /> },
       { id: 'recepciones-compra', label: 'Recepciones de compra', icon: <PackageCheck className="size-4" /> },
-      { id: 'facturas-proveedor-rec', label: 'Facturas de proveedor rec.', icon: <RotateCcw className="size-4" /> },
+      { id: 'facturas-proveedor-rec', label: 'Compras recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'pagos-realizados', label: 'Pagos realizados', icon: <Banknote className="size-4" /> },
       { id: 'creditos-proveedor', label: 'Créditos del proveedor', icon: <BadgeDollarSign className="size-4" /> },
     ]

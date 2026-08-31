@@ -1415,6 +1415,7 @@ export interface Notification {
   timestamp: string;
   read: boolean;
   link?: string | null;
+  dedupeKey?: string | null;
   metadata?: unknown;
 }
 
