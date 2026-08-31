@@ -1,0 +1,143 @@
+Rule: deslop/unused-export
+Severity: warning
+Category: Maintainability
+Count: 45
+
+Unused export: `NovaHubLogoFull` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `ManagerInventorySubnav` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `isValidSupplierCredit` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `toNio` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `daysUntil` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `NovaCustomersIcon` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `NovaSalesIcon` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `NovaInventoryIcon` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `NovaReportsIcon` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `NovaFinanceIcon` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `recurringBillsService` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `getImpactPreviews` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `journalEntriesService` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `transactionsService` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `balanceService` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `notificationsCatalogService` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `getPdfTemplateTargetByLegacyKey` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `getPdfTemplateLegacyKey` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `SALES_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `PURCHASES_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `INVENTORY_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `FINANCIAL_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `HR_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `NOTIFICATIONS_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `ACTIVITIES_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `DOCUMENTS_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `REPORTS_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `ACCOUNTING_SUBMODULES` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `getVariantAttributeValue` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `isValidPassword` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `disableBrowserNotifications` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `parseCsvBoolean` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `toCsvBoolean` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `parseCsvText` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `downloadCsv` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `getCustomerBalancePresentation` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `formatCustomerBalance` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `todayIso` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `getBase64Image` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `PERMISSION_ACTION_KEYS` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `generatePrintableDocument` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `getConfiguredPriceForVariant` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `buildLineDescription` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `getLineSku` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Unused export: `isTaxable` is exported but no module imports it, so it expands the public surface and can mislead callers about supported API.
+
+Suggestion: Drop the `export` keyword (or remove the declaration) if no other module uses this symbol.
+
+Files:
+  src/app/components/NovaHubLogo.tsx:55
+  src/app/components/manager/ManagerInventoryAdjustmentsView.tsx:49
+  src/app/components/reportes/financialAnalytics.ts:117
+  src/app/components/reportes/financialAnalytics.ts:149
+  src/app/components/reportes/financialAnalytics.ts:163
+  src/app/components/ui/NovaIcons.tsx:42
+  src/app/components/ui/NovaIcons.tsx:53
+  src/app/components/ui/NovaIcons.tsx:63
+  src/app/components/ui/NovaIcons.tsx:73
+  src/app/components/ui/NovaIcons.tsx:85
+  src/app/services/compras.service.ts:151
+  src/app/services/country-config.service.ts:345
+  src/app/services/finanzas.service.ts:45
+  src/app/services/finanzas.service.ts:52
+  src/app/services/finanzas.service.ts:56
+  src/app/services/notificaciones.service.ts:146
+  src/app/services/pdf-document-catalog.ts:74
+  src/app/services/pdf-document-catalog.ts:78
+  src/app/types/modules.ts:23
+  src/app/types/modules.ts:24
+  src/app/types/modules.ts:25
+  src/app/types/modules.ts:26
+  src/app/types/modules.ts:27
+  src/app/types/modules.ts:28
+  src/app/types/modules.ts:29
+  src/app/types/modules.ts:30
+  src/app/types/modules.ts:31
+  src/app/types/modules.ts:32
+  src/app/types/variants.ts:68
+  src/app/utils/accountValidation.ts:22
+  src/app/utils/browserNotifications.ts:44
+  src/app/utils/chartOfAccountsCsv.ts:42
+  src/app/utils/chartOfAccountsCsv.ts:50
+  src/app/utils/chartOfAccountsCsv.ts:62
+  src/app/utils/chartOfAccountsCsv.ts:95
+  src/app/utils/customerBalance.ts:26
+  src/app/utils/customerBalance.ts:58
+  src/app/utils/dateFormat.ts:19
+  src/app/utils/export-utils.ts:1
+  src/app/utils/permissions.ts:27
+  src/app/utils/printUtils.ts:268
+  src/app/utils/salesPriceList.ts:142
+  src/app/utils/salesPriceList.ts:187
+  src/app/utils/salesPriceList.ts:200
+  src/app/utils/taxUtils.ts:16

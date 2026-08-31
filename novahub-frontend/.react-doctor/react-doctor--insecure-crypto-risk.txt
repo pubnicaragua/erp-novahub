@@ -1,0 +1,30 @@
+Rule: react-doctor/insecure-crypto-risk
+Severity: warning
+Category: Security
+Count: 18
+
+Code uses weak hashes, deprecated ciphers, timing-unsafe comparisons, or Math.random in a security-shaped context.
+
+Suggestion: Use modern primitives, `crypto.randomBytes` / Web Crypto randomness, and timing-safe comparisons for signatures, digests, tokens, and auth material.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/insecure-crypto-risk
+
+Files:
+  .codex-build-currency/assets/EnterpriseGroupsAdminView-D-Ee0VOC.js:1
+  .codex-build-currency/assets/InventarioPage-CZvzvbUQ.js:12
+  .codex-build-currency/assets/NotificacionesPage-CG3sbxHQ.js:1
+  .codex-build-currency/assets/SuscripcionesPage-KwiIhu2l.js:1
+  .codex-build-currency/assets/exceljs.min-D3rsve49.js:8
+  .codex-build-currency/assets/index-C-MiAtUJ.js:24
+  .codex-build-currency/assets/pdf-dpzDaAzT.js:32
+  .codex-build-currency/assets/pdf.worker.min-yatZIOMy.mjs:21
+  .codex-build-currency/assets/ui-Bh04ISP8.js:29
+  .codex-build-modal/assets/EnterpriseGroupsAdminView-BwUf9jI8.js:1
+  .codex-build-modal/assets/InventoryDetailPanel-CR0ALf39.js:12
+  .codex-build-modal/assets/NotificacionesPage-Nwvy_oY_.js:1
+  .codex-build-modal/assets/SuscripcionesPage-DIK5aMyG.js:1
+  .codex-build-modal/assets/exceljs.min-DyXd0kgi.js:8
+  .codex-build-modal/assets/index-D-EBOu1j.js:24
+  .codex-build-modal/assets/pdf-dpzDaAzT.js:32
+  .codex-build-modal/assets/pdf.worker.min-yatZIOMy.mjs:21
+  .codex-build-modal/assets/ui-Bh04ISP8.js:29

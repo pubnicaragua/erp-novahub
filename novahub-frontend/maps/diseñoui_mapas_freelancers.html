@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mapa Comercial Nova Hub ERP · Managua</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+ --ink:#11241f;--muted:#6c7c77;--line:#dce8e3;--green:#08785a;--green2:#12aa7b;--amber:#eea13d;--gray:#83928d;--panel:#fbfdfc;
+ --sheet:420px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;font-family:Poppins,system-ui,sans-serif;background:#e8f0ed;color:var(--ink)}
+button,input,select,textarea{font:inherit}
+#map{position:fixed;top:0;right:0;bottom:0;left:var(--sheet);width:calc(100vw - var(--sheet));height:100vh;min-height:320px;z-index:1}
+.map-status{position:fixed;z-index:950;left:calc(var(--sheet) + 50%);top:50%;transform:translate(-50%,-50%);width:min(430px,calc(100% - var(--sheet) - 32px));padding:18px 20px;border:1px solid rgba(8,120,90,.18);border-radius:16px;background:rgba(255,255,255,.97);box-shadow:0 18px 45px rgba(12,53,43,.18);color:var(--ink);text-align:center}.map-status[hidden]{display:none}.map-status b{display:block;font-size:13px;margin-bottom:6px}.map-status span{display:block;font-size:10px;line-height:1.55;color:var(--muted)}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sheet);background:rgba(251,253,252,.985);border-right:1px solid rgba(16,71,57,.11);display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(12,53,43,.16);z-index:1000}
+.brand{padding:18px;background:radial-gradient(circle at 82% 12%,rgba(96,225,178,.28),transparent 34%),linear-gradient(145deg,#0b2f29,#08705a);color:white}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.logo{display:flex;align-items:center;gap:9px;font-weight:800}
+.logoicon{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d}
+.badge{font-size:9px;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 8px;background:rgba(255,255,255,.10)}
+.brand h1{font-size:21px;line-height:1.15;margin:14px 0 6px;letter-spacing:-.5px}
+.brand p{font-size:10px;line-height:1.5;margin:0;color:rgba(255,255,255,.75)}
+.live{margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.10);font-size:9px;display:flex;gap:7px;align-items:flex-start}
+.dot{width:7px;height:7px;border-radius:50%;background:#8df1be;box-shadow:0 0 0 4px rgba(141,241,190,.12);margin-top:3px;flex:0 0 auto}
+.scroll{overflow:auto;padding:14px 14px 20px}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:12px}
+.kpi{background:white;border:1px solid var(--line);border-radius:13px;padding:8px 7px;cursor:pointer;transition:.18s}
+.kpi:hover,.kpi.active{border-color:#4fc39d;box-shadow:0 5px 14px rgba(8,120,90,.12);transform:translateY(-1px)}
+.kpi b{display:block;font-size:17px;line-height:1}
+.kpi span{display:block;font-size:7.5px;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:4px}
+.search-row{display:flex;gap:6px;align-items:stretch;margin-bottom:5px}
+.search{position:relative;flex:1;min-width:0}
+.search input{width:100%;height:42px;border:1px solid var(--line);border-radius:13px;padding:0 42px 0 12px;background:white;outline:none;font-size:11px}
+.search input:focus{border-color:#70cbb0;box-shadow:0 0 0 4px rgba(16,160,117,.09)}
+.search button{position:absolute;right:5px;top:5px;width:32px;height:32px;border:0;border-radius:9px;background:#e8f4ef;color:#08785a;font-weight:900;cursor:pointer}
+.search button:hover{background:#cdeee0}
+.search-zone{border:1px solid #cfe6dc;border-radius:11px;background:#edf8f3;color:#0b7155;padding:0 9px;font-size:8.5px;font-weight:800;cursor:pointer;white-space:nowrap}
+.search-zone:hover{background:#d9f1e7}
+.search-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:17px;margin:0 2px 9px;color:#788984;font-size:8px}
+.search-meta button{border:0;background:transparent;color:#08785a;font-size:8px;font-weight:700;cursor:pointer;padding:2px 0}
+.sect{margin:12px 0}
+.stitle{display:flex;justify-content:space-between;align-items:center;margin:0 2px 7px;font-size:9px;text-transform:uppercase;letter-spacing:.75px;color:#61736d;font-weight:700}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:white;border-radius:10px;padding:7px 9px;color:#496058;font-size:9px;cursor:pointer}
+.chip.active{background:#123f35;color:white;border-color:#123f35}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+select{width:100%;border:1px solid var(--line);border-radius:11px;background:white;padding:9px 8px;font-size:9.5px;color:#42564f;outline:none}
+.segment{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;background:#eff6f3;border:1px solid var(--line);padding:3px;border-radius:12px}
+.segment button{border:0;background:transparent;border-radius:9px;padding:7px 4px;color:#667772;font-size:9px;cursor:pointer}
+.segment button.active{background:white;color:#0b7456;font-weight:700;box-shadow:0 3px 10px rgba(18,73,59,.11)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.actions #opportunities{grid-column:1/-1}
+.btn{border:0;border-radius:12px;padding:10px 8px;font-size:9.5px;font-weight:700;cursor:pointer}
+.primary{background:linear-gradient(135deg,#087858,#12a779);color:white}
+.secondary{background:#e9f4f0;color:#0b7055;border:1px solid #d5e9e1}
+.resultsHead{display:flex;justify-content:space-between;align-items:center;margin:14px 2px 7px;font-size:9px;color:var(--muted)}
+.resultsHead b{font-size:10.5px;color:var(--ink)}
+.list{display:flex;flex-direction:column;gap:6px}
+.kanban-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.kanban-column{min-width:0;background:#f1f7f4;border:1px solid #d9e9e2;border-radius:12px;padding:7px}
+.kanban-column-head{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:6px;font-size:8px;font-weight:800;color:#123f35}
+.kanban-column-head span{min-width:19px;height:19px;display:grid;place-items:center;border-radius:7px;background:#d8eee5;color:#08785a;font-size:8px}
+.kanban-cards{display:flex;flex-direction:column;gap:5px}
+.kanban-card{background:white;border:1px solid #dce8e3;border-radius:9px;padding:7px;box-shadow:0 3px 8px rgba(16,56,45,.06)}
+.kanban-card b{display:block;font-size:8.5px;line-height:1.25}
+.kanban-card .meta{font-size:7.5px;margin-top:2px}
+.kanban-card select{margin-top:5px;height:27px;padding:4px 5px;font-size:7.5px;border-radius:7px}
+.kanban-card button{width:100%;margin-top:4px;border:1px solid #d8e9e2;border-radius:7px;background:#eff8f4;color:#08785a;padding:5px;font-size:7.5px;font-weight:800;cursor:pointer}
+.kanban-empty{grid-column:1/-1;border:1px dashed #b9d9cb;border-radius:12px;background:#f4faf7;padding:15px;text-align:center;color:#6c7c77;font-size:9px;line-height:1.45}
+.item{border:1px solid var(--line);border-radius:12px;background:white;padding:9px 10px;cursor:pointer}
+.itemtop{display:flex;gap:8px;align-items:flex-start}
+.pill{flex:0 0 24px;width:24px;height:24px;border-radius:8px;color:white;display:grid;place-items:center;font-weight:800;font-size:9px}
+.pa{background:var(--green)}.pb{background:var(--amber)}.pc{background:var(--gray)}
+.itemname{font-size:10px;font-weight:700;line-height:1.25}
+.meta{font-size:8px;color:#74837e;margin-top:3px}
+.status{display:inline-flex;margin-top:6px;padding:3px 6px;border-radius:999px;background:#eff4f2;color:#64756f;font-size:7.5px}
+.marker{width:30px;height:30px;border-radius:10px;border:2px solid white;display:grid;place-items:center;box-shadow:0 4px 11px rgba(10,49,39,.28);position:relative}
+.marker:after{content:'';position:absolute;inset:-4px;border-radius:13px;border:2px solid var(--marker-ring,#9cacaa);opacity:.8}
+.marker span{font-weight:900;font-size:10px;letter-spacing:-.5px;color:white;position:relative;z-index:1}
+.ma{background:var(--green)}.mb{background:var(--amber)}.mc{background:var(--gray)}
+.marker.selected{--marker-ring:#3287e8}.marker.kanban{--marker-ring:#12aa7b}.marker.visited{--marker-ring:#84d795}.marker.interested{--marker-ring:#0b9d68}.marker.discarded{--marker-ring:#86958f;opacity:.62}
+.cluster-brand{width:42px;height:42px;border-radius:15px;background:#123f35;border:3px solid #b4f4d8;color:white;display:flex;align-items:center;justify-content:center;gap:3px;box-shadow:0 6px 15px rgba(12,53,43,.28);font-size:10px;font-weight:900}.cluster-brand span{font-size:13px;color:#8df1be}.cluster-brand b{font-size:11px}
+.fabbar{position:fixed;z-index:900;left:calc(var(--sheet) + 14px);top:14px;display:flex;gap:7px}
+.float{border:1px solid rgba(25,77,63,.12);background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:12px;padding:8px 10px;font-size:9px;font-weight:600;color:#294c42;box-shadow:0 7px 22px rgba(18,57,47,.13)}
+.legend{position:fixed;z-index:900;right:15px;bottom:18px;background:rgba(255,255,255,.96);border:1px solid rgba(28,87,69,.12);border-radius:13px;padding:10px 11px;font-size:8px;box-shadow:0 10px 26px rgba(16,56,45,.15)}
+.legend b{font-size:9px}.lr{display:flex;gap:6px;align-items:center;margin-top:5px}.ld{width:8px;height:8px;border-radius:50%}
+.business-label{background:rgba(255,255,255,.96)!important;border:1px solid rgba(18,74,59,.15)!important;border-radius:7px!important;box-shadow:0 4px 10px rgba(17,55,46,.12)!important;font-family:Poppins!important;font-size:9px!important;font-weight:600!important;padding:4px 6px!important;color:#173b31!important}
+.business-label:before{display:none!important}
+.popup{font-family:Poppins;min-width:260px}
+.popup h3{font-size:14px;margin:0 0 4px;line-height:1.25}
+.popup .sub{font-size:9px;color:#71817b;margin-bottom:8px}
+.grid{display:grid;grid-template-columns:75px 1fr;gap:5px 7px;font-size:8.7px}.grid b{color:#51655e}
+.warn{margin:8px 0;padding:7px 8px;border-radius:8px;background:#fff4df;color:#7e5519;font-size:8px}
+.popactions{display:flex;gap:6px;margin:7px 0}.popactions a{flex:1;text-decoration:none;text-align:center;padding:7px;border-radius:8px;background:#e8f4ef;color:#0b7155;font-size:8.5px;font-weight:700}
+.popquick{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:8px 0}.popquick button,.item-actions button{border:1px solid #d8e9e2;border-radius:8px;background:#f2f8f5;color:#0b7155;padding:7px 5px;font-size:8px;font-weight:800;cursor:pointer}.popquick button.primary-action,.item-actions button.primary-action{background:#123f35;color:white;border-color:#123f35}.popquick button.visit-action{background:#ecf9ee;color:#277443;border-color:#ccebd2}
+.crm{border-top:1px solid #e4ece9;padding-top:7px;margin-top:7px}.crm label{display:block;font-size:7.5px;text-transform:uppercase;font-weight:700;color:#62746e}
+.crm select,.crm input,.crm textarea{width:100%;border:1px solid #dfe8e4;border-radius:8px;padding:6px;margin:3px 0 5px;font-size:8.5px}.crm textarea{height:42px;resize:vertical}.crm button{width:100%;border:0;border-radius:8px;background:#123e35;color:white;padding:7px;font-size:8.5px;font-weight:700}.crm input[type=file]{padding:5px;background:#f7fbf9}.visit-readout{font-size:8px;color:#277443;background:#ecf9ee;border-radius:7px;padding:6px;margin:4px 0}
+.bulkbar{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:10px 0 3px;padding:8px;border-radius:12px;background:#edf7f2;border:1px solid #d5e9e1}.bulkbar b{font-size:9px;margin-right:auto}.bulkbar button{border:0;border-radius:8px;padding:6px 7px;background:white;color:#0b7155;font-size:8px;font-weight:800;cursor:pointer}.bulkbar button:hover{background:#d7f0e6}.item-actions{display:flex;gap:5px;margin-top:7px}.item-actions button{flex:1;padding:6px 4px}.item.selected-item{border-color:#4a9be4;background:#f5faff}.item.kanban-item{border-color:#77caa7}.item .check{accent-color:#08785a;width:15px;height:15px;margin-top:4px}
+.toast{position:fixed;z-index:2000;left:50%;bottom:22px;transform:translate(-50%,18px);opacity:0;background:#153d35;color:white;padding:10px 13px;border-radius:11px;font-size:9px;transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
+.sheetHandle{display:none}
+@media(max-width:820px){
+ :root{--sheet:100%}
+ #map{top:0;right:0;bottom:0;left:0;width:100vw;height:100vh}
+ .map-status{left:16px;right:16px;top:76px;transform:none;width:auto}
+ .sidebar{top:auto;left:0;right:0;bottom:0;width:100%;height:min(66vh,580px);border-radius:22px 22px 0 0;border-right:0;border-top:1px solid rgba(15,72,57,.13);box-shadow:0 -14px 38px rgba(16,53,44,.19);transition:height .25s ease}
+ .sidebar.collapsed{height:130px}
+ .sidebar.collapsed .scroll,.sidebar.collapsed .brand p,.sidebar.collapsed .live{display:none}
+ .sheetHandle{display:block;width:44px;height:5px;border-radius:999px;background:rgba(255,255,255,.45);margin:0 auto 9px}
+ .brand{padding:10px 14px 11px;border-radius:22px 22px 0 0}
+ .brand h1{font-size:15px;margin:8px 0 2px}
+ .brand p{font-size:9px}
+ .logoicon{width:31px;height:31px;border-radius:10px}
+ .badge{font-size:7.5px;padding:5px 7px}
+ .scroll{padding:10px 11px 18px}
+ .kpis{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.kpis::-webkit-scrollbar{display:none}.kpi{flex:0 0 84px;padding:7px 6px;border-radius:11px}.kpi b{font-size:15px}.kpi span{font-size:7px}
+ .search input{height:40px;font-size:12px}.search button{height:30px;width:30px}.search-zone{padding:0 8px;font-size:8px}
+ .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}.chip{flex:0 0 auto;padding:8px 10px;font-size:9.5px}
+ .filters{grid-template-columns:1fr 1fr}.filters select{font-size:10px;min-height:38px}
+ .segment button{min-height:35px;font-size:9.5px}
+ .actions{grid-template-columns:1fr 1fr}.btn{min-height:40px;font-size:10px}
+ .item{padding:10px}.itemname{font-size:11px}.meta{font-size:8.5px}.kanban-board{grid-template-columns:1fr 1fr}.kanban-column{padding:6px}
+ .fabbar{left:10px;top:calc(env(safe-area-inset-top) + 10px);right:10px;justify-content:space-between}
+ .float{font-size:8.5px}
+ .legend{display:none}
+ .toast{bottom:145px}
+}
+@media(max-width:390px){
+ .filters{grid-template-columns:1fr}
+ .badge{display:none}
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="map-status" id="mapStatus" hidden>
+ <b>Google Maps no pudo mostrar el mapa</b>
+ <span id="mapStatusText">Verificando la conexión con Google Maps…</span>
+</div>
+
+<aside class="sidebar collapsed" id="sheet">
+ <div class="brand" id="sheetHeader">
+  <div class="sheetHandle"></div>
+  <div class="topline">
+   <div class="logo"><div class="logoicon">N</div><span>NOVA HUB</span></div>
+   <div class="badge">Fuerza Comercial</div>
+  </div>
+  <h1>Mapa comercial ERP · Managua</h1>
+  <p>Managua, Ciudad Sandino y Veracruz con enfoque comercial, filtros rápidos y uso cómodo en celular.</p>
+  <div class="live"><span class="dot"></span><span id="liveStatus">Base inicial cargada. Lista para consultar Google Places…</span></div>
+ </div>
+ <div class="scroll">
+  <div class="kpis">
+   <div class="kpi" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
+   <div class="kpi" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
+   <div class="kpi" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
+   <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
+   <div class="kpi" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
+  </div>
+
+  <div class="search-row">
+   <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar en Google Places">⌕</button></div>
+   <button class="search-zone" id="searchViewport" type="button">Buscar zona</button>
+  </div>
+  <div class="search-meta"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span><button id="clearGoogleCache" type="button">Limpiar caché</button></div>
+
+  <div class="sect">
+   <div class="stitle"><span>Zonas rápidas</span><span>Deslice →</span></div>
+   <div class="chips" id="zoneChips"></div>
+  </div>
+
+  <div class="sect">
+   <div class="stitle"><span>Filtros comerciales</span></div>
+   <div class="filters">
+    <select id="priority"><option value="all">Todas las prioridades</option><option value="A">A · Prioritaria</option><option value="B">B · Viable</option><option value="C">C · Validar</option></select>
+    <select id="category"><option value="all">Todos los rubros</option></select>
+    <select id="source"><option value="all">Todas las fuentes</option><option value="Google Places">Google Places</option><option value="Base inicial">Base inicial</option></select>
+    <select id="state"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
+   </div>
+  </div>
+
+  <div class="sect">
+   <div class="stitle"><span>Nombres en el mapa</span></div>
+   <div class="segment" id="labels"><button data-mode="off">Ocultar</button><button class="active" data-mode="smart">Inteligente</button><button data-mode="all">Todos</button></div>
+  </div>
+
+  <div class="actions">
+   <button class="btn primary" id="refresh">↻ Actualizar Google Places</button>
+   <button class="btn secondary" id="export">↓ Exportar CSV</button>
+   <button class="btn secondary" id="opportunities">✦ Ver oportunidades</button>
+   <button class="btn secondary" id="kanbanToggle">▦ Ver Kanban</button>
+  </div>
+
+  <div class="bulkbar">
+   <b id="selectionSummary">0 seleccionados</b>
+   <button id="selectVisible">Seleccionar visibles</button>
+   <button id="clearSelection">Limpiar</button>
+   <button id="bulkKanban">Kanban</button>
+   <button id="bulkRoute">Ruta</button>
+  <button id="bulkVisit">Registrar visita</button>
+  <button id="bulkWhatsApp">WhatsApp oficial</button>
+   <button id="bulkDiscard">Descartar</button>
+  </div>
+
+  <div class="resultsHead"><b>Fuerza Comercial</b><span id="resultText"></span></div>
+  <div class="list" id="list"></div>
+  <div class="kanban-board" id="kanbanBoard" hidden></div>
+ </div>
+</aside>
+
+<div class="fabbar">
+ <div class="float" id="summary">Managua · Fuerza Comercial</div>
+ <button class="float" id="mobileSheetToggle" type="button">Filtros ↑</button>
+</div>
+<div class="legend"><b>Potencial Nova Hub</b><div class="lr"><i class="ld" style="background:#08785a"></i>A · visita prioritaria</div><div class="lr"><i class="ld" style="background:#eea13d"></i>B · prospecto viable</div><div class="lr"><i class="ld" style="background:#83928d"></i>C · validar operación</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+window.__novaShowMapError = function(message){
+ const status = document.getElementById('mapStatus');
+ const text = document.getElementById('mapStatusText');
+ if(text) text.textContent = message;
+ if(status) status.hidden = false;
+ const live = document.getElementById('liveStatus');
+ if(live) live.textContent = message;
+};
+window.gm_authFailure = function(){
+ window.__novaShowMapError('Google rechazó la API key. Habilita Maps JavaScript API y Places API, activa facturación y permite el dominio del ERP en las restricciones de la clave.');
+};
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCMwxArmM-BEJuxgbjOiON8KdH_IsNH1F4&libraries=places" onerror="window.__novaShowMapError('No se pudo descargar Google Maps. Revisa conexión, bloqueadores o la configuración de la API key.');"></script>
+<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
+<script>
+const seed = [{"id": "seed-001", "name": "Supermercado La Unión", "zone": "Managua", "category": "Supermercado / comercio", "address": "Carretera a Masaya, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.132629, "lng": -86.254269, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-002", "name": "PriceSmart Managua", "zone": "Managua", "category": "Mayorista / supermercado", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.135668, "lng": -86.253906, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-003", "name": "Distribuidora Reyes", "zone": "Managua", "category": "Mayorista / distribución", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.137208, "lng": -86.253336, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-004", "name": "Mercado El Mayoreo", "zone": "Carretera Norte", "category": "Mercado / mayorista", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.143278, "lng": -86.187131, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-005", "name": "La Colonia Plaza España", "zone": "Managua", "category": "Supermercado / comercio", "address": "Plaza España, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.13555, "lng": -86.252655, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-006", "name": "Joyería Garzón", "zone": "Managua", "category": "Comercio / joyería", "address": "Las Brisas, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.141675, "lng": -86.251631, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-007", "name": "Diseños y Sistemas Web", "zone": "Veracruz", "category": "Tecnología / servicios", "address": "Jardines de Veracruz, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.052797, "lng": -86.188715, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-008", "name": "Empaques Santo Domingo, S.A.", "zone": "Managua", "category": "Industria / empaques", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.136075, "lng": -86.255822, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-009", "name": "Ideas", "zone": "Managua", "category": "Construcción / servicios", "address": "Colonia Mántica, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.13577, "lng": -86.248795, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-010", "name": "Super Express Ciudad Sandino 01", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157972, "lng": -86.346451, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-011", "name": "Super Express San Andrés", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "San Andrés, Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157074, "lng": -86.345434, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-012", "name": "Super Express Praderas de Sandino", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Praderas de Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.160541, "lng": -86.347536, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-013", "name": "Super Express Ciudad Sandino 5", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157755, "lng": -86.338849, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-014", "name": "AMPM Ciudad Sandino", "zone": "Ciudad Sandino", "category": "Tienda / conveniencia", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.159319, "lng": -86.346675, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-015", "name": "Farma Value Ciudad Sandino", "zone": "Ciudad Sandino", "category": "Farmacia", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.154621, "lng": -86.340872, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-016", "name": "Plaza Calli", "zone": "Ciudad Sandino", "category": "Centro comercial", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.160602, "lng": -86.339814, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-017", "name": "Colegio Cristiano Nicaragüense", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.15771, "lng": -86.345433, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-018", "name": "Einstein College", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.155459, "lng": -86.340194, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-019", "name": "Liceo Franciscano", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.155573, "lng": -86.346966, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-020", "name": "Básculas Carmona", "zone": "Ciudad Sandino", "category": "Equipos / servicios", "address": "Carretera Nueva a León", "source": "Base inicial", "sourceUrl": "", "lat": 12.159622, "lng": -86.345584, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-021", "name": "La Colonia Plaza Veracruz", "zone": "Veracruz", "category": "Supermercado / comercio", "address": "Plaza Veracruz, Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.04978, "lng": -86.184857, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-022", "name": "Plaza Veracruz", "zone": "Veracruz", "category": "Centro comercial", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.053327, "lng": -86.183575, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-023", "name": "Placita Veracruz", "zone": "Veracruz", "category": "Centro comercial", "address": "Carretera a Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.051659, "lng": -86.187814, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-024", "name": "Super Express Jardines de Veracruz", "zone": "Veracruz", "category": "Supermercado / comercio", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.056273, "lng": -86.188509, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-025", "name": "Materiales de Construcción Veracruz", "zone": "Veracruz", "category": "Ferretería / construcción", "address": "Veracruz, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.056026, "lng": -86.189509, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-026", "name": "Farmacia Veracruz", "zone": "Veracruz", "category": "Farmacia", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.046844, "lng": -86.186535, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-027", "name": "Cyber Café Veracruz", "zone": "Veracruz", "category": "Tecnología / servicios", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.04785, "lng": -86.187313, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-028", "name": "Taller de Soldadura Veracruz", "zone": "Veracruz", "category": "Taller / industria", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.05058, "lng": -86.180574, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-029", "name": "Venta de Madera Veracruz", "zone": "Veracruz", "category": "Madera / construcción", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.056473, "lng": -86.185084, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-030", "name": "PriceSmart Carretera a Masaya", "zone": "Carretera a Masaya", "category": "Mayorista / supermercado", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.076433, "lng": -86.220965, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}];
+const centers = {"Managua": [12.1364, -86.2514], "Ciudad Sandino": [12.1587, -86.3442], "Veracruz": [12.0525, -86.186], "Carretera Norte": [12.145, -86.191], "Carretera a Masaya": [12.081, -86.219], "Mercado Oriental": [12.143, -86.247]};
+function readStore(key, fallback){
+  try{return JSON.parse(localStorage.getItem(key) || 'null') || fallback}catch(e){return fallback}
+}
+const followups = readStore('novaManaguaFollowupsV4', {});
+const commercialState = readStore('novaFuerzaComercialV1', {});
+const mapQuery = new URLSearchParams(location.search);
+const API_BASE = (mapQuery.get('api') || localStorage.getItem('novaApiBase') || 'http://localhost:3000/api').replace(/\/$/, '');
+const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
+const GOOGLE_PAGE_DELAY = 2000;
+const GOOGLE_MAX_PAGES = 3;
+
+let osm = [];
+let googlePlaces = [];
+let remoteProspects = [];
+let businesses = [...seed];
+let filtered = [];
+let selectedZone = 'Todos';
+let labelMode = 'smart';
+let pipelineFilter = 'all';
+let activeView = 'map';
+let googleSearchRun = 0;
+let markerById = new Map();
+
+if(!window.google?.maps?.Map){
+  window.__novaShowMapError('Google Maps JavaScript API no está disponible. Verifica que la clave permita el origen actual del ERP.');
+}
+
+const googleMap = new google.maps.Map(document.getElementById('map'), {
+  center: {lat:12.115,lng:-86.26}, zoom:11,
+  mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
+  zoomControl:true, clickableIcons:false,
+  styles:[
+    {featureType:'poi',elementType:'labels',stylers:[{visibility:'off'}]},
+    {featureType:'transit',elementType:'labels',stylers:[{visibility:'off'}]},
+    {featureType:'road',elementType:'labels.text.fill',stylers:[{color:'#5c6f69'}]},
+    {featureType:'water',elementType:'geometry',stylers:[{color:'#c9e6df'}]}
+  ]
+});
+let googleTilesLoaded = false;
+google.maps.event.addListenerOnce(googleMap, 'tilesloaded', () => {
+  googleTilesLoaded = true;
+  const status = document.getElementById('mapStatus');
+  if(status) status.hidden = true;
+  const live = document.getElementById('liveStatus');
+  if(live && live.textContent.includes('Google Maps')) live.textContent = 'Google Maps activo · datos comerciales listos.';
+});
+setTimeout(() => {
+  if(!googleTilesLoaded) window.__novaShowMapError('Google Maps cargó el contenedor, pero no entregó los mosaicos. Revisa Maps JavaScript API, facturación y las restricciones HTTP de la clave.');
+}, 8000);
+function resizeGoogleMap(){
+  const mapElement=document.getElementById('map');
+  if(!mapElement || mapElement.offsetWidth===0 || mapElement.offsetHeight===0) return;
+  google.maps.event.trigger(googleMap,'resize');
+  googleMap.setCenter({lat:12.115,lng:-86.26});
+}
+window.addEventListener('resize',resizeGoogleMap);
+window.addEventListener('load',resizeGoogleMap);
+if(window.ResizeObserver){new ResizeObserver(resizeGoogleMap).observe(document.getElementById('map'));}
+requestAnimationFrame(()=>{resizeGoogleMap();setTimeout(resizeGoogleMap,250);});
+const infoWindow = new google.maps.InfoWindow();
+const map = {
+  getZoom(){return googleMap.getZoom() || 11},
+  flyTo(coords, zoom){googleMap.panTo({lat:coords[0],lng:coords[1]});googleMap.setZoom(zoom)},
+  on(event, handler){return google.maps.event.addListener(googleMap,event==='zoomend'?'zoom_changed':event,handler)}
+};
+function svgDataUrl(svg){return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg)}
+function markerSvg(b){
+  const state=stateClass(b);
+  const ring=state==='interested'?'#0b9d68':state==='visited'?'#84d795':state==='kanban'?'#12aa7b':state==='selected'?'#3287e8':state==='discarded'?'#86958f':'#9cacaa';
+  const fill=b.priority==='A'?'#08785a':b.priority==='B'?'#eea13d':'#83928d';
+  return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 42 42"><circle cx="21" cy="21" r="18" fill="white" stroke="${ring}" stroke-width="3"/><rect x="7" y="7" width="28" height="28" rx="9" fill="${fill}"/><path d="M14 13v16M28 13v16M14 13l14 14" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><path d="M14 29l14-16" fill="none" stroke="#8df1be" stroke-width="3.2" stroke-linecap="round"/></svg>`),scaledSize:new google.maps.Size(42,42),anchor:new google.maps.Point(21,21)};
+}
+function clusterSvg(count){
+  return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="58" height="58"><circle cx="29" cy="29" r="25" fill="#123f35" stroke="#b4f4d8" stroke-width="4"/><path d="M20 17v24M38 17v24M20 17l18 18M20 41l18-24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><text x="29" y="34" text-anchor="middle" font-family="Poppins,Arial" font-size="11" font-weight="900" fill="#8df1be">${count}</text></svg>`),scaledSize:new google.maps.Size(58,58),anchor:new google.maps.Point(29,29)};
+}
+function createGoogleMarker(coords, options){
+  const marker=new google.maps.Marker({position:{lat:coords[0],lng:coords[1]},title:options.title||'',icon:options.icon||undefined,optimized:true});
+  marker.setMap(null);
+  marker.bindPopup=function(factory){marker._popupFactory=factory;marker.addListener('click',()=>marker.openPopup());return marker};
+  marker.openPopup=function(){if(!marker._popupFactory)return;infoWindow.setContent(typeof marker._popupFactory==='function'?marker._popupFactory():marker._popupFactory);infoWindow.open(googleMap,marker)};
+  marker.bindTooltip=function(content,options={}){if(options.permanent){marker.setLabel({text:String(content).replace(/<[^>]+>/g,''),color:'#173b31',fontSize:'10px',fontWeight:'600'})}return marker};
+  marker.unbindTooltip=function(){marker.setLabel(null);return marker};
+  return marker;
+}
+const L={marker:createGoogleMarker};
+const cluster={
+  markers:[],clusterer:null,
+  addLayer(marker){this.markers.push(marker)},
+  clearLayers(){this.clusterer?.clearMarkers();this.markers.forEach(marker=>marker.setMap(null));this.markers=[]},
+  refresh(){
+    this.clusterer?.clearMarkers();
+    if(window.markerClusterer?.MarkerClusterer){
+      this.clusterer=new window.markerClusterer.MarkerClusterer({map:googleMap,markers:this.markers,renderer:{render:({count,position})=>new google.maps.Marker({position,icon:clusterSvg(count),zIndex:1000+count})}});
+    }else this.markers.forEach(marker=>marker.setMap(googleMap));
+  }
+};
+
+function norm(s=''){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
+function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function safeId(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,'_')}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+function keyOf(b){return b?.googlePlaceId || b?.id || b}
+function stateOf(b){const key=keyOf(b); if(!commercialState[key]) commercialState[key]={}; return commercialState[key]}
+function persistCommercial(){localStorage.setItem('novaFuerzaComercialV1', JSON.stringify(commercialState))}
+function statusOf(b){return followups[b.id]?.status || stateOf(b).stage || 'Nuevo'}
+function isSelected(b){return stateOf(b).selected === true}
+function isKanban(b){return stateOf(b).kanban === true}
+function isVisited(b){return Boolean(stateOf(b).visitedAt || statusOf(b)==='Visitado')}
+function isInterested(b){return statusOf(b)==='Interesado'}
+function isDiscarded(b){return stateOf(b).discarded === true || statusOf(b)==='Descartado'}
+function isGoogleFound(b){return String(b?.source || '').includes('Google Places')}
+function stateClass(b){if(isDiscarded(b)) return 'discarded'; if(isInterested(b)) return 'interested'; if(isVisited(b)) return 'visited'; if(isKanban(b)) return 'kanban'; if(isSelected(b)) return 'selected'; return ''}
+function selectedBusinesses(){return businesses.filter(isSelected)}
+const stages = ['Nuevo','Contactado','Visitado','Interesado','Demo','Negociación','Cliente','Descartado'];
+const apiStageByUi = {Nuevo:'NEW',Contactado:'CONTACTED',Visitado:'VISITED',Interesado:'INTERESTED',Demo:'DEMO','Negociación':'NEGOTIATION',Cliente:'CLIENT',Descartado:'DISCARDED'};
+const uiStageByApi = Object.fromEntries(Object.entries(apiStageByUi).map(([ui,api]) => [api,ui]));
+function stageToApi(stage){return apiStageByUi[stage] || 'NEW'}
+function stageToUi(stage){return uiStageByApi[String(stage || '').toUpperCase()] || 'Nuevo'}
+function apiHeaders(){
+  const token=localStorage.getItem('nh-auth-token');
+  return token ? {'Content-Type':'application/json',Authorization:`Bearer ${token}`} : {'Content-Type':'application/json'};
+}
+async function forceSalesRequest(path, options={}){
+  const response=await fetch(`${API_BASE}${path}`,{...options,headers:{...apiHeaders(),...(options.headers||{})},cache:'no-store'});
+  if(!response.ok) throw new Error(`HTTP ${response.status}`);
+  const text=await response.text();
+  return text ? JSON.parse(text) : null;
+}
+function prospectPayload(b){
+  const c=stateOf(b);
+  return {
+    sourceKey:keyOf(b), googlePlaceId:b.googlePlaceId || null, name:b.name, phone:b.phone || null,
+    website:b.website || null, address:b.address || null, zone:b.zone || null, category:b.category || null,
+    lat:b.lat, lng:b.lng, rating:b.rating || null, reviews:b.reviews || 0, novaFitScore:b.score || 0,
+    priority:b.priority || 'C', selected:Boolean(c.selected), stage:stageToApi(statusOf(b)),
+    discardedReason:c.discardReason || null, assignedToId:c.assignedToId || null,
+    visitedAt:c.visitedAt || null, visitLat:c.visitLat ?? null, visitLng:c.visitLng ?? null,
+    notes:(followups[b.id] || {}).note || null, evidenceName:c.evidenceName || null, evidenceType:c.evidenceType || null,
+    whatsappPhone:c.whatsappPhone || b.phone || null,
+    whatsappOptIn:c.whatsappOptIn === undefined ? undefined : Boolean(c.whatsappOptIn),
+    whatsappOptInSource:c.whatsappOptInSource || null,
+  };
+}
+async function syncProspects(list){
+  const prospects=list.filter(Boolean).map(prospectPayload);
+  if(!prospects.length || !localStorage.getItem('nh-auth-token')) return null;
+  try{
+    const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects})});
+    (result?.prospects || []).forEach(prospect=>{
+      const business=list.find(item=>keyOf(item)===prospect.sourceKey);
+      if(business) stateOf(business).remoteId=prospect.id;
+    });
+    persistCommercial();
+    return result;
+  }catch(e){console.warn('Fuerza Comercial local: no se pudo sincronizar con el ERP',e);return null}
+}
+function remoteBusiness(prospect){
+  const id=prospect.googlePlaceId ? `google-${prospect.googlePlaceId}` : `remote-${prospect.id}`;
+  return {id,googlePlaceId:prospect.googlePlaceId || undefined,name:prospect.name || 'Prospecto sin nombre',zone:prospect.zone || nearestZone(Number(prospect.lat)||12.115,Number(prospect.lng)||-86.26),category:prospect.category || 'Comercio / servicios',address:prospect.address || 'Dirección pendiente de validar',source:'Fuerza Comercial',sourceUrl:'',lat:Number(prospect.lat)||12.115,lng:Number(prospect.lng)||-86.26,precision:'Prospecto persistido en NovaHub',score:Number(prospect.novaFitScore)||0,priority:prospect.priority || 'C',owner:'Fuerza Comercial',phone:prospect.phone || '',website:prospect.website || '',rating:prospect.rating || null,reviews:prospect.reviews || 0};
+}
+async function loadRemoteProspects(){
+  if(!localStorage.getItem('nh-auth-token')) return;
+  try{
+    const data=await forceSalesRequest('/force-sales/prospects');
+    if(!Array.isArray(data)) return;
+    remoteProspects=data.map(prospect=>{
+      const business=remoteBusiness(prospect); const key=keyOf(business); const current=commercialState[key] || {};
+      commercialState[key]={...current,remoteId:prospect.id,selected:Boolean(prospect.selected),kanban:true,stage:stageToUi(prospect.stage),discarded:stageToUi(prospect.stage)==='Descartado',discardReason:prospect.discardedReason || current.discardReason,visitedAt:prospect.visitedAt || current.visitedAt,visitLat:prospect.visitLat ?? current.visitLat,visitLng:prospect.visitLng ?? current.visitLng,whatsappPhone:prospect.phone || current.whatsappPhone,whatsappOptIn:Boolean(prospect.whatsappOptIn),whatsappOptInSource:prospect.whatsappOptInSource || current.whatsappOptInSource};
+      return business;
+    });
+    persistCommercial(); mergeBusinesses(); populateFilters(); render();
+  }catch(e){/* El modo local sigue operativo si el backend aún no tiene este módulo. */}
+}
+function updatePipelineKpis(){
+  // This KPI is the temporary Google Places result set, not the base catalog
+  // or persisted CRM prospects. This prevents the old misleading "130".
+  document.getElementById('foundCount').textContent=googlePlaces.length;
+  document.getElementById('selectedCount').textContent=businesses.filter(isSelected).length;
+  document.getElementById('kanbanCount').textContent=businesses.filter(isKanban).length;
+  document.getElementById('visitedCount').textContent=businesses.filter(isVisited).length;
+  document.getElementById('interestedCount').textContent=businesses.filter(isInterested).length;
+  document.querySelectorAll('.kpi[data-pipeline]').forEach(el=>el.classList.toggle('active',el.dataset.pipeline===pipelineFilter));
+  document.getElementById('selectionSummary').textContent=`${businesses.filter(isSelected).length} seleccionados`;
+}
+function nearestZone(lat,lng){
+  let best='Managua', d=Infinity;
+  Object.entries(centers).forEach(([n,c])=>{const x=(lat-c[0])**2+(lng-c[1])**2; if(x<d){d=x;best=n}});
+  return best;
+}
+function classify(tags){
+  const raw = [tags.shop,tags.amenity,tags.office,tags.craft,tags.tourism,tags.healthcare,tags.industrial].filter(Boolean).join(' ');
+  const x = norm(raw);
+  const rules = [
+    [['hardware','building materials','doityourself','paint'],'Ferretería / construcción'],
+    [['supermarket','wholesale','department store','mall','marketplace'],'Comercio / distribución'],
+    [['pharmacy'],'Farmacia'],
+    [['clinic','hospital','doctors','dentist','laboratory'],'Salud / clínica'],
+    [['veterinary'],'Veterinaria'],
+    [['fuel'],'Combustible / estación'],
+    [['car repair','car parts','tyres','car wash'],'Automotriz / taller'],
+    [['hotel','hostel','guest house','motel'],'Hospedaje'],
+    [['restaurant','fast food'],'Restaurante'],
+    [['cafe'],'Cafetería'],
+    [['bank','microfinance','money transfer'],'Finanzas'],
+    [['school','college','university','kindergarten'],'Educación'],
+    [['accountant','lawyer','company','logistics','insurance'],'Servicios profesionales'],
+    [['electronics','computer','mobile phone'],'Tecnología / comercio'],
+    [['furniture','interior decoration'],'Hogar / decoración'],
+    [['bakery','butcher','convenience','general'],'Comercio minorista'],
+    [['industrial'],'Industria'],
+    [['craft'],'Taller / artesanía'],
+    [['beauty','hairdresser'],'Belleza / servicios'],
+    [['bar','pub'],'Bar / restaurante']
+  ];
+  for(const [keys, label] of rules) if(keys.some(k => x.includes(norm(k)))) return label;
+  return raw ? raw.replaceAll('_',' ') : 'Comercio / servicios';
+}
+function scoreFor(cat, tags={}){
+  const x = norm(cat + ' ' + Object.values(tags).join(' '));
+  const hi = ['ferreteria','construccion','distribucion','industria','finanzas','combustible','farmacia','clinica','veterinaria','educacion','hospedaje','automotriz','tecnologia','supermercado','mayorista','centro comercial'];
+  const med = ['restaurante','cafeteria','comercio','taller','servicios','mercado','belleza'];
+  let s = hi.some(k=>x.includes(k)) ? 83 : med.some(k=>x.includes(k)) ? 68 : 53;
+  if(tags.phone || tags['contact:phone']) s += 5;
+  if(tags.website || tags['contact:website']) s += 3;
+  return Math.min(s, 95);
+}
+function osmBiz(el){
+  const t = el.tags || {};
+  const lat = el.lat ?? el.center?.lat;
+  const lng = el.lon ?? el.center?.lon;
+  if(!t.name || lat == null || lng == null) return null;
+  const category = classify(t);
+  const score = scoreFor(category, t);
+  const zone = nearestZone(lat, lng);
+  return {
+    id:`osm-${el.type}-${el.id}`,
+    name:t.name,
+    zone,
+    category,
+    address:[t['addr:street'],t['addr:housenumber'],t['addr:suburb']].filter(Boolean).join(' ') || t['addr:full'] || 'Ubicación pública OpenStreetMap',
+    source:'OpenStreetMap',
+    sourceUrl:`https://www.openstreetmap.org/${el.type}/${el.id}`,
+    lat,lng,
+    precision:'Coordenada pública OpenStreetMap',
+    score,
+    priority: score >= 78 ? 'A' : score >= 60 ? 'B' : 'C',
+    owner:'Fuerza Comercial',
+    phone:t.phone || t['contact:phone'] || '',
+    website:t.website || t['contact:website'] || ''
+  };
+}
+function mergeBusinesses(){
+  const m = new Map();
+  [...seed, ...osm, ...googlePlaces, ...remoteProspects].forEach(b => {
+    const key = norm(b.name) + '|' + norm(b.zone);
+    if(!m.has(key)) m.set(key, b);
+    else if(b.source === 'Google Places' || b.source === 'OpenStreetMap'){
+      const old = m.get(key);
+      const source = old.source === b.source ? b.source : `${old.source} + ${b.source}`;
+      m.set(key, {...old, ...b, source});
+    }
+  });
+  businesses = [...m.values()];
+}
+function pass(b){
+  const q = norm(document.getElementById('search').value);
+  const p = document.getElementById('priority').value;
+  const c = document.getElementById('category').value;
+  const s = document.getElementById('source').value;
+  const st = document.getElementById('state').value;
+  if(selectedZone !== 'Todos' && b.zone !== selectedZone) return false;
+  if(p !== 'all' && b.priority !== p) return false;
+  if(c !== 'all' && b.category !== c) return false;
+  if(s !== 'all' && !b.source.includes(s)) return false;
+  if(st === 'all' && isDiscarded(b)) return false;
+  if(st !== 'all' && statusOf(b) !== st) return false;
+  if(pipelineFilter === 'found' && !isGoogleFound(b)) return false;
+  if(pipelineFilter === 'selected' && !isSelected(b)) return false;
+  if(pipelineFilter === 'kanban' && !isKanban(b)) return false;
+  if(pipelineFilter === 'visited' && !isVisited(b)) return false;
+  if(pipelineFilter === 'interested' && !isInterested(b)) return false;
+  if(pipelineFilter === 'opportunities' && (b.score < 70 || isDiscarded(b))) return false;
+  if(q && !norm([b.name,b.zone,b.category,b.address].join(' ')).includes(q)) return false;
+  return true;
+}
+function icon(b){
+  return markerSvg(b);
+}
+function shouldLabel(b){
+  if(labelMode === 'off') return false;
+  if(labelMode === 'all') return map.getZoom() >= 12;
+  const z = map.getZoom();
+  return (b.priority === 'A' && z >= 13) || (b.priority === 'B' && z >= 14) || (b.priority === 'C' && z >= 16);
+}
+function popupHtml(b){
+  const f = followups[b.id] || {};
+  const c = stateOf(b);
+  const sid = safeId(b.id);
+  const gm = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.name + ' ' + b.address + ' Managua Nicaragua')}`;
+  return `<div class="popup">
+    <h3>${esc(b.name)}</h3>
+    <div class="sub">${esc(b.category)} · ${esc(b.zone)}</div>
+    <div class="grid">
+      <b>Prioridad</b><span>${b.priority} · ${b.score}/100</span>
+      <b>Dirección</b><span>${esc(b.address)}</span>
+      <b>Fuente</b><span>${esc(b.source)}</span>
+      <b>Responsable</b><span>Fuerza Comercial</span>
+    </div>
+    <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona decisora antes de la visita.</div>
+    <div class="popactions">
+      <a href="${gm}" target="_blank">Abrir Maps</a>
+      ${b.sourceUrl ? `<a href="${esc(b.sourceUrl)}" target="_blank">Ver fuente</a>` : `<a href="${gm}" target="_blank">Ruta</a>`}
+    </div>
+    <div class="popquick">
+      <button class="${c.selected?'primary-action':''}" onclick="toggleSelected('${b.id}')">${c.selected?'✓ Seleccionado':'Seleccionar'}</button>
+      ${c.kanban ? '<button disabled>✓ Ya en Fuerza Comercial</button>' : `<button class="primary-action" onclick="addToKanban('${b.id}')">Agregar al Kanban</button>`}
+      <button class="visit-action" onclick="registerVisit('${b.id}')">⌖ Registrar visita</button>
+      <button onclick="discardBusiness('${b.id}')">Descartar</button>
+    </div>
+    ${c.visitedAt ? `<div class="visit-readout">Visita registrada ${new Date(c.visitedAt).toLocaleString('es-NI')} · ${c.visitLat?.toFixed?.(5) || '—'}, ${c.visitLng?.toFixed?.(5) || '—'}</div>` : ''}
+    <div class="crm">
+      <label>Estado comercial</label>
+      <select id="st-${sid}">
+        ${['Nuevo','Contactado','Visitado','Interesado','Demo','Negociación','Cliente','Descartado'].map(x => `<option ${statusOf(b)===x?'selected':''}>${x}</option>`).join('')}
+      </select>
+      <label>Próximo contacto</label>
+      <input id="dt-${sid}" type="date" value="${esc(f.date||'')}">
+      <label>Notas</label>
+      <textarea id="nt-${sid}" placeholder="Contacto, tamaño, necesidad, decisión...">${esc(f.note||'')}</textarea>
+      <label>Evidencia opcional</label>
+      <input id="ev-${sid}" type="file" accept="image/*,.pdf">
+      ${c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}</div>` : ''}
+      <button onclick="saveFollowup('${b.id}')">Guardar seguimiento</button>
+      <label>WhatsApp y consentimiento</label>
+      <input id="wa-${sid}" type="tel" value="${esc(c.whatsappPhone || b.phone || '')}" placeholder="+505 8888 8888">
+      <input id="wa-source-${sid}" type="text" value="${esc(c.whatsappOptInSource || '')}" placeholder="Fuente: formulario, llamada o visita">
+      <label class="consent"><input id="wa-optin-${sid}" type="checkbox" ${c.whatsappOptIn?'checked':''}> Confirmo que existe opt-in explícito</label>
+      <button type="button" onclick="saveWhatsAppConsent('${b.id}')">Guardar consentimiento</button>
+      ${c.whatsappOptIn ? `<div class="meta">Apto para plantilla oficial de Meta · ${esc(c.whatsappOptInSource || 'fuente no indicada')}</div>` : '<div class="meta">Sin opt-in: no se habilita envío automatizado.</div>'}
+    </div>
+  </div>`;
+}
+function findBusiness(id){return businesses.find(x=>x.id===id)}
+function toggleSelected(id, value){
+  const b=findBusiness(id); if(!b) return;
+  stateOf(b).selected = value === undefined ? !isSelected(b) : value;
+  persistCommercial(); render(); toast(stateOf(b).selected ? 'Negocio seleccionado' : 'Selección retirada');
+}
+window.toggleSelected = toggleSelected;
+function addToKanban(id){
+  const b=findBusiness(id); if(!b) return;
+  if(isKanban(b)){toast('Este negocio ya pertenece a Fuerza Comercial');return}
+  const c=stateOf(b); c.kanban=true; c.stage=c.stage || 'Nuevo'; persistCommercial(); render();
+  syncProspects([b]); toast('Negocio agregado a Fuerza Comercial');
+}
+window.addToKanban = addToKanban;
+function addSelectedToKanban(){
+  const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona al menos un negocio');return}
+  let added=0, existing=0;
+  const addedBusinesses=[];
+  chosen.forEach(b=>{if(isKanban(b)){existing++;return} const c=stateOf(b);c.kanban=true;c.stage=c.stage||'Nuevo';addedBusinesses.push(b);added++});
+  persistCommercial(); render(); syncProspects(addedBusinesses); toast(`${added} agregados · ${existing} ya existían`);
+}
+function registerVisit(id){
+  const b=findBusiness(id); if(!b) return;
+  if(!navigator.geolocation){toast('Este navegador no permite capturar ubicación');return}
+  toast('Solicitando ubicación del dispositivo…');
+  navigator.geolocation.getCurrentPosition(position=>{
+    const c=stateOf(b); c.visitedAt=new Date().toISOString(); c.visitLat=position.coords.latitude; c.visitLng=position.coords.longitude; c.stage='Visitado'; c.kanban=true;
+    followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:new Date().toISOString()};
+    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups)); persistCommercial(); render(); syncProspects([b]); toast('Visita registrada con ubicación');
+  },()=>toast('No se pudo obtener la ubicación. Revisa el permiso del navegador.'),{enableHighAccuracy:true,timeout:12000,maximumAge:0});
+}
+window.registerVisit = registerVisit;
+function discardBusiness(id){
+  const b=findBusiness(id); if(!b) return;
+  const reason=prompt('Motivo: No aplica al ERP, Muy pequeño, Competencia, Cerrado, Ya usa solución, Duplicado u Otro','No aplica al ERP');
+  if(!reason) return;
+  const c=stateOf(b); c.discarded=true;c.discardReason=reason;c.discardedAt=new Date().toISOString();c.stage='Descartado';
+  followups[b.id]={...(followups[b.id]||{}),status:'Descartado',updatedAt:new Date().toISOString()};
+  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render();syncProspects([b]);toast('Negocio descartado');
+}
+window.discardBusiness = discardBusiness;
+window.saveFollowup = function(id){
+  const sid = safeId(id);
+  const b = findBusiness(id);
+  if(!b) return;
+  const status = document.getElementById('st-' + sid).value;
+  followups[id] = {
+    status,
+    date: document.getElementById('dt-' + sid).value,
+    note: document.getElementById('nt-' + sid).value,
+    updatedAt: new Date().toISOString()
+  };
+  const c=stateOf(b); c.stage=status; c.discarded=status==='Descartado'; if(status==='Visitado'&&!c.visitedAt)c.visitedAt=new Date().toISOString();
+  localStorage.setItem('novaManaguaFollowupsV4', JSON.stringify(followups));
+  persistCommercial();
+  syncProspects([b]);
+  const file=document.getElementById('ev-' + sid)?.files?.[0];
+  if(file && file.size <= 1500000){const reader=new FileReader();reader.onload=()=>{c.evidenceName=file.name;c.evidenceType=file.type;c.evidenceData=reader.result;persistCommercial();toast('Seguimiento y evidencia guardados')};reader.readAsDataURL(file)}else toast(file ? 'Seguimiento guardado · evidencia supera 1.5 MB' : 'Seguimiento guardado');
+  render();
+};
+window.saveWhatsAppConsent = async function(id){
+  const sid=safeId(id); const b=findBusiness(id); if(!b)return;
+  const optedIn=Boolean(document.getElementById('wa-optin-'+sid)?.checked);
+  const phone=(document.getElementById('wa-'+sid)?.value || '').trim();
+  const source=(document.getElementById('wa-source-'+sid)?.value || '').trim();
+  if(optedIn && (!phone || !source)){toast('Para activar WhatsApp indica teléfono y fuente del consentimiento');return}
+  const c=stateOf(b); c.whatsappPhone=phone || b.phone || ''; c.whatsappOptIn=optedIn; c.whatsappOptInSource=optedIn ? source : '';
+  persistCommercial();
+  if(localStorage.getItem('nh-auth-token')){
+    try{await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[prospectPayload(b)]})});toast(optedIn?'Consentimiento guardado en el ERP':'Consentimiento retirado')}catch(error){console.warn(error);toast('No se pudo guardar el consentimiento en el ERP')}
+  }else toast(optedIn?'Consentimiento guardado localmente':'Consentimiento retirado localmente');
+  render();
+};
+function applyLabels(){
+  markerById.forEach((m) => {
+    const b = m._b;
+    m.unbindTooltip();
+    if(shouldLabel(b)){
+      m.bindTooltip(esc(b.name), {permanent:true, direction:'right', offset:[10,-2], className:'business-label'});
+    }else{
+      m.bindTooltip(esc(b.name), {sticky:true, direction:'top', className:'business-label'});
+    }
+  });
+}
+function renderKanban(){
+  const board=document.getElementById('kanbanBoard');
+  if(!board) return;
+  const kanbanBusinesses=businesses.filter(b=>isKanban(b)&&!isDiscarded(b));
+  board.innerHTML=stages.filter(stage=>stage!=='Descartado').map(stage=>{
+    const cards=kanbanBusinesses.filter(b=>statusOf(b)===stage);
+    return `<section class="kanban-column"><div class="kanban-column-head"><strong>${stage}</strong><span>${cards.length}</span></div><div class="kanban-cards">${cards.length ? cards.map(b=>{
+      const sid=safeId(b.id);
+      return `<article class="kanban-card"><b>${esc(b.name)}</b><div class="meta">${esc(b.zone)} · ${esc(b.category)}</div><div class="meta">${b.score}% afinidad${b.phone ? ` · ${esc(b.phone)}` : ''}</div><select data-kanban-stage="${esc(b.id)}" aria-label="Cambiar etapa de ${esc(b.name)}">${stages.filter(x=>x!=='Descartado').map(x=>`<option ${x===stage?'selected':''}>${x}</option>`).join('')}</select><button data-kanban-open="${esc(b.id)}">Ver en mapa</button></article>`;
+    }).join('') : '<div class="meta">Sin prospectos</div>'}</div></section>`;
+  }).join('') + (kanbanBusinesses.length ? '' : '<div class="kanban-empty">Todavía no hay negocios en Fuerza Comercial. Selecciona negocios en el mapa y pulsa <b>Kanban</b>.</div>');
+  board.querySelectorAll('[data-kanban-stage]').forEach(el=>el.addEventListener('change',()=>{
+    const b=findBusiness(el.dataset.kanbanStage); if(!b)return;
+    const c=stateOf(b); c.kanban=true; c.stage=el.value; if(el.value==='Visitado'&&!c.visitedAt)c.visitedAt=new Date().toISOString();
+    followups[b.id]={...(followups[b.id]||{}),status:el.value,updatedAt:new Date().toISOString()};
+    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();syncProspects([b]);render();toast(`Etapa actualizada: ${el.value}`);
+  }));
+  board.querySelectorAll('[data-kanban-open]').forEach(el=>el.addEventListener('click',()=>{
+    const b=findBusiness(el.dataset.kanbanOpen); if(!b)return;
+    activeView='map'; updateView(); pipelineFilter='kanban'; render(); map.flyTo([b.lat,b.lng],16,{duration:.65}); setTimeout(()=>markerById.get(b.id)?.openPopup(),600);
+  }));
+}
+function updateView(){
+  const list=document.getElementById('list'); const board=document.getElementById('kanbanBoard'); const toggle=document.getElementById('kanbanToggle');
+  const kanban=activeView==='kanban';
+  if(list)list.hidden=kanban;
+  if(board)board.hidden=!kanban;
+  if(toggle)toggle.textContent=kanban?'▦ Volver al mapa':'▦ Ver Kanban';
+  if(kanban)renderKanban();
+}
+function render(){
+  filtered = businesses.filter(pass).sort((a,b)=>a.priority.localeCompare(b.priority)||b.score-a.score||a.name.localeCompare(b.name));
+  cluster.clearLayers();
+  markerById.clear();
+  filtered.forEach(b => {
+    const m = L.marker([b.lat, b.lng], {icon: icon(b), title:b.name});
+    m._b = b;
+    m.bindPopup(() => popupHtml(b), {maxWidth:340});
+    markerById.set(b.id, m);
+    cluster.addLayer(m);
+  });
+  cluster.refresh();
+  applyLabels();
+
+  updatePipelineKpis();
+  document.getElementById('resultText').textContent = `${filtered.length} de ${businesses.length}`;
+  document.getElementById('summary').textContent = `${selectedZone === 'Todos' ? 'Managua' : selectedZone} · ${selectedBusinesses().length} seleccionados`;
+
+  const list = document.getElementById('list');
+  list.innerHTML = filtered.slice(0, 140).map(b => `
+    <div class="item ${isSelected(b)?'selected-item ':''}${isKanban(b)?'kanban-item':''}" data-id="${esc(b.id)}">
+      <div class="itemtop">
+        <input class="check" type="checkbox" data-action="select" data-id="${esc(b.id)}" ${isSelected(b)?'checked':''} aria-label="Seleccionar ${esc(b.name)}">
+        <div class="pill p${b.priority.toLowerCase()}">${b.priority}</div>
+        <div>
+          <div class="itemname">${esc(b.name)}</div>
+          <div class="meta">${esc(b.zone)} · ${esc(b.category)}</div>
+        </div>
+      </div>
+      <span class="status">${esc(isKanban(b)?'En Kanban':statusOf(b))} · ${b.score}% afinidad</span>
+      <div class="item-actions">
+        <button data-action="select" data-id="${esc(b.id)}">${isSelected(b)?'✓ Seleccionado':'Seleccionar'}</button>
+        <button class="primary-action" data-action="kanban" data-id="${esc(b.id)}">${isKanban(b)?'✓ Kanban':'Kanban'}</button>
+        <button class="visit-action" data-action="visit" data-id="${esc(b.id)}">Visitar</button>
+      </div>
+    </div>`).join('') + (filtered.length > 140 ? `<div class="item"><div class="meta">Mostrando los primeros 140 resultados. Usa filtros o búsqueda para precisar.</div></div>` : '');
+  document.querySelectorAll('.item[data-id]').forEach(el => el.addEventListener('click', () => {
+    const b = businesses.find(x => x.id === el.dataset.id);
+    if(!b) return;
+    map.flyTo([b.lat, b.lng], 16, {duration:.65});
+    if(innerWidth <= 820) document.getElementById('sheet').classList.add('collapsed');
+    setTimeout(() => markerById.get(b.id)?.openPopup(), 600);
+  }));
+  document.querySelectorAll('[data-action="select"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();toggleSelected(el.dataset.id)}));
+  document.querySelectorAll('[data-action="kanban"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();addToKanban(el.dataset.id)}));
+  document.querySelectorAll('[data-action="visit"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();registerVisit(el.dataset.id)}));
+  updateView();
+}
+function populateFilters(){
+  const zonesList = ['Todos','Managua','Ciudad Sandino','Veracruz','Carretera Norte','Carretera a Masaya','Mercado Oriental'];
+  document.getElementById('zoneChips').innerHTML = zonesList.map(z => `<button class="chip ${z==='Todos'?'active':''}" data-zone="${z}">${z}</button>`).join('');
+  document.querySelectorAll('[data-zone]').forEach(btn => btn.addEventListener('click', () => {
+    selectedZone = btn.dataset.zone;
+    document.querySelectorAll('[data-zone]').forEach(x => x.classList.toggle('active', x === btn));
+    render();
+    if(selectedZone === 'Todos') map.flyTo([12.115,-86.26], 11, {duration:.6});
+    else map.flyTo(centers[selectedZone], selectedZone==='Ciudad Sandino'||selectedZone==='Veracruz' ? 14 : 13, {duration:.6});
+  }));
+  const cats = [...new Set(businesses.map(x => x.category))].sort();
+  const sel = document.getElementById('category');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="all">Todos los rubros</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
+  if(cats.includes(cur)) sel.value = cur;
+}
+async function fetchTimeout(url, opts={}, ms=50000){
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  try { return await fetch(url, {...opts, signal:c.signal}); }
+  finally { clearTimeout(t); }
+}
+const boxes = [
+  ['Managua', '12.06,-86.34,12.20,-86.17'],
+  ['Ciudad Sandino', '12.11,-86.40,12.22,-86.30'],
+  ['Veracruz', '11.99,-86.24,12.11,-86.12']
+];
+function queryFor(bbox){
+  return `[out:json][timeout:120];
+  (
+    nwr["name"]["shop"](${bbox});
+    nwr["name"]["office"](${bbox});
+    nwr["name"]["craft"](${bbox});
+    nwr["name"]["tourism"](${bbox});
+    nwr["name"]["healthcare"](${bbox});
+    nwr["name"]["industrial"](${bbox});
+    nwr["name"]["amenity"~"restaurant|cafe|fast_food|bar|pub|clinic|hospital|pharmacy|bank|microfinance|marketplace|fuel|car_rental|car_wash|driving_school|dentist|veterinary|school|college|university|kindergarten|cinema|theatre|events_venue|internet_cafe|coworking_space"](${bbox});
+  );
+  out center tags;`;
+}
+function placesCategory(types=[],name=''){
+  const x=norm([...types,name].join(' '));
+  if(/pharmacy|drugstore/.test(x))return 'Farmacia';
+  if(/doctor|clinic|hospital|dentist|health/.test(x))return 'Salud / clínica';
+  if(/hardware|home improvement|building|contractor|architect/.test(x))return 'Ferretería / construcción';
+  if(/clothing|shoe|jewelry|department|store|shopping/.test(x))return 'Comercio / ropa';
+  if(/logistics|moving|storage|transport/.test(x))return 'Logística / transporte';
+  if(/marketing|advertising|consulting|agency/.test(x))return 'Marketing / servicios';
+  if(/restaurant|cafe|food/.test(x))return 'Restaurante';
+  return 'Comercio / servicios';
+}
+function googlePlaceBiz(place){
+  const location=place.geometry?.location; if(!place.place_id||!location)return null;
+  const lat=typeof location.lat==='function'?location.lat():location.lat;
+  const lng=typeof location.lng==='function'?location.lng():location.lng;
+  if(lat==null||lng==null)return null;
+  const category=placesCategory(place.types||[],place.name||'');
+  let score=scoreFor(category,{});
+  if(place.rating)score+=Math.round(Math.max(0,place.rating-3.5)*5);
+  if((place.user_ratings_total||0)>=100)score+=5;
+  score=Math.min(95,score);
+  return {id:`google-${place.place_id}`,googlePlaceId:place.place_id,name:place.name||'Negocio sin nombre',zone:nearestZone(lat,lng),category,address:place.formatted_address||'Dirección disponible en Google Maps',source:'Google Places',sourceUrl:place.url||`https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${encodeURIComponent(place.place_id)}`,lat,lng,precision:'Ubicación y ficha devueltas por Google Places',score,priority:score>=78?'A':score>=60?'B':'C',owner:'Fuerza Comercial',rating:place.rating||null,reviews:place.user_ratings_total||0};
+}
+function boundsKey(bounds){
+  if(!bounds)return 'managua';
+  const ne=bounds.getNorthEast(), sw=bounds.getSouthWest();
+  return [sw.lat(),sw.lng(),ne.lat(),ne.lng()].map(value=>Number(value).toFixed(3)).join(',');
+}
+function currentBounds(){return googleMap.getBounds?.() || null}
+function setSearchStatus(message){
+  const node=document.getElementById('searchStatus'); if(node)node.textContent=message;
+  const live=document.getElementById('liveStatus'); if(live)live.textContent=message;
+}
+function cachedGoogleKey(query, bounds){return `novaGooglePlacesCacheV2:${norm(query || 'default')}:${boundsKey(bounds)}`}
+function readGoogleCache(query,bounds){
+  try{
+    const cached=JSON.parse(localStorage.getItem(cachedGoogleKey(query,bounds)) || 'null');
+    if(cached && Date.now()-cached.savedAt<GOOGLE_CACHE_TTL && Array.isArray(cached.data))return cached.data;
+  }catch(e){}
+  return null;
+}
+function mergeGoogleResults(items){
+  const merged=new Map(googlePlaces.map(place=>[place.googlePlaceId,place]));
+  items.map(googlePlaceBiz).filter(Boolean).forEach(place=>merged.set(place.googlePlaceId,place));
+  googlePlaces=[...merged.values()];
+}
+function searchTextPage(service, request, query, runId){
+  return new Promise(resolve=>{
+    const items=[]; let page=0; let finished=false;
+    const complete=()=>{if(!finished){finished=true;resolve(items)}};
+    const callback=(pageItems,status,pagination)=>{
+      if(runId!==googleSearchRun){complete();return}
+      page++;
+      if(status==='OK' && Array.isArray(pageItems))items.push(...pageItems);
+      if(status!=='OK' && status!=='ZERO_RESULTS')setSearchStatus(`Google Places respondió ${status} al buscar ${query}.`);
+      if(pagination?.hasNextPage && page<GOOGLE_MAX_PAGES){
+        setSearchStatus(`Google Places · ${query} · página ${page}/${GOOGLE_MAX_PAGES}…`);
+        window.setTimeout(()=>pagination.nextPage(),GOOGLE_PAGE_DELAY);
+      }else complete();
+    };
+    service.textSearch(request,callback);
+  });
+}
+async function searchGooglePlaces(query='', options={}){
+  const force=options.force===true;
+  const visibleOnly=options.visibleOnly===true;
+  const runId=++googleSearchRun;
+  const btn=document.getElementById('refresh'); const searchBtn=document.getElementById('searchGoogle'); const zoneBtn=document.getElementById('searchViewport');
+  [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=true});
+  if(!window.google?.maps?.places){setSearchStatus('Google Maps no está disponible. Revisa la key y las APIs habilitadas.');toast('No se pudo cargar Google Maps');[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});return}
+  const normalizedQuery=query.trim(); const bounds=visibleOnly ? currentBounds() : null;
+  const cache=force ? null : readGoogleCache(normalizedQuery,bounds);
+  if(cache){
+    mergeGoogleResults(cache); mergeBusinesses(); populateFilters(); render();
+    setSearchStatus(`${cache.length} resultados en caché · pulsa Limpiar caché para consultar Google de nuevo.`);
+    [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false}); return;
+  }
+  const service=new google.maps.places.PlacesService(googleMap);
+  const queries=normalizedQuery ? [normalizedQuery] : ['logística y transporte','tiendas de ropa','ferreterías y construcción','agencias de marketing','farmacias y clínicas'];
+  const collected=[];
+  try{
+    setSearchStatus(`Buscando ${queries.length} rubro${queries.length>1?'s':''} en Google Places…`);
+    const responses=await Promise.all(queries.map(searchQuery=>{
+      const request={query:`${searchQuery} en Managua, Nicaragua`,language:'es',region:'ni'};
+      if(bounds)request.bounds=bounds;
+      else {request.location={lat:12.115,lng:-86.26};request.radius=25000}
+      return searchTextPage(service,request,searchQuery,runId);
+    }));
+    responses.forEach(items=>collected.push(...items));
+    if(runId!==googleSearchRun)return;
+    const uniqueRaw=[]; const seen=new Set();
+    collected.forEach(place=>{if(place?.place_id&&!seen.has(place.place_id)){seen.add(place.place_id);uniqueRaw.push(place)}});
+    const mapped=uniqueRaw.map(googlePlaceBiz).filter(Boolean);
+    if(mapped.length){
+      mergeGoogleResults(uniqueRaw);
+      localStorage.setItem(cachedGoogleKey(normalizedQuery,bounds),JSON.stringify({savedAt:Date.now(),data:mapped}));
+      mergeBusinesses(); populateFilters(); render();
+      setSearchStatus(`${mapped.length} resultados nuevos · ${googlePlaces.length} negocios Google únicos cargados.`);
+      toast(`${mapped.length} negocios nuevos encontrados`);
+    }else{
+      setSearchStatus('Google Places no devolvió negocios para esa búsqueda. Prueba otro rubro o acerca el mapa.'); toast('Sin resultados de Google Places');
+    }
+  }catch(error){
+    setSearchStatus('No se pudo completar la búsqueda en Google Places. Revisa la consola y la configuración de la API.'); toast('Error consultando Google Places'); console.error(error);
+  }finally{[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});if(btn)btn.textContent='↻ Actualizar Google Places'}
+}
+function loadGooglePlaces(force=false){return searchGooglePlaces('',{force})}
+async function loadOSM(force=false){
+  const key = 'novaManaguaOSMCacheV4';
+  if(!force){
+    try{
+      const c = JSON.parse(localStorage.getItem(key) || 'null');
+      if(c && Date.now() - c.savedAt < 5*86400000 && Array.isArray(c.data)){
+        osm = c.data;
+        mergeBusinesses();
+        populateFilters();
+        render();
+        document.getElementById('liveStatus').textContent = `${osm.length} negocios OSM en caché + ${seed.length} registros base.`;
+        return;
+      }
+    }catch(e){}
+  }
+  const btn = document.getElementById('refresh');
+  btn.disabled = true;
+  btn.textContent = 'Consultando…';
+  const endpoints = [
+    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass-api.de/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+  ];
+  let all = [];
+  for(const [zone, bbox] of boxes){
+    document.getElementById('liveStatus').textContent = `Consultando ${zone} en OpenStreetMap…`;
+    let got = null;
+    for(const ep of endpoints){
+      try{
+        const r = await fetchTimeout(ep, {
+          method:'POST',
+          headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+          body:'data=' + encodeURIComponent(queryFor(bbox))
+        }, 52000);
+        if(!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        if(j.elements && j.elements.length){
+          got = j.elements;
+          break;
+        }
+      }catch(e){}
+    }
+    if(got) all.push(...got);
+  }
+  if(all.length){
+    const seen = new Set();
+    osm = all.filter(e => {
+      const k = e.type + '-' + e.id;
+      if(seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).map(osmBiz).filter(Boolean);
+    localStorage.setItem(key, JSON.stringify({savedAt:Date.now(), data:osm}));
+    mergeBusinesses();
+    populateFilters();
+    render();
+    document.getElementById('liveStatus').textContent = `Actualizado: ${osm.length} negocios OSM + ${seed.length} base; ${businesses.length} únicos.`;
+    toast('Mapa actualizado');
+  }else{
+    document.getElementById('liveStatus').textContent = 'No se pudo conectar con OpenStreetMap. Se mantiene la base inicial.';
+    toast('Usando base inicial');
+  }
+  btn.disabled = false;
+  btn.textContent = '↻ Actualizar Google Places';
+}
+function exportCSV(){
+  const rows = [['Empresa','Zona','Rubro','Prioridad','Puntaje','Dirección','Latitud','Longitud','Precisión','Fuente','Responsable','Estado','Próximo contacto','Notas','WhatsApp','Opt-in WhatsApp','Fuente opt-in','URL fuente']];
+  filtered.forEach(b => {
+    const f = followups[b.id] || {};
+    const c=stateOf(b);
+    rows.push([b.name,b.zone,b.category,b.priority,b.score,b.address,b.lat,b.lng,b.precision,b.source,'Fuerza Comercial',f.status||'Nuevo',f.date||'',f.note||'',c.whatsappPhone||b.phone||'',c.whatsappOptIn?'Sí':'No',c.whatsappOptInSource||'',b.sourceUrl||'']);
+  });
+  const csv = '\ufeff' + rows.map(r => r.map(v => `"${String(v ?? '').replaceAll('"','""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = `Prospectos_NovaHub_Managua_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function addSelectedToRoute(){
+  const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para armar una ruta');return}
+  const route=readStore('novaFuerzaRouteV1',[]); const keys=new Set(route);
+  chosen.forEach(b=>keys.add(keyOf(b))); localStorage.setItem('novaFuerzaRouteV1',JSON.stringify([...keys]));
+  toast(`${chosen.length} negocios añadidos a la ruta`);
+}
+function visitSelected(){
+  const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para registrar visitas');return}
+  if(!navigator.geolocation){toast('Este navegador no permite capturar ubicación');return}
+  toast('Capturando ubicación para la visita…');
+  navigator.geolocation.getCurrentPosition(position=>{
+    const now=new Date().toISOString(); chosen.forEach(b=>{const c=stateOf(b);c.visitedAt=now;c.visitLat=position.coords.latitude;c.visitLng=position.coords.longitude;c.stage='Visitado';c.kanban=true;followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:now}});
+    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render();syncProspects(chosen);toast(`${chosen.length} visitas registradas con ubicación`);
+  },()=>toast('No se pudo obtener la ubicación. Revisa el permiso del navegador.'),{enableHighAccuracy:true,timeout:12000,maximumAge:0});
+}
+function discardSelected(){
+  const chosen=selectedBusinesses(); if(!chosen.length){toast('Selecciona negocios para descartar');return}
+  const reason=prompt('Motivo para los seleccionados: No aplica al ERP, Muy pequeño, Competencia, Cerrado, Ya usa solución, Duplicado u Otro','No aplica al ERP'); if(!reason)return;
+  const now=new Date().toISOString(); chosen.forEach(b=>{const c=stateOf(b);c.discarded=true;c.discardReason=reason;c.discardedAt=now;c.stage='Descartado';followups[b.id]={...(followups[b.id]||{}),status:'Descartado',updatedAt:now}});
+  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render();syncProspects(chosen);toast(`${chosen.length} negocios descartados`);
+}
+async function sendSelectedWhatsApp(){
+  const chosen=selectedBusinesses().filter(b=>stateOf(b).whatsappOptIn && (stateOf(b).whatsappPhone || b.phone));
+  if(!chosen.length){toast('Selecciona negocios con teléfono y opt-in de WhatsApp');return}
+  if(!localStorage.getItem('nh-auth-token')){toast('Inicia sesión para usar WhatsApp oficial');return}
+  const templateName=prompt('Nombre exacto de la plantilla aprobada por Meta','novahub_prospeccion');
+  if(!templateName)return;
+  const languageCode=prompt('Código de idioma de la plantilla','es');
+  if(!languageCode)return;
+  const consented=chosen.slice(0,50);
+  toast('Sincronizando prospectos con el ERP…');
+  const synced=await syncProspects(consented);
+  const ids=consented.map(b=>stateOf(b).remoteId).filter(Boolean);
+  if(!synced || ids.length!==consented.length){toast('No se pudieron preparar todos los prospectos para el envío');return}
+  if(!confirm(`Se enviará la plantilla ${templateName} a ${ids.length} prospecto(s) con opt-in. ¿Continuar?`))return;
+  try{
+    const result=await forceSalesRequest('/force-sales/whatsapp/bulk',{method:'POST',body:JSON.stringify({ids,templateName,languageCode})});
+    toast(`${result?.sent || 0} enviados · ${result?.failed || 0} rechazados`);
+  }catch(error){console.error(error);toast('Meta no pudo procesar el lote. Revisa configuración y plantilla aprobada.')}
+}
+
+['search','priority','category','source','state'].forEach(id => {
+  document.getElementById(id).addEventListener(id==='search' ? 'input' : 'change', render);
+});
+document.querySelectorAll('#labels button').forEach(btn => btn.addEventListener('click', () => {
+  labelMode = btn.dataset.mode;
+  document.querySelectorAll('#labels button').forEach(x => x.classList.toggle('active', x===btn));
+  applyLabels();
+}));
+document.getElementById('refresh').addEventListener('click', () => loadGooglePlaces(true));
+document.getElementById('searchGoogle').addEventListener('click', () => searchGooglePlaces(document.getElementById('search').value,{force:true}));
+document.getElementById('searchViewport').addEventListener('click', () => searchGooglePlaces(document.getElementById('search').value,{force:true,visibleOnly:true}));
+document.getElementById('search').addEventListener('keydown', event => {if(event.key==='Enter'){event.preventDefault();searchGooglePlaces(event.currentTarget.value,{force:true})}});
+document.getElementById('clearGoogleCache').addEventListener('click', () => {
+  Object.keys(localStorage).filter(key=>key.startsWith('novaGooglePlacesCacheV')).forEach(key=>localStorage.removeItem(key));
+  setSearchStatus('Caché de Google Places limpiada. La próxima búsqueda será en vivo.'); toast('Caché limpiada');
+});
+document.getElementById('export').addEventListener('click', exportCSV);
+document.getElementById('kanbanToggle').addEventListener('click',()=>{activeView=activeView==='kanban'?'map':'kanban';updateView();if(activeView==='kanban'){pipelineFilter='kanban';renderKanban()}else{pipelineFilter='all';render()}});
+document.querySelectorAll('.kpi[data-pipeline]').forEach(el=>el.addEventListener('click',()=>{pipelineFilter=el.dataset.pipeline;render()}));
+document.getElementById('opportunities').addEventListener('click',()=>{pipelineFilter='opportunities';render();toast('Mostrando oportunidades con afinidad de 70% o más')});
+document.getElementById('selectVisible').addEventListener('click',()=>{filtered.forEach(b=>stateOf(b).selected=true);persistCommercial();render();toast(`${filtered.length} negocios seleccionados`)});
+document.getElementById('clearSelection').addEventListener('click',()=>{businesses.forEach(b=>stateOf(b).selected=false);persistCommercial();render();toast('Selección limpiada')});
+document.getElementById('bulkKanban').addEventListener('click',addSelectedToKanban);
+document.getElementById('bulkRoute').addEventListener('click',addSelectedToRoute);
+document.getElementById('bulkVisit').addEventListener('click',visitSelected);
+document.getElementById('bulkWhatsApp').addEventListener('click',sendSelectedWhatsApp);
+document.getElementById('bulkDiscard').addEventListener('click',discardSelected);
+map.on('zoomend', applyLabels);
+
+const sheet = document.getElementById('sheet');
+const toggle = document.getElementById('mobileSheetToggle');
+function updateToggle(){ toggle.textContent = sheet.classList.contains('collapsed') ? 'Filtros ↑' : 'Mapa ↓'; }
+toggle.addEventListener('click', () => { sheet.classList.toggle('collapsed'); updateToggle(); });
+document.getElementById('sheetHeader').addEventListener('click', () => {
+  if(innerWidth <= 820){ sheet.classList.toggle('collapsed'); updateToggle(); }
+});
+if(innerWidth > 820) sheet.classList.remove('collapsed');
+updateToggle();
+
+populateFilters();
+render();
+setTimeout(() => loadRemoteProspects().finally(() => loadGooglePlaces(false)), 450);
+</script>
+</body>
+</html>

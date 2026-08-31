@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, SquareKanban
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -94,6 +94,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const salesDraftStorageKey = getSalesEditorDraftKey('estimate', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<ViewLayoutMode>('sales-estimates-layout', 'table', 24 * 365);
+  const [kanbanMode, setKanbanMode] = useLocalStorageState<boolean>('sales-estimates-kanban', false, 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | EstimateWorkflowStatus>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -1105,7 +1106,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="quotes" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} showKanban ariaLabel="Elegir distribución de cotizaciones" />
+            <ViewLayoutSelect value={kanbanMode ? 'kanban' : layoutMode} onChange={(mode) => { setLayoutMode(mode); setKanbanMode(mode === 'kanban'); }} showKanban ariaLabel="Elegir distribución de cotizaciones" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
@@ -1124,7 +1125,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             )}
           </div>
         </div>
-        {layoutMode === 'kanban' ? (
+        {kanbanMode ? (
           <EstimacionesKanban
             data={data}
             onViewDetail={(est) => { setDetailEstimate(null); setEditingId(est.id); }}

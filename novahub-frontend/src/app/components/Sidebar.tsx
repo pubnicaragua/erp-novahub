@@ -14,6 +14,7 @@ import {
   Truck,
   Headphones,
   FolderOpen,
+  FolderKanban,
   BellRing,
   LayoutDashboard,
   Building2,
@@ -68,6 +69,7 @@ import {
   ClipboardCheck,
   TrendingDown,
   ChefHat,
+  MapPinned,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -265,7 +267,19 @@ const menuItems: MenuItem[] = [
       { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> }
     ]
   },
-  { 
+  {
+    id: 'proyectos',
+    label: 'Proyectos',
+    icon: <FolderKanban className="size-5" />,
+    section: 'Herramientas',
+  },
+  {
+    id: 'fuerza-comercial',
+    label: 'Fuerza Comercial',
+    icon: <MapPinned className="size-5" />,
+    section: 'Comercial',
+  },
+  {
     id: 'tickets', 
     label: 'Tickets y Soporte', 
     icon: <Headphones className="size-5" />,
@@ -328,6 +342,13 @@ const platformMenuItems: MenuItem[] = [
     label: 'Master Console',
     icon: <LayoutDashboard className="size-5" />,
     section: 'NovaHub Platform',
+  },
+  {
+    id: 'fuerza-comercial',
+    label: 'Fuerza Comercial',
+    icon: <MapPinned className="size-5" />,
+    section: 'NovaHub Platform',
+    superadminOnly: true,
   },
   {
     id: 'suscripciones',

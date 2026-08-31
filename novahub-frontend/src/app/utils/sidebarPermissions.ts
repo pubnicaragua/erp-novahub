@@ -90,6 +90,14 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'ACTIVITIES_REMINDERS', label: 'Recordatorios', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
 
+  // Proyectos
+  { id: 'PROJECTS_LIST', label: 'Portafolio', parent: 'PROJECTS' },
+  { id: 'PROJECTS_TASKS', label: 'Planificación y tareas', parent: 'PROJECTS' },
+  { id: 'PROJECTS_MILESTONES', label: 'Hitos', parent: 'PROJECTS' },
+  { id: 'PROJECTS_EXPENSES', label: 'Costos y presupuesto', parent: 'PROJECTS' },
+  { id: 'PROJECTS_DOCUMENTS', label: 'Documentos', parent: 'PROJECTS' },
+  { id: 'PROJECTS_TIME', label: 'Tiempo y cronograma', parent: 'PROJECTS' },
+
   // Documentos
   { id: 'DOCUMENTS_FILES', label: 'Archivos', parent: 'DOCUMENTS' },
   { id: 'DOCUMENTS_CONTRACTS', label: 'Contratos', parent: 'DOCUMENTS' },
@@ -309,7 +317,7 @@ export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'ACCOUNTING', 'HR',
   'ACTIVITIES', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
-  'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT', 'RESTAURANT_TABLES',
+  'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT', 'RESTAURANT_TABLES',
   'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS',
   ...PERMISSION_SUBMODULES.map(({ id }) => id),
 ]);

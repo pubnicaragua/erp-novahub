@@ -85,6 +85,40 @@ export interface ManagerOverview {
   }>;
 }
 
+export interface ManagerUserActivityItem {
+  id: string;
+  clientTenantId: string;
+  userId?: string | null;
+  module: string;
+  entity: string;
+  entityId: string;
+  action: string;
+  details?: string | null;
+  createdAt: string;
+  user?: { id: string; name?: string | null; email?: string | null } | null;
+  clientTenant?: { id: string; name: string } | null;
+}
+
+export interface ManagerUserActivityResponse {
+  items: ManagerUserActivityItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface ManagerUserActivityQuery {
+  branchId?: string;
+  userId?: string;
+  module?: string;
+  action?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 export interface ManagerInventoryAdjustmentItem {
   id: string;
   productId: string;
@@ -810,6 +844,11 @@ export const enterpriseGroupsService = {
   getUsers: (groupId: string, branchId?: string, signal?: AbortSignal) =>
     api.get<any[]>(`/enterprise-groups/manager/${groupId}/users`, {
       params: branchId ? { branchId } : undefined,
+      signal,
+    }),
+  getUserActivity: (groupId: string, query: ManagerUserActivityQuery = {}, signal?: AbortSignal) =>
+    api.get<ManagerUserActivityResponse>(`/enterprise-groups/manager/${groupId}/users/activity`, {
+      params: query,
       signal,
     }),
   updateBranchUser: (

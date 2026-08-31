@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from './select';
 
-export type ViewLayoutMode = 'table' | 'cards' | 'kanban';
+export type ViewLayoutMode = 'table' | 'cards';
 export const TABLE_LAYOUT_BREAKPOINT = 1280;
 
 function readCompactTableViewport() {

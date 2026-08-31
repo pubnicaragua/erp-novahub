@@ -1,0 +1,16 @@
+Rule: socket/low-supply-chain-score
+Severity: error
+Category: Security
+Count: 2
+
+`jspdf@2.5.2 (lockfile resolution of "^2.5.2")` scored 25/100 on Socket's vulnerability axis (minimum 50). This points to known security vulnerabilities (CVEs) affecting this version. Other axes — supply chain 97, maintenance 83, quality 99, license 100.
+
+`react-router@7.13.0` scored 40/100 on Socket's vulnerability axis (minimum 50). This points to known security vulnerabilities (CVEs) affecting this version. Other axes — supply chain 94, maintenance 96, quality 79, license 100.
+
+Suggestion: Upgrade to a version with no known advisories (run `npm audit` to find one), or replace it; update `"jspdf": "^2.5.2"` in package.json. Full report: https://socket.dev/npm/package/jspdf/overview/2.5.2. If you've reviewed and accepted this package, raise `supplyChain.minScore` (currently 50) or set `supplyChain.severity: "warning"`.
+
+Docs: https://socket.dev/npm/package/jspdf/overview/2.5.2
+
+Files:
+  package.json:68
+  package.json:85
