@@ -681,10 +681,10 @@ export function OrgChartView({ tenantId, tenantName, employees, users, onBack, o
 
       {/* Modal edición de jefe */}
       {editingEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditingEmployee(null)}>
-          <div className="relative max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-2xl sm:p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-3 pr-10">
-              <h3 className="break-words text-sm font-black uppercase tracking-wider">Jefe de {getEmployeeName(editingEmployee)}</h3>
+        <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="org-chart-edit-title" onClick={() => setEditingEmployee(null)}>
+          <div className="nh-modal-surface relative max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-2xl sm:p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="nh-modal-header flex items-start justify-between gap-3 border-b border-border/50 pb-4 pr-10">
+              <h3 id="org-chart-edit-title" className="break-words text-sm font-black uppercase tracking-wider">Jefe de {getEmployeeName(editingEmployee)}</h3>
               <button type="button" onClick={() => setEditingEmployee(null)} className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Cerrar edición de jefe" title="Cerrar">
                 <X className="size-4" />
               </button>
@@ -711,7 +711,7 @@ export function OrgChartView({ tenantId, tenantName, employees, users, onBack, o
                 <span>Los subordinados actuales de {getEmployeeName(editingEmployee)} se mantienen con él.</span>
               </div>
             </div>
-            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+            <div className="nh-modal-footer mt-5 flex flex-col-reverse items-stretch justify-end gap-2 border-t border-border/50 pt-4 sm:flex-row sm:items-center">
               <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setEditingEmployee(null)}>Cancelar</Button>
               <Button
                 size="sm"

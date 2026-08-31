@@ -183,6 +183,7 @@ interface PlanCuentasViewProps {
 
 export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewProps) {
   const { canPerform, user } = useAuth();
+  const canExportAccounts = canPerform('ACCOUNTING_CHART', 'export');
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
 
@@ -499,6 +500,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   };
 
   const handleExport = async () => {
+    if (!canExportAccounts) return;
     try {
       const raw = await contabilidadService.exportAccounts();
       const rows = Array.isArray(raw) ? raw : (raw as any)?.data;
@@ -767,9 +769,11 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           <h1 className="text-2xl font-bold tracking-tight">Plan de Cuentas</h1>
         </div>
         <div className="erp-toolbar-primary-group flex w-full flex-wrap gap-2 sm:w-auto">
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <FileDown className="w-4 h-4 mr-1" /> Exportar
-          </Button>
+          {canExportAccounts && (
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <FileDown className="w-4 h-4 mr-1" /> Exportar
+            </Button>
+          )}
           {canPerform('ACCOUNTING_CHART', 'create') && (
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload className="w-4 h-4 mr-1" /> Importar

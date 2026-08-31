@@ -29,6 +29,7 @@ import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreview
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { pdfStatusLabel } from '../../utils/pdfStatus';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86_400_000;
@@ -966,7 +967,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         renderTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name.substring(0, 32), fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']), [59, 130, 246]);
 
-        renderTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [String(i.productName || '').substring(0, 32), i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), i.status || '']), [245, 158, 11]);
+        renderTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [String(i.productName || '').substring(0, 32), i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), pdfStatusLabel(i.status, '-')]), [245, 158, 11]);
 
         doc.save(buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
@@ -1107,7 +1108,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         writeTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name, fmtQty(p.qty), p.costPrice, p.value, `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]), 'FF10B981');
         writeTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name, fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']), 'FF3B82F6');
-        writeTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [i.productName, i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), i.status || '']), 'FFF59E0B');
+        writeTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [i.productName, i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), pdfStatusLabel(i.status, '-')]), 'FFF59E0B');
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_inventario'], 'xlsx', dateRange));
         toast.success("Excel exportado exitosamente");

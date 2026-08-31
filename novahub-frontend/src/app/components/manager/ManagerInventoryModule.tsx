@@ -309,7 +309,7 @@ function ProductDetailSheet({ row, canViewInventoryCost, groupId, onEnterBranch,
   const branchTargets = resolveRecordBranchTargets(row);
 
   return <Sheet open={Boolean(row)} onOpenChange={(open) => !open && onClose()}>
-    <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-3xl">
+    <SheetContent side="right" className="erp-detail-panel flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'general' | 'distribution')} className="flex min-h-0 flex-1 flex-col gap-0">
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-6 py-5 backdrop-blur-md">
           <div className="flex items-start gap-4 pr-8">
@@ -475,7 +475,7 @@ function InventoryDetailSheet({ view, row, canViewInventoryCost, groupId, onEnte
     : [row?.code, row?.sku || row?.product?.code, row?.branchName, row?.warehouseName].filter(Boolean).join(' · ');
 
   return <Sheet open={Boolean(row)} onOpenChange={(open) => !open && onClose()}>
-    <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-3xl">
+    <SheetContent side="right" className="erp-detail-panel flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
       <SheetHeader className="sticky top-0 z-10 space-y-0 border-b border-border/50 bg-background/95 px-6 py-5 backdrop-blur-md">
         <div className="flex items-start gap-4 pr-8">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-inner">{createElement(viewIcon(view), { className: 'size-6' })}</div>

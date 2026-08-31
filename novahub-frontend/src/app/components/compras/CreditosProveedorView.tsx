@@ -32,8 +32,88 @@ import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { contabilidadService } from '../../services/contabilidad.service';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+
+type CreditImportCatalogOption = {
+  code: string;
+  name: string;
+  rate: number;
+  isActive?: boolean;
+};
+
+const FALLBACK_CREDIT_TAX_OPTIONS: CreditImportCatalogOption[] = [
+  { code: 'GRAVADO', name: 'IVA gravado', rate: 15 },
+  { code: 'EXENTO', name: 'IVA exento', rate: 0 },
+  { code: 'EXONERADO', name: 'IVA exonerado', rate: 0 },
+  { code: 'NO_GRAVADO', name: 'IVA no gravado', rate: 0 },
+  { code: 'NO_SUJETO', name: 'IVA no sujeto', rate: 0 },
+  { code: 'TASA_ESPECIAL', name: 'IVA tasa especial', rate: 7 },
+  { code: 'ISC_APLICABLE', name: 'ISC aplicable', rate: 0 },
+];
+
+const FALLBACK_CREDIT_WITHHOLDING_OPTIONS: CreditImportCatalogOption[] = [
+  { code: 'IR_1', name: 'IR 1%', rate: 1 },
+  { code: 'IR_2', name: 'IR 2%', rate: 2 },
+  { code: 'IR_5', name: 'IR 5%', rate: 5 },
+  { code: 'IR_10', name: 'IR 10%', rate: 10 },
+  { code: 'IR_15', name: 'IR 15%', rate: 15 },
+  { code: 'IR_20', name: 'IR 20%', rate: 20 },
+  { code: 'IR_25', name: 'IR 25%', rate: 25 },
+  { code: 'IVA_1', name: 'IVA retención 1%', rate: 1 },
+  { code: 'IVA_2', name: 'IVA retención 2%', rate: 2 },
+  { code: 'IVA_3', name: 'IVA retención 3%', rate: 3 },
+  { code: 'IVA_4', name: 'IVA retención 4%', rate: 4 },
+  { code: 'IVA_5', name: 'IVA retención 5%', rate: 5 },
+];
+
+const normalizeCreditCatalogLabel = (value: unknown) => String(value ?? '')
+  .trim()
+  .toUpperCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^A-Z0-9]+/g, '_')
+  .replace(/^_+|_+$/g, '');
+
+const readCreditCatalog = (response: any, fallback: CreditImportCatalogOption[]) => {
+  const entries = (Array.isArray(response) ? response : response?.data || [])
+    .filter((entry: any) => entry?.code)
+    .map((entry: any) => ({
+      code: String(entry.code).trim().toUpperCase(),
+      name: String(entry.name || entry.code).trim(),
+      rate: Number(entry.rate || 0),
+      isActive: entry.isActive !== false,
+    }));
+  return entries.length > 0 ? entries : fallback;
+};
+
+const isNoneCreditWithholding = (option: CreditImportCatalogOption | string) => {
+  const value = typeof option === 'string' ? option : option.code;
+  const name = typeof option === 'string' ? option : option.name;
+  return ['NONE', 'SIN_RETENCION', 'NO_APLICA', 'NINGUNA'].includes(normalizeCreditCatalogLabel(value))
+    || ['NONE', 'SIN_RETENCION', 'NO_APLICA', 'NINGUNA'].includes(normalizeCreditCatalogLabel(name));
+};
+
+const normalizeCreditCatalogValue = (value: unknown, options: CreditImportCatalogOption[], fallback: string) => {
+  const normalized = normalizeCreditCatalogLabel(value);
+  if (!normalized || isNoneCreditWithholding(String(value || ''))) return fallback;
+  const match = options.find((option) => [
+    option.code,
+    option.name,
+    `${option.name} (${option.rate}%)`,
+    `${option.name} ${option.rate}%`,
+  ].some((alias) => normalizeCreditCatalogLabel(alias) === normalized));
+  return match?.code || String(value).trim().toUpperCase();
+};
+
+const normalizeCreditDecimalInput = (value: unknown) => {
+  const raw = String(value ?? '').replace(',', '.');
+  const cleaned = raw.replace(/[^\d.]/g, '');
+  const dotIndex = cleaned.indexOf('.');
+  if (dotIndex < 0) return cleaned;
+  return `${cleaned.slice(0, dotIndex)}.${cleaned.slice(dotIndex + 1).replace(/\./g, '')}`;
+};
 
 const INVOICE_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pendiente',
@@ -66,6 +146,23 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ISSUED' | 'APPLIED'>('ALL');
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [taxCatalog, setTaxCatalog] = useState<CreditImportCatalogOption[]>(FALLBACK_CREDIT_TAX_OPTIONS);
+  const [withholdingCatalog, setWithholdingCatalog] = useState<CreditImportCatalogOption[]>(FALLBACK_CREDIT_WITHHOLDING_OPTIONS);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      contabilidadService.getTaxCatalog('TAX'),
+      contabilidadService.getTaxCatalog('WITHHOLDING'),
+    ]).then(([taxResponse, withholdingResponse]) => {
+      if (!active) return;
+      setTaxCatalog(readCreditCatalog(taxResponse, FALLBACK_CREDIT_TAX_OPTIONS));
+      setWithholdingCatalog(readCreditCatalog(withholdingResponse, FALLBACK_CREDIT_WITHHOLDING_OPTIONS));
+    }).catch(() => {
+      // Los valores de respaldo permiten importar aunque el catálogo esté temporalmente indisponible.
+    });
+    return () => { active = false; };
+  }, []);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierCredit> | null>(null);
@@ -85,10 +182,17 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   useEffect(() => { setSuppliers(supplierCatalog); }, [supplierCatalog]);
 
   const downloadCreditTemplate = () => {
+    const activeTaxOptions = taxCatalog.filter((option) => option.isActive !== false);
+    const activeWithholdingOptions = withholdingCatalog.filter((option) => option.isActive !== false && !isNoneCreditWithholding(option));
+    const exampleTax = activeTaxOptions[0] || FALLBACK_CREDIT_TAX_OPTIONS[0];
+    const exampleWithholding = activeWithholdingOptions[0];
+    const formatOptions = (options: Array<CreditImportCatalogOption | string>, emptyLabel: string) => options.length > 0
+      ? options.map((option) => typeof option === 'string' ? option : `${option.name} (${option.rate}%)`).join(' · ')
+      : emptyLabel;
     const ws = XLSX.utils.aoa_to_sheet([
       ['TIPO', 'PRODUCTO', 'DESCRIPCION', 'CANTIDAD', 'PRECIO', 'IVA', 'TASA_IR', 'DESCUENTO'],
-      ['PRODUCTO', 'Código o nombre exacto', 'Cemento Holcim 50kg', '25', '210', 'GRAVADO', 'NONE', '0'],
-      ['SERVICIO', '', 'Flete de entrega', '1', '1500', 'EXENTO', 'IR_1', '2'],
+      ['PRODUCTO', 'Código o nombre exacto', 'Cemento Holcim 50kg', '25', '210', exampleTax.name, exampleWithholding?.name || 'Sin retención', '0'],
+      ['SERVICIO', '', 'Flete de entrega', '1', '1500', activeTaxOptions.find((option) => option.code === 'EXENTO')?.name || 'IVA exento', 'Sin retención', '2'],
     ]);
     const guide = XLSX.utils.aoa_to_sheet([
       ['PLANTILLA DE CRÉDITO DE PROVEEDOR - REGLAS POR COLUMNA'],
@@ -111,31 +215,23 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       ['  Precio unitario en la moneda del crédito (C$ o USD). Ejemplo: 210'],
       [''],
       ['IVA (opcional, por línea)'],
-      ['  GRAVADO  -> Aplica IVA a esta línea (usa la tasa global del formulario).'],
-      ['  EXENTO   -> No aplica IVA.'],
-      ['  Si se deja vacío, se usa la configuración global del formulario.'],
+      ['  Escriba el nombre en español de una opción configurada. La tasa se toma del catálogo vigente y se normaliza al código interno.'],
+      [`  Opciones configuradas: ${formatOptions(activeTaxOptions, 'No hay opciones activas configuradas')}`],
       [''],
       ['TASA_IR (opcional, por línea)'],
-      ['  NONE    -> Sin retención IR.'],
-      ['  IR_1    -> Retención IR 1%.'],
-      ['  IR_2    -> Retención IR 2%.'],
-      ['  IR_5    -> Retención IR 5%.'],
-      ['  IR_10   -> Retención IR 10%.'],
-      ['  IR_15   -> Retención IR 15%.'],
-      ['  IR_20   -> Retención IR 20%.'],
-      ['  IR_25   -> Retención IR 25%.'],
-      ['  Si se deja vacío, se usa la configuración global del formulario.'],
+      ['  Escriba "Sin retención" cuando no aplique o el nombre en español de una retención configurada. Se normaliza al código interno.'],
+      [`  Opciones configuradas: ${formatOptions(['Sin retención', ...activeWithholdingOptions], 'Sin retención')}`],
       [''],
       ['DESCUENTO (opcional, por línea)'],
       ['  Porcentaje de descuento para esta línea (0-100). Ejemplo: 2'],
       ['  Si se deja vacío, se usa el descuento global del formulario.'],
       [''],
       ['EJEMPLOS'],
-      ['TIPO=PRODUCTO | PRODUCTO=HOLCIM | DESCRIPCION= | CANTIDAD=25 | PRECIO=210 | IVA=GRAVADO | TASA_IR=NONE | DESCUENTO=0'],
-      ['TIPO=SERVICIO | PRODUCTO= | DESCRIPCION=Flete de entrega | CANTIDAD=1 | PRECIO=1500 | IVA=EXENTO | TASA_IR=IR_1 | DESCUENTO=2'],
+      [`TIPO=PRODUCTO | PRODUCTO=HOLCIM | DESCRIPCION= | CANTIDAD=25 | PRECIO=210 | IVA=${exampleTax.name} | TASA_IR=${exampleWithholding?.name || 'Sin retención'} | DESCUENTO=0`],
+      [`TIPO=SERVICIO | PRODUCTO= | DESCRIPCION=Flete de entrega | CANTIDAD=1 | PRECIO=1500 | IVA=${activeTaxOptions.find((option) => option.code === 'EXENTO')?.name || 'IVA exento'} | TASA_IR=Sin retención | DESCUENTO=2`],
       [''],
-      ['NOTA: IVA, retención IR y descuento pueden configurarse globalmente en el formulario o por línea en este archivo.'],
-      ['Los valores por línea tienen prioridad sobre la configuración global.'],
+      ['NOTA: los nombres en español solo son la forma de captura. El endpoint los convierte a los códigos internos equivalentes antes de guardar.'],
+      ['Si se deja vacío, se usa la configuración global del formulario. Los valores del archivo se muestran para revisión antes de guardar.'],
       ['El archivo puede ser .xlsx, .xls, .csv o .pdf con estas mismas columnas.'],
     ]);
     const wb = XLSX.utils.book_new();
@@ -172,11 +268,12 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       }
       setImportProgress(74);
 
-      const normalizeHeader = (h: any) => String(h || '').trim().toLowerCase().replace(/[\s_\-]+/g, '');
+      const normalizeHeader = (h: any) => String(h || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_\-]+/g, '');
+      const parseImportNumber = (value: unknown) => Number(String(value ?? '').trim().replace(',', '.'));
       const header = raw[0]?.map(normalizeHeader) || [];
       const findCol = (...names: string[]) => {
         for (const n of names) {
-          const idx = header.indexOf(n);
+          const idx = header.indexOf(normalizeHeader(n));
           if (idx >= 0) return idx;
         }
         return -1;
@@ -202,11 +299,13 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         const tipo = String(row[iTipo >= 0 ? iTipo : 0] || 'PRODUCTO').trim().toUpperCase();
         const rawProd = iProd >= 0 ? String(row[iProd] || '').trim() : '';
         const desc = String(row[iDesc] || '').trim();
-        const cant = Number(row[iCant]);
-        const precio = Number(row[iPrecio]);
-        const ivaLine = iIva >= 0 ? String(row[iIva] || '').trim().toUpperCase() : '';
-        const irLine = iIr >= 0 ? String(row[iIr] || '').trim().toUpperCase() : '';
-        const descLine = iDescuento >= 0 ? Number(row[iDescuento]) : 0;
+        const cant = parseImportNumber(row[iCant]);
+        const precio = parseImportNumber(row[iPrecio]);
+        const rawIvaLine = iIva >= 0 ? String(row[iIva] ?? '').trim() : '';
+        const rawIrLine = iIr >= 0 ? String(row[iIr] ?? '').trim() : '';
+        const ivaLine = rawIvaLine ? normalizeCreditCatalogValue(rawIvaLine, taxCatalog, 'EXENTO') : '';
+        const irLine = rawIrLine ? normalizeCreditCatalogValue(rawIrLine, withholdingCatalog, 'NONE') : '';
+        const descLine = iDescuento >= 0 ? parseImportNumber(row[iDescuento]) : 0;
 
         const tipoNorm = tipo.startsWith('PROD') ? 'PRODUCT' : tipo.startsWith('SERV') ? 'SERVICE' : '';
         if (!tipoNorm) { errors.push(`Fila ${line}: TIPO inválido ("${tipo}"). Use PRODUCTO o SERVICIO.`); return; }
@@ -391,11 +490,15 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const creditDiscountRate = Number(localDoc?.discountRate || 0);
   const creditDiscountAmount = creditSubtotal * creditDiscountRate / 100;
   const creditTaxBase = Math.max(0, creditSubtotal - creditDiscountAmount);
-  const isGravado = String(localDoc?.taxType || 'EXENTO').toUpperCase() === 'GRAVADO';
-  const creditTaxRate = isGravado ? Number(localDoc?.taxRate || 15) : 0;
+  const currentTaxType = normalizeCreditCatalogLabel(localDoc?.taxType || 'EXENTO');
+  const isGravado = !['EXENTO', 'EXONERADO', 'NO_GRAVADO', 'NO_SUJETO'].includes(currentTaxType);
+  const selectedTaxOption = taxCatalog.find((option) => normalizeCreditCatalogLabel(option.code) === currentTaxType);
+  const creditTaxRate = isGravado ? Number(localDoc?.taxRate || selectedTaxOption?.rate || 15) : 0;
   const creditTaxAmount = creditTaxBase * creditTaxRate / 100;
-  const hasWithholding = String(localDoc?.withholdingType || 'NONE').toUpperCase() !== 'NONE';
-  const creditWithholdingRate = hasWithholding ? Number(localDoc?.withholdingRate || 0) : 0;
+  const currentWithholdingType = String(localDoc?.withholdingType || 'NONE').toUpperCase();
+  const hasWithholding = !isNoneCreditWithholding(currentWithholdingType);
+  const selectedWithholdingOption = withholdingCatalog.find((option) => normalizeCreditCatalogLabel(option.code) === normalizeCreditCatalogLabel(currentWithholdingType));
+  const creditWithholdingRate = hasWithholding ? Number(localDoc?.withholdingRate || selectedWithholdingOption?.rate || 0) : 0;
   const creditWithholdingTotal = creditTaxBase * creditWithholdingRate / 100;
   const creditGrandTotal = Math.max(0, creditTaxBase + creditTaxAmount - creditWithholdingTotal);
   
@@ -412,7 +515,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           subtotal: creditSubtotal,
           discountRate: creditDiscountRate,
           discountAmount: creditDiscountAmount,
-          taxType: isGravado ? 'GRAVADO' : 'EXENTO',
+          // Preserve the selected catalog code so configured Spanish labels are
+          // normalized by the API without losing custom tax treatments.
+          taxType: isGravado ? (localDoc.taxType || selectedTaxOption?.code || 'GRAVADO') : 'EXENTO',
           taxRate: isGravado ? creditTaxRate : 0,
           taxAmount: creditTaxAmount,
           withholdingType: hasWithholding ? (localDoc.withholdingType || 'IR_2') : 'NONE',
@@ -748,25 +853,27 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <p className="text-[10px] text-muted-foreground mb-1">IVA</p>
                   <Select
                     disabled={!canMutate || !!localDoc.supplierInvoiceId}
-                    value={String(localDoc.taxType || 'EXENTO').toUpperCase()}
+                    value={currentTaxType}
                     onValueChange={(taxType) => {
-                      const gravado = taxType === 'GRAVADO';
-                      setLocalDoc({ ...localDoc, taxType: gravado ? 'GRAVADO' : 'EXENTO', taxRate: gravado ? (Number(localDoc.taxRate) || 15) : 0 });
+                      const selected = taxCatalog.find((option) => normalizeCreditCatalogLabel(option.code) === normalizeCreditCatalogLabel(taxType));
+                      const taxable = !['EXENTO', 'EXONERADO', 'NO_GRAVADO', 'NO_SUJETO'].includes(normalizeCreditCatalogLabel(taxType));
+                      setLocalDoc({ ...localDoc, taxType, taxRate: taxable ? (Number(localDoc.taxRate) || Number(selected?.rate) || 15) : 0 });
                     }}
                   >
                     <SelectTrigger className="h-8 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="EXENTO">Exento</SelectItem>
-                      <SelectItem value="GRAVADO">Gravado</SelectItem>
+                      {taxCatalog.filter((option) => option.isActive !== false).map((option) => (
+                        <SelectItem key={option.code} value={option.code}>{option.name} ({option.rate}%)</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Tasa IVA (%)</p>
                   <Input
-                    disabled={!canMutate || !!localDoc.supplierInvoiceId || String(localDoc.taxType || 'EXENTO').toUpperCase() !== 'GRAVADO'}
+                    disabled={!canMutate || !!localDoc.supplierInvoiceId || !isGravado}
                     type="number" min="0" step="0.01"
-                    value={String(localDoc.taxType || 'EXENTO').toUpperCase() === 'GRAVADO' ? (localDoc.taxRate || 15) : 0}
+                    value={isGravado ? creditTaxRate : 0}
                     onChange={(e) => setLocalDoc({ ...localDoc, taxRate: Number(e.target.value) })}
                     className="h-8 text-xs font-bold tabular-nums" />
                 </div>
@@ -775,26 +882,23 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <div className="flex h-8 items-center gap-2">
                     <Select
                       disabled={!canMutate || !!localDoc.supplierInvoiceId}
-                      value={String(localDoc.withholdingType || 'NONE').toUpperCase()}
+                      value={currentWithholdingType}
                       onValueChange={(withholdingType) => {
-                        const withRetention = withholdingType !== 'NONE';
+                        const selected = withholdingCatalog.find((option) => normalizeCreditCatalogLabel(option.code) === normalizeCreditCatalogLabel(withholdingType));
+                        const withRetention = !isNoneCreditWithholding(withholdingType);
                         setLocalDoc({
                           ...localDoc,
                           withholdingType: withRetention ? withholdingType : 'NONE',
-                          withholdingRate: withRetention ? (Number(localDoc.withholdingRate) || Number(withholdingType.split('_')[1] || 2)) : 0,
+                          withholdingRate: withRetention ? (Number(localDoc.withholdingRate) || Number(selected?.rate) || 2) : 0,
                         });
                       }}
                     >
                       <SelectTrigger className="h-8 w-full text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="NONE">Sin retención</SelectItem>
-                        <SelectItem value="IR_1">IR 1%</SelectItem>
-                        <SelectItem value="IR_2">IR 2%</SelectItem>
-                        <SelectItem value="IR_5">IR 5%</SelectItem>
-                        <SelectItem value="IR_10">IR 10%</SelectItem>
-                        <SelectItem value="IR_15">IR 15%</SelectItem>
-                        <SelectItem value="IR_20">IR 20%</SelectItem>
-                        <SelectItem value="IR_25">IR 25%</SelectItem>
+                        {withholdingCatalog.filter((option) => option.isActive !== false && !isNoneCreditWithholding(option)).map((option) => (
+                          <SelectItem key={option.code} value={option.code}>{option.name} ({option.rate}%)</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -916,10 +1020,10 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                     <div className="col-span-2">
                       <Input 
                         disabled={!canMutate}
-                        type="number" 
-                        min="0" 
-                        value={item.unitPrice === 0 ? '' : item.unitPrice} 
-                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
+                        type="text"
+                        inputMode="decimal"
+                        value={item.unitPrice === 0 ? '' : String(item.unitPrice ?? '')}
+                        onChange={(e) => handleItemChange(idx, 'unitPrice', normalizeCreditDecimalInput(e.target.value))}
                         className="h-8 text-xs text-right" 
                         placeholder="0" 
                       />
@@ -1125,7 +1229,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <DialogHeader data-tour="purchases-credit-modal-title">
             <DialogTitle className="flex items-center gap-2"><CheckCircle2 className="size-5 text-emerald-500" /> Aplicar crédito {applyTarget?.number}</DialogTitle>
             <DialogDescription>
-              Al aplicar el crédito se cancelará la cuenta por pagar asociada y se generará el asiento contable de pago. Esta acción no se puede deshacer.
+              Al aplicar el crédito se reducirá la cuenta por pagar asociada o quedará saldo a favor frente al proveedor. No se registra ningún pago ni salida de caja. Esta acción no se puede deshacer.
             </DialogDescription>
             <PurchaseViewTutorial view="credits" context="form" labelOverride="Cómo aplicar crédito" stepKeys={['title', 'data', 'summary', 'actions']} targetPrefix="purchases-credit-modal" />
           </DialogHeader>
@@ -1136,7 +1240,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 <div className="flex justify-between"><span className="text-muted-foreground">Monto</span><b className="text-emerald-600"><CurrencyValuationAmount amount={Number(applyTarget.total || 0)} sourceCurrency={resolveSourceCurrency((applyTarget as any)?.currency)} sourceExchangeRate={(applyTarget as any)?.exchangeRate} /></b></div>
               </div>
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs leading-relaxed text-muted-foreground">
-                El pago cancelará la cuenta por pagar del proveedor. Se registrará el movimiento bancario y el asiento contable correspondiente.
+                El crédito cancela o reduce la cuenta por pagar del proveedor. Solo se registrará el asiento de compensación; no se generará movimiento bancario.
               </div>
             </div>
           )}

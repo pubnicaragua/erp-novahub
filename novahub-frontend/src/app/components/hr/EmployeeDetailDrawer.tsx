@@ -150,7 +150,7 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-3xl">
+      <SheetContent side="right" className="erp-detail-panel w-full gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as DetailTab)} className="flex min-h-0 flex-1 flex-col gap-0">
           <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-4 backdrop-blur-md sm:px-6" data-tour="hr-employee-detail-title">
             <div className="flex items-start gap-3 pr-8">

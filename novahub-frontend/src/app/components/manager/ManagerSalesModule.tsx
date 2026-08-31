@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Activity, ArrowUpRight, Building2, Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, FileCog, FileSpreadsheet, FileText, History, LayoutGrid, List, Loader2, Mail, MapPin, Phone, Receipt, RefreshCw, Search, ShoppingCart, TrendingUp, Truck, UserRound, Users } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
-import { MANAGER_SALES_VIEWS, type ManagerSalesView } from './manager-sales.types';
+import { MANAGER_SALES_VIEWS, VISIBLE_MANAGER_SALES_VIEWS, type ManagerSalesView } from './manager-sales.types';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { ScrollArea } from '../ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -442,7 +442,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
       </div>
     </div>
 
-    {sidebarCollapsed && <div className="sales-subnav flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/30 p-1.5">{MANAGER_SALES_VIEWS.map((item) => <button key={item.id} type="button" onClick={() => changeView(item.id)} className={cn('flex-none rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-wide text-muted-foreground transition-colors hover:bg-card hover:text-foreground', view === item.id && 'bg-primary text-primary-foreground shadow-sm')}><span className="sm:hidden">{item.label.slice(0, 3)}</span><span className="hidden sm:inline">{item.label}</span></button>)}</div>}
+    {sidebarCollapsed && <div className="sales-subnav flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/30 p-1.5">{VISIBLE_MANAGER_SALES_VIEWS.map((item) => <button key={item.id} type="button" onClick={() => changeView(item.id)} className={cn('flex-none rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-wide text-muted-foreground transition-colors hover:bg-card hover:text-foreground', view === item.id && 'bg-primary text-primary-foreground shadow-sm')}><span className="sm:hidden">{item.label.slice(0, 3)}</span><span className="hidden sm:inline">{item.label}</span></button>)}</div>}
 
     {view === 'invoice-series' ? <ManagerInvoiceSeriesSettings groupId={groupId} businessUnitId={businessUnitId} branchId={branchId} /> : view === 'overview' ? <SalesOverview metrics={metrics} reportCurrency={activeReportCurrency} /> : <>
       <SalesFilters view={view} search={search} setSearch={(value) => { setSearch(value); setPage(1); }} status={status} setStatus={(value) => { setStatus(value); setPage(1); }} customerType={customerType} setCustomerType={(value) => { setCustomerType(value); setPage(1); }} dateFrom={dateFrom} setDateFrom={(value) => { setDateFrom(value); setPage(1); }} dateTo={dateTo} setDateTo={(value) => { setDateTo(value); setPage(1); }} statusOptions={activeStatusOptions} layoutMode={effectiveLayoutMode} setLayoutMode={setLayoutMode} registerId={registerId} setRegisterId={(value) => { setRegisterId(value); setPage(1); }} registerOptions={metrics.registers || []} deliveryBranchId={deliveryBranchId} setDeliveryBranchId={(value) => { setDeliveryBranchId(value); setPage(1); }} branches={branches} paymentStatus={paymentStatus} setPaymentStatus={(value) => { setPaymentStatus(value); setPage(1); }} priceListMode={priceListMode} setPriceListMode={(value) => { setPriceListMode(value); setPage(1); }} />
@@ -886,7 +886,7 @@ function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenC
   const recordBranchId = String(record?.branchId || '');
 
   return <Sheet open={Boolean(customer)} onOpenChange={onOpenChange}>
-    <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-3xl">
+    <SheetContent side="right" className="erp-detail-panel flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'general' | 'facturas' | 'historial')} className="flex min-h-0 flex-1 flex-col gap-0">
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-6 py-5 backdrop-blur-md">
           <div className="flex items-start gap-4 pr-8">

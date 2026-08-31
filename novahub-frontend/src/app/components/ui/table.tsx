@@ -4,18 +4,78 @@ import * as React from "react";
 
 import { cn } from "./utils";
 
-function Table({ className, containerClassName, containerStyle, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; containerStyle?: React.CSSProperties }) {
+function textFromNode(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textFromNode).join(" ");
+  if (React.isValidElement(node)) return textFromNode(node.props.children);
+  return "";
+}
+
+function getResponsiveHeaderLabels(children: React.ReactNode): string[] {
+  const labels: string[] = [];
+
+  const visit = (nodes: React.ReactNode, insideHeader = false) => {
+    React.Children.forEach(nodes, (node) => {
+      if (!React.isValidElement(node)) return;
+      if (node.type === TableHeader) {
+        visit(node.props.children, true);
+        return;
+      }
+      if (insideHeader && node.type === TableRow) {
+        React.Children.forEach(node.props.children, (cell) => {
+          if (React.isValidElement(cell) && cell.type === TableHead) {
+            labels.push(textFromNode(cell.props.children).replace(/\s+/g, " ").trim());
+          }
+        });
+        return;
+      }
+      if (insideHeader) visit(node.props.children, true);
+    });
+  };
+
+  visit(children);
+  return labels;
+}
+
+function addResponsiveCellLabels(children: React.ReactNode, labels: string[]): React.ReactNode {
+  return React.Children.map(children, (node) => {
+    if (!React.isValidElement(node)) return node;
+    if (node.type === TableRow) {
+      let cellIndex = 0;
+      const rowChildren = React.Children.map(node.props.children, (cell) => {
+        if (!React.isValidElement(cell) || cell.type !== TableCell) return cell;
+        const label = cell.props["data-label"] ?? labels[cellIndex] ?? "";
+        cellIndex += 1;
+        return React.cloneElement(cell, { "data-label": label });
+      });
+      return React.cloneElement(node, { children: rowChildren });
+    }
+    if (node.type === TableBody || node.type === TableFooter || node.type === React.Fragment) {
+      return React.cloneElement(node, { children: addResponsiveCellLabels(node.props.children, labels) });
+    }
+    return node;
+  });
+}
+
+function Table({ className, containerClassName, containerStyle, responsiveCards = true, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; containerStyle?: React.CSSProperties; responsiveCards?: boolean }) {
+  const responsiveChildren = responsiveCards
+    ? addResponsiveCellLabels(props.children, getResponsiveHeaderLabels(props.children))
+    : props.children;
+
   return (
     <div
       data-slot="table-container"
+      data-responsive-cards-container={responsiveCards ? "true" : undefined}
       style={containerStyle}
       className={cn("relative w-full max-w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"
+        data-responsive-cards={responsiveCards ? "true" : undefined}
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
-      />
+       >{responsiveChildren}</table>
     </div>
   );
 }

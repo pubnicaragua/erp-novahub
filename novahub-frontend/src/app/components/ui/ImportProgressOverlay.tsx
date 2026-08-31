@@ -13,8 +13,8 @@ export function ImportProgressOverlay({ open, progress, title, description }: Im
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/65 p-4" role="dialog" aria-modal="true" aria-label={title} aria-busy="true">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-2xl">
+    <div className="nh-modal-root fixed inset-0 z-[200] flex items-center justify-center bg-black/65 p-4" role="dialog" aria-modal="true" aria-label={title} aria-busy="true">
+      <div className="nh-modal-surface w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-2xl">
         <div className="flex flex-col items-center gap-5 text-center">
           <div className="relative flex size-24 items-center justify-center rounded-full border-4 border-primary/25 bg-primary/5 shadow-inner">
             <div className="absolute inset-1 animate-spin rounded-full border-4 border-transparent border-t-primary" />

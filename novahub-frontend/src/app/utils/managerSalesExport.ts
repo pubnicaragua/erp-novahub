@@ -6,6 +6,7 @@ import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignColor,
 import { formatCurrencyDescriptor } from './currency';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
+import { pdfStatusLabel } from './pdfStatus';
 
 type ManagerSalesExportOptions = {
   rows: Array<Record<string, unknown>>;
@@ -47,6 +48,10 @@ function filteredContext(filterSummary?: string) {
 function normalizeCell(value: unknown) {
   if (value == null) return '—';
   return String(value);
+}
+
+function pdfReportCell(key: string, value: unknown) {
+  return /estado|status/i.test(key) ? pdfStatusLabel(value) : normalizeCell(value);
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -148,7 +153,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
     : ['Mensaje']).slice(0, 8);
   const reportLabels: Record<string, string> = { number: 'Documento', documentNumber: 'Documento', branchName: 'Sucursal', customerName: 'Cliente', supplierName: 'Proveedor', date: 'Fecha', dueDate: 'Vencimiento', expiryDate: 'Validez', status: 'Estado', total: 'Total', amount: 'Monto', balance: 'Saldo', currency: 'Moneda' };
   const configured = options.pdfFormat !== 'roll-58' && options.pdfFormat !== 'roll-80'
-    ? await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: options.title, tenantName: options.tenantName, tenantLogo: options.tenantLogo, designOverride: options.pdfDesign, rows: options.rows, columns: reportKeys.map((key) => ({ header: reportLabels[key] || key, value: row => row[key], align: ['total', 'amount', 'balance'].includes(key) ? 'right' as const : 'left' as const })), fileName: buildDateFilteredPdfFileName([options.fileBase], 'configured', options.dateFrom, options.dateTo) })
+    ? await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: options.title, tenantName: options.tenantName, tenantLogo: options.tenantLogo, designOverride: options.pdfDesign, rows: options.rows, columns: reportKeys.map((key) => ({ header: reportLabels[key] || key, value: row => /estado|status/i.test(key) ? pdfStatusLabel(row[key]) : row[key], align: ['total', 'amount', 'balance'].includes(key) ? 'right' as const : 'left' as const })), fileName: buildDateFilteredPdfFileName([options.fileBase], 'configured', options.dateFrom, options.dateTo) })
     : null;
   if (configured) return configured;
   const configuredSettings = options.pdfDesign && typeof options.pdfDesign === 'object' && 'settings' in options.pdfDesign
@@ -185,7 +190,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
   const keys = options.rows.length ? Object.keys(options.rows[0]) : ['Mensaje'];
   autoTable(doc, {
     head: [keys],
-    body: options.rows.length ? options.rows.map((row) => keys.map((key) => normalizeCell(row[key]))) : [['Sin registros para el alcance seleccionado']],
+    body: options.rows.length ? options.rows.map((row) => keys.map((key) => pdfReportCell(key, row[key]))) : [['Sin registros para el alcance seleccionado']],
     startY: currentY,
     margin: { left: margin, right: margin, bottom: 14 },
     styles: { font: 'helvetica', fontSize: keys.length > 12 ? 5.8 : 7, cellPadding: 1.8, textColor: [51, 65, 85], overflow: 'linebreak' },
@@ -206,7 +211,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
     const sheetKeys = sheetData.rows.length ? Object.keys(sheetData.rows[0]) : ['Mensaje'];
     autoTable(doc, {
       head: [sheetKeys],
-      body: sheetData.rows.length ? sheetData.rows.map((row) => sheetKeys.map((key) => normalizeCell(row[key]))) : [['Sin registros para el alcance seleccionado']],
+      body: sheetData.rows.length ? sheetData.rows.map((row) => sheetKeys.map((key) => pdfReportCell(key, row[key]))) : [['Sin registros para el alcance seleccionado']],
       startY: extraY,
       margin: { left: margin, right: margin, bottom: 14 },
       styles: { font: 'helvetica', fontSize: sheetKeys.length > 10 ? 5.8 : 7, cellPadding: 1.8, textColor: [51, 65, 85], overflow: 'linebreak' },

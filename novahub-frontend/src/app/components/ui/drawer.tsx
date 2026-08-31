@@ -37,8 +37,9 @@ function DrawerOverlay({
   return (
     <DrawerPrimitive.Overlay
       data-slot="drawer-overlay"
+      data-overlay-system="novahub"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px]",
         className,
       )}
       {...props}
@@ -56,8 +57,9 @@ function DrawerContent({
       <DrawerOverlay />
       <DrawerPrimitive.Content
         data-slot="drawer-content"
+        data-overlay-surface="novahub-panel"
         className={cn(
-          "group/drawer-content bg-background fixed z-50 flex min-h-0 min-w-0 max-w-[100vw] h-auto flex-col overscroll-contain",
+          "group/drawer-content bg-background/95 fixed z-50 flex min-h-0 min-w-0 max-w-[100vw] h-auto flex-col overscroll-contain border-border/60 backdrop-blur-xl",
           "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[min(90dvh,48rem)] data-[vaul-drawer-direction=top]:overflow-y-auto data-[vaul-drawer-direction=top]:rounded-b-lg data-[vaul-drawer-direction=top]:border-b",
           "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:mt-24 data-[vaul-drawer-direction=bottom]:max-h-[min(90dvh,48rem)] data-[vaul-drawer-direction=bottom]:overflow-y-auto data-[vaul-drawer-direction=bottom]:rounded-t-lg data-[vaul-drawer-direction=bottom]:border-t",
           "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-dvh data-[vaul-drawer-direction=right]:w-[min(100vw,28rem)] data-[vaul-drawer-direction=right]:max-w-full data-[vaul-drawer-direction=right]:overflow-hidden data-[vaul-drawer-direction=right]:border-l data-[vaul-drawer-direction=right]:sm:max-w-sm",
@@ -81,6 +83,7 @@ function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="drawer-header"
+      data-overlay-section="header"
       className={cn("flex min-w-0 shrink-0 flex-col gap-1.5 p-4", className)}
       {...props}
     />
@@ -91,6 +94,7 @@ function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="drawer-footer"
+      data-overlay-section="footer"
       className={cn("mt-auto flex min-w-0 shrink-0 flex-col gap-2 p-4", className)}
       {...props}
     />

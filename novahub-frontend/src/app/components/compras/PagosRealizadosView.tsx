@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { paymentsService, supplierInvoicesService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
@@ -30,6 +31,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { cn } from '../ui/utils';
 
 interface Props {
   data: PaymentMade[];
@@ -125,6 +127,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PurchasePaymentLine[]>([{ method: 'CASH', amount: 0, currency: displayCurrency, exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate }]);
+  const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
   const [detailPayment, setDetailPayment] = useState<PaymentMade | null>(null);
   const [paymentEvidenceFiles, setPaymentEvidenceFiles] = useState<File[]>([]);
   const groupedPayments = useMemo(() => groupMadePayments(data, baseCurrency, globalRate, toBaseAmount), [data, baseCurrency, globalRate, toBaseAmount]);
@@ -174,6 +177,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     if (editingId) {
       setPaymentEvidenceFiles([]);
       if (editingId === 'NEW') {
+         setPartialPaymentEnabled(false);
          const prefilled = draftPaymentFromInvoice || {};
          const prefilledMethod = normalizeMethod(prefilled.method as any);
          const prefilledCurrency = String(prefilled.currency || displayCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
@@ -207,6 +211,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
          }]);
          if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
        } else {
+          setPartialPaymentEnabled(false);
           const found = data.find(x => x.id === editingId);
           setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
           const existingLines = Array.isArray((found as any)?.payments) && (found as any).payments.length > 0
@@ -266,10 +271,32 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   const linkedInvoiceForPayment = (payment: PaymentMade) =>
     payment.supplierInvoice || bills.find((bill) => bill.id === payment.supplierInvoiceId) || null;
+  const selectedInvoice = localDoc?.supplierInvoiceId
+    ? bills.find((bill) => bill.id === localDoc.supplierInvoiceId) || (localDoc as any).supplierInvoice || null
+    : null;
+  const getPaymentLineBase = (line: PurchasePaymentLine) => toBaseAmount(
+    Number(line.amount || 0),
+    line.currency,
+    line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+  );
+  const paymentTotalBase = paymentLines.reduce((sum, line) => sum + getPaymentLineBase(line), 0);
+  const originalEditingPaymentBase = editingId && editingId !== 'NEW' && localDoc
+    ? Number(localDoc.baseAmount ?? toBaseAmount(Number(localDoc.amount || 0), localDoc.currency, Number(localDoc.exchangeRate || globalRate)))
+    : 0;
+  const selectedInvoiceBalanceBase = selectedInvoice
+    ? Math.max(0, toBaseAmount(
+      Number((selectedInvoice as any).balance ?? (selectedInvoice as any).total ?? 0),
+      (selectedInvoice as any).currency,
+      Number((selectedInvoice as any).exchangeRate || globalRate),
+    ) + originalEditingPaymentBase)
+    : 0;
+  const paymentRemainingBase = selectedInvoice
+    ? Math.max(0, selectedInvoiceBalanceBase - paymentTotalBase)
+    : 0;
+  const paymentOverInvoiceBalance = Boolean(selectedInvoice && paymentTotalBase > selectedInvoiceBalanceBase + 0.01);
   const expectedPaymentAmount = (payment: PaymentMade) => {
     const invoice = linkedInvoiceForPayment(payment) as any;
-    const orderTotal = Number(invoice?.purchaseReceipt?.purchaseOrder?.total || 0);
-    return orderTotal > 0 ? orderTotal : Number(invoice?.total || payment.amount || 0);
+    return Number(invoice?.total || payment.amount || 0);
   };
   const paidPaymentAmount = (payment: PaymentMade) => {
     const invoice = linkedInvoiceForPayment(payment) as any;
@@ -279,11 +306,11 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   };
   const paymentExpectedCurrency = (payment: PaymentMade) => {
     const invoice = linkedInvoiceForPayment(payment) as any;
-    return invoice?.purchaseReceipt?.purchaseOrder?.currency || invoice?.currency || payment.currency;
+    return invoice?.currency || payment.currency;
   };
   const paymentExpectedRate = (payment: PaymentMade) => {
     const invoice = linkedInvoiceForPayment(payment) as any;
-    return invoice?.purchaseReceipt?.purchaseOrder?.exchangeRate || invoice?.exchangeRate || payment.exchangeRate;
+    return invoice?.exchangeRate || payment.exchangeRate;
   };
 
   const handleExportListPdf = async (format: PdfDownloadFormat) => {
@@ -392,6 +419,24 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     }
     if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
       return toast.error('Seleccione el banco de cada pago con tarjeta, transferencia o cheque');
+    }
+    const effectivePaymentBase = effectiveLines.reduce((sum, line) => sum + toBaseAmount(
+      line.amount,
+      line.currency,
+      line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+    ), 0);
+    const invoiceBalanceBase = selectedInvoice
+      ? Math.max(0, toBaseAmount(
+        Number((selectedInvoice as any).balance ?? (selectedInvoice as any).total ?? 0),
+        (selectedInvoice as any).currency,
+        Number((selectedInvoice as any).exchangeRate || globalRate),
+      ) + originalEditingPaymentBase)
+      : 0;
+    if (selectedInvoice && effectivePaymentBase > invoiceBalanceBase + 0.01) {
+      return toast.error('El pago no puede superar el saldo pendiente de la factura del proveedor');
+    }
+    if (selectedInvoice && effectivePaymentBase < invoiceBalanceBase - 0.01 && !partialPaymentEnabled) {
+      return toast.error('Active "Pago parcial" para registrar solo una parte de la factura');
     }
     if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
     if (paymentEvidenceFiles.length > 0 && !localDoc.supplierInvoiceId) {
@@ -580,6 +625,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                             currency: nextCurrency,
                             exchangeRate: paymentLineRate(nextCurrency),
                           });
+                          setPartialPaymentEnabled(false);
                           setPaymentLines((current) => current.map((line, index) => index === 0 ? {
                             ...line,
                             amount: b ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, line.currency, Number(b.exchangeRate || 1), Number(line.exchangeRate || paymentLineRate(line.currency))).toFixed(2)) : nextAmountInPaymentCurrency,
@@ -600,12 +646,24 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                     />
                   </div>
                   <div className="col-span-2 rounded-2xl border border-border/60 bg-muted/10 p-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
                         <p className="mt-1 text-[10px] text-muted-foreground">Un pago mixto se registra como un solo paquete con su desglose interno.</p>
                       </div>
-                      <Badge variant="outline" className="shrink-0 border-primary/20 bg-primary/5 text-primary">Mixto permitido</Badge>
+                      <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                        {selectedInvoice && <label
+                          className={cn(
+                            'flex items-center gap-2 text-[10px] font-black uppercase tracking-widest',
+                            paymentOverInvoiceBalance ? 'cursor-not-allowed text-muted-foreground/50' : 'cursor-pointer text-muted-foreground',
+                          )}
+                          title={paymentOverInvoiceBalance ? 'El monto no puede superar el saldo de la factura' : undefined}
+                        >
+                          <Switch checked={partialPaymentEnabled} onCheckedChange={setPartialPaymentEnabled} disabled={paymentOverInvoiceBalance} aria-label="Activar pago parcial" />
+                          Pago parcial
+                        </label>}
+                        <Badge variant="outline" className="shrink-0 border-primary/20 bg-primary/5 text-primary">Mixto permitido</Badge>
+                      </div>
                     </div>
                     <div className="mt-3 space-y-3">
                       {paymentLines.map((line, index) => (
@@ -665,6 +723,20 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       </Button>
                     </div>
                   </div>
+                  {selectedInvoice && <div className="col-span-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Liquidación de la factura</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">Puede pagarla completa o registrar un abono para continuar después.</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                      <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo anterior</span><span className="font-bold">{formatConvertedAmount(selectedInvoiceBalanceBase, baseCurrency)}</span></div>
+                      <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Este pago</span><span className="font-bold text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
+                      <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo restante</span><span className={cn('font-bold', paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentRemainingBase, baseCurrency)}</span></div>
+                    </div>
+                    {paymentOverInvoiceBalance && <p className="mt-2 text-[10px] font-bold text-rose-600">El monto excede el saldo de la factura.</p>}
+                  </div>}
                   <div className="col-span-2 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -708,21 +780,13 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                 <div className="flex items-center justify-between border-b border-border/50 pb-3">
                   <span className="font-black uppercase text-xs tracking-widest">Total entregado</span>
                   <span className="font-black text-xl text-emerald-500 tabular-nums">
-                    {baseCurrency === 'USD' ? '$' : 'C$'} {paymentLines.reduce((sum, line) => sum + toBaseAmount(
-                      Number(line.amount || 0),
-                      line.currency,
-                      line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
-                    ), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {formatConvertedAmount(paymentTotalBase, baseCurrency)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Equivalente base</span>
                   <span className="font-bold tabular-nums">
-                    {baseCurrency === 'USD' ? '$' : 'C$'} {paymentLines.reduce((sum, line) => sum + toBaseAmount(
-                      Number(line.amount || 0),
-                      line.currency,
-                      line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
-                    ), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {formatConvertedAmount(paymentTotalBase, baseCurrency)}
                   </span>
                 </div>
                 <div className="rounded-xl border border-primary/15 bg-primary/[0.03] p-3 text-[10px] text-muted-foreground">

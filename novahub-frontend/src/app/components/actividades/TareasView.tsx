@@ -85,7 +85,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   };
 
   const handleCompleteTask = async () => {
-    if (!selectedTask) return;
+    if (!selectedTask || !canPerform('ACTIVITIES_TASKS', 'approve')) return;
     try {
       let fileUrl = evidenceUrl.trim();
       if (evidenceFile) {
@@ -140,14 +140,16 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     },
     { key: 'dueDate', header: 'Vencimiento', width: '100px', editable: canPerform('ACTIVITIES_TASKS', 'edit'), type: 'datetime-local' as const, render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
     {
-      key: 'status', header: 'Estado', width: '120px', editable: canPerform('ACTIVITIES_TASKS', 'edit'), type: 'select' as const, options: statusOpts,
+      // Completar una tarea es una transición de flujo: no debe poder
+      // hacerse editando la celda y saltándose el permiso Aprobar.
+      key: 'status', header: 'Estado', width: '120px', editable: false, type: 'select' as const, options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val || '').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color || 'bg-muted/20 text-muted-foreground')}>{o?.label || val}</Badge>; }
     },
     {
       key: 'actions', header: 'Acciones', width: '100px', editable: false,
       render: (_val: any, row: any) => {
         if (row.status !== 'COMPLETED') {
-          return canPerform('ACTIVITIES_TASKS', 'edit') ? (
+          return canPerform('ACTIVITIES_TASKS', 'approve') ? (
               <Button size="sm" variant="default" title="Completar tarea" className="h-8 max-w-full shrink-0 text-xs"
               onClick={() => { setSelectedTask(row); setIsCompleteOpen(true); }}
             >
@@ -282,7 +284,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCompleteOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCompleteTask} variant="default">Confirmar Cierre</Button>
+            {canPerform('ACTIVITIES_TASKS', 'approve') && <Button onClick={handleCompleteTask} variant="default">Confirmar Cierre</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -17,6 +17,7 @@ import {
   validateEvidenceFile,
 } from '../../services/soporte-tecnico.service';
 import { cn } from '../ui/utils';
+import { useAuth } from '../../contexts/AuthContext';
 
 const CATEGORIES = [
   { id: 'ALL', label: 'Todos', icon: LifeBuoy },
@@ -48,7 +49,10 @@ interface SoporteTecnicoViewProps {
 }
 
 export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: SoporteTecnicoViewProps) {
-  const ticketsQuery = useTenantQuery<any[]>(['technical-support', 'my-tickets'], signal => soporteTecnicoService.getMyTickets(signal));
+  const { canPerform } = useAuth();
+  const canViewSupport = canPerform('SUPPORT_TECH', 'view');
+  const canCreateSupport = canPerform('SUPPORT_TECH', 'create');
+  const ticketsQuery = useTenantQuery<any[]>(['technical-support', 'my-tickets'], signal => soporteTecnicoService.getMyTickets(signal), { enabled: canViewSupport });
   const tickets = Array.isArray(ticketsQuery.data) ? ticketsQuery.data : [];
   const loading = ticketsQuery.isLoading || ticketsQuery.isFetching;
   const [search, setSearch] = useState('');
@@ -76,6 +80,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
   };
 
   const handleCreate = async () => {
+    if (!canCreateSupport) return;
     if (!form.subject.trim() || !form.description.trim()) { toast.error('Completa asunto y descripción'); return; }
     try {
       setSaving(true);
@@ -139,9 +144,9 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
           </h1>
           </div>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 py-6 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all">
+        {canCreateSupport && <Button onClick={() => setShowCreateModal(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 py-6 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all">
           <Plus className="size-5 mr-2" /> Nuevo Ticket
-        </Button>
+        </Button>}
       </div>
 
       {/* Stats */}
@@ -216,21 +221,21 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
         <div className="flex flex-col items-center justify-center py-20 text-center bg-muted/10 rounded-[40px] border-2 border-dashed border-border/40">
           <div className="size-24 rounded-full bg-muted flex items-center justify-center mb-6 shadow-inner"><LifeBuoy className="size-12 text-muted-foreground/30" /></div>
           <h2 className="text-2xl font-black tracking-tight uppercase italic">No hay tickets</h2>
-          <Button variant="outline" onClick={() => setShowCreateModal(true)} className="mt-6 rounded-2xl font-black uppercase tracking-widest text-[10px]"><Plus className="size-4 mr-2" /> Crear Ticket</Button>
+          {canCreateSupport && <Button variant="outline" onClick={() => setShowCreateModal(true)} className="mt-6 rounded-2xl font-black uppercase tracking-widest text-[10px]"><Plus className="size-4 mr-2" /> Crear Ticket</Button>}
         </div>
       )}
 
       {/* Detail Modal */}
       <AnimatePresence>
         {selectedTicket && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedTicket(null)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative my-4 max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-2xl overflow-y-auto rounded-[32px] border border-border/40 bg-background p-4 shadow-2xl sm:my-8 sm:max-h-[90vh] sm:p-8">
-              <div className="mb-6 flex min-w-0 items-start justify-between gap-3">
+          <div className="nh-modal-root fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedTicket(null)} className="nh-modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div role="dialog" aria-modal="true" aria-labelledby="support-ticket-detail-title" initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="nh-modal-surface relative my-4 max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-2xl overflow-y-auto rounded-[32px] border border-border/40 bg-background p-4 shadow-2xl sm:my-8 sm:max-h-[90vh] sm:p-8">
+              <div className="nh-modal-header mb-6 flex min-w-0 items-start justify-between gap-3 border-b border-border/50 pb-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="p-3 bg-primary/10 rounded-2xl"><Eye className="size-6 text-primary" /></div>
                   <div className="min-w-0">
-                    <h2 className="break-words text-xl font-black tracking-tighter uppercase italic leading-none sm:text-2xl">{selectedTicket.number}</h2>
+                    <h2 id="support-ticket-detail-title" className="break-words text-xl font-black tracking-tighter uppercase italic leading-none sm:text-2xl">{selectedTicket.number}</h2>
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">Detalle del Ticket</p>
                   </div>
                 </div>
@@ -280,14 +285,14 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
       {/* Create Modal */}
       <AnimatePresence>
         {showCreateModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowCreateModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-lg bg-background rounded-[32px] overflow-hidden shadow-2xl border border-border/40 p-8 my-8">
-              <div className="flex items-center justify-between mb-8">
+          <div className="nh-modal-root fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowCreateModal(false)} className="nh-modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div role="dialog" aria-modal="true" aria-labelledby="support-ticket-create-title" initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="nh-modal-surface relative w-full max-w-lg bg-background rounded-[32px] overflow-hidden shadow-2xl border border-border/40 p-8 my-8">
+              <div className="nh-modal-header flex items-center justify-between mb-8 border-b border-border/50 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-primary/10 rounded-2xl"><Send className="size-6 text-primary" /></div>
                   <div>
-                    <h2 className="text-2xl font-black tracking-tighter uppercase italic leading-none">Nuevo Ticket</h2>
+                    <h2 id="support-ticket-create-title" className="text-2xl font-black tracking-tighter uppercase italic leading-none">Nuevo Ticket</h2>
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">Soporte Técnico Nova</p>
                   </div>
                 </div>
@@ -338,9 +343,11 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
                     )}
                   </div>
                 </div>
-                <Button onClick={handleCreate} disabled={saving || !form.subject.trim() || !form.description.trim()} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest h-14 rounded-2xl shadow-xl shadow-primary/20 mt-4 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50">
+                <div className="nh-modal-footer mt-4 border-t border-border/50 pt-4">
+                <Button onClick={handleCreate} disabled={saving || !form.subject.trim() || !form.description.trim()} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest h-14 rounded-2xl shadow-xl shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50">
                   {saving ? <Loader2 className="size-5 animate-spin" /> : <><Send className="size-5 mr-2" />Enviar Ticket</>}
                 </Button>
+                </div>
               </div>
             </motion.div>
           </div>

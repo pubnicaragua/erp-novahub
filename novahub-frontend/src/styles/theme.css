@@ -9,7 +9,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.65 0.2 155);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: oklch(0.145 0 0);
   --secondary: oklch(0.95 0.0058 264.53);
   --secondary-foreground: #030213;
   --muted: #ececf0;
@@ -71,7 +71,7 @@
   --sidebar: oklch(0.16 0.01 155);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.65 0.2 155);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
   --sidebar-accent: oklch(0.22 0.02 155);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0.01 155);
@@ -359,7 +359,6 @@ html[data-theme-transition="active"]::view-transition-new(root) {
   .odoo-highlight {
     position: relative;
     display: inline-block;
-    color: #ffffff !important;
     font-weight: 600;
   }
 

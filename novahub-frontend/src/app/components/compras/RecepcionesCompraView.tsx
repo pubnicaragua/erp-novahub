@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, Pencil, Ban,
-  AlertTriangle, XCircle, ArrowDown, FileText, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign
+  AlertTriangle, XCircle, ArrowDown, FileText, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign, RefreshCw
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -28,9 +28,11 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { formatExchangeRate } from '../../utils/currency';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
+import { Switch } from '../ui/switch';
 import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
@@ -40,12 +42,11 @@ import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
 const statusOpts = [
-  { label: 'Pendiente de recibir', value: 'PENDING',        color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
-  { label: 'Recibida',      value: 'RECEIVED',       color: 'bg-primary/10 text-primary' },
-  { label: 'Recepción parcial', value: 'PARTIAL',    color: 'bg-primary/10 text-primary' },
-  { label: 'Recibida con incidencias', value: 'WITH_INCIDENTS', color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
+  { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  { label: 'Recibido', value: 'RECEIVED', color: 'bg-primary/10 text-primary' },
+  { label: 'Recibido con incidencias', value: 'WITH_INCIDENTS', color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
   { label: 'Pagada',        value: 'PAID',           color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
-  { label: 'Cancelada',     value: 'REJECTED',       color: 'bg-destructive/10 text-destructive' },
+  { label: 'Cancelada',     value: 'CANCELLED',       color: 'bg-destructive/10 text-destructive' },
 ];
 
 function getActiveReceiptInvoices(receipt: Pick<PurchaseReceipt, 'supplierInvoices'>) {
@@ -64,15 +65,17 @@ function isReceiptPaid(receipt: Pick<PurchaseReceipt, 'supplierInvoices'>) {
 
 function getReceiptDisplayStatus(receipt: Pick<PurchaseReceipt, 'status' | 'supplierInvoices'>) {
   const operationalStatus = String(receipt.status || 'PENDING').toUpperCase();
-  if (operationalStatus === 'REJECTED') return operationalStatus;
+  if (operationalStatus === 'CANCELLED' || operationalStatus === 'REJECTED') return 'CANCELLED';
+  if (operationalStatus === 'PAID') return 'PAID';
+  if (operationalStatus === 'PARTIAL') return isReceiptPaid(receipt) ? 'PAID' : 'WITH_INCIDENTS';
   return isReceiptPaid(receipt) ? 'PAID' : operationalStatus;
 }
 
-const STATUS_OPTIONS_RECEIVING = ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'];
+const STATUS_OPTIONS_RECEIVING = ['RECEIVED', 'WITH_INCIDENTS'];
 // Una recepción ya marcada como recibida sigue siendo editable mientras no
 // tenga una factura registrada. Esto permite trasladar unidades entre
 // recibidas y rechazadas cuando se corrige la revisión física.
-const RECEIPT_EDITABLE_STATUSES = ['PENDING', 'PARTIAL', 'WITH_INCIDENTS', 'RECEIVED'];
+const RECEIPT_EDITABLE_STATUSES = ['PENDING', 'WITH_INCIDENTS', 'RECEIVED'];
 const RECEIPT_NON_TAXABLE_TYPES = new Set(['EXENTO', 'EXONERADO', 'NO_GRAVADO', 'NO_SUJETO']);
 const RECEIPT_WITHHOLDING_RATES: Record<string, number> = {
   IR_1: 1, IR_2: 2, IR_5: 5, IR_10: 10, IR_15: 15, IR_20: 20, IR_25: 25,
@@ -240,6 +243,7 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
 function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any> }) {
   const { displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount, formatConvertedAmount } = useCurrency();
   const [paymentLines, setPaymentLines] = useState<ReceiptPaymentLine[]>([]);
+  const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
   const [notes, setNotes] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [invoiceId, setInvoiceId] = useState('');
@@ -265,6 +269,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
       initialRate,
     ).toFixed(2));
     setPaymentLines([{ method: draftMethod, amount: initialAmount, currency: initialCurrency, exchangeRate: initialRate, reference: draft.reference || '' }]);
+    setPartialPaymentEnabled(false);
     setNotes(draft.notes || '');
     setFiles([]);
     setInvoiceId(draft.supplierInvoiceId || '');
@@ -317,6 +322,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
     ), 0).toFixed(2));
     const draftBaseAmount = Number(toBaseAmount(Number(draft.amount || 0), draft.currency, Number(draft.exchangeRate || globalRate || 1)).toFixed(2));
     if (paymentBaseAmount > draftBaseAmount + 0.01) return toast.error('El monto convertido no puede superar el saldo pendiente.');
+    if (paymentBaseAmount < draftBaseAmount - 0.01 && !partialPaymentEnabled) return toast.error('Activa "Pago parcial" para registrar solo una parte de la factura.');
     setSaving(true);
     const saveToastId = toast.loading('Registrando pago y generando la integración contable...');
     try {
@@ -366,6 +372,18 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
     }
   };
 
+  const paymentBaseAmount = draft
+    ? Number(paymentLines.reduce((sum, line) => sum + toBaseAmount(
+      Number(line.amount || 0),
+      line.currency,
+      line.currency === baseCurrency ? 1 : line.exchangeRate,
+    ), 0).toFixed(2))
+    : 0;
+  const draftBaseAmount = draft
+    ? Number(toBaseAmount(Number(draft.amount || 0), draft.currency, Number(draft.exchangeRate || globalRate || 1)).toFixed(2))
+    : 0;
+  const paymentExceedsDraftBalance = paymentBaseAmount > draftBaseAmount + 0.01;
+
   return (
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) onClose(); }}>
       <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] !max-w-3xl flex-col overflow-hidden rounded-3xl border-primary/20 bg-background p-0 shadow-2xl">
@@ -408,12 +426,18 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2 rounded-2xl border border-border/60 bg-muted/10 p-3">
-                  <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
-                      <p className="mt-1 text-[10px] text-muted-foreground">El pago mixto queda agrupado en un mismo registro.</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Activa Pago parcial para conservar saldo; el pago mixto queda agrupado en un mismo registro.</p>
                     </div>
-                    <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">Mixto permitido</Badge>
+                    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                      <label className={cn('flex items-center gap-2 text-[10px] font-black uppercase tracking-widest', paymentExceedsDraftBalance ? 'cursor-not-allowed text-muted-foreground/50' : 'cursor-pointer text-muted-foreground')} title={paymentExceedsDraftBalance ? 'El monto no puede superar el saldo pendiente' : undefined}>
+                        <Switch checked={partialPaymentEnabled} onCheckedChange={setPartialPaymentEnabled} disabled={saving || paymentExceedsDraftBalance} aria-label="Activar pago parcial" />
+                        Pago parcial
+                      </label>
+                      <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">Mixto permitido</Badge>
+                    </div>
                   </div>
                   <div className="space-y-3">
                     {paymentLines.map((line, index) => (
@@ -480,7 +504,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     setEditingId(targetId);
     onClearTargetId?.();
   }, [targetId, data, onClearTargetId]);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS' | 'PAID' | 'CANCELLED'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -528,8 +552,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   }
 
   const filtered = data.filter(r => {
-    const status = String(r.status || '').toUpperCase();
-    if (statusFilter !== 'ALL' && status !== statusFilter) return false;
+    if (statusFilter !== 'ALL' && getReceiptDisplayStatus(r) !== statusFilter) return false;
     return (r.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
@@ -591,7 +614,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     supplier: (row: PurchaseReceipt) => row.supplier?.name || '-',
     date: (row: PurchaseReceipt) => (row.date ? new Date(row.date).getTime() : null),
     total: (row: PurchaseReceipt) => Number(row.total || row.purchaseOrder?.total || 0),
-    status: (row: PurchaseReceipt) => String(row.status || '').toUpperCase(),
+    status: (row: PurchaseReceipt) => getReceiptDisplayStatus(row),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
@@ -674,9 +697,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     { key: 'total',     header: 'Total recepción', width: '145px',
       headerExtra: <ColumnFilterMenu label="Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
       render: (_value, row) => {
-        const receiptStatus = String(row.status || '').toUpperCase();
+        const receiptStatus = getReceiptDisplayStatus(row);
         const hasReceivedQuantity = (row.items || []).some((item) => Number(item.quantityReceived || 0) > 0);
-        const hasFinalAmount = ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(receiptStatus) || hasReceivedQuantity;
+        const hasFinalAmount = ['RECEIVED', 'WITH_INCIDENTS', 'PAID'].includes(receiptStatus) || hasReceivedQuantity;
         const linkedOrder = row.purchaseOrder;
         const expectedTotal = Number(linkedOrder?.total || 0);
         const finalTotal = Number(row.total || 0);
@@ -786,8 +809,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   };
 
   const openPaymentModal = (receipt: any, invoice?: any) => {
-    const receiptStatus = String(receipt?.status || '').toUpperCase();
-    if (!['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(receiptStatus)) {
+    const receiptStatus = getReceiptDisplayStatus(receipt);
+    if (!['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus)) {
       toast.error('El pago solo se puede registrar cuando la recepción está recibida o recibida con incidencias.');
       return;
     }
@@ -883,7 +906,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const registerInvoiceFromPaymentModal = async ({ draft, number, date, dueDate, files }: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => {
     const receipt = data.find((item) => String(item.id) === String(draft.receiptId));
     if (!receipt) throw new Error('No se encontró la recepción seleccionada. Actualiza la lista e inténtalo nuevamente.');
-    if (!['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(receipt.status || '').toUpperCase())) {
+    if (!['RECEIVED', 'WITH_INCIDENTS'].includes(getReceiptDisplayStatus(receipt))) {
       throw new Error('La recepción debe estar recibida antes de registrar la factura.');
     }
 
@@ -943,10 +966,25 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     const hasRejected = items.some(it => Number(it.quantityRejected||0) > 0);
     const allReceived = items.every(it => Number(it.quantityReceived||0) >= Number(it.quantityOrdered||0));
     const anyReceived = items.some(it => Number(it.quantityReceived||0) > 0);
-    if (hasRejected) return 'WITH_INCIDENTS';
+    const hasMissing = items.some(it => Number(it.quantityReceived || 0) + Number(it.quantityRejected || 0) < Number(it.quantityOrdered || 0));
+    if (!anyReceived && !hasRejected) return 'PENDING';
+    if (hasRejected || hasMissing) return 'WITH_INCIDENTS';
     if (allReceived) return 'RECEIVED';
-    if (anyReceived) return 'PARTIAL';
     return 'PENDING';
+  };
+
+  const handleRepairInventory = async (receipt: PurchaseReceipt) => {
+    const repairToastId = toast.loading('Sincronizando recepción con inventario...');
+    try {
+      const response = await purchaseReceiptsService.approve(String(receipt.id));
+      const operations = getInventoryCostOperations(response);
+      if (operations.length > 0) setInventoryCostOperations(operations);
+      toast.success('Inventario sincronizado correctamente', { id: repairToastId });
+      onRefresh();
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo sincronizar el inventario', { id: repairToastId });
+    }
   };
 
   const handleItemChange = (idx: number, field: string, value: any) => {
@@ -1043,7 +1081,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 <Badge variant="outline" className="border-primary/25 bg-primary/5 px-2 py-0.5 text-[9px] font-black tracking-wide text-primary">
                   {receiptCurrencyMeta.symbol} · {receiptCurrencyMeta.code} · {receiptCurrencyMeta.label}
                 </Badge>
-                {receiptCurrency === 'USD' && <span className="font-bold normal-case tracking-normal text-muted-foreground">Tasa: {receiptExchangeRate.toFixed(4)} NIO/USD</span>}
+                {receiptCurrency === 'USD' && <span className="font-bold normal-case tracking-normal text-muted-foreground">Tasa: {formatExchangeRate(receiptExchangeRate)} NIO/USD</span>}
               </div>
             </div>
           </div>
@@ -1170,7 +1208,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     <span className="text-xs font-black text-primary">{receiptCurrencyMeta.symbol} · {receiptCurrencyMeta.code}</span>
                     <span className="text-[10px] font-bold text-muted-foreground">{receiptCurrencyMeta.label}</span>
                   </div>
-                  {receiptCurrency === 'USD' && <p className="mt-1 text-[10px] text-muted-foreground">Tasa: {receiptExchangeRate.toFixed(4)} NIO/USD</p>}
+                  {receiptCurrency === 'USD' && <p className="mt-1 text-[10px] text-muted-foreground">Tasa: {formatExchangeRate(receiptExchangeRate)} NIO/USD</p>}
                 </div>
               </div>
             </CardContent>
@@ -1509,7 +1547,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         </div>
         <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailReceipt(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
-            const validIds = ids.map(String).filter((id) => !id.startsWith('new-') && String(data.find((receipt) => receipt.id === id)?.status || '').toUpperCase() !== 'REJECTED');
+            const validIds = ids.map(String).filter((id) => {
+              const receipt = data.find((candidate) => candidate.id === id);
+              return !id.startsWith('new-') && Boolean(receipt) && getReceiptDisplayStatus(receipt as PurchaseReceipt) === 'PENDING';
+            });
             if (validIds.length === 0) return;
             const cancelToastId = toast.loading(`Cancelando ${validIds.length} recepción${validIds.length === 1 ? '' : 'es'}...`);
             let cancelled = 0;
@@ -1530,19 +1571,24 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             if (cancelled > 0) onRefresh();
           } : undefined}
           actions={(row) => {
-            const receiptStatus = String(row.status || '').toUpperCase();
+            const receiptStatus = getReceiptDisplayStatus(row);
             const canReceiveRow = receiptStatus === 'PENDING'
               && canPerform('PURCHASES_RECEIPTS', 'approve')
               && canPerform('PURCHASES_RECEIPTS', 'edit');
-            const isApprovedReceipt = ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(receiptStatus);
-            const activeInvoice = isApprovedReceipt
+            const isPayableReceipt = ['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus);
+            const needsInventorySync = ['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus)
+              && (!row.inventoryProcessedAt || (row.items || []).some((item: any) =>
+                item.stockApplies !== false
+                && Number(item.quantityReceived || 0) > Number(item.inventoryProcessedQuantity || 0),
+              ));
+            const activeInvoice = isPayableReceipt
               ? (row.supplierInvoices || []).find((invoice: any) => String(invoice.status || '').toUpperCase() !== 'CANCELLED')
               : undefined;
             const payableInvoice = activeInvoice && Number(activeInvoice.balance || 0) > 0 ? activeInvoice : undefined;
             const canRegisterPayment = Boolean(payableInvoice)
               && canPerform('PURCHASES_PAYMENTS', 'create')
               && canPerform('PURCHASES_PAYMENTS', 'approve');
-            const canRegisterInvoice = !activeInvoice
+            const canRegisterInvoice = isPayableReceipt && !activeInvoice
               && canPerform('PURCHASES_RECEIPTS', 'edit')
               && canPerform('PURCHASES_PAYMENTS', 'create')
               && canPerform('PURCHASES_PAYMENTS', 'approve');
@@ -1563,7 +1609,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     <PackageCheck className="size-4" />
                   </Button>
                 )}
-                {isApprovedReceipt && (canRegisterPayment || canRegisterInvoice) && (
+                {isPayableReceipt && (canRegisterPayment || canRegisterInvoice) && (
                   <Button
                     title={canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'}
                     aria-label={`${canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'} de ${row.number || 'recepción'}`}
@@ -1575,7 +1621,19 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     <Banknote className="size-4" />
                   </Button>
                 )}
-                {canPerform('PURCHASES_RECEIPTS', 'delete') && receiptStatus !== 'REJECTED' && (
+                {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'approve') && (
+                  <Button
+                    title="Reintentar sincronización con inventario"
+                    aria-label={`Reintentar inventario de ${row.number || 'recepción'}`}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-lg text-amber-600 hover:bg-amber-500/10 hover:text-amber-700"
+                    onClick={() => void handleRepairInventory(row)}
+                  >
+                    <RefreshCw className="size-4" />
+                  </Button>
+                )}
+                {canPerform('PURCHASES_RECEIPTS', 'delete') && receiptStatus === 'PENDING' && (
                   <Button
                     title="Cancelar recepción"
                     aria-label={`Cancelar ${row.number || 'recepción'}`}
@@ -1695,7 +1753,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   <div className="mx-5 mb-5 rounded-2xl border border-dashed border-primary/30 bg-primary/[0.035] p-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-[10px] font-black uppercase tracking-widest text-primary">Operación ponderada</p>
-                      <p className="text-[10px] font-bold text-muted-foreground">Moneda base: {operation.baseCurrency}{operation.sourceCurrency !== operation.baseCurrency ? ` · entrada ${operation.sourceCurrency} · tasa ${Number(operation.exchangeRate || 1).toFixed(4)}` : ''}</p>
+                      <p className="text-[10px] font-bold text-muted-foreground">Moneda base: {operation.baseCurrency}{operation.sourceCurrency !== operation.baseCurrency ? ` · entrada ${operation.sourceCurrency} · tasa ${formatExchangeRate(operation.exchangeRate)}` : ''}</p>
                     </div>
                     <p className="mt-3 overflow-x-auto whitespace-nowrap font-mono text-xs font-bold text-foreground">
                       ({formatInventoryOperationQuantity(previousQuantity)} × {formatInventoryOperationAmount(previousUnitCost, operation.baseCurrency)}) + ({formatInventoryOperationQuantity(receivedQuantity)} × {formatInventoryOperationAmount(receivedUnitCost, operation.baseCurrency)})

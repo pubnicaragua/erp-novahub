@@ -408,19 +408,22 @@ export function TrainingHubView() {
       {/* Modales se mantienen igual */}
       <AnimatePresence>
         {selectedVideo && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-3 sm:p-4 md:p-10">
+          <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-3 sm:p-4 md:p-10">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedVideo(null)}
-              className="absolute inset-0 bg-black/95 backdrop-blur-xl"
+              className="nh-modal-backdrop nh-modal-media-backdrop absolute inset-0 bg-black/95 backdrop-blur-xl"
             />
             <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Video: ${selectedVideo.title}`}
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative my-auto aspect-video w-full max-w-6xl overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl"
+              className="nh-modal-surface nh-modal-media-surface relative my-auto aspect-video w-full max-w-6xl overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl"
             >
               <button 
                 onClick={() => setSelectedVideo(null)}
@@ -463,27 +466,30 @@ export function TrainingHubView() {
 
       <AnimatePresence>
         {(showUploadModal || editingVideo) && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="nh-modal-root fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => { setShowUploadModal(false); setEditingVideo(null); }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              className="nh-modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
             <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="training-form-title"
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg bg-background rounded-[32px] overflow-hidden shadow-2xl border border-border/40 p-8 my-8"
+              className="nh-modal-surface relative w-full max-w-lg bg-background rounded-[32px] overflow-hidden shadow-2xl border border-border/40 p-4 sm:p-8 my-8"
             >
-              <div className="flex items-center justify-between mb-8">
+              <div className="nh-modal-header flex items-center justify-between mb-8 border-b border-border/50 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-primary/10 rounded-2xl">
                     {editingVideo ? <Edit3 className="size-6 text-primary" /> : <Upload className="size-6 text-primary" />}
                   </div>
                   <div>
-                    <h2 className="text-2xl font-black tracking-tighter uppercase italic leading-none">
+                    <h2 id="training-form-title" className="text-2xl font-black tracking-tighter uppercase italic leading-none">
                       {editingVideo ? 'Editar Guía' : 'Nueva Guía'}
                     </h2>
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">Sube contenido educativo</p>
@@ -575,6 +581,7 @@ export function TrainingHubView() {
                   </div>
                 )}
 
+                <div className="nh-modal-footer mt-4 border-t border-border/50 pt-4">
                 <Button 
                   onClick={editingVideo ? handleUpdate : handleUpload}
                   disabled={saving || (!editingVideo && (!uploadData.file || !uploadData.title))}
@@ -582,6 +589,7 @@ export function TrainingHubView() {
                 >
                   {saving ? <Loader2 className="size-5 animate-spin" /> : editingVideo ? <><Save className="size-5 mr-2" />Guardar</> : <><Plus className="size-5 mr-2" />Publicar</>}
                 </Button>
+                </div>
               </div>
             </motion.div>
           </div>

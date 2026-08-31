@@ -75,7 +75,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { BrandLogo } from './BrandLogo';
 import { NovaSuiteIcon } from './ui/NovaIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import { SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from '../utils/sidebarPermissions';
+import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from '../utils/sidebarPermissions';
 
 interface SidebarProps {
   activeModule: Module | 'overview';
@@ -92,6 +92,7 @@ interface SubMenuItem {
   label: string;
   icon: React.ReactNode;
   hasAdd?: boolean;
+  hidden?: boolean;
 }
 
 interface MenuItem {
@@ -128,7 +129,7 @@ const menuItems: MenuItem[] = [
       { id: 'devoluciones-venta', label: 'Notas de crédito', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Créditos', icon: <FileMinus className="size-4" /> },
       { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
-      { id: 'entregas', label: 'Entregas', icon: <PackageCheck className="size-4" /> },
+      { id: 'entregas', label: 'Entregas', icon: <PackageCheck className="size-4" />, hidden: true },
       { id: 'facturacion-caja', label: 'Facturación por caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
     ]
@@ -415,7 +416,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
     if (item.submenu) {
       if (sidebarCollapsed) {
-        const visibleSubmenu = item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id));
+        const visibleSubmenu = item.submenu.filter(subItem => !subItem.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id) && hasSubmenuAccess(item.id, subItem.id));
         const currentSubmenu = activeModule === item.id
           ? visibleSubmenu.find(subItem => subItem.id === activeSubModule)
           : undefined;
@@ -528,7 +529,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
         continue;
       }
       const visibleSubmenu = item.submenu
-        ? item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id))
+        ? item.submenu.filter(subItem => !subItem.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id) && hasSubmenuAccess(item.id, subItem.id))
         : undefined;
       if (item.submenu && (!visibleSubmenu || visibleSubmenu.length === 0)) continue;
       if (item.section && item.section !== lastSection) headers.add(item.id);
@@ -568,7 +569,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                 src={workspaceLogo}
                 alt={`Logo de ${workspaceName}`}
                 kind={workspaceKind}
-                className="size-9 rounded-xl bg-sidebar-accent text-sidebar-foreground ring-0 transition-all"
+                className="size-9 rounded-xl bg-sidebar-accent text-sidebar-accent-foreground ring-0 transition-all"
                 imageClassName="rounded-xl"
               />
               {!sidebarCollapsed && (
@@ -602,7 +603,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                   return null;
                 }
                 const visibleSubmenu = item.submenu
-                  ? item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id))
+                  ? item.submenu.filter(subItem => !subItem.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id) && hasSubmenuAccess(item.id, subItem.id))
                   : undefined;
 
                 if (item.submenu && (!visibleSubmenu || visibleSubmenu.length === 0)) return null;
@@ -617,7 +618,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                   isActive && !item.submenu
                     ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
                     : isActive && item.submenu
-                      ? 'bg-primary/10 text-sidebar-foreground ring-1 ring-primary/20'
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-sidebar-border'
                       : 'text-sidebar-foreground/70'
                 );
                 const itemHref = buildModuleHref(item.id as Module | 'overview');
@@ -653,7 +654,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                               </a>
                             )}
                           </TooltipTrigger>
-                          <TooltipContent side="right" sideOffset={10} className="font-bold text-xs bg-sidebar-accent text-sidebar-foreground border-sidebar-border shadow-lg">
+                          <TooltipContent side="right" sideOffset={10} className="font-bold text-xs bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border shadow-lg">
                             {user?.role === 'partner' && item.id === 'clientes' ? 'Mis Clientes' : item.label}
                           </TooltipContent>
                         </Tooltip>
@@ -712,7 +713,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                     'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                                     activeModule === item.id && activeSubModule === subItem.id
-                                      ? 'bg-primary text-primary-foreground font-medium shadow-sm'
+                                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm'
                                       : 'text-sidebar-foreground/55'
                                   )}
                                   aria-current={activeModule === item.id && activeSubModule === subItem.id ? 'page' : undefined}
@@ -735,17 +736,17 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
           {/* User Info Footer */}
           <div className="shrink-0 border-t border-sidebar-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-            <div className={cn("flex items-center gap-3 rounded-xl bg-sidebar-accent border border-sidebar-border/50", sidebarCollapsed ? "p-1.5 justify-center" : "px-3 py-3")}>
+            <div className={cn("flex items-center gap-3 rounded-xl bg-sidebar-accent text-sidebar-accent-foreground border border-sidebar-border/50", sidebarCollapsed ? "p-1.5 justify-center" : "px-3 py-3")}>
               <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-sm">
                 {user?.name.charAt(0)}
               </div>
               {!sidebarCollapsed && (
                 <div className="flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-medium text-sidebar-foreground">
+                  <p className="truncate text-sm font-medium text-sidebar-accent-foreground">
                     {user?.name}
                   </p>
                   <div className="flex">
-                    <p className="truncate text-[11px] text-sidebar-foreground/50 capitalize odoo-highlight">
+                    <p className="truncate text-[11px] text-sidebar-accent-foreground capitalize odoo-highlight">
                       {user?.customRoleName || {
                         superadmin: 'Super Administrador',
                         partner: 'Partner',

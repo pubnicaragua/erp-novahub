@@ -44,6 +44,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function ActivosFijosView() {
   const { canPerform } = useAuth();
+  const canExportAssets = canPerform('ACCOUNTING_ASSETS', 'export');
   const { displayCurrency, formatConvertedAmount, convertAmount, toBaseAmount, baseCurrency } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -96,6 +97,7 @@ export function ActivosFijosView() {
   };
 
   async function handleExport(scope: 'all' | 'selected') {
+    if (!canExportAssets) return;
     const ids = scope === 'selected' ? selectedIds : assets.map(a => a.id);
     if (ids.length === 0) { toast.error(scope === 'selected' ? 'No hay activos seleccionados' : 'No hay activos para exportar'); return; }
     setExporting(true);
@@ -132,7 +134,7 @@ export function ActivosFijosView() {
               {selectedIds.length} seleccionado{selectedIds.length !== 1 ? 's' : ''}
             </Badge>
           )}
-          <DropdownMenu>
+          {canExportAssets && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" disabled={exporting || assets.length === 0} className="gap-2">
                 {exporting ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
@@ -149,7 +151,7 @@ export function ActivosFijosView() {
                 <Download className="size-3.5" /> Exportar seleccionados ({selectedIds.length})
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
           {canPerform('ACCOUNTING_ASSETS', 'create') && (
             <Button className="gap-2" data-toolbar-role="primary" onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />

@@ -103,6 +103,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   };
 
   const handleRequestPayment = async (benefit: any) => {
+    if (!canPerform('HR_BENEFITS', 'approve')) return;
     try {
       await hrService.createPaymentRequest({ requestType: 'BENEFIT', sourceId: benefit.id });
       toast.success('Solicitud de pago enviada a Contabilidad');
@@ -343,7 +344,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                   {Number(benefit.cost || 0) > 0 && assignedCount > 0 && benefit.paymentStatus !== 'PAID' && (
                     <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2">
                       <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pago: {benefit.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : benefit.paymentStatus === 'APPROVED' ? 'Aprobado' : 'Pendiente'}</span>
-                      {(!benefit.paymentStatus || benefit.paymentStatus === 'PENDING') && canPerform('HR_BENEFITS', 'edit') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(benefit)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
+                      {(!benefit.paymentStatus || benefit.paymentStatus === 'PENDING') && canPerform('HR_BENEFITS', 'approve') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(benefit)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
                     </div>
                   )}
                   {Number(benefit.cost || 0) > 0 && benefit.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600"><CheckCircle className="size-3.5" /> Pago contabilizado</div>}

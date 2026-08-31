@@ -36,6 +36,7 @@ export const salesOrdersService = {
   create: (data: Partial<SalesOrder>, idempotencyKey?: string) => api.idempotentPost<SalesOrder>('/sales/orders', data, idempotencyKey),
   update: (id: string, data: Partial<SalesOrder>) => api.patch<SalesOrder>(`/sales/orders/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/orders/${id}`),
+  cancel: (id: string) => api.idempotentPatch<SalesOrder>(`/sales/orders/${id}/cancel`, {}),
   confirm: (id: string) => api.patch<SalesOrder>(`/sales/orders/${id}/confirm`, {}),
   convertToInvoice: (id: string, data?: Pick<SalesOrder, 'accountId' | 'sellerEmployeeId'>, idempotencyKey?: string) =>
     api.idempotentPost<Invoice>(`/sales/orders/${id}/convert-to-invoice`, data || {}, idempotencyKey),
@@ -50,7 +51,7 @@ export const invoicesService = {
     api.put<any>('/sales/invoice-series', data),
   getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
   accountingPreflight: (data: { warehouseId?: string; items?: Array<{ productId?: string; warehouseId?: string }> }) =>
-    api.post<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[]; cogsAccount?: any; warehouses?: any[] }>('/sales/invoices/accounting-preflight', data),
+    api.post<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[]; warehouses?: any[] }>('/sales/invoices/accounting-preflight', data),
   create: (data: Partial<Invoice>, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
   sendToCredit: (id: string, data: { dueDate?: string }, idempotencyKey?: string) =>
@@ -99,6 +100,7 @@ export const recurringInvoicesService = {
   update: (id: string, data: Partial<RecurringInvoice>) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}`, data),
   pause: (id: string) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}/pause`, {}),
   resume: (id: string) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}/resume`, {}),
+  cancel: (id: string) => api.idempotentPatch<RecurringInvoice>(`/sales/recurring-invoices/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/sales/recurring-invoices/${id}`),
 };
 
@@ -106,8 +108,8 @@ export const recurringInvoicesService = {
 export const paymentsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', { params: filters as any, signal }),
   getById: (id: string) => api.get<PaymentReceived>(`/sales/payments/${id}`),
-  create: (data: Partial<PaymentReceived>, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
-  createMixed: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; reference?: string; notes?: string }> }, idempotencyKey?: string) =>
+  create: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string }, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
+  createMixed: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; reference?: string; notes?: string }> }, idempotencyKey?: string) =>
     api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>('/sales/payments/mixed', data, idempotencyKey),
   update: (id: string, data: Partial<PaymentReceived>) => api.patch<PaymentReceived>(`/sales/payments/${id}`, data),
   checkNumber: (number: string, excludeId?: string) =>
@@ -124,6 +126,7 @@ export const salesReturnsService = {
   update: (id: string, data: Partial<SalesReturn>) => api.patch<SalesReturn>(`/sales/returns/${id}`, data),
   approve: (id: string, idempotencyKey?: string) => api.idempotentPatch<SalesReturn>(`/sales/returns/${id}/approve`, {}, idempotencyKey),
   process: (id: string, idempotencyKey?: string) => api.idempotentPatch<SalesReturn>(`/sales/returns/${id}/process`, {}, idempotencyKey),
+  reject: (id: string) => api.idempotentPatch<SalesReturn>(`/sales/returns/${id}/reject`, {}),
   delete: (id: string) => api.delete<void>(`/sales/returns/${id}`),
 };
 
@@ -136,6 +139,7 @@ export const creditNotesService = {
   issue: (id: string, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}, idempotencyKey),
   sendToCash: (id: string, data?: { notes?: string }) => api.post<any>(`/sales/credit-notes/${id}/send-to-cash`, data || {}),
   apply: (id: string, data: any, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/apply`, data, idempotencyKey),
+  cancel: (id: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
 };
 

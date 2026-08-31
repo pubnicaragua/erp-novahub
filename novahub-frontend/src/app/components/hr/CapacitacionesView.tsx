@@ -112,6 +112,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   };
 
   const handleRequestPayment = async (training: any) => {
+    if (!canPerform('HR_TRAINING', 'approve')) return;
     try {
       await hrService.createPaymentRequest({ requestType: 'TRAINING', sourceId: training.id });
       toast.success('Solicitud de pago enviada a Contabilidad');
@@ -529,7 +530,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 </div>
               )}
 
-              {Number(training.cost || 0) > 0 && training.paymentStatus !== 'PAID' && canPerform('HR_TRAINING', 'edit') && (
+              {Number(training.cost || 0) > 0 && training.paymentStatus !== 'PAID' && canPerform('HR_TRAINING', 'approve') && (
                 <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2">
                   <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pago: {training.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : training.paymentStatus === 'APPROVED' ? 'Aprobada' : 'Pendiente'}</span>
                   {(!training.paymentStatus || training.paymentStatus === 'PENDING') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(training)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}

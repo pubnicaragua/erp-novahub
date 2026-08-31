@@ -117,13 +117,14 @@ export type PermissionAction =
   | 'generate' | 'send' | 'print' | 'manage' | 'viewCost';
 
 // La matriz de roles expone CRUD, importación/exportación y una acción de
-// flujo. Estas acciones legacy siguen aceptándose en las vistas, pero ahora
-// se resuelven contra "Aprobar" cuando la vista tiene ese permiso disponible.
+// flujo. Las acciones operativas legacy se resuelven contra "Aprobar" cuando
+// la vista la declara; editar un registro no concede avanzar el flujo.
 const DELETE_COMPATIBLE_ACTIONS: PermissionAction[] = ['deactivate', 'cancel', 'reject', 'reverse'];
 const CREATE_COMPATIBLE_ACTIONS: PermissionAction[] = ['duplicate'];
 const APPROVAL_COMPATIBLE_ACTIONS: PermissionAction[] = [
-  'approve', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay', 'apply', 'reconcile', 'convert', 'send',
+  'approve', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay', 'apply', 'reconcile', 'convert', 'generate', 'send',
 ];
+const EXPORT_COMPATIBLE_ACTIONS: PermissionAction[] = ['download', 'print'];
 
 /**
  * Cada sesión nueva debe iniciar en el primer módulo accesible. La URL y el
@@ -772,12 +773,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       inventario: [
         'INVENTORY',
         'INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS',
-        'INVENTORY_ADJUSTMENTS',
+        'INVENTORY_ADJUSTMENTS', 'INVENTORY_SERVICES', 'INVENTORY_ATTRIBUTES',
+        'INVENTORY_AUDITS', 'INVENTORY_LOSSES', 'INVENTORY_ASSETS', 'INVENTORY_CONFIG',
         'INVENTORY_MOVEMENTS',
       ],
       finanzas: [
         'FINANCIAL', 'FINANCIAL_BANK',
         'FINANCIAL_INCOMES', 'FINANCIAL_EXPENSES', 'FINANCIAL_EXPENSES_REC', 'FINANCIAL_BALANCE', 'FINANCIAL_DASHBOARD',
+        'FINANCIAL_RECEIVABLES', 'FINANCIAL_PAYABLES', 'FINANCIAL_CALENDAR', 'FINANCIAL_ANALYSIS', 'FINANCIAL_LOSSES',
       ],
       actividades: [
         'ACTIVITIES',
@@ -875,6 +878,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const parentByGranularPrefix: Record<string, string> = {
       'PURCHASES_': 'PURCHASES',
       'SALES_': 'SALES',
+      'RESTAURANT_': 'RESTAURANT',
       'INVENTORY_': 'INVENTORY',
       'FINANCIAL_': 'FINANCIAL',
       'HR_': 'HR',
@@ -887,6 +891,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'ACCOUNTING_': 'ACCOUNTING',
       'CONFIG_': 'CONFIGURATION',
       'MY_COMPANY_': 'MY_COMPANY',
+      'LEGAL_': 'LEGAL',
     };
 
     const findPermission = (moduleName: string) => permissions.find(
@@ -948,11 +953,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       case 'export': return permission.canExport;
       default:
         if (DELETE_COMPATIBLE_ACTIONS.includes(action)) return permission.canDelete || permission.canDeactivate || permission.canCancel || legacyActionAllowed;
-        if (action === 'download') return permission.canExport || legacyActionAllowed;
+        if (EXPORT_COMPATIBLE_ACTIONS.includes(action)) return permission.canExport;
         if (APPROVAL_COMPATIBLE_ACTIONS.includes(action)) {
           return (permission as any).approve !== undefined
             ? (permission as any).approve === true
-            : permission.canEdit || legacyActionAllowed;
+            : (permission as any)[action] === true || legacyActionAllowed;
         }
         if (CREATE_COMPATIBLE_ACTIONS.includes(action)) return permission.canCreate || legacyActionAllowed;
         return permission.canEdit || legacyActionAllowed;

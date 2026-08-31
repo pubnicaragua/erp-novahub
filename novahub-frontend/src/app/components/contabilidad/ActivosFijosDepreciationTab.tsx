@@ -13,6 +13,7 @@ import { Input } from '../ui/input';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { fetchFixedAssetDetails, exportFixedAssetsExcel } from './fixedAssetsExport';
 import { toast } from 'sonner';
 
@@ -47,6 +48,9 @@ const STATUS_LABELS: Record<string, string> = {
 export function ActivosFijosDepreciationTab() {
   const queryClient = useQueryClient();
   const { displayCurrency, formatConvertedAmount, convertAmount, toBaseAmount, baseCurrency } = useCurrency();
+  const { canPerform } = useAuth();
+  const canExportAssets = canPerform('ACCOUNTING_ASSETS', 'export');
+  const canProcessDepreciation = canPerform('ACCOUNTING_ASSETS', 'approve');
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -80,6 +84,7 @@ export function ActivosFijosDepreciationTab() {
   const fmt = (value: number, sourceCurrency?: string, sourceRate?: number) => formatConvertedAmount(value, sourceCurrency, sourceRate);
 
   async function handleProcess() {
+    if (!canProcessDepreciation) return;
     if (!period) { toast.error('Selecciona un período'); return; }
     setProcessing(true);
     try {
@@ -114,6 +119,7 @@ export function ActivosFijosDepreciationTab() {
   };
 
   async function handleExport(scope: 'all' | 'selected') {
+    if (!canExportAssets) return;
     const ids = scope === 'selected' ? selectedIds : assets.map(a => a.id);
     if (ids.length === 0) { toast.error(scope === 'selected' ? 'No hay activos seleccionados' : 'No hay activos para exportar'); return; }
     setExporting(true);
@@ -129,6 +135,7 @@ export function ActivosFijosDepreciationTab() {
   }
 
   async function handleGenerate(id: string) {
+    if (!canProcessDepreciation) return;
     setGeneratingId(id);
     try {
       await contabilidadService.generateFixedAssetProjection(id);
@@ -196,7 +203,7 @@ export function ActivosFijosDepreciationTab() {
                   className="h-8 rounded-md border border-border bg-background px-2 text-xs"
                 />
               </div>
-              <DropdownMenu>
+              {canExportAssets && <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={exporting || assets.length === 0} className="h-8 gap-1.5">
                     {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <FileSpreadsheet className="size-3.5" />}
@@ -213,10 +220,10 @@ export function ActivosFijosDepreciationTab() {
                     <Download className="size-3.5" /> Exportar seleccionados ({selectedIds.length})
                   </DropdownMenuItem>
                 </DropdownMenuContent>
-              </DropdownMenu>
-              <Button size="sm" onClick={handleProcess} disabled={processing || !period} className="h-8 gap-1.5">
+              </DropdownMenu>}
+              {canProcessDepreciation && <Button size="sm" onClick={handleProcess} disabled={processing || !period} className="h-8 gap-1.5">
                 <Calculator className="size-3.5" /> {processing ? 'Procesando...' : selectedIds.length > 0 ? `Procesar ${selectedIds.length} seleccionado${selectedIds.length !== 1 ? 's' : ''}` : 'Procesar Depreciación'}
-              </Button>
+              </Button>}
             </div>
           </CardTitle>
           <p className="text-[10px] text-muted-foreground">
@@ -360,9 +367,11 @@ export function ActivosFijosDepreciationTab() {
                                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                                         Proyección ({projection.length} períodos · {processedCount} procesados)
                                       </p>
-                                      <Button variant="outline" size="sm" onClick={() => handleGenerate(asset.id)} disabled={generatingId === asset.id} className="h-7 gap-1.5">
-                                        <RefreshCw className={generatingId === asset.id ? 'size-3 animate-spin' : 'size-3'} /> Generar proyección
-                                      </Button>
+                                      {canProcessDepreciation && (
+                                        <Button variant="outline" size="sm" onClick={() => handleGenerate(asset.id)} disabled={generatingId === asset.id} className="h-7 gap-1.5">
+                                          <RefreshCw className={generatingId === asset.id ? 'size-3 animate-spin' : 'size-3'} /> Generar proyección
+                                        </Button>
+                                      )}
                                     </div>
                                     {projection.length === 0 ? (
                                       <div className="rounded-xl border border-dashed border-border/40 py-4 text-center text-xs text-muted-foreground">

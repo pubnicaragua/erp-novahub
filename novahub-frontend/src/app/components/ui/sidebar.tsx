@@ -526,11 +526,9 @@ function SidebarMenuButton({
     return button;
   }
 
-  if (typeof tooltip === "string") {
-    tooltip = {
-      children: tooltip,
-    };
-  }
+  const tooltipProps: React.ComponentProps<typeof TooltipContent> = typeof tooltip === "string"
+    ? { children: tooltip }
+    : tooltip;
 
   return (
     <Tooltip>
@@ -539,7 +537,11 @@ function SidebarMenuButton({
         side="right"
         align="center"
         hidden={state !== "collapsed" || isMobile}
-        {...tooltip}
+        {...tooltipProps}
+        className={cn(
+          "bg-sidebar-accent text-sidebar-accent-foreground",
+          tooltipProps.className,
+        )}
       />
     </Tooltip>
   );

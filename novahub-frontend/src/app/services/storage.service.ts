@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { api, apiRequest } from './api';
+import { notifyErpMutation } from '../utils/action-lock';
 import {
   MAX_OPTIMIZED_IMAGE_BYTES,
   MAX_SOURCE_IMAGE_BYTES,
@@ -100,42 +101,47 @@ export const storageService = {
     // The backend creates the signed URL with its service-role client. Uploading
     // to that exact URL avoids rebuilding it with the browser Supabase client,
     // which can point to a different project when environments drift.
-    if (prepared.signedUrl) {
-      const body = new FormData();
-      body.append('cacheControl', '3600');
-      body.append('', uploadFile);
+    notifyErpMutation('start', 'PUT', `/storage/uploads/${purpose}/signed`);
+    try {
+      if (prepared.signedUrl) {
+        const body = new FormData();
+        body.append('cacheControl', '3600');
+        body.append('', uploadFile);
 
-      const response = await fetch(prepared.signedUrl, {
-        method: 'PUT',
-        headers: { 'x-upsert': String(Boolean(prepared.upsert)) },
-        body,
-      });
-
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        let message = detail;
-        try {
-          const parsed = JSON.parse(detail) as { message?: string; error?: string };
-          message = parsed.message || parsed.error || detail;
-        } catch {
-          // Keep the raw response when Storage does not return JSON.
-        }
-        throw new Error(
-          `No se pudo subir el archivo al almacenamiento (${response.status}).${message ? ` ${message}` : ''}`,
-        );
-      }
-    } else {
-      // Compatibility fallback for an older backend response.
-      if (!supabase) throw new Error('El almacenamiento no está configurado. Contacta al administrador.');
-      const { error } = await supabase.storage
-        .from(prepared.bucket)
-        .uploadToSignedUrl(prepared.path, prepared.token, uploadFile, {
-          contentType: uploadMimeType,
-          cacheControl: '3600',
+        const response = await fetch(prepared.signedUrl, {
+          method: 'PUT',
+          headers: { 'x-upsert': String(Boolean(prepared.upsert)) },
+          body,
         });
-      if (error) {
-        throw new Error(`No se pudo subir el archivo al almacenamiento. ${error.message}`);
+
+        if (!response.ok) {
+          const detail = await response.text().catch(() => '');
+          let message = detail;
+          try {
+            const parsed = JSON.parse(detail) as { message?: string; error?: string };
+            message = parsed.message || parsed.error || detail;
+          } catch {
+            // Keep the raw response when Storage does not return JSON.
+          }
+          throw new Error(
+            `No se pudo subir el archivo al almacenamiento (${response.status}).${message ? ` ${message}` : ''}`,
+          );
+        }
+      } else {
+        // Compatibility fallback for an older backend response.
+        if (!supabase) throw new Error('El almacenamiento no está configurado. Contacta al administrador.');
+        const { error } = await supabase.storage
+          .from(prepared.bucket)
+          .uploadToSignedUrl(prepared.path, prepared.token, uploadFile, {
+            contentType: uploadMimeType,
+            cacheControl: '3600',
+          });
+        if (error) {
+          throw new Error(`No se pudo subir el archivo al almacenamiento. ${error.message}`);
+        }
       }
+    } finally {
+      notifyErpMutation('end', 'PUT', `/storage/uploads/${purpose}/signed`);
     }
 
     const url = prepared.publicUrl || (await this.resolveUrl(prepared.uri));

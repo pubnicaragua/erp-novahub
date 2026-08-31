@@ -30,6 +30,7 @@ import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { pdfStatusLabel } from '../../utils/pdfStatus';
 
 interface Column {
   key: string;
@@ -51,6 +52,7 @@ interface FinanceTableViewProps {
   canCreate?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
+  canExport?: boolean;
   targetItemId?: string | null;
   onClearTargetItem?: () => void;
   detailsRenderer?: (item: any) => React.ReactNode;
@@ -67,6 +69,7 @@ export function FinanceTableView({
   canCreate = true,
   canEdit = true,
   canDelete = true,
+  canExport = false,
   targetItemId,
   onClearTargetItem,
   detailsRenderer,
@@ -231,6 +234,7 @@ export function FinanceTableView({
   };
 
   const exportExcel = async () => {
+    if (!canExport) return;
     try {
       toast.info("Generando Excel, por favor espere...");
       const wb = new ExcelJS.Workbook();
@@ -355,6 +359,7 @@ export function FinanceTableView({
   };
 
   const exportPDF = async () => {
+    if (!canExport) return;
     try {
       toast.info("Generando PDF, por favor espere...");
       const pdfSettings = await getPdfDesignSettings('finanzas.transactions');
@@ -409,7 +414,7 @@ export function FinanceTableView({
       const body = filteredData.map(item => columns.map(col => {
         if (col.type === 'currency') return formatConvertedAmount(Number(item[col.key] || 0), item.currency, item.exchangeRate);
         if (col.type === 'date' || col.type === 'datetime') return item[col.key] ? new Date(item[col.key]).toLocaleString('es-NI') : '-';
-        if (col.type === 'select') return getLabelForValue(col, item[col.key]);
+        if (col.type === 'select') return col.key.toLowerCase().includes('status') || col.key.toLowerCase().includes('estado') ? pdfStatusLabel(getLabelForValue(col, item[col.key])) : getLabelForValue(col, item[col.key]);
         if (col.key === 'description' || col.key === 'notes') return translatePaymentMethodText(item[col.key]);
         return String(item[col.key] || '-');
       }));
@@ -461,7 +466,7 @@ export function FinanceTableView({
       if (col.key === 'status') {
         const isActive = value === 'ACTIVE';
         return (
-          <Badge className={cn("font-bold uppercase text-[10px] text-white", isActive ? "bg-primary hover:bg-primary/90" : "bg-muted-foreground hover:bg-muted-foreground/90")}>
+          <Badge className={cn("font-bold uppercase text-[10px]", isActive ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted-foreground text-background hover:bg-muted-foreground/90")}>
             {label}
           </Badge>
         );
@@ -494,15 +499,17 @@ export function FinanceTableView({
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-10 w-full sm:w-56 md:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" />
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button data-toolbar-role="print" className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/50 bg-background/50 px-4 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted sm:w-auto"><Download className="size-4" /> Exportar</button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
-              <DropdownMenuItem onClick={exportPDF}><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {canExport && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button data-toolbar-role="print" className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/50 bg-background/50 px-4 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted sm:w-auto"><Download className="size-4" /> Exportar</button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportPDF}><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {canCreate && (
             <button onClick={onAdd} data-toolbar-role="primary" className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 h-10 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 transition-colors sm:w-auto shadow-xl shadow-primary/20 border border-primary/20"><Plus className="size-4" /> Nuevo Registro</button>
           )}

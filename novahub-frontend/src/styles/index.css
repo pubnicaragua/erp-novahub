@@ -3,6 +3,50 @@
 @import './theme.css';
 @import './print.css';
 
+/*
+   One-shot protection for server actions. The component guard adds the
+   attribute on the first click and the API client keeps it active until the
+   mutation settles. It also covers legacy/native buttons that do not use the
+   shared Button primitive.
+*/
+button[data-action-busy='true'] {
+  cursor: wait !important;
+  pointer-events: none !important;
+}
+
+button[data-action-busy='true']::after {
+  content: '';
+  display: inline-block;
+  width: .9em;
+  height: .9em;
+  flex: 0 0 auto;
+  margin-left: .15rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 9999px;
+  animation: erp-action-lock-spin .7s linear infinite;
+}
+
+@keyframes erp-action-lock-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Any interactive surface that explicitly uses the primary token must use
+   its calculated foreground. This covers legacy buttons and active tabs that
+   add the background utility outside the shared Button primitive, including
+   the primary gradients used by the module navigation. */
+:is(button, a, [role='button'], [role='tab'])[class~='bg-primary'],
+:is(button, a, [role='button'], [role='tab'])[class*='from-primary'][data-state='active'],
+:is(button, a, [role='button'], [role='tab'])[class*='bg-primary'][data-state='active'] {
+  color: var(--primary-foreground);
+}
+
+:is(button, a, [role='button'], [role='tab'])[class~='bg-primary']:is(:hover, :focus-visible, :active),
+:is(button, a, [role='button'], [role='tab'])[class*='from-primary'][data-state='active']:is(:hover, :focus-visible, :active),
+:is(button, a, [role='button'], [role='tab'])[class*='bg-primary'][data-state='active']:is(:hover, :focus-visible, :active) {
+  color: var(--primary-foreground);
+}
+
 /* `--input` is transparent in the light theme. Keep legacy/raw controls
    visibly bordered so every module follows the same form pattern. */
 input.border-input,
@@ -143,9 +187,21 @@ select.erp-filter-select,
     max-width: 100% !important;
   }
 
-  [data-slot="sheet-content"] {
+[data-slot="sheet-content"] {
     width: 100% !important;
     max-width: 100% !important;
+  }
+
+  /* Los paneles de detalle conservan un margen seguro incluso en móvil.
+     El contenido sigue teniendo scroll interno, pero nunca tapa todo el
+     viewport ni queda pegado a sus bordes. */
+  [data-slot="sheet-content"].erp-detail-panel {
+    inset: 0.5rem !important;
+    width: calc(100% - 1rem) !important;
+    max-width: calc(100% - 1rem) !important;
+    height: calc(100dvh - 1rem) !important;
+    border: 1px solid hsl(var(--border) / 0.6) !important;
+    border-radius: 1.25rem !important;
   }
 
   [data-slot="dialog-footer"],
@@ -1047,6 +1103,31 @@ th .column-filter-menu .column-filter-icon,
   .sales-item-row[data-item-layout="standard"] > div:nth-child(4)::before { content: "Total"; }
   .sales-item-row[data-item-layout="standard"] > div:nth-child(5)::before { content: "Acciones"; }
 
+  /* Individual pricing adds an IVA/discount block. Keep its three numeric
+     controls in a real grid instead of letting the legacy col-span classes
+     force every control onto the same row. */
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(1),
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(2),
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(6) {
+    grid-column: 1 / -1 !important;
+  }
+
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(3),
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(4),
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(5) {
+    grid-column: auto !important;
+  }
+
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(2)::before { content: "Descuento e IVA"; }
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(3)::before { content: "Cantidad"; }
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(4)::before { content: "Precio unitario"; }
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(5)::before { content: "IVA"; }
+  .sales-item-row[data-item-layout="standard"][data-pricing-mode="individual"] > div:nth-child(6)::before { content: "Total y acciones"; }
+
   .sales-item-row[data-item-layout="recurrent"] > div:nth-child(1)::before { content: "Tipo"; }
   .sales-item-row[data-item-layout="recurrent"] > div:nth-child(2)::before { content: "Producto / servicio"; }
   .sales-item-row[data-item-layout="recurrent"] > div:nth-child(3)::before { content: "Cantidad"; }
@@ -1139,6 +1220,63 @@ th .column-filter-menu .column-filter-icon,
   .purchases-module .purchase-item-fields {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* Delivery and extra charges are a compact two-row editor on phones:
+     description first, then amount and remove action. */
+  .sales-module [data-item-layout="extra-charge"],
+  .sales-module [data-item-layout="delivery"] {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .sales-module [data-item-layout="extra-charge"] > span,
+  .sales-module [data-item-layout="delivery"] > span,
+  .sales-module [data-item-layout="extra-charge"] > input,
+  .sales-module [data-item-layout="delivery"] > input {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .sales-module [data-item-layout="extra-charge"] > div,
+  .sales-module [data-item-layout="delivery"] > div {
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sales-module [data-item-layout="extra-charge"] > button,
+  .sales-module [data-item-layout="delivery"] > button {
+    grid-column: 2;
+    grid-row: 3;
+    justify-self: end;
+  }
+}
+
+/* Un detalle es un panel lateral, no una página completa. El tamaño se
+   conserva por tipo de contenido, pero todos quedan limitados al viewport.
+   !important protege el contrato frente a clases heredadas como w-full o
+   max-w-full en vistas antiguas. */
+@media (min-width: 640px) {
+  [data-slot="sheet-content"].erp-detail-panel {
+    width: min(calc(100vw - 2rem), 48rem) !important;
+    max-width: 48rem !important;
+  }
+
+  [data-slot="sheet-content"].erp-detail-panel--compact {
+    width: min(calc(100vw - 2rem), 36rem) !important;
+    max-width: 36rem !important;
+  }
+
+  [data-slot="sheet-content"].erp-detail-panel--medium {
+    width: min(calc(100vw - 2rem), 42rem) !important;
+    max-width: 42rem !important;
+  }
+
+  [data-slot="sheet-content"].erp-detail-panel--wide {
+    width: min(calc(100vw - 2rem), 72rem) !important;
+    max-width: 72rem !important;
+  }
 }
 
 /* Scrollbar estable: siempre visible y sin desplazar el contenido al aparecer. */
@@ -1157,4 +1295,266 @@ th .column-filter-menu .column-filter-icon,
   background: color-mix(in srgb, hsl(var(--primary)) 55%, transparent);
   border-radius: 999px;
   box-shadow: 0 0 10px color-mix(in srgb, hsl(var(--primary)) 25%, transparent);
+}
+
+/* Shared data tables become readable record cards in compact layouts. The
+   Table primitive supplies each cell label from the desktop header, so the
+   same view remains a real table on wide screens and a scannable card list on
+   laptops, tablets and phones without duplicating every renderer. */
+@media (max-width: 1279px) {
+  [data-responsive-cards-container="true"] {
+    overflow: visible !important;
+  }
+
+  table[data-responsive-cards="true"] {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: auto !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+  }
+
+  table[data-responsive-cards="true"] > thead {
+    display: none !important;
+  }
+
+  table[data-responsive-cards="true"] > tbody {
+    display: grid !important;
+    width: 100% !important;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border) / 0.6) !important;
+    border-radius: 1rem;
+    background: hsl(var(--card) / 0.72);
+    box-shadow: 0 4px 16px hsl(var(--foreground) / 0.04);
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr:hover {
+    background: color-mix(in srgb, var(--primary) 4%, var(--card));
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td {
+    display: grid !important;
+    grid-template-columns: minmax(6rem, 36%) minmax(0, 1fr);
+    align-items: start;
+    gap: 0.5rem;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0.7rem 0.85rem !important;
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+    border: 0 !important;
+    border-bottom: 1px solid hsl(var(--border) / 0.35) !important;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td::before {
+    content: attr(data-label);
+    min-width: 0;
+    color: hsl(var(--muted-foreground) / 0.75);
+    font-size: 0.625rem;
+    font-weight: 900;
+    line-height: 1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td[data-label=""] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td[data-label=""]::before {
+    display: none;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td:last-child {
+    border-bottom: 0 !important;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td[colspan],
+  table[data-responsive-cards="true"] > tbody > tr > td[data-actions-column="true"] {
+    grid-column: 1 / -1;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td[colspan] {
+    display: block !important;
+    text-align: center;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td[colspan]::before {
+    display: none;
+  }
+
+  table[data-responsive-cards="true"] [data-action-group="true"] {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  table[data-responsive-cards="true"] td > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  table[data-responsive-cards="true"] > tfoot,
+  table[data-responsive-cards="true"] > tfoot > tr,
+  table[data-responsive-cards="true"] > tfoot > tr > td {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 639px) {
+  table[data-responsive-cards="true"] > tbody {
+    padding: 0.5rem;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr {
+    grid-template-columns: minmax(0, 1fr);
+    border-radius: 0.875rem;
+  }
+
+  table[data-responsive-cards="true"] > tbody > tr > td {
+    grid-template-columns: minmax(5.5rem, 34%) minmax(0, 1fr);
+    padding: 0.65rem 0.75rem !important;
+  }
+}
+
+/* NovaHub overlay language. Dialog, AlertDialog, Sheet and Drawer expose
+   these hooks from their shared primitives so every module gets the same
+   backdrop, focus surface and responsive action rhythm while retaining the
+   intentional width of each workflow. */
+[data-overlay-system="novahub"] {
+  background-color: rgb(2 6 23 / 0.58) !important;
+  backdrop-filter: blur(2px);
+}
+
+[data-overlay-surface="novahub-modal"],
+[data-overlay-surface="novahub-panel"] {
+  min-width: 0;
+  max-width: 100vw;
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+[data-overlay-surface="novahub-modal"] input,
+[data-overlay-surface="novahub-modal"] select,
+[data-overlay-surface="novahub-modal"] textarea,
+[data-overlay-surface="novahub-panel"] input,
+[data-overlay-surface="novahub-panel"] select,
+[data-overlay-surface="novahub-panel"] textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-overlay-section="header"] {
+  min-width: 0;
+}
+
+[data-overlay-section="header"] > *,
+[data-overlay-section="footer"] > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-overlay-section="footer"] {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* Legacy overlays use the same visual contract until they are migrated to a
+   Radix primitive. These classes are intentionally composable with their
+   existing max-width and grid classes. */
+.nh-modal-root {
+  isolation: isolate;
+  min-width: 0;
+  background-color: rgb(2 6 23 / 0.58) !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.nh-modal-backdrop {
+  background-color: rgb(2 6 23 / 0.58) !important;
+  backdrop-filter: blur(2px);
+}
+
+.nh-modal-backdrop.nh-modal-media-backdrop {
+  background-color: rgb(0 0 0 / 0.95) !important;
+  backdrop-filter: blur(18px);
+}
+
+.nh-modal-surface {
+  min-width: 0;
+  max-height: calc(100dvh - 2rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 1.5rem;
+  background: color-mix(in srgb, var(--background) 96%, transparent);
+  box-shadow: 0 24px 70px rgb(2 6 23 / 0.28);
+  backdrop-filter: blur(18px);
+}
+
+.nh-modal-surface.nh-modal-media-surface {
+  border-color: rgb(255 255 255 / 0.1);
+  background: #000;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.55);
+  backdrop-filter: none;
+}
+
+.nh-modal-header {
+  min-width: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.nh-modal-footer {
+  min-width: 0;
+  flex-wrap: wrap;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.nh-modal-surface input,
+.nh-modal-surface select,
+.nh-modal-surface textarea,
+.nh-modal-surface button {
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .nh-modal-root {
+    align-items: flex-start !important;
+    padding: 0.75rem !important;
+  }
+
+  .nh-modal-surface {
+    width: 100% !important;
+    max-height: calc(100dvh - 1.5rem);
+    border-radius: 1.25rem;
+  }
+
+  .nh-modal-footer {
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+  }
+
+  .nh-modal-footer > * {
+    width: 100%;
+  }
 }

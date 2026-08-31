@@ -99,7 +99,12 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const tenantKey = user?.tenantId || 'anonymous';
   const canReadAccounting = canPerform('ACCOUNTING', 'view');
   const canReadInventory = canPerform('INVENTORY', 'view');
-  const canReadPurchases = canPerform('PURCHASES', 'view');
+  const canViewPurchasesSection = useCallback((sectionId: string) => {
+    const section = COMPRAS_SECTIONS.find((candidate) => candidate.id === sectionId);
+    return Boolean(section?.requiredModules.some((module) => canPerform(module, 'view')));
+  }, [canPerform]);
+  const canReadPurchases = canPerform('PURCHASES', 'view')
+    || COMPRAS_SECTIONS.some((section) => canViewPurchasesSection(section.id));
   const purchasesStaleTime = 15_000;
   const [searchState, setSearchState] = useState<Record<string, string>>({});
   const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
@@ -142,21 +147,31 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   };
 
   useEffect(() => {
-    if (activeSubModule) setActiveSection(normalize(activeSubModule));
-  }, [activeSubModule]);
+    if (!activeSubModule) return;
+    const nextSection = normalize(activeSubModule);
+    if (COMPRAS_SECTIONS.some((section) => section.id === nextSection) && canViewPurchasesSection(nextSection)) {
+      setActiveSection(nextSection);
+    }
+  }, [activeSubModule, canViewPurchasesSection]);
+
+  useEffect(() => {
+    if (canViewPurchasesSection(activeSection)) return;
+    const fallback = COMPRAS_SECTIONS.find((section) => canViewPurchasesSection(section.id))?.id;
+    if (fallback) setActiveSection(fallback);
+  }, [activeSection, canViewPurchasesSection]);
 
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as any;
       if (detail?.module !== 'compras') return;
-      if (detail?.subModule === 'ordenes-compra' && detail?.filter === 'TO_APPROVE') {
+      if (detail?.subModule === 'ordenes-compra' && detail?.filter === 'TO_APPROVE' && canViewPurchasesSection('ordenes')) {
         setActiveSection('ordenes');
         setStatusState((s) => ({ ...s, ordenes: 'ALL' }));
         setOrdersPrefilter('TO_APPROVE');
         return;
       }
       const section = normalize(detail?.subModule);
-      if (!COMPRAS_SECTIONS.some((item) => item.id === section)) return;
+      if (!COMPRAS_SECTIONS.some((item) => item.id === section) || !canViewPurchasesSection(section)) return;
       setActiveSection(section);
       const targetId = String(detail?.targetId || '').trim();
       const number = String(detail?.number || '').trim();
@@ -165,7 +180,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     };
     window.addEventListener('navigate-module', handler);
     return () => window.removeEventListener('navigate-module', handler);
-  }, []);
+  }, [canViewPurchasesSection, updateSearch]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -187,14 +202,14 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const suppliersQuery = useQuery({
     queryKey: ['purchases', 'suppliers', tenantKey, suppliersPage.page, suppliersPage.pageSize, searchFor('proveedores')],
     queryFn: ({ signal }) => suppliersService.getAll({ page: suppliersPage.page, pageSize: suppliersPage.pageSize, search: searchFor('proveedores') }, signal),
-    enabled: canReadPurchases && activeSection === 'proveedores',
+    enabled: canViewPurchasesSection('proveedores') && activeSection === 'proveedores',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
   const suppliersCatalogQuery = useQuery({
     queryKey: ['purchases', 'suppliers-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => suppliersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
-    enabled: canReadPurchases && ['solicitudes', 'gastos', 'gastos-rec', 'ordenes', 'recepciones', 'facturas-rec', 'pagos', 'creditos'].includes(activeSection),
+    enabled: canViewPurchasesSection('proveedores') && ['solicitudes', 'gastos', 'gastos-rec', 'ordenes', 'recepciones', 'facturas-rec', 'pagos', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -227,21 +242,21 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const productCatalogQuery = useQuery({
     queryKey: ['purchases', 'products-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => inventoryService.getProducts({ page: 1, pageSize: 200 }, signal),
-    enabled: canReadInventory && ['ordenes', 'recepciones', 'creditos'].includes(activeSection),
+    enabled: canPerform('INVENTORY_PRODUCTS', 'view') && ['ordenes', 'recepciones', 'creditos', 'facturas-rec'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
   const productCategoriesQuery = useQuery({
     queryKey: ['purchases', 'products-categories-catalog', tenantKey],
     queryFn: ({ signal }) => inventoryService.getCategories(signal),
-    enabled: canReadInventory && ['ordenes', 'recepciones'].includes(activeSection),
+    enabled: canPerform('INVENTORY_ATTRIBUTES', 'view') && ['ordenes', 'recepciones'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
   const orderCatalogQuery = useQuery({
     queryKey: ['purchases', 'orders-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => purchaseOrdersService.getAll({ page: 1, pageSize: 200 }, signal),
-    enabled: canReadPurchases && activeSection === 'recepciones',
+    enabled: canViewPurchasesSection('ordenes') && activeSection === 'recepciones',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -255,7 +270,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const expensesQuery = useQuery({
     queryKey: ['purchases', 'expenses', tenantKey, expensesPage.page, expensesPage.pageSize, searchFor('gastos'), expenseDateFilter.from, expenseDateFilter.to],
     queryFn: ({ signal }) => expensesService.getAll({ page: expensesPage.page, pageSize: expensesPage.pageSize, search: searchFor('gastos'), dateFrom: expenseDateFilter.from, dateTo: expenseDateFilter.to }, signal),
-    enabled: canReadPurchases && activeSection === 'gastos',
+    enabled: canViewPurchasesSection('gastos') && activeSection === 'gastos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -263,7 +278,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const recurringExpensesQuery = useQuery({
     queryKey: ['purchases', 'recurring-expenses', tenantKey, recurringExpensesPage.page, recurringExpensesPage.pageSize, searchFor('gastos-rec')],
     queryFn: ({ signal }) => recurringExpensesService.getAll({ page: recurringExpensesPage.page, pageSize: recurringExpensesPage.pageSize, search: searchFor('gastos-rec') }, signal),
-    enabled: canReadPurchases && activeSection === 'gastos-rec',
+    enabled: canViewPurchasesSection('gastos-rec') && activeSection === 'gastos-rec',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -271,7 +286,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const ordersQuery = useQuery({
     queryKey: ['purchases', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes'), statusFor('ordenes'), selectedBranchId],
     queryFn: ({ signal }) => purchaseOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes'), status: statusFor('ordenes'), branchId: selectedBranchId || undefined }, signal),
-    enabled: canReadPurchases && activeSection === 'ordenes',
+    enabled: canViewPurchasesSection('ordenes') && activeSection === 'ordenes',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -279,14 +294,14 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const receiptsQuery = useQuery({
     queryKey: ['purchases', 'receipts', tenantKey, receiptsPage.page, receiptsPage.pageSize, searchFor('recepciones'), selectedBranchId],
     queryFn: ({ signal }) => purchaseReceiptsService.getAll({ page: receiptsPage.page, pageSize: receiptsPage.pageSize, search: searchFor('recepciones'), branchId: selectedBranchId || undefined }, signal),
-    enabled: canReadPurchases && activeSection === 'recepciones',
+    enabled: canViewPurchasesSection('recepciones') && activeSection === 'recepciones',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
   const invoicesCatalogQuery = useQuery({
     queryKey: ['purchases', 'invoices-catalog', tenantKey, 1, 200, selectedBranchId],
     queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200, branchId: selectedBranchId || undefined }, signal),
-    enabled: canReadPurchases && ['pagos', 'creditos'].includes(activeSection),
+    enabled: canPerform('PURCHASES_INVOICES', 'view') && ['pagos', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -295,7 +310,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const recurringInvoicesQuery = useQuery({
     queryKey: ['purchases', 'recurring-invoices', tenantKey, recurringInvoicesPage.page, recurringInvoicesPage.pageSize, searchFor('facturas-rec')],
     queryFn: ({ signal }) => recurringSupplierInvoicesService.getAll({ page: recurringInvoicesPage.page, pageSize: recurringInvoicesPage.pageSize, search: searchFor('facturas-rec') }, signal),
-    enabled: canReadPurchases && activeSection === 'facturas-rec',
+    enabled: canViewPurchasesSection('facturas-rec') && activeSection === 'facturas-rec',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -303,7 +318,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const paymentsQuery = useQuery({
     queryKey: ['purchases', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos'), selectedBranchId],
     queryFn: ({ signal }) => paymentsMadeService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos'), branchId: selectedBranchId || undefined }, signal),
-    enabled: canReadPurchases && activeSection === 'pagos',
+    enabled: canViewPurchasesSection('pagos') && activeSection === 'pagos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -311,7 +326,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const creditsQuery = useQuery({
     queryKey: ['purchases', 'credits', tenantKey, creditsPage.page, creditsPage.pageSize, searchFor('creditos'), selectedBranchId],
     queryFn: ({ signal }) => supplierCreditsService.getAll({ page: creditsPage.page, pageSize: creditsPage.pageSize, search: searchFor('creditos'), branchId: selectedBranchId || undefined }, signal),
-    enabled: canReadPurchases && activeSection === 'creditos',
+    enabled: canViewPurchasesSection('creditos') && activeSection === 'creditos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -319,7 +334,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const requestsQuery = useQuery({
     queryKey: ['purchases', 'requests', tenantKey, requestsPage.page, requestsPage.pageSize, searchFor('solicitudes'), statusFor('solicitudes'), selectedBranchId],
     queryFn: ({ signal }) => purchaseRequestsService.getAll({ page: requestsPage.page, pageSize: requestsPage.pageSize, search: searchFor('solicitudes'), status: statusFor('solicitudes'), branchId: selectedBranchId || undefined }, signal),
-    enabled: canReadPurchases && activeSection === 'solicitudes',
+    enabled: canViewPurchasesSection('solicitudes') && activeSection === 'solicitudes',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -398,7 +413,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
       .filter((order) => PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(order.status)))
       .map((order) => ({ id: String(order.id), label: order.number, detail: order.supplier?.name || 'Sin proveedor asignado' }));
     const receiptItems: PurchaseAlertItem[] = (filteredData.recepciones as PurchaseReceipt[])
-      .filter((receipt) => ['PENDING', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(receipt.status || 'PENDING').toUpperCase()))
+      .filter((receipt) => ['PENDING', 'WITH_INCIDENTS'].includes(String(receipt.status || 'PENDING').toUpperCase()))
       .map((receipt) => ({ id: String(receipt.id), label: receipt.number, detail: receipt.supplier?.name || 'Sin proveedor asignado' }));
     const expenseItems: PurchaseAlertItem[] = (filteredData.gastos as Expense[])
       .filter((expense) => String(expense.status || '').toUpperCase() === 'PENDING')
@@ -449,24 +464,16 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
           </div>
           <CurrencyValuationBanner className="mb-5" />
 
-          <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); }}>
+          <Tabs value={activeSection} className="w-full" onValueChange={(val) => { if (canViewPurchasesSection(val)) setActiveSection(val); }}>
         <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
         <TabsList ref={tabsRef} className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {COMPRAS_SECTIONS.map((section) => {
-                const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
-                // La suscripción al módulo padre (PURCHASES) habilita todas
-                // sus vistas, incluso con submódulos granulares contratados.
-                const hasFallback = user?.enabledModules?.includes('PURCHASES');
-                const hasAccess = (!user?.enabledModules || !section.requiredModules || hasRequired || hasFallback)
-                  && (!section.requiredModules || section.requiredModules.some(mod => canPerform(mod, 'view')));
-                if (!hasAccess) return null;
+                if (!canViewPurchasesSection(section.id)) return null;
                 return (
                 <TabsTrigger 
                   key={section.id} 
                   value={section.id}
-                  className="flex flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
+                  className="flex flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
                 >
                   <section.icon className="size-4" />
                   <span className="hidden sm:inline">{section.label}</span>
@@ -477,7 +484,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
         </div>
           <AnimatePresence mode="wait">
             {COMPRAS_SECTIONS.map(section => {
-               if (activeSection !== section.id) return null;
+               if (activeSection !== section.id || !canViewPurchasesSection(section.id)) return null;
                const commonProps = { loading, onRefresh: fetchData, isSidebarCollapsed };
                return (
                  <motion.div
@@ -494,7 +501,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
                      {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} warehouseCatalog={warehouseCatalog} selectedBranchId={selectedBranchId} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog.filter((warehouse: any) => !selectedBranchId || warehouse?.clientTenantId === selectedBranchId)} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
-                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}
+                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}
                    {section.id === 'pagos'         && (
                     <PagosRealizadosView
                       {...commonProps}

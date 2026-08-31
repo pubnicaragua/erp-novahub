@@ -86,6 +86,8 @@ const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
 
 export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh, pagination, onSearchChange, branches = [], selectedBranchId, onGoToConfig }: TransferenciasViewProps) {
   const { canPerform, user } = useAuth();
+  const canCreateTransfer = canPerform('INVENTORY_TRANSFERS', 'create');
+  const canEditTransferConfig = canPerform('INVENTORY_CONFIG', 'edit');
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -421,6 +423,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
   };
 
   const handleCreateTransfer = async () => {
+    if (!canCreateTransfer) return;
     if (!newTransfer.fromId || !newTransfer.toId) {
       toast.error('Selecciona el origen y el destino de la transferencia');
       return;
@@ -547,9 +550,9 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
             />
           </div>
         </div>
-        {canPerform('INVENTORY', 'edit') && (
+        {(canCreateTransfer || canEditTransferConfig) && (
           <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end">
-            {onGoToConfig && (
+            {onGoToConfig && canEditTransferConfig && (
               <Button type="button" variant="outline" size="sm" onClick={onGoToConfig} className="h-10 w-full rounded-xl md:w-auto">
                 <Settings2 className="mr-1 size-3.5" /> Configurar cuentas
               </Button>
@@ -557,7 +560,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
             <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-10 w-full rounded-xl md:w-auto">
               <CircleHelp className="size-3.5 mr-1" /> Cómo transferir inventario
             </Button>
-            <Button 
+            {canCreateTransfer && <Button 
               size="sm" 
               className="h-10 w-full min-w-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 md:w-auto"
               onClick={() => setIsCreating(true)}
@@ -566,7 +569,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
             >
               <Plus className="size-4" />
               Nueva Transferencia
-            </Button>
+            </Button>}
           </div>
         )}
       </div>

@@ -26,6 +26,8 @@ export type CustomerImportRow = {
   department: string;
   country: string;
   creditLimit: number | '';
+  creditLimitCurrency: 'NIO' | 'USD';
+  creditLimitCurrencyError?: boolean;
   status: 'ACTIVE' | 'INACTIVE';
   notes: string;
   error?: string;
@@ -38,6 +40,7 @@ interface CustomerImportPreviewProps {
   rows: CustomerImportRow[];
   fileName: string;
   priceLists: Array<{ id: string; code: string; name: string }>;
+  defaultCreditLimitCurrency: 'NIO' | 'USD';
   isSidebarCollapsed: boolean;
   importing: boolean;
   progress: number;
@@ -122,6 +125,12 @@ function CustomerImportMobileCard({
         <ImportField label="Departamento"><Input className={fieldClass} value={row.department} onChange={(event) => update('department', event.target.value)} disabled={importing} /></ImportField>
         <ImportField label="País"><Input className={fieldClass} value={row.country} onChange={(event) => update('country', event.target.value)} disabled={importing} /></ImportField>
         <ImportField label="Límite de crédito"><Input className={`${fieldClass} text-right`} type="number" min="0" value={row.creditLimit} onChange={(event) => update('creditLimit', event.target.value)} disabled={importing} /></ImportField>
+        <ImportField label="Moneda del límite">
+          <Select value={row.creditLimitCurrency} onValueChange={(value) => update('creditLimitCurrency', value)} disabled={importing}>
+            <SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="NIO">Córdobas (NIO)</SelectItem><SelectItem value="USD">Dólares (USD)</SelectItem></SelectContent>
+          </Select>
+        </ImportField>
         <ImportField label="Estado">
           <Select value={row.status} onValueChange={(value) => update('status', value)} disabled={importing}>
             <SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger>
@@ -141,6 +150,7 @@ export function CustomerImportPreview({
   rows,
   fileName,
   priceLists,
+  defaultCreditLimitCurrency,
   isSidebarCollapsed,
   importing,
   progress,
@@ -155,7 +165,7 @@ export function CustomerImportPreview({
   const [confirmText, setConfirmText] = useState('');
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
-  const gridTemplate = '80px 288px 160px 192px 224px 192px 176px 256px 176px 288px 160px 192px 160px 176px 144px 288px';
+  const gridTemplate = '80px 288px 160px 192px 224px 192px 176px 256px 176px 288px 160px 192px 160px 176px 144px 144px 288px';
   const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58);
   const validRows = rows.filter((row) => !row.error).length;
   const errorRows = rows.filter((row) => row.error).length;
@@ -174,13 +184,13 @@ export function CustomerImportPreview({
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
             <h1 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">Previsualizar clientes</h1>
-            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente y no se importa desde el archivo.</p>
+            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente. La moneda del límite queda visible por fila; si el archivo no la indica, se usa {defaultCreditLimitCurrency}.</p>
           </div>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Archivo cargado</p><p className="truncate text-sm font-bold" title={fileName}>{fileName}</p></div>
-          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
+          <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Límite por moneda</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
         </div>
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="clientes" />
@@ -204,6 +214,7 @@ export function CustomerImportPreview({
                 <TableHead className="w-48 min-w-48 whitespace-nowrap">Departamento</TableHead>
                 <TableHead className="w-40 min-w-40 whitespace-nowrap">País</TableHead>
                 <TableHead className="w-44 min-w-44 whitespace-nowrap text-right">Límite crédito</TableHead>
+                <TableHead className="w-36 min-w-36 whitespace-nowrap">Moneda límite</TableHead>
                 <TableHead className="w-36 min-w-36 whitespace-nowrap">Estado</TableHead>
                 <TableHead className="w-72 min-w-72 whitespace-nowrap">Validación</TableHead>
               </TableRow>
@@ -228,6 +239,7 @@ export function CustomerImportPreview({
                   <TableCell><Input className={fieldClass} value={row.department} onChange={(event) => onRowUpdate(index, 'department', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className={fieldClass} value={row.country} onChange={(event) => onRowUpdate(index, 'country', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className="h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-right text-xs" type="number" min="0" value={row.creditLimit} onChange={(event) => onRowUpdate(index, 'creditLimit', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Select value={row.creditLimitCurrency} onValueChange={(value) => onRowUpdate(index, 'creditLimitCurrency', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></TableCell>
                   <TableCell><Select value={row.status} onValueChange={(value) => onRowUpdate(index, 'status', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></TableCell>
                   <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : row.warning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}>{row.error || row.warning || 'Correcto'}</TableCell>
                 </TableRow>

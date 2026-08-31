@@ -35,8 +35,9 @@ const SheetOverlay = React.forwardRef<
   <SheetPrimitive.Overlay
     ref={ref}
     data-slot="sheet-overlay"
+    data-overlay-system="novahub"
     className={cn(
-      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px]",
       className,
     )}
     {...props}
@@ -57,8 +58,9 @@ function SheetContent({
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
+        data-overlay-surface="novahub-panel"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex min-h-0 min-w-0 max-w-[100vw] flex-col gap-4 overscroll-contain shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+          "bg-background/95 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex min-h-0 min-w-0 max-w-[100vw] flex-col gap-4 overscroll-contain border-border/60 shadow-2xl backdrop-blur-xl transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" &&
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-dvh w-[min(100vw,28rem)] max-w-full overflow-hidden border-l sm:max-w-sm",
           side === "left" &&
@@ -85,6 +87,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-header"
+      data-overlay-section="header"
       className={cn("flex min-w-0 shrink-0 flex-col gap-1.5 p-4", className)}
       {...props}
     />
@@ -95,6 +98,7 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-footer"
+      data-overlay-section="footer"
       className={cn("mt-auto flex min-w-0 shrink-0 flex-col gap-2 p-4", className)}
       {...props}
     />

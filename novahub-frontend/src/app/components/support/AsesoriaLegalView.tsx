@@ -29,7 +29,13 @@ interface AsesoriaLegalViewProps {
 
 export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: AsesoriaLegalViewProps) {
   const { canPerform } = useAuth();
-  const canViewLegal = canPerform('LEGAL', 'view');
+  const canViewCases = canPerform('LEGAL_CASES', 'view');
+  const canViewReminders = canPerform('LEGAL_REMINDERS', 'view');
+  const tabs = [
+    { id: 'cases', label: 'Casos', icon: FileText, canView: canViewCases },
+    { id: 'reminders', label: 'Recordatorios', icon: Bell, canView: canViewReminders },
+  ];
+  const visibleTabs = tabs.filter((tab) => tab.canView);
   const [activeTab, setActiveTab] = useState(activeSubModule || 'cases');
   const [selectedCase, setSelectedCase] = useState<LegalCase | null>(null);
   const [showNewCase, setShowNewCase] = useState(false);
@@ -40,10 +46,10 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
   const casesQuery = useTenantQuery<LegalCase[]>(
     ['legal', 'cases', filterType, filterStatus],
     signal => legalService.listCases(filterType !== 'all' ? filterType : undefined, filterStatus !== 'all' ? filterStatus : undefined, signal),
-    { enabled: canViewLegal && activeTab === 'cases' },
+    { enabled: canViewCases && activeTab === 'cases' },
   );
   const remindersQuery = useTenantQuery<LegalReminder[]>(['legal', 'reminders'], signal => legalService.listReminders(signal), {
-    enabled: canViewLegal && activeTab === 'reminders',
+    enabled: canViewReminders && activeTab === 'reminders',
   });
   const cases = asList(casesQuery.data) as LegalCase[];
   const reminders = asList(remindersQuery.data) as LegalReminder[];
@@ -53,12 +59,17 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
   const fetchData = () => activeTab === 'cases' ? casesQuery.refetch() : remindersQuery.refetch();
 
   useEffect(() => {
-    if (activeSubModule && activeSubModule !== activeTab) {
+    if (activeSubModule && visibleTabs.some((tab) => tab.id === activeSubModule) && activeSubModule !== activeTab) {
       setActiveTab(activeSubModule);
+    } else if (visibleTabs.length > 0 && !visibleTabs.some((tab) => tab.id === activeTab)) {
+      const fallback = visibleTabs[0].id;
+      setActiveTab(fallback);
+      onSubModuleChange?.(fallback);
     }
-  }, [activeSubModule]);
+  }, [activeSubModule, activeTab, onSubModuleChange, visibleTabs]);
 
   const handleTabChange = (value: string) => {
+    if (!visibleTabs.some((tab) => tab.id === value)) return;
     setActiveTab(value);
     if (onSubModuleChange) {
       onSubModuleChange(value);
@@ -110,18 +121,18 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
           <motion.div key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
-                <TabsTrigger value="cases"
+                {canViewCases && <TabsTrigger value="cases"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
                   <FileText className="size-4" /> Casos
-                </TabsTrigger>
-                <TabsTrigger value="reminders"
+                </TabsTrigger>}
+                {canViewReminders && <TabsTrigger value="reminders"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
                   <Bell className="size-4" /> Recordatorios
-                </TabsTrigger>
+                </TabsTrigger>}
               </TabsList>
 
               <TabsContent value="cases" className="mt-0">
@@ -150,7 +161,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
                       </SelectContent>
                     </Select>
                   </div>
-                  {canPerform('LEGAL', 'create') && (
+                  {canPerform('LEGAL_CASES', 'create') && (
                     <Button onClick={() => setShowNewCase(true)} className="rounded-xl gap-2 font-bold">
                       <Plus className="size-4" /> Nuevo Caso
                     </Button>
@@ -179,9 +190,9 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
                     <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
                       <Scale className="size-12 text-muted-foreground/30" />
                       <p className="text-muted-foreground text-center">No hay casos legales{search ? ' que coincidan' : ''}.</p>
-                      <Button onClick={() => setShowNewCase(true)} className="rounded-xl gap-2 font-bold">
+                      {canPerform('LEGAL_CASES', 'create') && <Button onClick={() => setShowNewCase(true)} className="rounded-xl gap-2 font-bold">
                         <Plus className="size-4" /> Crear Primer Caso
-                      </Button>
+                      </Button>}
                     </CardContent>
                   </Card>
                 ) : (
@@ -233,7 +244,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
           </div>
           <div className="p-4 sm:p-6">
             <NewCaseForm
-              onComplete={(c) => { setCases((prev) => [c, ...prev]); setShowNewCase(false); toast.success('Caso creado'); }}
+              onComplete={() => { void casesQuery.refetch(); setShowNewCase(false); toast.success('Caso creado'); }}
               onCancel={() => setShowNewCase(false)}
             />
           </div>
@@ -251,7 +262,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
           <div className="p-4 sm:p-6">
             <NewReminderForm
               cases={cases}
-              onComplete={(r) => { setReminders((prev) => [r, ...prev]); setShowNewReminder(false); toast.success('Recordatorio creado'); }}
+              onComplete={() => { void remindersQuery.refetch(); setShowNewReminder(false); toast.success('Recordatorio creado'); }}
               onCancel={() => setShowNewReminder(false)}
             />
           </div>
@@ -348,6 +359,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
   };
 
   const handleStatusChange = async (newStatus: string) => {
+    if (!canPerform('LEGAL_CASES', 'approve')) return;
     try {
       await legalService.updateStatus(c.id, newStatus);
       toast.success('Estado actualizado');
@@ -381,7 +393,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
             <Button variant="outline" onClick={() => setShowChat(true)} className="gap-2 rounded-xl text-xs font-bold">
               <MessageCircle className="size-3" /> Chat
             </Button>
-            {canPerform('LEGAL', 'edit') && (
+            {canPerform('LEGAL_CASES', 'approve') && (
               <Button variant="outline" onClick={() => setShowStatusDialog(true)} className="gap-2 rounded-xl text-xs font-bold">
                 <AlertTriangle className="size-3" /> Cambiar Estado
               </Button>
@@ -438,7 +450,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
                   className="size-3.5 rounded border-border bg-background text-primary" />
                 <span className="text-xs text-muted-foreground">Nota interna</span>
               </label>
-              <Button onClick={handleAddNote} disabled={addingNote || !note.trim() || !canPerform('LEGAL', 'edit')} className="h-9 rounded-xl gap-2 text-xs font-bold">
+              <Button onClick={handleAddNote} disabled={addingNote || !note.trim() || !canPerform('LEGAL_CASES', 'edit')} className="h-9 rounded-xl gap-2 text-xs font-bold">
                 {addingNote ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} Agregar
               </Button>
             </div>
@@ -481,7 +493,7 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
 
   return (
     <div className="space-y-4">
-      {canPerform('LEGAL', 'create') && (
+      {canPerform('LEGAL_REMINDERS', 'create') && (
         <div className="flex justify-end">
           <Button onClick={onNew} className="rounded-xl gap-2 font-bold"><Plus className="size-4" /> Nuevo Recordatorio</Button>
         </div>
@@ -511,7 +523,7 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
                         {r.caseId && <Badge variant="outline" className="text-[10px]">Vinculado</Badge>}
                       </div>
                     </div>
-                    {canPerform('LEGAL', 'delete') && (
+                    {canPerform('LEGAL_REMINDERS', 'delete') && (
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive">
                         <Trash2 className="size-4" />
                       </Button>
@@ -533,7 +545,7 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
                         <Clock className="size-3" />Venció {new Date(r.dueDate).toLocaleDateString('es-NI')}
                       </span>
                     </div>
-                    {canPerform('LEGAL', 'delete') && (
+                    {canPerform('LEGAL_REMINDERS', 'delete') && (
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive">
                         <Trash2 className="size-4" />
                       </Button>

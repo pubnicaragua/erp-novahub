@@ -43,7 +43,7 @@ const viewLabels: Record<ManagerPurchasesView, string> = Object.fromEntries(MANA
 
 const statusOptions: Partial<Record<ManagerPurchasesView, Array<{ value: string; label: string }>>> = {
   orders: PURCHASE_ORDER_STATUS_OPTIONS.map(({ value, label }) => ({ value, label })),
-  receipts: [{ value: 'PENDING', label: 'Pendiente' }, { value: 'RECEIVED', label: 'Recibida' }, { value: 'PARTIAL', label: 'Parcial' }, { value: 'REJECTED', label: 'Rechazada' }, { value: 'WITH_INCIDENTS', label: 'Con incidencias' }],
+  receipts: [{ value: 'PENDING', label: 'Pendiente' }, { value: 'RECEIVED', label: 'Recibido' }, { value: 'WITH_INCIDENTS', label: 'Recibido con incidencias' }, { value: 'PAID', label: 'Pagada' }, { value: 'CANCELLED', label: 'Cancelada' }],
   invoices: [{ value: 'PENDING', label: 'Pendiente' }, { value: 'PARTIAL', label: 'Parcial' }, { value: 'PAID', label: 'Pagada' }, { value: 'OVERDUE', label: 'Vencida' }, { value: 'CANCELLED', label: 'Cancelada' }],
   recurring: [{ value: 'ACTIVE', label: 'Activa' }, { value: 'PAUSED', label: 'Pausada' }, { value: 'EXPIRED', label: 'Vencida' }, { value: 'CANCELLED', label: 'Cancelada' }],
   payments: [{ value: 'CASH', label: 'Efectivo' }, { value: 'TRANSFER', label: 'Transferencia' }, { value: 'CHECK', label: 'Cheque' }, { value: 'CARD', label: 'Tarjeta' }, { value: 'OTHER', label: 'Otro' }],
@@ -58,7 +58,7 @@ const statusLabel = (value: unknown) => {
   const labels: Record<string, string> = {
     DRAFT: 'Borrador', SENT: 'Enviada', APPROVED: 'Aprobada', CANCELLED: 'Cancelada', PENDING: 'Pendiente', IN_PROCESS: 'En proceso',
     PENDING_REVIEW: 'Pendiente de revisión', CONFIRMED: 'Confirmada', IN_PROGRESS: 'En proceso', SHIPPED: 'Enviada', DELIVERED: 'Entregada',
-    RECEIVED: 'Recibida', PARTIAL: 'Parcial', REJECTED: 'Rechazada', WITH_INCIDENTS: 'Con incidencias', PAID: 'Pagada', CREDIT: 'A crédito', OVERDUE: 'Vencida', REFUNDED: 'Reembolsada',
+    RECEIVED: 'Recibida', PARTIAL: 'Parcial', REJECTED: 'Rechazada', WITH_INCIDENTS: 'Recibida con incidencias', PAID: 'Pagada', CREDIT: 'A crédito', OVERDUE: 'Vencida', REFUNDED: 'Reembolsada',
     ACTIVE: 'Activa', INACTIVE: 'Inactiva', ARCHIVED: 'Archivada', PAUSED: 'Pausada', EXPIRED: 'Vencida',
     CASH: 'Efectivo', TRANSFER: 'Transferencia', CHECK: 'Cheque', CARD: 'Tarjeta', OTHER: 'Otro', BANK: 'Banco', CREDIT_CARD: 'Tarjeta de crédito', DEBIT_CARD: 'Tarjeta de débito',
     ISSUED: 'Emitida', APPLIED: 'Aplicada', VOIDED: 'Anulada', POSTED: 'Registrada',

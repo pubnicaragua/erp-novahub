@@ -114,6 +114,8 @@ export interface Customer {
   contactEmail?: string;
   contactPhone?: string;
   creditLimit: number;
+  /** Moneda original en la que se configuró el límite de crédito. */
+  creditLimitCurrency?: 'NIO' | 'USD';
   creditDays?: number | null;
   /** Saldo calculado en moneda base; puede coexistir con saldo a favor. */
   balanceDue?: number;
@@ -357,6 +359,11 @@ export interface RecurringInvoice {
   taxAmount: number;
   discountAmount?: number;
   total: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  extraCharges?: Array<{ id?: string; description?: string | null; amount?: number }>;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
@@ -505,6 +512,11 @@ export interface CreditNote {
   taxAmount?: number;
   discountAmount?: number;
   total: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  extraCharges?: Array<{ id?: string; description?: string | null; amount?: number }>;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   amountPaid?: number;
   balance?: number;
   cashQueue?: {
@@ -695,7 +707,7 @@ export interface PurchaseReceipt {
   supplierId: string;
   supplier?: Supplier;
   date: string;
-  status: 'pending' | 'received' | 'partial' | 'rejected' | 'with_incidents' | 'PENDING' | 'RECEIVED' | 'PARTIAL' | 'REJECTED' | 'WITH_INCIDENTS';
+  status: 'pending' | 'received' | 'partial' | 'rejected' | 'with_incidents' | 'paid' | 'cancelled' | 'PENDING' | 'RECEIVED' | 'PARTIAL' | 'REJECTED' | 'WITH_INCIDENTS' | 'PAID' | 'CANCELLED';
   subtotal?: number;
   taxAmount?: number;
   withholdingTotal?: number;
@@ -813,6 +825,15 @@ export interface RecurringSupplierInvoice {
   startDate: string;
   endDate?: string;
   nextInvoiceDate: string;
+  description?: string;
+  subtotal?: number;
+  taxAmount?: number;
+  withholdingTotal?: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  extraCharges?: Array<{ description?: string; amount?: number }> | null;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   total: number;
   currency: Currency;
   exchangeRate?: number;
@@ -826,9 +847,15 @@ export interface RecurringSupplierInvoice {
 export interface RecurringSupplierInvoiceItem {
   id: string;
   recurringSupplierInvoiceId: string;
+  productId?: string | null;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   unitPrice: number;
+  taxType?: string;
+  taxRate?: number;
+  withholdingType?: string;
+  withholdingRate?: number;
   total: number;
 }
 

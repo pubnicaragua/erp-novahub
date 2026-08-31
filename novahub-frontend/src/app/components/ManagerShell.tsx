@@ -66,6 +66,7 @@ import { notificationsService } from "../services/notifications.service";
 import { playNotificationSound } from "../utils/notificationSound";
 import { useQuery } from "@tanstack/react-query";
 import { formatCurrencyDescriptor, getCurrencyMetadata } from "../utils/currency";
+import { getReadableForeground, validateThemeRoot } from "../utils/color-contrast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,7 +86,7 @@ import {
   type ManagerInventoryView,
 } from "./manager/manager-inventory.types";
 import {
-  MANAGER_SALES_VIEWS,
+  VISIBLE_MANAGER_SALES_VIEWS,
   type ManagerSalesView,
 } from "./manager/manager-sales.types";
 import {
@@ -290,10 +291,15 @@ export const useManagerShellNavigation = () =>
   useContext(ManagerShellNavigationContext);
 const MANAGER_THEME_VARIABLES = [
   "--primary",
+  "--primary-foreground",
   "--accent",
+  "--accent-foreground",
   "--sidebar",
+  "--sidebar-foreground",
   "--sidebar-primary",
+  "--sidebar-primary-foreground",
   "--sidebar-accent",
+  "--sidebar-accent-foreground",
 ];
 const MANAGER_THEME_PRESETS = {
   emerald: {
@@ -363,10 +369,20 @@ function applyManagerTheme(theme: ManagerThemeState) {
   const preset = MANAGER_THEME_PRESETS[theme.preset];
   root.classList.toggle("dark", theme.mode === "dark");
   root.style.setProperty("--primary", preset.primary);
+  root.style.setProperty("--primary-foreground", getReadableForeground(preset.primary));
   root.style.setProperty("--sidebar-primary", preset.primary);
+  root.style.setProperty("--sidebar-primary-foreground", getReadableForeground(preset.primary));
   root.style.setProperty("--accent", preset.accent);
+  root.style.setProperty("--accent-foreground", getReadableForeground(preset.accent));
   root.style.setProperty("--sidebar", preset.sidebar);
+  root.style.setProperty("--sidebar-foreground", getReadableForeground(preset.sidebar));
   root.style.setProperty("--sidebar-accent", preset.accent);
+  root.style.setProperty("--sidebar-accent-foreground", getReadableForeground(preset.accent));
+  const issues = validateThemeRoot(root);
+  root.dataset.themeContrast = issues.length === 0 ? "pass" : "issues";
+  if (import.meta.env.DEV && issues.length > 0) {
+    console.warn("[NovaHub manager theme] Combinaciones con contraste insuficiente:", issues);
+  }
 }
 
 function useManagerTheme() {
@@ -609,7 +625,7 @@ export function ManagerShell({
     if (next === "inventory" || next === "sales" || next === "purchases" || next === "finances" || next === "accounting" || next === "reports" || next === "hr") {
       if (next === "inventory")
         onInventoryViewChange(MANAGER_INVENTORY_VIEWS.find((view) => view.id === "products")?.id || MANAGER_INVENTORY_VIEWS[0].id);
-      if (next === "sales") onSalesViewChange(MANAGER_SALES_VIEWS[0].id);
+      if (next === "sales") onSalesViewChange(VISIBLE_MANAGER_SALES_VIEWS[0].id);
       if (next === "purchases") onPurchasesViewChange(MANAGER_PURCHASES_VIEWS[0].id);
       if (next === "finances") onFinanceViewChange(MANAGER_FINANCE_VIEWS[0].id);
       if (next === "accounting") onAccountingViewChange(MANAGER_ACCOUNTING_VIEWS[0].id);
@@ -1019,7 +1035,7 @@ function ManagerSidebar({
                   src={groupLogo}
                   alt={`Logo de ${groupName || "grupo empresarial"}`}
                   kind={groupLogo ? "group" : "platform"}
-                  className="size-9 rounded-xl bg-sidebar-accent text-sidebar-foreground ring-0"
+                  className="size-9 rounded-xl bg-sidebar-accent text-sidebar-accent-foreground ring-0"
                   imageClassName="rounded-xl"
                 />
               </div>
@@ -1029,7 +1045,7 @@ function ManagerSidebar({
                   src={groupLogo}
                   alt={`Logo de ${groupName || "grupo empresarial"}`}
                   kind={groupLogo ? "group" : "platform"}
-                  className="size-10 rounded-xl bg-sidebar-accent text-sidebar-foreground ring-0"
+                  className="size-10 rounded-xl bg-sidebar-accent text-sidebar-accent-foreground ring-0"
                   imageClassName="rounded-xl"
                 />
                 <div className="flex min-w-0 flex-col items-start overflow-hidden leading-none">
@@ -1085,7 +1101,7 @@ function ManagerSidebar({
                               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                               sidebarCollapsed && "justify-center",
                               active
-                                ? "bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold"
+                                ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm font-semibold"
                                 : "text-sidebar-foreground/70",
                             )}
                             aria-current={active ? "page" : undefined}
@@ -1117,7 +1133,7 @@ function ManagerSidebar({
                               {(item.id === "inventory"
                                 ? MANAGER_INVENTORY_VIEWS
                                 : item.id === "sales"
-                                  ? MANAGER_SALES_VIEWS
+                                  ? VISIBLE_MANAGER_SALES_VIEWS
                                   : item.id === "purchases"
                                     ? MANAGER_PURCHASES_VIEWS
                                     : item.id === "finances"
@@ -1205,7 +1221,7 @@ function ManagerSidebar({
                                 <TooltipContent
                                   side="right"
                                   sideOffset={10}
-                                  className="border-sidebar-border bg-sidebar-accent text-xs font-bold text-sidebar-foreground shadow-lg"
+                                  className="border-sidebar-border bg-sidebar-accent text-xs font-bold text-sidebar-accent-foreground shadow-lg"
                                 >
                                   {item.label}
                                 </TooltipContent>
@@ -1225,7 +1241,7 @@ function ManagerSidebar({
           <div className="shrink-0 border-t border-sidebar-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
             <div
               className={cn(
-                "flex items-center gap-3 rounded-xl border border-sidebar-border/50 bg-sidebar-accent",
+                "flex items-center gap-3 rounded-xl border border-sidebar-border/50 bg-sidebar-accent text-sidebar-accent-foreground",
                 sidebarCollapsed ? "justify-center p-1.5" : "px-3 py-3",
               )}
               title={
@@ -1241,10 +1257,10 @@ function ManagerSidebar({
               </div>
               {!collapsed && (
                 <div className="flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-medium text-sidebar-foreground">
+                  <p className="truncate text-sm font-medium text-sidebar-accent-foreground">
                     {user?.name || "Manager"}
                   </p>
-                  <p className="truncate text-[11px] capitalize text-sidebar-foreground/50">
+                  <p className="truncate text-[11px] capitalize text-sidebar-accent-foreground">
                     Acceso Manager
                   </p>
                 </div>

@@ -28,3 +28,6 @@ export const MANAGER_SALES_VIEWS: Array<{ id: ManagerSalesView; label: string }>
   { id: 'invoice-series', label: 'Series de facturación' },
   { id: 'pricelists', label: 'Listas de precios' },
 ];
+
+/** La vista queda implementada para una fase posterior, pero no se navega aún. */
+export const VISIBLE_MANAGER_SALES_VIEWS = MANAGER_SALES_VIEWS.filter((view) => view.id !== 'deliveries');

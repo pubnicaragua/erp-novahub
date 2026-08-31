@@ -12,6 +12,7 @@ import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
 import { createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
+import { pdfStatusLabel } from './pdfStatus';
 
 type PdfRgb = [number, number, number];
 
@@ -208,11 +209,11 @@ function escapeHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
 }
 
-function commercialItemDescription(item: any, fallback = 'Producto') {
-  const description = String(item?.description || item?.name || fallback);
+function commercialItemDescription(item: any, fallback = 'Producto', includeCommercialNote = true) {
+  const description = String(item?.description || item?.name || item?.product?.name || fallback);
   const code = String(item?.code || item?.sku || item?.product?.code || '').trim();
-  const note = String(item?.commercialNoteSnapshot || item?.commercialNote || '').trim();
-  return [description, code ? `Código: ${code}` : '', note ? `Nota: ${note}` : ''].filter(Boolean).join('\n');
+  const note = String(item?.commercialNoteSnapshot || item?.commercialNote || item?.product?.commercialNoteSnapshot || item?.product?.commercialNote || '').trim();
+  return [description, code ? `Código: ${code}` : '', includeCommercialNote && note ? `Nota: ${note}` : ''].filter(Boolean).join('\n');
 }
 
 function htmlFieldStyle(field: any) {
@@ -1231,7 +1232,7 @@ async function generateSalesTicketPDF({
     : [{ description: transaction.description || 'Sin líneas de detalle', quantity: 1, unitPrice: Number(transaction.total || 0), total: Number(transaction.total || 0) }];
   const additionalChargeLines = getSalesPdfAdditionalCharges(transaction);
   const estimatedItemHeight = items.reduce((height: number, item: any) => {
-    const descriptionLines = Math.max(1, commercialItemDescription(item).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / (width === 58 ? 24 : 36))), 0));
+    const descriptionLines = Math.max(1, commercialItemDescription(item, 'Producto', false).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / (width === 58 ? 24 : 36))), 0));
     return height + 8 + descriptionLines * 3.6;
   }, 0);
   const notesHeight = transaction.notes ? Math.min(24, Math.max(6, String(transaction.notes).length / (width === 58 ? 20 : 30) * 3.2)) : 0;
@@ -1313,7 +1314,7 @@ async function generateSalesTicketPDF({
   doc.text('DETALLE', margin, y);
   y += 4;
   items.forEach((item: any) => {
-    const description = commercialItemDescription(item);
+    const description = commercialItemDescription(item, 'Producto', false);
     const descriptionLines = doc.splitTextToSize(description, contentWidth);
     doc.setFont(fontName, 'normal');
     doc.setFontSize(7.5);
@@ -1527,6 +1528,11 @@ const configuredPdfFont = (value: unknown) => {
   if (['times', 'times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'].includes(selected)) return 'times';
   if (['courier', 'courier new', 'consolas', 'monaco'].includes(selected)) return 'courier';
   return 'helvetica';
+};
+
+const configuredPdfTableValue = (column: { header: string; value: (row: any) => unknown }, row: any) => {
+  const value = column.value(row);
+  return /estado|status/i.test(column.header) ? pdfStatusLabel(value) : String(value ?? '—');
 };
 
 const configuredHistoryPaper = (settings: Record<string, any>, format: PdfDownloadFormat) => {
@@ -1869,7 +1875,7 @@ export const generateConfiguredHistoryPDF = async ({
     startY: subjectBoxY + subjectBoxH + 8,
     head: [columns.map((column) => column.header)],
     body: reportRows.length
-      ? reportRows.map((row) => columns.map((column) => String(column.value(row) ?? '—')))
+      ? reportRows.map((row) => columns.map((column) => configuredPdfTableValue(column, row)))
       : [columns.map(() => '—')],
     theme: tableTheme,
     margin: { left: margin, right: margin, bottom: 22 },
@@ -1981,7 +1987,7 @@ export const generateExpensePDF = async ({
       ['Pagado a', expense.paidTo || '-'],
       ['Cuenta de origen', expense.paymentSource || '-'],
       ['Referencia', expense.reference || '-'],
-      ['Estado', expense.status || '-'],
+      ['Estado', pdfStatusLabel(expense.status, '-')],
       ['Evidencia', expense.evidenceFileName || 'No adjunta'],
     ],
     theme: 'grid',
@@ -2038,15 +2044,7 @@ export const generatePurchaseOrderPDF = async ({
   doc.text(`N°: ${order.number || order.id || 'N/A'}`, 196, 22, { align: 'right' });
   doc.text(`Fecha: ${order.date ? new Date(order.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
   doc.text(`Entrega: ${order.expectedDelivery ? new Date(order.expectedDelivery).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
-  const orderStatusLabels: Record<string, string> = {
-    DRAFT: 'Borrador',
-    PENDING: 'En proceso',
-    IN_PROCESS: 'En proceso',
-    APPROVED: 'Aprobada',
-    CANCELLED: 'Rechazada',
-    REJECTED: 'Rechazada',
-  };
-  const orderStatus = orderStatusLabels[String(order.status || '').toUpperCase()] || order.status || 'Sin estado';
+  const orderStatus = pdfStatusLabel(order.status);
   const orderOrigin = order.purchaseRequestNumber || order.purchaseRequestId
     ? `Desde solicitud de compra${order.purchaseRequestNumber ? ` ${order.purchaseRequestNumber}` : ''}`
     : 'Orden creada directamente';
@@ -2147,13 +2145,7 @@ export const generatePurchaseRequestPDF = async ({
   const doc = new jsPDF(pdfDesignPaper(settings));
   const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
-  const statusLabels: Record<string, string> = {
-    PENDING_APPROVAL: 'Pendiente',
-    APPROVED: 'Aprobada',
-    CANCELLED: 'Anulada',
-  };
-  const rawStatus = String(request.status || 'PENDING_APPROVAL').toUpperCase();
-  const status = statusLabels[rawStatus] || (['REJECTED'].includes(rawStatus) ? 'Anulada' : 'Pendiente');
+  const status = pdfStatusLabel(request.status || 'PENDING_APPROVAL');
   const management = request.management?.[0];
 
   doc.setFontSize(20);
@@ -2287,7 +2279,7 @@ export const generateRecurringInvoicePDF = async ({
     body: [
       ['Cliente', recurringInvoice.customer?.name || '-'],
       ['Frecuencia', freqLabel],
-      ['Estado', String(recurringInvoice.status || '-').toUpperCase()],
+      ['Estado', pdfStatusLabel(recurringInvoice.status, '-')],
       ['Moneda', recurringInvoice.currency || '-'],
       ['Fin', recurringInvoice.endDate ? new Date(recurringInvoice.endDate).toLocaleDateString() : 'Sin fin'],
     ],
@@ -2395,7 +2387,7 @@ export const generateSupplierInvoicePDF = async ({
     head: [['Campo', 'Detalle']],
     body: [
       ['Proveedor', invoice.supplier?.name || '-'],
-      ['Estado', invoice.status || '-'],
+      ['Estado', pdfStatusLabel(invoice.status, '-')],
       ['Moneda', invoice.currency || '-'],
       ['Notas', invoice.notes || '-'],
     ],
@@ -2630,7 +2622,7 @@ export const generateHistoricalCashReportPDF = async ({
     branch: item.branch?.name || 'Sin sucursal',
     register: item.register ? `${item.register.code} · ${item.register.name}` : 'Sin caja',
     cashier: item.openedBy?.name || '—',
-    status: item.status === 'CLOSED' ? 'Cerrada' : item.status === 'COUNTING' ? 'En arqueo' : item.status || 'Abierta',
+    status: pdfStatusLabel(item.status || 'OPEN'),
     sales: String(item.saleCount || 0),
     salesNio: `C$ ${money(item.salesNIO)}`,
     salesUsd: `$ ${money(item.salesUSD)}`,
@@ -2694,7 +2686,7 @@ export const generateHistoricalCashReportPDF = async ({
     item.branch?.name || 'Sin sucursal',
     item.register ? `${item.register.code} · ${item.register.name}` : 'Sin caja',
     item.openedBy?.name || '—',
-    item.status === 'CLOSED' ? 'CERRADA' : item.status === 'COUNTING' ? 'EN ARQUEO' : 'ABIERTA',
+    pdfStatusLabel(item.status || 'OPEN'),
     String(item.saleCount || 0),
     `C$ ${money(item.salesNIO)}`,
     `$ ${money(item.salesUSD)}`,
@@ -2751,7 +2743,7 @@ export const generateCashClosureReportPDF = async ({
   const time = (value: unknown) => value ? new Date(String(value)).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : 'No aplica';
   const label = (value: unknown) => String(value || 'No aplica').replace(/_/g, ' ');
   const cash = detail.cash || {};
-  const statusLabel = (value: unknown) => ({ PAID: 'Pagada', PENDING: 'Pendiente', PARTIAL: 'Parcial', CANCELLED: 'Anulada', OVERDUE: 'Vencida' } as Record<string, string>)[String(value || '').toUpperCase()] || label(value);
+  const statusLabel = (value: unknown) => pdfStatusLabel(value);
 
   const drawChrome = (title: string, subtitle: string) => {
     doc.setFillColor(...dark);
@@ -2790,7 +2782,7 @@ export const generateCashClosureReportPDF = async ({
     [title, money(value?.NIO, 'NIO'), money(value?.USD, 'USD')],
   ];
 
-  drawChrome('CIERRE GERENCIAL DE CAJA', `${session.branch?.name || 'Sin sucursal'} · ${session.register?.code || 'Sin caja'} · Sesión ${label(session.status)} · ${date(session.openedAt)} ${time(session.openedAt)}`);
+  drawChrome('CIERRE GERENCIAL DE CAJA', `${session.branch?.name || 'Sin sucursal'} · ${session.register?.code || 'Sin caja'} · Sesión ${pdfStatusLabel(session.status)} · ${date(session.openedAt)} ${time(session.openedAt)}`);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...text);

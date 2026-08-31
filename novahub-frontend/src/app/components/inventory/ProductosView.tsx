@@ -41,6 +41,7 @@ import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/Virtualiz
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizePurchasePriority, PURCHASE_PRIORITY_OPTIONS } from '../../utils/purchasePriority';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
+import { formatExchangeRate } from '../../utils/currency';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -2064,7 +2065,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 disabled={isSaving}
               />
             </div>
-            <span className="block text-[9px] text-muted-foreground">Tasa: {product.priceCurrency === baseCurrency ? '1.00' : Number(exchangeRate || 1).toFixed(4)}</span>
+            <span className="block text-[9px] text-muted-foreground">Tasa: {formatExchangeRate(product.priceCurrency === baseCurrency ? 1 : exchangeRate)}</span>
           </div>
         </TableCell>}
         {!isServiceView && canViewInventoryCost && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>

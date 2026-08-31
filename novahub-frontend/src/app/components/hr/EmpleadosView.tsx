@@ -1072,7 +1072,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg">
+                  <div className="size-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
                     {emp.firstName?.[0]}{emp.lastName?.[0]}
                   </div>
                   <div className="min-w-0">

@@ -178,6 +178,7 @@ export interface PosCustomer {
   balanceFavor?: number;
   availableCredit?: number;
   creditLimit?: number;
+  creditLimitCurrency?: 'NIO' | 'USD';
 }
 
 export interface PosInvoiceItem {
@@ -651,7 +652,7 @@ export const cajaService = {
     api.patch<InvoiceCashQueue>(`/caja/invoice-cash-queue/${id}/heartbeat`, dto),
 
   reconcileInvoiceCashQueue: (dto?: { queueId?: string; sessionId?: string }) =>
-    api.post<{ examined: number; stale: number; released: number; markedPaid: number; affectedQueueIds: string[] }>('/caja/invoice-cash-queue/reconcile', dto || {}),
+    api.post<{ examined: number; stale: number; released: number; markedPaid: number; cancelled?: number; affectedQueueIds: string[] }>('/caja/invoice-cash-queue/reconcile', dto || {}),
 
   payInvoiceCashQueue: (id: string, dto: { registerId: string; sessionId: string; claimToken?: string; payments: PosPaymentLine[] }, idempotencyKey?: string) =>
     api.idempotentPatch<{ queue: InvoiceCashQueue; payment: any }>(`/caja/invoice-cash-queue/${id}/pay`, dto, idempotencyKey),

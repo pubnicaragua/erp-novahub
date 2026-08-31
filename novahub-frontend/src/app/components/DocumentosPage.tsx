@@ -20,6 +20,18 @@ interface DocumentosPageProps {
 
 export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: DocumentosPageProps) => {
   const { user, canPerform } = useAuth();
+  const tabs = [
+    { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500', module: 'DOCUMENTS_FILES' },
+    { id: 'contratos', label: 'Contratos', icon: Scale, color: 'text-emerald-500', module: 'DOCUMENTS_CONTRACTS' },
+    { id: 'facturas', label: 'Facturas Legales', icon: FileText, color: 'text-amber-500', module: 'DOCUMENTS_INVOICES' },
+    { id: 'reportes', label: 'Reportes', icon: FileBarChart, color: 'text-purple-500', module: 'DOCUMENTS_REPORTS' },
+    { id: 'planes', label: 'Nova Cloud', icon: Cloud, color: 'text-cyan-500', module: 'DOCUMENTS' },
+  ];
+  const visibleTabs = tabs.filter((tab) => {
+    const hasRequired = user?.enabledModules?.includes(tab.module);
+    const hasFallback = user?.enabledModules?.includes('DOCUMENTS');
+    return (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
+  });
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'archivos');
   const filesQuery = useTenantQuery<any[]>(['documents', 'files'], signal => filesService.getAll(signal), { enabled: activeTab === 'archivos' && canPerform('DOCUMENTS_FILES', 'view') });
   const contractsQuery = useTenantQuery<any[]>(['documents', 'contracts'], signal => contractsService.getAll(signal), { enabled: activeTab === 'contratos' && canPerform('DOCUMENTS_CONTRACTS', 'view') });
@@ -34,18 +46,20 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
   const fetchData = () => activeQuery.refetch();
 
   useEffect(() => {
-    if (activeSubModule) {
-      setActiveTab(activeSubModule);
+    const requestedTab = activeSubModule;
+    if (requestedTab && visibleTabs.some((tab) => tab.id === requestedTab)) {
+      setActiveTab(requestedTab);
+      return;
     }
-  }, [activeSubModule]);
+    if (visibleTabs.length > 0 && !visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(visibleTabs[0].id);
+    }
+  }, [activeSubModule, activeTab, visibleTabs]);
 
-  const tabs = [
-    { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500', module: 'DOCUMENTS_FILES' },
-    { id: 'contratos', label: 'Contratos', icon: Scale, color: 'text-emerald-500', module: 'DOCUMENTS_CONTRACTS' },
-    { id: 'facturas', label: 'Facturas Legales', icon: FileText, color: 'text-amber-500', module: 'DOCUMENTS_INVOICES' },
-    { id: 'reportes', label: 'Reportes', icon: FileBarChart, color: 'text-purple-500', module: 'DOCUMENTS_REPORTS' },
-    { id: 'planes', label: 'Nova Cloud', icon: Cloud, color: 'text-cyan-500', module: 'DOCUMENTS' }
-  ];
+  const handleTabChange = (value: string) => {
+    if (!visibleTabs.some((tab) => tab.id === value)) return;
+    setActiveTab(value);
+  };
 
   return (
     <div className="flex flex-1 bg-background w-full">
@@ -66,16 +80,10 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
 
           <CurrencyValuationBanner className="mb-6" />
 
-          <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
+          <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
           <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
           <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-              {tabs.map((tab) => {
-                const hasRequired = user?.enabledModules?.includes(tab.module);
-                // La suscripción al módulo padre (DOCUMENTS) habilita todas
-                // sus vistas, incluso con submódulos granulares contratados.
-                const hasFallback = user?.enabledModules?.includes('DOCUMENTS');
-                const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
-                if (!hasAccess) return null;
+              {visibleTabs.map((tab) => {
                 return (
                 <TabsTrigger 
                   key={tab.id} 

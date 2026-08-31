@@ -16,10 +16,11 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { getApiErrorMessage } from '../services/api';
+import { normalizeCurrency } from '../utils/currency';
 
 export function ClientesPage() {
   const { canPerform } = useAuth();
-  const { formatConvertedAmount } = useCurrency();
+  const { baseCurrency, exchangeRate, formatConvertedAmount } = useCurrency();
   const [clientesData, setClientesData] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -106,7 +107,7 @@ export function ClientesPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6" style={{ background: 'var(--role-surface)' }}>
+    <div className="space-y-6 bg-background p-4 md:p-6">
       <CurrencyValuationBanner />
       <div className="flex min-w-0 flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-3">
@@ -118,7 +119,9 @@ export function ClientesPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
+          {canPerform('SALES_CLIENTS', 'export') && (
+            <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
+          )}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('SALES_CLIENTS', 'create') && (
               <DialogTrigger asChild>
@@ -246,7 +249,7 @@ export function ClientesPage() {
                         <div className="w-48 space-y-1.5">
                           <div className="flex justify-between text-xs">
                             <span className="text-muted-foreground">Límite configurado</span>
-                            <span className="font-medium text-foreground">{formatConvertedAmount(limite, 'NIO')}</span>
+                          <span className="font-medium text-foreground">{formatConvertedAmount(limite, normalizeCurrency(c.creditLimitCurrency, baseCurrency), exchangeRate)}</span>
                           </div>
                           <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                             <div className="h-full bg-primary transition-all" style={{ width: limite > 0 ? '100%' : '0%' }} />

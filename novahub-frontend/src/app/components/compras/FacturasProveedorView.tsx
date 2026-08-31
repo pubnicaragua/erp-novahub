@@ -23,6 +23,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { getPurchaseInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
@@ -52,13 +53,6 @@ const statusOpts = [
   { label: 'Vencida',     value: 'OVERDUE',  color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
 ];
-
-const getPurchaseOriginBadge = (invoice: Partial<SupplierInvoice> | null | undefined) => {
-  const type = String(invoice?.originType || '').toUpperCase();
-  if (type === 'PURCHASE_REQUEST') return 'Desde solicitud de compra';
-  if (type === 'PURCHASE_ORDER' || invoice?.purchaseOrderId) return 'Desde orden de compra';
-  return 'Factura directa';
-};
 
 function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: number } {
   const tt = (item.taxType || 'GRAVADO').toUpperCase();
@@ -187,7 +181,10 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const columns: ColumnDef<SupplierInvoice>[] = [
     { key: 'number',   header: 'N° Factura',   width: '170px',
-      render: (val, row) => <div className="flex min-w-0 flex-col items-start gap-1"><span className="font-black font-mono text-primary text-xs">{val||'-'}</span><Badge variant="outline" className="border-none bg-primary/10 px-1.5 py-0 text-[8px] font-black text-primary">{getPurchaseOriginBadge(row)}</Badge></div> },
+      render: (val, row) => {
+        const source = getPurchaseInvoiceOriginBadge(row);
+        return <div className="flex min-w-0 flex-col items-start gap-1"><span className="font-black font-mono text-primary text-xs">{val||'-'}</span>{source && <Badge className={cn('border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge>}</div>;
+      } },
     { key: 'supplier', header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',     header: 'Emisión',     width: '110px',
@@ -447,7 +444,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             </Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Factura de Proveedor' : `Factura ${localDoc.number||''}`}</h2>
-              <div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle financiero</p><Badge variant="outline" className="border-none bg-primary/10 text-[8px] font-black text-primary">{getPurchaseOriginBadge(localDoc)}</Badge></div>
+              <div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle financiero</p>{(() => { const source = getPurchaseInvoiceOriginBadge(localDoc); return source ? <Badge className={cn('border-none px-2 py-0.5 text-[8px] font-black', source.className)}>{source.label}</Badge> : null; })()}</div>
             </div>
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">

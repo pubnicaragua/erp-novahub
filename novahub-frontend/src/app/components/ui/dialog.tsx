@@ -11,6 +11,8 @@ const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
 
+const hasExplicitDialogWidth = (className?: string) => /(?:^|\s)(?:[a-z-]+:)*!?(?:w-|max-w-|min-w-)/.test(className || "");
+
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -18,8 +20,9 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     data-slot="dialog-overlay"
+    data-overlay-system="novahub"
     className={cn(
-      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px]",
       className
     )}
     {...props}
@@ -36,8 +39,10 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       data-slot="dialog-content"
+      data-overlay-surface="novahub-modal"
       className={cn(
-        "bg-background border-border data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid min-w-0 w-full max-w-[calc(100%-2rem)] max-h-[min(88vh,calc(100dvh-3rem))] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border p-4 shadow-2xl duration-200 sm:p-6 sm:max-w-lg",
+        "bg-background/95 border-border/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 flex min-h-0 min-w-0 w-full max-w-[calc(100%-2rem)] max-h-[min(88vh,calc(100dvh-3rem))] flex-col translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-3xl border p-4 shadow-2xl backdrop-blur-xl duration-200 sm:p-6",
+        !hasExplicitDialogWidth(className) && "sm:!w-[calc(100%-2rem)] sm:!max-w-lg",
         className
       )}
       {...props}
@@ -58,6 +63,7 @@ const DialogHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     data-slot="dialog-header"
+    data-overlay-section="header"
     className={cn(
       "flex min-w-0 flex-col gap-2 text-center sm:text-left",
       className
@@ -73,6 +79,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     data-slot="dialog-footer"
+    data-overlay-section="footer"
     className={cn(
       "flex min-w-0 flex-wrap flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-2 sm:gap-0",
       className

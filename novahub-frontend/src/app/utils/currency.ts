@@ -30,6 +30,28 @@ export function formatCurrencyAmount(value: unknown, currency: unknown = 'NIO', 
     : `${metadata.symbol} ${formatted}`;
 }
 
+/**
+ * Formatea una tasa de cambio para lectura humana sin reducir la precisión
+ * numérica que se utiliza internamente para convertir importes.
+ * `fractionDigits` se conserva por compatibilidad, pero nunca puede exceder 2.
+ */
+export function formatExchangeRate(value: unknown, fallback = 1, fractionDigits = 2) {
+  const requestedDigits = Number(fractionDigits);
+  const digits = Math.min(2, Math.max(0, Number.isFinite(requestedDigits) ? Math.trunc(requestedDigits) : 2));
+  const numericValue = Number(value);
+  const numericFallback = Number(fallback);
+  const safeValue = Number.isFinite(numericValue) && numericValue > 0
+    ? numericValue
+    : Number.isFinite(numericFallback) && numericFallback > 0
+      ? numericFallback
+      : 1;
+
+  return safeValue.toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
 export function formatCurrencyDescriptor(currency: unknown) {
   const metadata = getCurrencyMetadata(currency);
   return `${metadata.symbol} · ${metadata.code} · ${metadata.name}`;

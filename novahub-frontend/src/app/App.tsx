@@ -16,6 +16,7 @@ import { SessionMonitor } from './components/auth/SessionMonitor';
 import { PLATFORM_SIDEBAR_MODULE_ORDER, SIDEBAR_MODULE_ORDER, Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
+import { ActionClickGuard } from './components/ui/ActionClickGuard';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
@@ -23,6 +24,8 @@ import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 import { readPersistedDarkMode } from './utils/theme-mode';
+import { useResponsiveNativeTables } from './hooks/useResponsiveNativeTables';
+import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from './utils/sidebarPermissions';
 
 function recoverFromChunk(moduleName: string) {
   const now = Date.now();
@@ -112,7 +115,7 @@ const ErrorBoundaryFallback = () => (
 
 
 function DashboardLayout() {
-  const { hasAccess, sessionStartVersion, user } = useAuth();
+  const { hasAccess, canPerform, sessionStartVersion, user } = useAuth();
   useIncomingNotificationAlert();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
@@ -154,6 +157,26 @@ function DashboardLayout() {
   const lastModuleRef = React.useRef<Module | 'overview'>(activeModule);
   const skipInitialUrlNavigationRef = React.useRef(sessionStartVersion > 0);
 
+  const isAuthorizedSubmodule = (module: string | undefined, subModule: string | undefined) => {
+    if (!module || !subModule) return true;
+    if (HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subModule)) return false;
+    const requiredModules = SIDEBAR_SUBMENU_MODULE_REQUIREMENTS[`${module}:${subModule}`]
+      || SIDEBAR_SUBMENU_MODULE_REQUIREMENTS[subModule];
+    // Internal tabs and one-off context values are validated by their own
+    // view. Known sidebar entries must, however, be authorized here too so a
+    // crafted URL/event cannot open a tab hidden from the role.
+    if (!requiredModules) return true;
+    const permissionModules = SIDEBAR_SUBMENU_PERMISSION_MODULES[`${module}:${subModule}`]
+      || SIDEBAR_SUBMENU_PERMISSION_MODULES[subModule]
+      || requiredModules;
+    return permissionModules.some((permissionModule) => canPerform(permissionModule, 'view'));
+  };
+
+  const normalizeIncomingSubmodule = (module: string | undefined, subModule: string | undefined) => {
+    const normalized = subModule === 'dashboard' ? 'productos' : subModule;
+    return isAuthorizedSubmodule(module, normalized) ? normalized : undefined;
+  };
+
   useEffect(() => {
     // Al iniciar una sesión nueva, AuthContext ya limpió la URL. El objeto
     // searchParams de este primer render puede todavía contener la ruta de la
@@ -171,9 +194,9 @@ function DashboardLayout() {
     // when it actually differs from the current view.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (nextModule !== activeModule) setActiveModule(nextModule);
-    const nextSubModule = urlSubModule === 'dashboard' ? 'productos' : (urlSubModule || undefined);
+    const nextSubModule = normalizeIncomingSubmodule(nextModule, urlSubModule || undefined);
     if (nextSubModule !== activeSubModule) setActiveSubModule(nextSubModule);
-  }, [searchParams]);
+  }, [searchParams, canPerform]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -284,9 +307,12 @@ function DashboardLayout() {
 
   const handleModuleChange = (module: Module, subModule?: string) => {
     const targetModule = module === 'roles' ? 'suscripciones' : module;
-    if (hasAccess(targetModule)) {
+    const safeSubModule = normalizeIncomingSubmodule(targetModule, subModule);
+    if (hasAccess(targetModule) && (subModule === undefined || safeSubModule !== undefined)) {
       setActiveModule(targetModule);
-      setActiveSubModule(module === 'inventario' ? (subModule || 'productos') : subModule);
+      setActiveSubModule(module === 'inventario'
+        ? (safeSubModule || (isAuthorizedSubmodule(targetModule, 'productos') ? 'productos' : undefined))
+        : safeSubModule);
     }
   };
 
@@ -320,9 +346,10 @@ function DashboardLayout() {
       const detail = e.detail || {};
       const targetModule = detail.module === 'roles' ? 'suscripciones' : detail.module;
       const allowed = targetModule === 'overview' ? hasAccess('dashboard') : hasAccess(targetModule);
-      if (allowed) {
+      const safeSubModule = normalizeIncomingSubmodule(targetModule, detail.subModule);
+      if (allowed && (detail.subModule === undefined || safeSubModule !== undefined)) {
         setActiveModule(targetModule);
-        setActiveSubModule(detail.subModule);
+        setActiveSubModule(safeSubModule);
 
         // Si la notificación viene desde otro módulo, la vista destino todavía
         // no existía cuando se disparó el evento original. Reproducimos una
@@ -341,7 +368,8 @@ function DashboardLayout() {
     };
     const subHandler = (e: any) => {
       const subModule = e.detail?.subModule;
-      if (subModule) setActiveSubModule(subModule === 'dashboard' ? 'productos' : subModule);
+      const safeSubModule = normalizeIncomingSubmodule(String(activeModule), subModule);
+      if (safeSubModule) setActiveSubModule(safeSubModule);
     };
     window.addEventListener('navigate-module', handler);
     window.addEventListener('navigate-submodule', subHandler);
@@ -349,7 +377,7 @@ function DashboardLayout() {
       window.removeEventListener('navigate-module', handler);
       window.removeEventListener('navigate-submodule', subHandler);
     };
-  }, [hasAccess]);
+  }, [activeModule, canPerform, currentModule, hasAccess]);
 
   const renderContent = () => {
     if (currentModule === 'overview') {
@@ -447,6 +475,7 @@ function AppContent() {
   const [sessionClosed, setSessionClosed] = useState(false);
   const [showingSessionBranding, setShowingSessionBranding] = useState(false);
   const lastSessionStartVersion = useRef(0);
+  useResponsiveNativeTables();
 
   useEffect(() => {
     // Native number inputs act as spinners while focused. Keep the wheel for
@@ -635,6 +664,7 @@ export default function App() {
         <ThemeProvider>
           <CurrencyProvider>
             <ImpersonationProvider>
+              <ActionClickGuard />
               <AppContent />
             </ImpersonationProvider>
           </CurrencyProvider>

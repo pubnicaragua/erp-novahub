@@ -33,6 +33,7 @@ import type {
 import type { SalesPageSize, SalesPaginationControls } from '../types';
 import { inventoryService } from '../services/inventario.service';
 import { hrService } from '../services/hr.service';
+import { HIDDEN_DEFERRED_SALES_VIEW_IDS } from '../utils/sidebarPermissions';
 
 // Sub-Views
 import { ClientesView } from './ventas/ClientesView';
@@ -58,10 +59,11 @@ const SALES_SECTIONS = [
   { id: 'devoluciones-venta', label: 'Notas de Crédito', icon: FileOutput, description: 'Retornos y saldos a favor', requiredModules: ['SALES_RETURNS'] },
   { id: 'notas-credito', label: 'Créditos', icon: FileMinus, description: 'Productos y servicios a crédito', requiredModules: ['SALES_CREDIT_NOTES'] },
   { id: 'listas-precios', label: 'Listas de Precios', icon: Tags, description: 'Tarifas de venta', requiredModules: ['SALES_PRICE_LISTS'] },
-  { id: 'entregas', label: 'Entregas', icon: PackageCheck, description: 'Ventas suspendidas y entregas inter-sucursal', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
+  { id: 'entregas', label: 'Entregas', icon: PackageCheck, description: 'Ventas suspendidas y entregas inter-sucursal', requiredModules: ['RETAIL_POS', 'SALES_POS'], hidden: true },
   { id: 'facturacion-caja', label: 'Facturación por Caja', icon: Calculator, description: 'POS y facturación directa', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
   { id: 'control-caja', label: 'Control de Caja', icon: Coins, description: 'Apertura, arqueo y dashboard', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
 ];
+const VISIBLE_SALES_SECTIONS = SALES_SECTIONS.filter((section) => !section.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(section.id));
 
 interface VentasPageProps {
   activeSubModule?: string;
@@ -72,9 +74,11 @@ interface VentasPageProps {
 export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: VentasPageProps) {
   const { user, canPerform } = useAuth();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
-  const canReadInventory = canPerform('INVENTORY', 'view');
   const canReadHr = canPerform('HR', 'view');
-  const canReadSales = canPerform('SALES', 'view');
+  const canViewSalesSection = useCallback((sectionId: string) => {
+    const section = SALES_SECTIONS.find((candidate) => candidate.id === sectionId);
+    return Boolean(section?.requiredModules.some((module) => canPerform(module, 'view')));
+  }, [canPerform]);
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
@@ -90,12 +94,21 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   // Sync section with Sidebar prop
   useEffect(() => {
     if (activeSubModule) {
-      const exists = SALES_SECTIONS.some(s => s.id === activeSubModule);
+      const exists = VISIBLE_SALES_SECTIONS.some(s => s.id === activeSubModule) && canViewSalesSection(activeSubModule);
       if (exists) {
         setActiveSection(activeSubModule);
       }
     }
-  }, [activeSubModule]);
+  }, [activeSubModule, canViewSalesSection]);
+
+  useEffect(() => {
+    if (canViewSalesSection(activeSection)) return;
+    const fallback = VISIBLE_SALES_SECTIONS.find((section) => canViewSalesSection(section.id))?.id;
+    if (fallback) {
+      setActiveSection(fallback);
+      onSubModuleChange?.(fallback);
+    }
+  }, [activeSection, canViewSalesSection, onSubModuleChange]);
 
   useEffect(() => {
     if (previousActiveSectionRef.current === 'facturas' && activeSection !== 'facturas') {
@@ -155,7 +168,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
         return;
       }
 
-      if (!SALES_SECTIONS.some((item) => item.id === section)) return;
+      if (!VISIBLE_SALES_SECTIONS.some((item) => item.id === section) || !canViewSalesSection(section)) return;
       setActiveSection(section);
       onSubModuleChange?.(section);
 
@@ -172,7 +185,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     };
     window.addEventListener('navigate-module', handler);
     return () => window.removeEventListener('navigate-module', handler);
-  }, [onSubModuleChange]);
+  }, [canViewSalesSection, onSubModuleChange, updateSearch]);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
     return () => window.clearTimeout(timer);
@@ -193,7 +206,11 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const recurringPage = pageFor('facturas-recurrentes');
   const returnsPage = pageFor('devoluciones-venta');
   const creditNotesPage = pageFor('notas-credito');
-  const creditNotesQueryPage = activeSection === 'pagos-recibidos'
+  const isPaymentDocumentCatalog = activeSection === 'pagos-recibidos';
+  const invoiceQueryPage = isPaymentDocumentCatalog
+    ? { page: 1, pageSize: 200 }
+    : invoicesPage;
+  const creditNotesQueryPage = isPaymentDocumentCatalog
     ? { page: 1, pageSize: 200 }
     : creditNotesPage;
   const estimatesDates = dateFor('estimaciones');
@@ -210,73 +227,81 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const customersListQuery = useQuery({
     queryKey: ['sales', 'customers', tenantKey, customersPage.page, customersPage.pageSize, searchFor('clientes')],
     queryFn: ({ signal }) => customersService.getAll({ page: customersPage.page, pageSize: customersPage.pageSize, search: searchFor('clientes') }, signal),
-    enabled: canReadSales && activeSection === 'clientes',
+    enabled: canViewSalesSection('clientes') && activeSection === 'clientes',
     placeholderData: keepPreviousData,
   });
   const customersCatalogQuery = useQuery({
     queryKey: ['sales', 'customers-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => customersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
-    enabled: canReadSales && needsCatalogs,
+    enabled: canViewSalesSection('clientes') && needsCatalogs,
     placeholderData: keepPreviousData,
   });
   const estimatesQuery = useQuery({
     queryKey: ['sales', 'estimates', tenantKey, estimatesPage.page, estimatesPage.pageSize, searchFor('estimaciones'), estimatesDates.dateFrom, estimatesDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => estimatesService.getAll({ page: estimatesPage.page, pageSize: estimatesPage.pageSize, search: searchFor('estimaciones'), ...estimatesDates, ...branchFilter }, signal),
-    enabled: canReadSales && activeSection === 'estimaciones',
+    enabled: canViewSalesSection('estimaciones') && activeSection === 'estimaciones',
     placeholderData: keepPreviousData,
   });
   const ordersQuery = useQuery({
     queryKey: ['sales', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes-venta'), ordersDates.dateFrom, ordersDates.dateTo, selectedBranchId, ordersStatusParam],
     queryFn: ({ signal }) => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta'), status: ordersStatusParam, ...ordersDates, ...branchFilter }, signal),
-    enabled: canReadSales && activeSection === 'ordenes-venta',
+    enabled: canViewSalesSection('ordenes-venta') && activeSection === 'ordenes-venta',
     placeholderData: keepPreviousData,
   });
   const invoicesQuery = useQuery({
-    queryKey: ['sales', 'invoices', tenantKey, invoicesPage.page, invoicesPage.pageSize, searchFor('facturas'), invoicesDates.dateFrom, invoicesDates.dateTo, selectedBranchId],
-    queryFn: ({ signal }) => invoicesService.getAll({ page: invoicesPage.page, pageSize: invoicesPage.pageSize, search: searchFor('facturas'), ...invoicesDates, ...branchFilter }, signal),
-    enabled: canReadSales && needsInvoices,
+    queryKey: isPaymentDocumentCatalog
+      ? ['sales', 'invoices-payment-catalog', tenantKey, selectedBranchId]
+      : ['sales', 'invoices', tenantKey, invoiceQueryPage.page, invoiceQueryPage.pageSize, searchFor('facturas'), invoicesDates.dateFrom, invoicesDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => isPaymentDocumentCatalog
+      ? invoicesService.getAll({ page: 1, pageSize: 200, ...branchFilter }, signal)
+      : invoicesService.getAll({ page: invoiceQueryPage.page, pageSize: invoiceQueryPage.pageSize, search: searchFor('facturas'), ...invoicesDates, ...branchFilter }, signal),
+    enabled: canViewSalesSection('facturas') && needsInvoices,
     placeholderData: keepPreviousData,
   });
   const paymentsQuery = useQuery({
     queryKey: ['sales', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos-recibidos'), paymentsDates.dateFrom, paymentsDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => paymentsService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos-recibidos'), ...paymentsDates, ...branchFilter }, signal),
-    enabled: canReadSales && activeSection === 'pagos-recibidos',
+    enabled: canViewSalesSection('pagos-recibidos') && activeSection === 'pagos-recibidos',
     placeholderData: keepPreviousData,
   });
   const recurringQuery = useQuery({
     queryKey: ['sales', 'recurring-invoices', tenantKey, recurringPage.page, recurringPage.pageSize, searchFor('facturas-recurrentes'), recurringDates.dateFrom, recurringDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => recurringInvoicesService.getAll({ page: recurringPage.page, pageSize: recurringPage.pageSize, search: searchFor('facturas-recurrentes'), ...recurringDates, ...branchFilter }, signal),
-    enabled: canReadSales && activeSection === 'facturas-recurrentes',
+    enabled: canViewSalesSection('facturas-recurrentes') && activeSection === 'facturas-recurrentes',
     placeholderData: keepPreviousData,
   });
   const returnsQuery = useQuery({
     queryKey: ['sales', 'returns', tenantKey, returnsPage.page, returnsPage.pageSize, searchFor('devoluciones-venta'), returnsDates.dateFrom, returnsDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => salesReturnsService.getAll({ page: returnsPage.page, pageSize: returnsPage.pageSize, search: searchFor('devoluciones-venta'), ...returnsDates, ...branchFilter }, signal),
-    enabled: canReadSales && activeSection === 'devoluciones-venta',
+    enabled: canViewSalesSection('devoluciones-venta') && activeSection === 'devoluciones-venta',
     placeholderData: keepPreviousData,
   });
   const creditNotesQuery = useQuery({
-    queryKey: ['sales', 'credit-notes', tenantKey, creditNotesQueryPage.page, creditNotesQueryPage.pageSize, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo, selectedBranchId],
-    queryFn: ({ signal }) => creditNotesService.getAll({ page: creditNotesQueryPage.page, pageSize: creditNotesQueryPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates, ...branchFilter }, signal),
-    enabled: canReadSales && needsCredits,
+    queryKey: isPaymentDocumentCatalog
+      ? ['sales', 'credit-notes-payment-catalog', tenantKey, selectedBranchId]
+      : ['sales', 'credit-notes', tenantKey, creditNotesQueryPage.page, creditNotesQueryPage.pageSize, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => isPaymentDocumentCatalog
+      ? creditNotesService.getAll({ page: 1, pageSize: 200, ...branchFilter }, signal)
+      : creditNotesService.getAll({ page: creditNotesQueryPage.page, pageSize: creditNotesQueryPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates, ...branchFilter }, signal),
+    enabled: canViewSalesSection('notas-credito') && needsCredits,
     placeholderData: keepPreviousData,
   });
   const productsQuery = useQuery({
     queryKey: ['sales', 'products-catalog', tenantKey, 1, 200],
     queryFn: () => inventoryService.getProducts({ page: 1, pageSize: 200 }),
-    enabled: canReadInventory && needsProducts,
+    enabled: canPerform('INVENTORY_PRODUCTS', 'view') && needsProducts,
     placeholderData: keepPreviousData,
   });
   const seriesQuery = useQuery({
     queryKey: ['sales', 'series', tenantKey],
     queryFn: () => inventoryService.getSeries(),
-     enabled: canReadInventory && activeSection === 'facturas',
+     enabled: canPerform('INVENTORY_PRODUCTS', 'view') && activeSection === 'facturas',
     placeholderData: keepPreviousData,
   });
   const warehousesQuery = useQuery({
     queryKey: ['sales', 'warehouses', tenantKey],
     queryFn: () => inventoryService.getWarehouses(),
-    enabled: canReadInventory && needsProducts,
+    enabled: canPerform('INVENTORY_WAREHOUSES', 'view') && needsProducts,
     placeholderData: keepPreviousData,
   });
   const employeesQuery = useQuery({
@@ -467,22 +492,16 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
           </div>
           <CurrencyValuationBanner className="mb-5" />
 
-          <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
+          <Tabs value={activeSection} className="w-full" onValueChange={(val) => { if (!canViewSalesSection(val)) return; setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
             <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
             <TabsList ref={tabsRef} className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
-              {SALES_SECTIONS.map((section) => {
-                const hasEnabledModule = !section.requiredModules || !user?.enabledModules
-                  || user.enabledModules.includes('SALES')
-                  || section.requiredModules.some(mod => user.enabledModules.includes(mod));
-                const hasAccess = hasEnabledModule && (!section.requiredModules || section.requiredModules.some(mod => canPerform(mod, 'view')));
-                if (!hasAccess) return null;
+              {VISIBLE_SALES_SECTIONS.map((section) => {
+                if (!canViewSalesSection(section.id)) return null;
                 return (
                 <TabsTrigger 
                   key={section.id} 
                   value={section.id}
-                  className="flex flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
+                  className="flex flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
                 >
                   <section.icon className="size-4" />
                   <span className="hidden sm:inline">{section.label}</span>

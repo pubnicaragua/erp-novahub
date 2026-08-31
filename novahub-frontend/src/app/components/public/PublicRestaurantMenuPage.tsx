@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { getApiErrorMessage } from '../../services/api';
 import { restaurantService, type RestaurantMenuCategory, type RestaurantPublicBranding } from '../../services/restaurant.service';
+import { getReadableForeground, getReadableForegroundForBackgrounds } from '../../utils/color-contrast';
 
 type MenuTheme = RestaurantPublicBranding['theme'];
 
@@ -96,6 +97,9 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
 
   const t = themeStyles(branding.theme, branding.primaryColor, branding.accentColor);
   const isDark = branding.theme === 'elegant';
+  const primaryForeground = getReadableForeground(branding.primaryColor);
+  const accentForeground = getReadableForeground(branding.accentColor);
+  const headerForeground = getReadableForegroundForBackgrounds([branding.accentColor, branding.primaryColor]);
 
   const lines = useMemo(() => categories.flatMap((category) => category.items.filter((item) => cart[item.id]).map((item) => ({ item, quantity: cart[item.id] }))), [categories, cart]);
   const total = lines.reduce((sum, line) => sum + Number(line.item.price || 0) * line.quantity, 0);
@@ -126,17 +130,17 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
 
   return <main className={`min-h-screen px-4 pb-28 pt-6 text-slate-900 sm:px-6 ${t.page}`}>
     <div className="mx-auto max-w-5xl">
-      <header className={`relative overflow-hidden rounded-3xl p-6 shadow-xl sm:p-8 ${t.header}`} style={{ background: `linear-gradient(135deg, ${branding.accentColor}, ${branding.primaryColor})` }}>
+      <header className={`relative overflow-hidden rounded-3xl p-6 shadow-xl sm:p-8 ${t.header}`} style={{ background: `linear-gradient(135deg, ${branding.accentColor}, ${branding.primaryColor})`, color: headerForeground }}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             {branding.logo ? <img src={branding.logo} alt={branding.name} className="size-14 rounded-2xl border border-white/20 object-cover shadow-lg" /> : <div className="flex size-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur"><ChefHat className="size-7" /></div>}
             <div>
-              <h1 className="text-2xl font-black text-white sm:text-4xl">{branding.name}</h1>
-              <p className="mt-1 text-sm font-medium text-white/80">Mesa {table?.code || '—'} · {table?.name || 'Carta digital'}</p>
+            <h1 className="text-2xl font-black sm:text-4xl" style={{ color: headerForeground }}>{branding.name}</h1>
+            <p className="mt-1 text-sm font-medium" style={{ color: headerForeground }}>Mesa {table?.code || '—'} · {table?.name || 'Carta digital'}</p>
             </div>
           </div>
           {featured.length > 0 && (
-            <div className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold text-white backdrop-blur">
+            <div className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold backdrop-blur" style={{ color: headerForeground }}>
               <Star className="size-3.5 fill-amber-300 text-amber-300" /> Recomendados de la casa
             </div>
           )}
@@ -148,7 +152,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
           <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-600 text-white"><Send className="size-6" /></div>
           <h2 className="mt-4 text-2xl font-black text-emerald-900">Pedido recibido</h2>
           <p className="mt-2 text-emerald-800">Tu comanda <strong>{sentNumber}</strong> fue enviada al restaurante.</p>
-          <Button className="mt-5" style={{ background: branding.primaryColor }} onClick={() => setSentNumber('')}>Hacer otro pedido</Button>
+          <Button className="mt-5" style={{ background: branding.primaryColor, color: primaryForeground }} onClick={() => setSentNumber('')}>Hacer otro pedido</Button>
         </div>
       ) : (
         <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_320px]">
@@ -187,10 +191,10 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
                             <div className="flex items-center gap-2">
                               <button type="button" aria-label="Quitar uno" onClick={() => change(item.id, -1)} className="flex size-8 items-center justify-center rounded-full border border-slate-300 text-slate-600 active:scale-90"><Minus className="size-3.5" /></button>
                               <span className="min-w-5 text-center text-sm font-black">{qty}</span>
-                              <button type="button" aria-label="Agregar uno" onClick={() => change(item.id, 1)} className="flex size-8 items-center justify-center rounded-full text-white active:scale-90" style={{ background: branding.primaryColor }}><Plus className="size-3.5" /></button>
+                              <button type="button" aria-label="Agregar uno" onClick={() => change(item.id, 1)} className="flex size-8 items-center justify-center active:scale-90" style={{ background: branding.primaryColor, color: primaryForeground }}><Plus className="size-3.5" /></button>
                             </div>
                           ) : (
-                            <button type="button" onClick={() => change(item.id, 1)} className={`flex h-9 items-center gap-1.5 px-4 text-xs font-black uppercase tracking-wide text-white active:scale-95 ${t.addButton}`} style={{ background: t.addButton.includes('bg-[') ? undefined : branding.primaryColor }}>
+                            <button type="button" onClick={() => change(item.id, 1)} className={`flex h-9 items-center gap-1.5 px-4 text-xs font-black uppercase tracking-wide active:scale-95 ${t.addButton}`} style={{ background: t.addButton.includes('bg-[') ? undefined : branding.primaryColor, color: t.addButton.includes('bg-[') ? undefined : primaryForeground }}>
                               <Plus className="size-3.5" /> Agregar
                             </button>
                           )}
@@ -213,7 +217,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
               <div className="flex items-center gap-2">
                 <ShoppingBag className="size-4" style={{ color: branding.primaryColor }} />
                 <h3 className="text-sm font-black uppercase tracking-widest">Tu pedido</h3>
-                <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-black text-white ${t.badge}`} style={{ background: branding.primaryColor }}>{lines.length}</span>
+                <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-black ${t.badge}`} style={{ background: branding.primaryColor, color: primaryForeground }}>{lines.length}</span>
               </div>
               {lines.length ? (
                 <div className="mt-4 space-y-2">
@@ -232,7 +236,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre (opcional)" className="h-10 rounded-xl text-sm" />
                 <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Teléfono (opcional)" className="h-10 rounded-xl text-sm" />
                 <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas para la cocina" className="h-10 rounded-xl text-sm" />
-                <Button className="w-full h-11 rounded-xl font-black uppercase tracking-wide" disabled={!lines.length || sending} style={{ background: branding.primaryColor }} onClick={sendOrder}>
+                <Button className="w-full h-11 rounded-xl font-black uppercase tracking-wide" disabled={!lines.length || sending} style={{ background: branding.primaryColor, color: primaryForeground }} onClick={sendOrder}>
                   {sending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} Enviar pedido
                 </Button>
               </div>
@@ -245,7 +249,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
     {/* Carrito móvil flotante */}
     {!sentNumber && lines.length > 0 && (
       <div className="fixed inset-x-4 bottom-4 z-40 lg:hidden">
-        <button type="button" onClick={() => setShowCart(!showCart)} className="flex w-full items-center justify-between rounded-2xl px-5 py-4 text-white shadow-2xl" style={{ background: branding.accentColor }}>
+        <button type="button" onClick={() => setShowCart(!showCart)} className="flex w-full items-center justify-between rounded-2xl px-5 py-4 shadow-2xl" style={{ background: branding.accentColor, color: accentForeground }}>
           <span className="flex items-center gap-2 text-sm font-black"><ShoppingBag className="size-4" /> {lines.length} platillo{lines.length === 1 ? '' : 's'} · {money(total)}</span>
           <span className="text-xs font-bold uppercase tracking-wide">Ver pedido</span>
         </button>
@@ -260,7 +264,7 @@ export function PublicRestaurantMenuPage({ tableToken }: { tableToken: string })
             <div className="mt-2 space-y-2 border-t pt-3">
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre (opcional)" className="h-10 rounded-xl text-sm" />
               <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas para la cocina" className="h-10 rounded-xl text-sm" />
-              <Button className="w-full h-11 rounded-xl font-black uppercase" disabled={sending} style={{ background: branding.primaryColor }} onClick={sendOrder}>
+              <Button className="w-full h-11 rounded-xl font-black uppercase" disabled={sending} style={{ background: branding.primaryColor, color: primaryForeground }} onClick={sendOrder}>
                 {sending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} Enviar pedido
               </Button>
             </div>

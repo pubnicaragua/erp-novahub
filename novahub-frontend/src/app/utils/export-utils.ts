@@ -1,3 +1,5 @@
+import { getReadableForeground } from './color-contrast';
+
 export const getBase64Image = async (url: string): Promise<string | null> => {
   try {
     const resp = await fetch(url);
@@ -16,6 +18,7 @@ export const getBase64Image = async (url: string): Promise<string | null> => {
 export const sanitizeHtml2CanvasOklch = (elementId: string | string[], clonedDoc: Document, primaryHex: string) => {
   const elementIds = Array.isArray(elementId) ? elementId : [elementId];
   const safePrimary = /^#[0-9a-f]{6}$/i.test(primaryHex.trim()) ? primaryHex.trim() : '#10b981';
+  const primaryForeground = getReadableForeground(safePrimary);
   const styleTag = clonedDoc.createElement('style');
   styleTag.innerHTML = `
     :root, *, *::before, *::after {
@@ -26,7 +29,7 @@ export const sanitizeHtml2CanvasOklch = (elementId: string | string[], clonedDoc
       --popover: #ffffff !important;
       --popover-foreground: #333333 !important;
       --primary: ${safePrimary} !important;
-      --primary-foreground: #ffffff !important;
+      --primary-foreground: ${primaryForeground} !important;
       --secondary: #f1f5f9 !important;
       --secondary-foreground: #334155 !important;
       --muted: #f1f5f9 !important;
@@ -41,7 +44,7 @@ export const sanitizeHtml2CanvasOklch = (elementId: string | string[], clonedDoc
       --sidebar: #ffffff !important;
       --sidebar-foreground: #333333 !important;
       --sidebar-primary: ${safePrimary} !important;
-      --sidebar-primary-foreground: #ffffff !important;
+      --sidebar-primary-foreground: ${primaryForeground} !important;
       --sidebar-accent: #ecfdf5 !important;
       --sidebar-accent-foreground: #065f46 !important;
       --sidebar-border: #e5e7eb !important;

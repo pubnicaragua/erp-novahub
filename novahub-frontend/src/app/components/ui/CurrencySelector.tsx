@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Currency } from '../../contexts/CurrencyContext';
+import { formatExchangeRate } from '../../utils/currency';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 
 interface CurrencySelectorProps {
@@ -24,16 +25,16 @@ export function CurrencySelector({
   disabled = false,
   className = '',
   hideLabel = false,
-  rateDecimals = 4,
+  rateDecimals = 2,
 }: CurrencySelectorProps) {
   const selected = String(value || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
   const base = String(baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
   const safeRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 36.5;
   const rateText = selected === base
-    ? `${(1).toFixed(rateDecimals)} · moneda base`
+    ? `${formatExchangeRate(1, 1, rateDecimals)} · moneda base`
     : base === 'NIO'
-      ? `1 USD = ${safeRate.toFixed(rateDecimals)} NIO`
-      : `1 NIO = ${(1 / safeRate).toFixed(rateDecimals)} USD`;
+      ? `1 USD = ${formatExchangeRate(safeRate, 36.5, rateDecimals)} NIO`
+      : `1 NIO = ${formatExchangeRate(1 / safeRate, 1, rateDecimals)} USD`;
 
   return (
     <div className={className}>

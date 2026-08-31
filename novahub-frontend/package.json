@@ -8,6 +8,7 @@
     "dev": "vite",
     "lint": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --fix --max-warnings 0",
+    "validate:theme-contrast": "node scripts/validate-theme-contrast.mjs",
     "test:e2e": "playwright test",
     "test:e2e:manual": "node e2e/run-manual.mjs",
     "test:e2e:smoke": "node e2e/smoke-manual.mjs",

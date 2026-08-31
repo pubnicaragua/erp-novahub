@@ -110,7 +110,7 @@ export function InventoryLossDetailSheet({ row, canViewInventoryCost, formatCurr
 
   return (
     <Sheet open={Boolean(row)} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="flex w-full min-w-0 max-w-[72rem] flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[72rem]">
+      <SheetContent side="right" className="erp-detail-panel erp-detail-panel--wide flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
           <div className="flex min-w-0 items-start gap-4">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-600 shadow-inner">

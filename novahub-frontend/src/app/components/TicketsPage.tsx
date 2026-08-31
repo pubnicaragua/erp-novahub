@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Headphones, TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
@@ -57,9 +57,24 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
   const canViewTickets = canPerform('TICKETS', 'view');
   const canViewKnowledge = canPerform('TICKETS_KNOWLEDGE_BASE', 'view');
   const canViewAgents = canPerform('TICKETS_AGENTS', 'view');
+  const tabs = [
+    { id: 'tickets', label: 'Tickets', icon: TicketIcon, color: 'text-blue-500', canView: canViewTickets },
+    { id: 'faqs', label: 'Base de Conocimiento', icon: BookOpen, color: 'text-emerald-500', canView: canViewKnowledge },
+    { id: 'agents', label: 'Agentes', icon: Users, color: 'text-amber-500', canView: canViewAgents },
+  ];
+  const visibleTabs = tabs.filter((tab) => tab.canView);
   const [internalActiveTab, setInternalActiveTab] = useState('tickets');
   const activeTab = activeSubModule || internalActiveTab;
   const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    if (visibleTabs.length === 0) return;
+    const requestedTab = activeSubModule || internalActiveTab;
+    if (visibleTabs.some((tab) => tab.id === requestedTab)) return;
+    const fallback = visibleTabs[0].id;
+    setInternalActiveTab(fallback);
+    onSubModuleChange?.(fallback);
+  }, [activeSubModule, internalActiveTab, onSubModuleChange, visibleTabs]);
 
   // Las pestañas son independientes: no cargamos tickets, artículos y agentes
   // al mismo tiempo cuando el usuario solo necesita una de ellas.
@@ -88,17 +103,12 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
     : activeQuery.refetch();
 
   const handleTabChange = (value: string) => {
+    if (!visibleTabs.some((tab) => tab.id === value)) return;
     setInternalActiveTab(value);
     if (onSubModuleChange) {
       onSubModuleChange(value);
     }
   };
-
-  const tabs = [
-    { id: 'tickets', label: 'Tickets', icon: TicketIcon, color: 'text-blue-500' },
-    { id: 'faqs', label: 'Base de Conocimiento', icon: BookOpen, color: 'text-emerald-500' },
-    { id: 'agents', label: 'Agentes', icon: Users, color: 'text-amber-500' }
-  ];
 
   return (
     <div className="flex flex-1 bg-background w-full">
@@ -123,7 +133,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
           <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
             <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
             <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
-              {tabs.map((tab) => (
+              {visibleTabs.map((tab) => (
                 <TabsTrigger 
                   key={tab.id} 
                   value={tab.id}

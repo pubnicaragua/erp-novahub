@@ -423,7 +423,7 @@ export function LibroMayorView() {
       </Card>
 
       <Sheet open={Boolean(selectedEntry)} onOpenChange={(open) => { if (!open) closeEntryDetail(); }}>
-        <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <SheetContent side="right" className="erp-detail-panel erp-detail-panel--compact flex w-full min-w-0 flex-col gap-0 overflow-hidden p-0">
           <SheetHeader className="sticky top-0 z-10 border-b border-border/50 bg-background/95 px-5 py-5 backdrop-blur-md sm:px-6">
             <div className="flex items-start gap-3 pr-8">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">

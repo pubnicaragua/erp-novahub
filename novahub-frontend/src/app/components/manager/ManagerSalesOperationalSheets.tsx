@@ -49,7 +49,7 @@ function SheetCloseFooter({ onClose }: { onClose: (open: boolean) => void }) {
 
 export function ManagerSalesDeliverySheet({ open, onOpenChange, loading, delivery, history = [], reportCurrency, onDownload, onGoToBranch, onWhatsApp }: CommonSheetProps & { delivery: any | null; history?: any[]; reportCurrency: string; onWhatsApp?: () => void }) {
   const hasWhatsApp = Boolean(delivery?.customerPhone);
-  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent side="right" className="w-full overflow-hidden p-0 sm:max-w-2xl">
+  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent side="right" className="erp-detail-panel erp-detail-panel--medium w-full overflow-hidden p-0">
     <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-7">
       <SheetHeader className="text-left"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Control de entrega</p><SheetTitle className="mt-1 truncate font-mono text-2xl font-black">{delivery?.number || 'Detalle de entrega'}</SheetTitle><SheetDescription className="mt-1">Consulta de la reserva, sus sucursales, artículos e historial.</SheetDescription></div>{delivery && statusBadge(delivery.deliveryStatus)}</div></SheetHeader>
       {loading ? <LoadingDetail /> : delivery ? <>
@@ -64,7 +64,7 @@ export function ManagerSalesDeliverySheet({ open, onOpenChange, loading, deliver
 }
 
 export function ManagerSalesCashSheet({ open, onOpenChange, loading, session, invoices = [], log = [], reportCurrency, onDownload, onGoToBranch }: CommonSheetProps & { session: any | null; invoices?: any[]; log?: any[]; reportCurrency: string }) {
-  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent side="right" className="w-full overflow-hidden p-0 sm:max-w-2xl"><ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-7">
+  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent side="right" className="erp-detail-panel erp-detail-panel--medium w-full overflow-hidden p-0"><ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-7">
     <SheetHeader className="text-left"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Sesión de caja</p><SheetTitle className="mt-1 truncate text-2xl font-black">{session?.registerName || 'Detalle de caja'}</SheetTitle><SheetDescription className="mt-1">Apertura, facturación, movimientos y cierre de la sesión.</SheetDescription></div>{session && statusBadge(session.status)}</div></SheetHeader>
     {loading ? <LoadingDetail /> : session ? <>
       <Card className="rounded-2xl border-primary/20 bg-primary/[0.04] p-4"><div className="grid grid-cols-2 gap-4 sm:grid-cols-4"><Field label="Sucursal" value={session.branchName} icon={Building2} /><Field label="Código" value={session.registerCode} icon={Banknote} mono /><Field label="Facturas" value={formatNumber(session.invoiceCount)} icon={Receipt} /><Field label="Diferencia" value={<ManagerMoney value={session.differenceNIO} currency="NIO" selectedAmount={session.reportDifferenceNIO} selectedCurrency={reportCurrency} sourceExchangeRate={session.exchangeRateUSD || session.reportRate} />} icon={WalletCards} /></div></Card>
@@ -77,7 +77,7 @@ export function ManagerSalesCashSheet({ open, onOpenChange, loading, session, in
 }
 
 export function ManagerSalesPriceListSheet({ open, onOpenChange, loading, priceList, items = [], reportCurrency, onDownload, onGoToBranch }: CommonSheetProps & { priceList: any | null; items?: any[]; reportCurrency: string }) {
-  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent side="right" className="w-full overflow-hidden p-0 sm:max-w-2xl"><ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-7">
+  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent side="right" className="erp-detail-panel erp-detail-panel--medium w-full overflow-hidden p-0"><ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-7">
     <SheetHeader className="text-left"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Lista de precios</p><SheetTitle className="mt-1 truncate font-mono text-2xl font-black">{priceList?.code || 'Detalle de lista'}</SheetTitle><SheetDescription className="mt-1">Consulta de precios por producto y sucursal. La edición permanece en la sucursal.</SheetDescription></div>{priceList && <Badge variant="outline" className={cn('font-black', priceList.isActive ? statusClass('ACTIVE') : statusClass('INACTIVE'))}>{priceList.isActive ? 'Activa' : 'Inactiva'}</Badge>}</div></SheetHeader>
     {loading ? <LoadingDetail /> : priceList ? <>
       <Card className="rounded-2xl border-primary/20 bg-primary/[0.04] p-4"><div className="grid grid-cols-2 gap-4 sm:grid-cols-4"><Field label="Nombre" value={priceList.name} icon={List} /><Field label="Sucursal" value={priceList.branchName} icon={Building2} /><Field label="Productos" value={formatNumber(priceList.itemCount)} icon={Package} /><Field label="Predeterminada" value={priceList.isDefault ? 'Sí' : 'No'} icon={CheckCircle2} /></div></Card>

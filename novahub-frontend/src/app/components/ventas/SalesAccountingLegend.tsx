@@ -22,7 +22,6 @@ const DEFAULT_ACCOUNTS: Record<string, Record<string, AccountMapping>> = {
     receivable: { code: '1100', name: 'Cuentas por Cobrar' },
     income: { code: '4000', name: 'Ingresos Operativos' },
     ivaPayable: { code: '2100', name: 'IVA por Pagar' },
-    cogs: { code: '5810', name: 'Costo de Ventas' },
   },
   payment: {
     cash: { code: '1000', name: 'Caja y Bancos' },
@@ -32,20 +31,17 @@ const DEFAULT_ACCOUNTS: Record<string, Record<string, AccountMapping>> = {
     returns: { code: '4100', name: 'Devoluciones y Descuentos' },
     receivable: { code: '1100', name: 'Cuentas por Cobrar' },
     ivaPayable: { code: '2100', name: 'IVA por Pagar' },
-    cogs: { code: '5810', name: 'Costo de Ventas' },
     loss: { code: '5300', name: 'Pérdida por devolución' },
   },
   creditNote: {
     income: { code: '4000', name: 'Ingresos por Ventas' },
     ivaPayable: { code: '2100', name: 'IVA por Pagar' },
-    cogs: { code: '5810', name: 'Costo de Ventas' },
     receivable: { code: '1100', name: 'Cuentas por Cobrar' },
   },
   cashSale: {
     cash: { code: '1000', name: 'Caja y Bancos' },
     income: { code: '4000', name: 'Ingresos por Ventas' },
     ivaPayable: { code: '2100', name: 'IVA por Pagar' },
-    cogs: { code: '5810', name: 'Costo de Ventas' },
   },
 };
 
@@ -89,26 +85,22 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
     receivable: normalizeAccount(mappings?.invoice?.receivable, invoiceAccounts.receivable),
     income: normalizeAccount(mappings?.invoice?.income, invoiceAccounts.income),
     ivaPayable: normalizeAccount(mappings?.invoice?.ivaPayable, invoiceAccounts.ivaPayable),
-    cogs: normalizeAccount(mappings?.invoice?.cogs, invoiceAccounts.cogs),
   };
   const configuredCashSale = {
     cash: normalizeAccount(mappings?.cashSale?.cash, cashSaleAccounts.cash),
     income: normalizeAccount(mappings?.cashSale?.income, cashSaleAccounts.income),
     ivaPayable: normalizeAccount(mappings?.cashSale?.ivaPayable, cashSaleAccounts.ivaPayable),
-    cogs: normalizeAccount(mappings?.cashSale?.cogs, cashSaleAccounts.cogs),
   };
   const configuredReturn = {
     returns: normalizeAccount(mappings?.saleReturn?.returns, DEFAULT_ACCOUNTS.saleReturn.returns),
     receivable: normalizeAccount(mappings?.saleReturn?.receivable, DEFAULT_ACCOUNTS.saleReturn.receivable),
     ivaPayable: normalizeAccount(mappings?.saleReturn?.ivaPayable, DEFAULT_ACCOUNTS.saleReturn.ivaPayable),
-    cogs: normalizeAccount(mappings?.saleReturn?.cogs, DEFAULT_ACCOUNTS.saleReturn.cogs),
     loss: normalizeAccount(mappings?.saleReturn?.loss, DEFAULT_ACCOUNTS.saleReturn.loss),
   };
   const configuredCredit = {
     income: normalizeAccount(mappings?.creditNote?.income, DEFAULT_ACCOUNTS.creditNote.income),
     receivable: normalizeAccount(mappings?.creditNote?.receivable, DEFAULT_ACCOUNTS.creditNote.receivable),
     ivaPayable: normalizeAccount(mappings?.creditNote?.ivaPayable, DEFAULT_ACCOUNTS.creditNote.ivaPayable),
-    cogs: normalizeAccount(mappings?.creditNote?.cogs, DEFAULT_ACCOUNTS.creditNote.cogs),
   };
   const method = paymentMethod ? (PAYMENT_METHODS[String(paymentMethod).toUpperCase()] || PAYMENT_METHODS.CASH) : null;
   const effectiveMethod = method || PAYMENT_METHODS.CASH;
@@ -127,14 +119,14 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
   const summary = flow === 'order'
     ? 'Orden de venta: no genera asiento contable.'
     : flow === 'pos'
-      ? `POS: asiento comercial por el total · ${effectiveMethod.label} → ${effectivePayment.code}; crédito a ${effectiveIncome.code} + IVA; costo en asiento separado.`
+      ? `POS: un asiento por el total · ${effectiveMethod.label} → ${effectivePayment.code}; Ingresos netos + IVA + salida de inventario.`
       : flow === 'return'
         ? 'Devolución: aplica el ajuste configurado al procesarse.'
         : flow === 'creditNote'
-          ? `Crédito directo: CxC → ingresos + IVA por el total; costo contra Inventario en asiento separado (${configuredCredit.income.code}).`
+          ? `Crédito directo: un asiento → CxC, reversión de ingresos netos, IVA y entrada de inventario (${configuredCredit.income.code}).`
           : method
-            ? `Factura: CxC → ingresos + IVA por el total; ${method.label} → CxC al cobrar (${effectivePayment.code}).`
-            : `Factura: asiento comercial por el total; costo ${configuredInvoice.cogs.code} contra Inventario en asiento separado; cada cobro cancela CxC.`;
+            ? `Factura: un asiento por el total · ${method.label} → ${effectivePayment.code}; Ingresos netos + IVA + salida de inventario.`
+            : `Factura: un asiento por el total con CxC, IVA y salida de inventario; cada cobro posterior cancela CxC.`;
 
   return (
     <div className={`flex min-w-0 items-center gap-2 rounded-xl border border-border/40 bg-muted/10 px-3 py-2 ${compact ? '' : 'text-xs'}`}>
@@ -160,64 +152,55 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
 
             {flow === 'order' ? (
               <p className="rounded-lg bg-muted/30 p-2.5 text-[10px] leading-relaxed text-muted-foreground">
-                La orden de venta es un documento comercial previo. No genera asiento. Al convertirla en factura, se reconoce la venta en CxC, ingresos e IVA; los cobros posteriores cancelan CxC.
+                La orden de venta es un documento comercial previo. No genera asiento. Al convertirla en factura, se reconoce la venta en CxC, IVA, Ingresos por Ventas netos del costo y salida de inventario; los cobros posteriores cancelan CxC.
               </p>
             ) : (
               <>
                 {flow !== 'pos' && flow !== 'return' && flow !== 'creditNote' && (
                   <div>
-                    <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Factura y cobro · asiento comercial</p>
-                    <AccountLine label="Cuentas por Cobrar" side="debit" account={configuredInvoice.receivable} />
-                    <AccountLine label="Ingresos" side="credit" account={configuredInvoice.income} />
+                    <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Factura · un solo asiento al reconocer la venta</p>
+                    <AccountLine label={method ? `Cobro · ${method.label}` : 'Cuentas por Cobrar'} side="debit" account={method ? effectivePayment : configuredInvoice.receivable} />
+                    <AccountLine label="Ingresos por Ventas · netos del costo" side="credit" account={configuredInvoice.income} />
                     <AccountLine label="IVA por pagar" side="credit" account={configuredInvoice.ivaPayable} />
-                    <AccountLine label={`Cobro · ${method?.label || 'método registrado al pagar'}`} side="debit" account={effectivePayment} />
-                    <AccountLine label="Cancelación de CxC" side="credit" account={configuredInvoice.receivable} />
-                    <p className="mt-2 mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Costo de inventario · asiento separado</p>
-                    <AccountLine label="Costo de Ventas" side="debit" account={configuredInvoice.cogs} />
                     <AccountLine label="Inventario · cuenta del almacén" side="credit" account={{ code: 'ALMACÉN', name: 'Cuenta configurada en el almacén' }} />
+                    {!method && <p className="mt-2 text-[10px] text-muted-foreground">El cobro posterior genera únicamente la cancelación de CxC.</p>}
                   </div>
                 )}
                 {flow === 'pos' && (
                   <div>
                     <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Facturación por Caja · asiento comercial</p>
                     <AccountLine label={`Cobro · ${method?.label || 'método registrado al pagar'}`} side="debit" account={effectivePayment} />
-                    <AccountLine label="Ingresos por Ventas" side="credit" account={effectiveIncome} />
+                    <AccountLine label="Ingresos por Ventas · netos del costo" side="credit" account={effectiveIncome} />
                     <AccountLine label="IVA por pagar" side="credit" account={effectiveVat} />
-                    <p className="mt-2 mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Costo de inventario · asiento separado</p>
-                    <AccountLine label="Costo de Ventas" side="debit" account={configuredCashSale.cogs} />
                     <AccountLine label="Inventario · cuenta del almacén" side="credit" account={{ code: 'ALMACÉN', name: 'Cuenta configurada en el almacén' }} />
                   </div>
                 )}
                 {flow === 'return' ? (
                   <div>
                     <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Devolución procesada · asiento comercial</p>
-                    <AccountLine label="Devoluciones" side="debit" account={configuredReturn.returns} />
+                    <AccountLine label="Devoluciones · netas del costo" side="debit" account={configuredReturn.returns} />
                     <AccountLine label="Cuenta por cobrar" side="credit" account={configuredReturn.receivable} />
                     <AccountLine label="IVA por pagar" side="debit" account={configuredReturn.ivaPayable} />
-                    <p className="mt-2 mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Reversión de costo · asiento separado</p>
                     <AccountLine label="Entrada a Inventario" side="debit" account={{ code: 'ALMACÉN', name: 'Cuenta configurada en el almacén' }} />
                     <AccountLine label="Pérdida si se descarta" side="debit" account={configuredReturn.loss} />
-                    <AccountLine label="Reversión de Costo de Ventas" side="credit" account={configuredReturn.cogs} />
                   </div>
                 ) : flow === 'creditNote' ? (
                   <div>
                     <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Crédito directo · asiento comercial</p>
-                    <AccountLine label="Cuentas por Cobrar" side="debit" account={configuredCredit.receivable} />
-                    <AccountLine label="Ingresos por Ventas" side="credit" account={configuredCredit.income} />
+                    <AccountLine label="Disminución de Cuentas por Cobrar" side="credit" account={configuredCredit.receivable} />
+                    <AccountLine label="Reversión de Ingresos · neta del costo" side="debit" account={configuredCredit.income} />
                     <AccountLine label="IVA por pagar" side="credit" account={configuredCredit.ivaPayable} />
-                    <p className="mt-2 mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Costo de inventario · asiento separado</p>
-                    <AccountLine label="Costo de Ventas" side="debit" account={configuredCredit.cogs} />
-                    <AccountLine label="Salida de Inventario · almacén" side="credit" account={{ code: 'ALMACÉN', name: 'Cuenta configurada en el almacén' }} />
+                    <AccountLine label="Entrada de Inventario · almacén" side="debit" account={{ code: 'ALMACÉN', name: 'Cuenta configurada en el almacén' }} />
                   </div>
                 ) : null}
                 <p className="rounded-lg bg-muted/30 p-2.5 text-[10px] leading-relaxed text-muted-foreground">
                   {flow === 'pos'
-                    ? 'En facturación por caja, la factura nace pagada y usa únicamente las cuentas globales configuradas en Contabilidad → Facturación por Caja. No se usa una cuenta particular de la caja.'
+                    ? 'En facturación por caja, la factura nace pagada y usa las cuentas globales configuradas. El costo de los productos reduce Ingresos por Ventas y la salida de inventario queda en el mismo asiento.'
                     : flow === 'return'
-                      ? 'La devolución reduce CxC, separa IVA y revierte el costo: lo reintegrado carga al almacén; lo descartado carga a Pérdida.'
+                      ? 'La devolución usa un solo asiento: reduce CxC, separa IVA, resta el costo de la cuenta de devoluciones y carga lo reintegrado al almacén o lo descartado a Pérdida.'
                       : flow === 'creditNote'
-                        ? 'El crédito directo es una venta a plazo: aumenta CxC y reconoce ingresos e IVA por el total; el costo de inventario se registra en un asiento separado.'
-                      : 'La venta reconoce CxC, ingresos e IVA por el total. Si contiene inventario, el costo de ventas y la salida de inventario se registran en un asiento separado; cada pago posterior cancela CxC.'}
+                        ? 'El crédito directo usa un solo asiento: disminuye CxC, revierte IVA e ingresos por el importe neto del costo y carga la entrada de inventario.'
+                      : 'El asiento conserva el total comercial. En productos, el costo real se resta de Ingresos por Ventas y la salida de inventario se incluye en el mismo asiento; el cobro posterior solo cancela CxC.'}
                 </p>
               </>
             )}

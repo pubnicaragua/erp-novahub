@@ -110,7 +110,7 @@ const HELP_DATA: Record<string, {
     faq: [
       { q: '¿Qué es un asiento de ajuste?', a: 'Registro hecho al cierre del período para corregir o reconocer ingresos/gastos devengados que no se registraron durante el mes.' },
       { q: '¿Por qué no puedo editar un asiento cerrado?', a: 'Los asientos de períodos cerrados están protegidos. Para corregir, hacé un asiento de reversión en el período abierto actual.' },
-      { q: '¿Cómo se vincula con facturas?', a: 'Las facturas pendientes no generan asiento. Cuando una factura queda pagada, se crea un único asiento: débito a la cuenta real del cobro y crédito a Ingresos + IVA.' },
+      { q: '¿Cómo se vincula con facturas?', a: 'Las facturas pendientes no generan asiento. Cuando una factura queda pagada, se crea un único asiento: débito a la cuenta real del cobro, crédito a IVA y crédito a Ingresos por Ventas netos del costo de inventario, junto con la salida del inventario.' },
     ],
   },
   'libro-mayor': {

@@ -9,7 +9,7 @@ import {
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Utensils
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -37,8 +37,9 @@ import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
-import { SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
+import { HIDDEN_PERMISSION_MODULE_IDS, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
 import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
+import { formatExchangeRate } from '../utils/currency';
 import { optimizeImageFile } from '../utils/image-optimization';
 import { FastColorInput } from './ui/FastColorInput';
 
@@ -60,6 +61,7 @@ const AVAILABLE_MODULES = [
   { id: 'DASHBOARD', label: 'Dashboard', icon: BarChart3, description: 'Vista general con KPIs y resumen del negocio' },
   { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
+  { id: 'RESTAURANT', label: 'Restaurante POS', icon: Utensils, description: 'Salón, carta, cocina y comandas' },
   { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
   { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package, description: 'Stock, Almacenes y SKU' },
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
@@ -92,6 +94,12 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', parent: 'SALES' },
   { id: 'RETAIL_POS', label: 'Facturación por Caja', parent: 'SALES' },
 
+  // Restaurante POS: las operaciones comparten la acción genérica Aprobar.
+  { id: 'RESTAURANT_TABLES', label: 'Salón y mesas', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_MENU', label: 'Carta', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_KITCHEN', label: 'Comandas y cocina', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_REPORTS', label: 'Reportes restaurante', parent: 'RESTAURANT' },
+
   // Compras
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
   { id: 'PURCHASES_REQUESTS', label: 'Solicitudes de compra', parent: 'PURCHASES' },
@@ -109,6 +117,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'HR_DASHBOARD', label: 'Dashboard HR', parent: 'HR' },
   { id: 'HR_EMPLOYEES', label: 'Empleados', parent: 'HR' },
   { id: 'HR_PAYROLL', label: 'Nóminas', parent: 'HR' },
+  { id: 'HR_COMMISSIONS', label: 'Comisiones', parent: 'HR' },
   { id: 'HR_ATTENDANCE', label: 'Asistencia', parent: 'HR' },
   { id: 'HR_LEAVES', label: 'Vacaciones', parent: 'HR' },
   { id: 'HR_PERFORMANCE', label: 'Desempeño', parent: 'HR' },
@@ -118,6 +127,8 @@ export const SUBMODULES_FOR_PERMS = [
 
   // Finanzas
   { id: 'FINANCIAL_DASHBOARD', label: 'Dashboard', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_RECEIVABLES', label: 'Cuentas por Cobrar', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_PAYABLES', label: 'Cuentas por Pagar', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_INCOMES', label: 'Ingresos', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_EXPENSES', label: 'Gastos', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'FINANCIAL' },
@@ -129,14 +140,26 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'FINANCIAL_BANK', label: 'Bancos', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_BUDGET', label: 'Presupuestos', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_REPORTS', label: 'Reportes financieros', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_CALENDAR', label: 'Calendario Financiero', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_ANALYSIS', label: 'Análisis de ingresos y gastos', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_LOSSES', label: 'Pérdidas', parent: 'FINANCIAL' },
 
   // Inventario
   { id: 'INVENTORY_PRODUCTS', label: 'Productos', parent: 'INVENTORY' },
   { id: 'INVENTORY_SERVICES', label: 'Servicios', parent: 'INVENTORY' },
+  { id: 'INVENTORY_ATTRIBUTES', label: 'Atributos y categorías', parent: 'INVENTORY' },
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
   { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', parent: 'INVENTORY' },
   { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', parent: 'INVENTORY' },
   { id: 'INVENTORY_MOVEMENTS', label: 'Movimientos', parent: 'INVENTORY' },
+  { id: 'INVENTORY_AUDITS', label: 'Auditorías', parent: 'INVENTORY' },
+  { id: 'INVENTORY_LOSSES', label: 'Pérdidas', parent: 'INVENTORY' },
+  { id: 'INVENTORY_ASSETS', label: 'Mobiliario y equipos', parent: 'INVENTORY' },
+  { id: 'INVENTORY_CONFIG', label: 'Configuración de inventario', parent: 'INVENTORY' },
+
+  // Asesoría legal
+  { id: 'LEGAL_CASES', label: 'Casos legales', parent: 'LEGAL' },
+  { id: 'LEGAL_REMINDERS', label: 'Recordatorios legales', parent: 'LEGAL' },
 
   // Actividades
   { id: 'ACTIVITIES_TASKS', label: 'Tareas', parent: 'ACTIVITIES' },
@@ -304,7 +327,7 @@ const colorPresets: ColorPreset[] = [
 ];
 
 function generateThemeFromColor(hex: string, sidebarHex: string, accentHex: string): BrandColors {
-  const fgColor = '#ffffff';
+  const fgColor = getReadableForeground(hex);
   const sFgColor = getReadableForeground(sidebarHex);
 
   return {
@@ -549,7 +572,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (!user) return [];
     
 
-    return ALL_PERM_MODULES.filter(m => {
+    return ALL_PERM_MODULES.filter(m => !HIDDEN_PERMISSION_MODULE_IDS.has(String(m.id).toUpperCase())).filter(m => {
       const parentMod = 'parent' in m ? (m as any).parent : null;
       const permissionModules = Array.isArray(user.permissions) ? user.permissions.map(permission => String(permission.module).toUpperCase()) : [];
       if (parentMod === 'CONFIGURATION' && (
@@ -757,8 +780,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setSidebarHex(preset.sidebar);
     setAccentHex(preset.accent);
 
-    // Always use white text on primary buttons
-    setPrimaryFgHex('#ffffff');
+    setPrimaryFgHex(getReadableForeground(preset.primary));
     setSidebarFgHex(getReadableForeground(preset.sidebar));
     setActivePreset(preset.name);
   }, []);
@@ -767,24 +789,22 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (!canEditBranding) return;
     try {
       const colors = generateThemeFromColor(primaryHex, sidebarHex, accentHex);
+      const safePrimaryFgHex = ensureReadableForeground(primaryHex, primaryFgHex);
       const safeSidebarFgHex = ensureReadableForeground(sidebarHex, sidebarFgHex);
-      setPrimaryFgHex('#ffffff');
+      setPrimaryFgHex(safePrimaryFgHex);
       setSidebarFgHex(safeSidebarFgHex);
-      colors.primaryForeground = hexToOklch('#ffffff');
+      colors.primaryForeground = hexToOklch(safePrimaryFgHex);
       colors.sidebarForeground = hexToOklch(safeSidebarFgHex);
 
       updateTheme(colors);
 
       await brandingService.update({
-        primaryColor: primaryHex,
-        sidebarColor: sidebarHex,
-        accentColor: accentHex,
-        logo: themeConfig.logo || undefined
+        userTheme: { colors },
       });
       await refetchConfiguration();
 
-      toast.success('Marca actualizada correctamente', {
-        description: `Los cambios se guardaron para nivel: ${user?.role.toUpperCase()}`,
+      toast.success('Tema actualizado correctamente', {
+        description: `Los cambios se guardaron para ${user?.name || user?.email || 'este usuario'}`,
       });
     } catch (error) {
       console.error('Error saving theme:', error);
@@ -792,15 +812,22 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     resetTheme();
     setPrimaryHex('#10b981');
     setSidebarHex('#0c1a12');
     setAccentHex('#064e3b');
-  setPrimaryFgHex('#ffffff');
+    setPrimaryFgHex(getReadableForeground('#10b981'));
     setSidebarFgHex(getReadableForeground('#0c1a12'));
     setActivePreset('Emerald Default');
-    toast.info('Tema restaurado al predeterminado');
+    try {
+      await brandingService.update({ userTheme: null });
+      await refetchConfiguration();
+      toast.info('Tema personal restaurado al predeterminado');
+    } catch (error) {
+      console.error('Error resetting theme:', error);
+      toast.error('No se pudo restablecer el tema personal');
+    }
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -965,34 +992,56 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     const pricingList = asList(configurationData.pricing);
     const modulesList = asList(configurationData.modules);
 
-    if (branding?.primaryColor) setPrimaryHex(branding.primaryColor.startsWith('oklch') ? oklchToApproxHex(branding.primaryColor) : branding.primaryColor);
-    if (branding?.sidebarColor) setSidebarHex(branding.sidebarColor.startsWith('oklch') ? oklchToApproxHex(branding.sidebarColor) : branding.sidebarColor);
-    if (branding?.accentColor) setAccentHex(branding.accentColor.startsWith('oklch') ? oklchToApproxHex(branding.accentColor) : branding.accentColor);
+    const userThemeColors = branding?.userTheme?.colors || {};
+    const resolvedPrimary = userThemeColors.primary || branding?.primaryColor;
+    const resolvedSidebar = userThemeColors.sidebar || branding?.sidebarColor;
+    const resolvedAccent = userThemeColors.accent || branding?.accentColor;
+    const resolvedPrimaryForeground = userThemeColors.primaryForeground;
+    const resolvedSidebarForeground = userThemeColors.sidebarForeground;
+    if (resolvedPrimary) setPrimaryHex(resolvedPrimary.startsWith('oklch') ? oklchToApproxHex(resolvedPrimary) : resolvedPrimary);
+    if (resolvedSidebar) setSidebarHex(resolvedSidebar.startsWith('oklch') ? oklchToApproxHex(resolvedSidebar) : resolvedSidebar);
+    if (resolvedAccent) setAccentHex(resolvedAccent.startsWith('oklch') ? oklchToApproxHex(resolvedAccent) : resolvedAccent);
+    if (resolvedPrimaryForeground) setPrimaryFgHex(resolvedPrimaryForeground.startsWith('oklch') ? oklchToApproxHex(resolvedPrimaryForeground) : resolvedPrimaryForeground);
+    if (resolvedSidebarForeground) setSidebarFgHex(resolvedSidebarForeground.startsWith('oklch') ? oklchToApproxHex(resolvedSidebarForeground) : resolvedSidebarForeground);
     if (branding?.portalPrimaryColor) setPortalPrimaryHex(branding.portalPrimaryColor);
     if (branding?.portalAccentColor) setPortalAccentHex(branding.portalAccentColor);
     if (branding?.companyName) setCompanyName(branding.companyName);
     if (branding?.logo) setLogoPreview(branding.logo);
     if (branding?.industry) setCompanyIndustry(branding.industry);
     if (branding?.whiteLabel !== undefined) setWhiteLabel(branding.whiteLabel);
-    // A partial branding response must not reset a valid tenant theme to the
-    // hardcoded defaults. This query is also loaded by ThemeProvider, so only
-    // apply it when at least one persisted brand color is actually present.
-    if (branding && (branding.primaryColor || branding.sidebarColor || branding.accentColor)) {
+    // El tema personal tiene prioridad sobre los colores corporativos. Si aún
+    // no existe, la marca del tenant se usa como fallback visual.
+    if (branding && (resolvedPrimary || resolvedSidebar || resolvedAccent || resolvedPrimaryForeground || resolvedSidebarForeground)) {
       const serverColors: Partial<BrandColors> = {};
-      if (branding.primaryColor) {
-        serverColors.primary = branding.primaryColor.startsWith('oklch')
-          ? oklchToApproxHex(branding.primaryColor)
-          : branding.primaryColor;
+      if (resolvedPrimary) {
+        serverColors.primary = resolvedPrimary;
       }
-      if (branding.sidebarColor) {
-        serverColors.sidebar = branding.sidebarColor.startsWith('oklch')
-          ? oklchToApproxHex(branding.sidebarColor)
-          : branding.sidebarColor;
+      if (resolvedSidebar) {
+        serverColors.sidebar = resolvedSidebar;
       }
-      if (branding.accentColor) {
-        serverColors.accent = branding.accentColor.startsWith('oklch')
-          ? oklchToApproxHex(branding.accentColor)
-          : branding.accentColor;
+      if (resolvedAccent) {
+        serverColors.accent = resolvedAccent;
+      }
+      if (resolvedPrimary) {
+        serverColors.sidebarPrimary = userThemeColors.sidebarPrimary || resolvedPrimary;
+      }
+      if (resolvedAccent) {
+        serverColors.sidebarAccent = userThemeColors.sidebarAccent || resolvedAccent;
+      }
+      if (userThemeColors.primaryForeground) {
+        serverColors.primaryForeground = userThemeColors.primaryForeground;
+      }
+      if (userThemeColors.accentForeground) {
+        serverColors.accentForeground = userThemeColors.accentForeground;
+      }
+      if (userThemeColors.sidebarForeground) {
+        serverColors.sidebarForeground = userThemeColors.sidebarForeground;
+      }
+      if (userThemeColors.sidebarPrimary) {
+        serverColors.sidebarPrimary = userThemeColors.sidebarPrimary;
+      }
+      if (userThemeColors.sidebarAccent) {
+        serverColors.sidebarAccent = userThemeColors.sidebarAccent;
       }
       updateTheme(serverColors);
     }
@@ -1204,6 +1253,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setEditingRole({ ...editingRole, permissions: newPerms });
   };
 
+  const previewPrimaryForeground = ensureReadableForeground(primaryHex, primaryFgHex);
+  const previewSidebarForeground = ensureReadableForeground(sidebarHex, sidebarFgHex);
+  const previewAccentForeground = getReadableForeground(accentHex);
+
   return (
     <div className="space-y-6 p-4 md:p-8 pb-24 max-w-[1920px] mx-auto">
 
@@ -1364,32 +1417,32 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <CardTitle className="flex items-center gap-2 text-lg font-black"><Eye className="size-5 text-primary" />Vista Previa</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-4">
-                  <div className="rounded-xl overflow-hidden border border-border shadow-lg" style={{ backgroundColor: sidebarHex }}>
-                    <div className="p-3 border-b" style={{ borderColor: `${sidebarFgHex}20` }}>
+                  <div className="rounded-xl overflow-hidden border border-border shadow-lg" style={{ backgroundColor: sidebarHex, color: previewSidebarForeground }}>
+                    <div className="p-3 border-b" style={{ borderColor: `${previewSidebarForeground}20` }}>
                       <div className="flex items-center gap-2">
                         {logoPreview ? (
                           <img src={logoPreview} alt="Logo" className="size-8 object-contain rounded" />
                         ) : (
-                          <div className="size-8 rounded-lg flex items-center justify-center font-black text-sm" style={{ backgroundColor: primaryHex, color: primaryFgHex }}>N</div>
+                          <div className="size-8 rounded-lg flex items-center justify-center font-black text-sm" style={{ backgroundColor: primaryHex, color: previewPrimaryForeground }}>N</div>
                         )}
                         <div>
-                          <p className="text-xs font-bold" style={{ color: sidebarFgHex }}>{companyName || 'Mi Empresa'}</p>
-                          <p className="text-[9px] opacity-50" style={{ color: sidebarFgHex }}>Dashboard ERP</p>
+                          <p className="text-xs font-bold" style={{ color: previewSidebarForeground }}>{companyName || 'Mi Empresa'}</p>
+                          <p className="text-[9px]" style={{ color: previewSidebarForeground }}>Dashboard ERP</p>
                         </div>
                       </div>
                     </div>
                     <div className="p-2 space-y-1">
                       {['Dashboard', 'Ventas', 'Compras', 'Inventario de Mercancías'].map((item, i) => (
                         <div key={item} className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
-                          style={i === 0 ? { backgroundColor: primaryHex, color: primaryFgHex } : { color: `${sidebarFgHex}99` }}>
+                          style={i === 0 ? { backgroundColor: primaryHex, color: previewPrimaryForeground } : { color: previewSidebarForeground }}>
                           {item}
                         </div>
                       ))}
                     </div>
-                    <div className="p-3 border-t space-y-2" style={{ borderColor: `${sidebarFgHex}20` }}>
+                    <div className="p-3 border-t space-y-2" style={{ borderColor: `${previewSidebarForeground}20` }}>
                       <div className="flex gap-2">
-                        <button className="flex-1 rounded-lg px-2 py-1 text-[10px] font-bold transition-all" style={{ backgroundColor: primaryHex, color: primaryFgHex }}>Primario</button>
-                        <button className="flex-1 rounded-lg px-2 py-1 text-[10px] font-bold transition-all" style={{ backgroundColor: accentHex, color: sidebarFgHex }}>Acento</button>
+                        <button className="flex-1 rounded-lg px-2 py-1 text-[10px] font-bold transition-all" style={{ backgroundColor: primaryHex, color: previewPrimaryForeground }}>Primario</button>
+                        <button className="flex-1 rounded-lg px-2 py-1 text-[10px] font-bold transition-all" style={{ backgroundColor: accentHex, color: previewAccentForeground }}>Acento</button>
                       </div>
                     </div>
                   </div>
@@ -1596,7 +1649,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
                                   {(() => {
                                     const permsArray = Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : []);
-                                    const activePerms = permsArray.filter((p: any) => PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write);
+                                    const activePerms = permsArray.filter((p: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(p.module || '').toUpperCase()) && (PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write));
                                     const parentModules = new Set(activePerms.map((p: any) => {
                                       const sub = SUBMODULES_FOR_PERMS.find(s => s.id === p.module);
                                       return sub ? sub.parent : p.module;
@@ -1623,7 +1676,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
                           {/* Permissions Matrix */}
                           <div className="space-y-1.5 mb-5">
-                            {(Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : [])).filter((p: any) => PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write).slice(0, 4).map((p: any) => {
+                            {(Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : [])).filter((p: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(p.module || '').toUpperCase()) && (PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write)).slice(0, 4).map((p: any) => {
                               const mod = tenantPermModules.find(m => m.id === p.module);
                               if (!mod) return null;
                               return (
@@ -1640,7 +1693,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                             })}
                             {(() => {
                               const permsArr = Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : []);
-                              const active = permsArr.filter((p: any) => PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write);
+                              const active = permsArr.filter((p: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(p.module || '').toUpperCase()) && (PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write));
                               return active.length > 4 ? (
                                 <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {active.length - 4} vistas más</p>
                               ) : null;
@@ -1726,7 +1779,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
-                        {normalizePermissions(editingRole?.permissions).map((p) => {
+                        {normalizePermissions(editingRole?.permissions).filter((p) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(p.module || '').toUpperCase())).map((p) => {
                           const mod = tenantPermModules.find(m => m.id === p.module);
                           if (!mod) return null; // No renderizar si no tiene permisos
                           const isSubmodule = mod && 'parent' in mod;
@@ -1996,7 +2049,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <div className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/40">
                     <span className="text-xs font-bold text-muted-foreground">Tasa Actual del Sistema</span>
                     <span className="text-lg font-black text-primary">
-                      {currentBackendRate ? `C$ ${currentBackendRate.toFixed(4)}` : '---'}
+                      {currentBackendRate ? `C$ ${formatExchangeRate(currentBackendRate)}` : '---'}
                     </span>
                   </div>
                 </div>

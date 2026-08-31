@@ -121,7 +121,7 @@ export function SalesDocumentDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
-      <SheetContent side="right" className="flex w-full min-w-0 max-w-full flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-xl">
+      <SheetContent side="right" className="erp-detail-panel erp-detail-panel--compact flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">

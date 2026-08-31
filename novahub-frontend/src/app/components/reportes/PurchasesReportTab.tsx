@@ -20,6 +20,7 @@ import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper 
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { pdfStatusLabel } from '../../utils/pdfStatus';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86400000;
@@ -28,6 +29,8 @@ const STATUS_LABEL: Record<string, string> = {
   PAID: 'Pagada',
   PARTIAL: 'Parcial',
   PENDING: 'Pendiente',
+  RECEIVED: 'Recibida',
+  WITH_INCIDENTS: 'Recibida con incidencias',
   OVERDUE: 'Vencida',
   CANCELLED: 'Anulada',
   CANCELED: 'Anulada',
@@ -40,6 +43,8 @@ const STATUS_COLOR: Record<string, string> = {
   PAID: 'bg-emerald-500/10 text-emerald-500',
   PARTIAL: 'bg-amber-500/10 text-amber-500',
   PENDING: 'bg-slate-400/10 text-slate-400',
+  RECEIVED: 'bg-emerald-500/10 text-emerald-500',
+  WITH_INCIDENTS: 'bg-orange-500/10 text-orange-500',
   OVERDUE: 'bg-rose-500/10 text-rose-500',
   CANCELLED: 'bg-rose-500/10 text-rose-500',
   CANCELED: 'bg-rose-500/10 text-rose-500',
@@ -491,8 +496,8 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const approved = activeOrders.filter(o => String(o.status || '').toUpperCase() === 'APPROVED').length;
     const ordersWithReceipt = new Set(receipts.map(r => r.purchaseOrderId).filter(Boolean));
     const pendingReceiptOrders = activeOrders.filter(o => !ordersWithReceipt.has(o.id));
-    const partial = receipts.filter(r => String(r.status || '').toUpperCase() === 'PARTIAL').length;
-    const complete = receipts.filter(r => String(r.status || '').toUpperCase() === 'RECEIVED').length;
+    const partial = receipts.filter(r => ['PARTIAL', 'WITH_INCIDENTS'].includes(String(r.status || '').toUpperCase())).length;
+    const complete = receipts.filter(r => ['RECEIVED', 'PAID'].includes(String(r.status || '').toUpperCase())).length;
     const receiptsWithInvoice = new Set(receipts.filter(r => Array.isArray(r.supplierInvoices) && r.supplierInvoices.length > 0).map(r => r.id));
     const invoiceReceiptIds = new Set(fBillsAll.map(b => b.purchaseReceiptId).filter(Boolean));
     const recibidoNoFacturado = receipts.filter(r => !receiptsWithInvoice.has(r.id) && !invoiceReceiptIds.has(r.id));
@@ -526,8 +531,8 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       const supplierName = r.supplier?.name || 'Proveedor';
       const row = bySupplier.get(r.supplierId) || { name: supplierName, receipts: 0, partial: 0, incidents: 0 };
       row.receipts += 1;
-      const isPartial = String(r.status || '').toUpperCase() === 'PARTIAL';
-      const hasIncident = String(r.status || '').toUpperCase() === 'WITH_INCIDENTS' || String(r.status || '').toUpperCase() === 'REJECTED' || isPartial;
+      const isPartial = ['PARTIAL', 'WITH_INCIDENTS'].includes(String(r.status || '').toUpperCase());
+      const hasIncident = ['WITH_INCIDENTS', 'REJECTED', 'CANCELLED'].includes(String(r.status || '').toUpperCase()) || isPartial;
       if (isPartial) row.partial += 1;
       (r.items || []).forEach((it: any) => {
         const ordered = Number(it.quantityOrdered || 0);
@@ -748,8 +753,8 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       const name = r.supplier?.name || 'Proveedor';
       const row = receiptStats.get(name) || { total: 0, complete: 0, incidents: 0 };
       row.total += 1;
-      if (String(r.status || '').toUpperCase() === 'RECEIVED') row.complete += 1;
-      if (String(r.status || '').toUpperCase() === 'PARTIAL' || String(r.status || '').toUpperCase() === 'WITH_INCIDENTS' || String(r.status || '').toUpperCase() === 'REJECTED') row.incidents += 1;
+      if (['RECEIVED', 'PAID'].includes(String(r.status || '').toUpperCase())) row.complete += 1;
+      if (['PARTIAL', 'WITH_INCIDENTS', 'REJECTED'].includes(String(r.status || '').toUpperCase())) row.incidents += 1;
       receiptStats.set(name, row);
       const ord = orders.find(o => o.id === r.purchaseOrderId);
       const exp = ord ? toDate(ord.expectedDelivery) : null;
@@ -1059,7 +1064,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         renderTop('Top Proveedores (Compras netas)', suppliersPerf.list.slice(0, 5).map(s => ({ name: s.name, value: s.compras, detail: `${s.facturas} facturas · ${s.pct.toFixed(1)}% participación` })), [249, 115, 22]);
         renderTop('Productos con Mayor Inversión', visibleProducts.filter(p => p.monto > 0).slice(0, 5).map(p => ({ name: p.name, value: p.monto, detail: `${p.qty} unidades · precio prom. ${fmtShort(p.priceAvg)}` })), [59, 130, 246]);
-        renderTop('Retenciones Registradas', retenciones.list.slice(0, 5).map(r => ({ name: r.proveedor, value: r.monto, detail: `${r.factura} · ${r.tipo} · ${r.estado}` })), [245, 158, 11]);
+        renderTop('Retenciones Registradas', retenciones.list.slice(0, 5).map(r => ({ name: r.proveedor, value: r.monto, detail: `${r.factura} · ${r.tipo} · ${pdfStatusLabel(r.estado, '-')}` })), [245, 158, 11]);
 
         const pageCount = (doc as any).internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
@@ -1214,7 +1219,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         renderTable('Top Proveedores', ['#', 'Proveedor', 'Detalle', 'Monto'], suppliersPerf.list.slice(0, 5).map((s, i) => [i + 1, s.name, `${s.facturas} facturas · ${s.pct.toFixed(1)}% participación`, Number(s.compras)]), 'FFF59E0B');
         renderTable('Productos con Mayor Inversión', ['#', 'Producto', 'Detalle', 'Monto'], visibleProducts.filter(p => p.monto > 0).slice(0, 5).map((p, i) => [i + 1, p.name, `${p.qty} unidades · precio prom. ${fmtShort(p.priceAvg)}`, Number(p.monto)]), 'FF3B82F6');
-        renderTable('Retenciones Registradas', ['#', 'Proveedor', 'Detalle', 'Monto'], retenciones.list.slice(0, 5).map((r, i) => [i + 1, r.proveedor, `${r.factura} · ${r.tipo} · ${r.estado}`, Number(r.monto)]), 'FFF59E0B');
+        renderTable('Retenciones Registradas', ['#', 'Proveedor', 'Detalle', 'Monto'], retenciones.list.slice(0, 5).map((r, i) => [i + 1, r.proveedor, `${r.factura} · ${r.tipo} · ${pdfStatusLabel(r.estado, '-')}`, Number(r.monto)]), 'FFF59E0B');
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_compras'], 'xlsx', dateRange));
         toast.success('Excel exportado exitosamente');
@@ -1411,7 +1416,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   {stageItem(<Truck className="size-3.5 text-orange-500" />, 'Órdenes pend. de recepción', stages.pendingReceipt, 'text-orange-500')}
-                  {stageItem(<Package className="size-3.5 text-amber-500" />, 'Recepciones parciales', stages.partial, 'text-amber-500')}
+                  {stageItem(<Package className="size-3.5 text-amber-500" />, 'Recepciones con incidencias', stages.partial, 'text-amber-500')}
                   {stageItem(<CreditCard className="size-3.5 text-orange-500" />, 'Facturas pendientes de pago', stages.pendingPay, 'text-orange-500')}
                   {stageItem(<Clock className="size-3.5 text-rose-500" />, 'Facturas vencidas', stages.overdue, 'text-rose-500')}
                 </div>
@@ -1507,7 +1512,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                     {incidentSummary.suppliers.map(s => (
                       <div key={s.name} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30">
                         <p className="text-xs font-bold truncate">{s.name}</p>
-                        <p className="text-[10px] text-muted-foreground shrink-0">{s.partial} parciales · {s.incidents} con incidencias · {s.receipts} recepciones</p>
+                        <p className="text-[10px] text-muted-foreground shrink-0">{s.partial} con diferencias · {s.incidents} con incidencias · {s.receipts} recepciones</p>
                       </div>
                     ))}
                   </div>

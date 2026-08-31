@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Checkbox } from '../ui/checkbox';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
@@ -30,8 +29,8 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
-import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
+import { getSalesInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
@@ -48,6 +47,7 @@ import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, wr
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase } from '../../utils/paymentSettlement';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -105,27 +105,6 @@ type InvoicePaymentLine = {
 };
 
 type InvoiceSaveAction = 'SAVE' | 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
-
-const getInvoiceSourceBadge = (invoice: Partial<Invoice> | null | undefined) => {
-  const sourceType = String(invoice?.sourceType || '').toUpperCase();
-  if (sourceType === 'CASH_SALE' || invoice?.registerId || invoice?.sessionId) {
-    return { label: 'Desde Facturación por Caja', className: 'bg-cyan-500/10 text-cyan-500' };
-  }
-  if (sourceType === 'ESTIMATE') {
-    return { label: 'Desde Cotización', className: 'bg-violet-500/10 text-violet-500' };
-  }
-  if (sourceType === 'SALES_ORDER' || invoice?.salesOrderId) {
-    return { label: 'Desde Orden de Venta', className: 'bg-orange-500/10 text-orange-500' };
-  }
-  if (
-    sourceType === 'RECURRING' ||
-    String(invoice?.number || '').toUpperCase().startsWith('FAC-REC-') ||
-    String(invoice?.notes || '').toLowerCase().includes('desde recurrente')
-  ) {
-    return { label: 'Desde Facturas Recurrentes', className: 'bg-purple-500/10 text-purple-500' };
-  }
-  return null;
-};
 
 export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasViewProps) {
   const {
@@ -225,8 +204,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditLoading, setCreditLoading] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
-  const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[] } | null>(null);
-  const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
   const localDocRef = useRef<any>(null);
   const hydratedDraftKeyRef = useRef<string | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -285,29 +262,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     currency,
     exchangeRate: paymentLineRate(currency),
   });
-
-  const accountingPreflightSignature = isCreating || editingId
-    ? JSON.stringify({
-      warehouseId: localDoc?.warehouseId || warehouses[0]?.id || '',
-      items: (localDoc?.items || []).map((item: any) => ({ productId: item.productId || '', warehouseId: item.warehouseId || '' })),
-    })
-    : '';
-
-  useEffect(() => {
-    if (!accountingPreflightSignature || !localDoc?.items?.length) {
-      setAccountingPreflight(null);
-      setAccountingPreflightLoading(false);
-      return;
-    }
-    let active = true;
-    setAccountingPreflightLoading(true);
-    const payload = JSON.parse(accountingPreflightSignature);
-    invoicesService.accountingPreflight(payload)
-      .then((result: any) => { if (active) setAccountingPreflight(result); })
-      .catch(() => { if (active) setAccountingPreflight({ ready: false, hasInventoryItems: true, errors: ['No se pudo validar la configuración contable del inventario.'], warnings: [] }); })
-      .finally(() => { if (active) setAccountingPreflightLoading(false); });
-    return () => { active = false; };
-  }, [accountingPreflightSignature, localDoc?.items?.length]);
 
   useEffect(() => {
     if (!paymentDialogOpen || !paymentInvoice) return;
@@ -634,7 +588,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     // Compatibilidad con respuestas antiguas: el saldo firmado incluye la
     // factura actual, por lo que se excluye antes de calcular lo disponible.
     const customer = invoice.customer || customers.find((item) => item.id === invoice.customerId);
-    const limit = Math.max(0, Number(customer?.creditLimit || 0));
+    const limitCurrency = customer?.creditLimitCurrency === 'USD' ? 'USD' : 'NIO';
+    const limit = Math.max(0, toBaseAmount(
+      Number(customer?.creditLimit || 0),
+      limitCurrency,
+      limitCurrency === baseCurrency ? 1 : Number(globalRate || 1),
+    ));
     const currentDebt = getCustomerDebtAmount(customer);
     const debtWithoutInvoice = Math.max(0, currentDebt - getInvoiceBalanceInBase(invoice));
     return Math.max(0, Number((limit - debtWithoutInvoice).toFixed(2)));
@@ -722,26 +681,25 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     if (!paymentInvoice) return;
     const cashControlAlreadyLinked = Boolean(paymentInvoice.registerId || paymentInvoice.sessionId);
     const maxAmount = getInvoiceBalance(paymentInvoice);
-    let remainingToApplyBase = getInvoiceBalanceInBase(paymentInvoice);
-    let nonCashOverpayment = false;
-    const submittedPaymentLines = paymentLines.flatMap((line) => {
+    const getLineBaseAmount = (line: InvoicePaymentLine) => {
       const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate || 1);
-      const receivedBase = toBaseAmount(Number(line.amount || 0), line.currency, lineRate);
-      if (line.method !== 'CASH' && receivedBase > remainingToApplyBase + 0.01) {
-        nonCashOverpayment = true;
-      }
-      const appliedBase = Math.min(receivedBase, remainingToApplyBase);
-      if (appliedBase <= 0.005) return [];
-      remainingToApplyBase = Number(Math.max(0, remainingToApplyBase - appliedBase).toFixed(2));
-      return [{
-        ...line,
-        amount: Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2)),
-      }];
-    });
-    if (nonCashOverpayment) {
-      toast.error('Solo el efectivo puede superar el saldo y generar vuelto.');
+      return toBaseAmount(Number(line.amount || 0), line.currency, lineRate);
+    };
+    const balanceBase = getInvoiceBalanceInBase(paymentInvoice);
+    const changeBase = getPaymentChangeBase(paymentLines, balanceBase, getLineBaseAmount);
+    if (changeBase > 0.01 && !cashCoversPaymentChange(paymentLines, balanceBase, getLineBaseAmount)) {
+      toast.error('No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.');
       return;
     }
+    const submittedPaymentLines = allocatePaymentLinesToBalance(
+      paymentLines,
+      balanceBase,
+      getLineBaseAmount,
+      (appliedBase, line) => {
+        const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate || 1);
+        return Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2));
+      },
+    );
     const amount = Number(submittedPaymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(2));
     if (!paymentDate || Number.isNaN(new Date(`${paymentDate}T12:00:00`).getTime())) {
       toast.error('Selecciona una fecha válida para registrar el pago');
@@ -790,7 +748,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       return;
     }
     const remaining = Math.max(0, Number((maxAmount - amountAppliedToInvoice).toFixed(2)));
-    if (remaining > 0.01 && !partialPaymentEnabled) {
+    if (remaining > 0.01 && !paymentPartialActive) {
       toast.error('Marca "Pago parcial" para dejar un saldo pendiente');
       return;
     }
@@ -1121,6 +1079,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     : 0;
   const paymentCreditAfterBase = Math.max(0, Number((paymentCreditAvailableBase - paymentRemainingBase).toFixed(2)));
   const paymentPartialCreditFits = paymentHasActiveCredit || paymentRemainingBase <= paymentCreditAvailableBase + 0.01;
+  const paymentPartialActive = partialPaymentEnabled && paymentPartialCreditFits;
   const paymentCustomer = paymentInvoice?.customer || (paymentInvoice?.customerId ? customers.find((customer) => customer.id === paymentInvoice.customerId) : undefined);
   const paymentCustomerFavorBase = getCustomerFavorAmount(paymentCustomer);
   const paymentCustomerFavorAppliedBase = Number(paymentLines
@@ -1157,10 +1116,27 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       return { ...nextLine, amount: maximumBase, currency: baseCurrency, exchangeRate: 1 };
     }));
   };
-  const paymentChangeInInvoiceCurrency = paymentInvoice && paymentLines.some((line) => line.method === 'CASH')
-    ? Math.max(0, paymentTotalInInvoiceCurrency - getInvoiceBalance(paymentInvoice))
+  const paymentBalanceBase = paymentInvoice ? getInvoiceBalanceInBase(paymentInvoice) : 0;
+  const paymentCashTotalBase = getPaymentCashBase(paymentLines, (line) => toBaseAmount(
+    Number(line.amount || 0),
+    line.currency,
+    line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+  ));
+  const paymentChangeBase = getPaymentChangeBase(paymentLines, paymentBalanceBase, (line) => toBaseAmount(
+    Number(line.amount || 0),
+    line.currency,
+    line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+  ));
+  const paymentChangeUnsupported = paymentChangeBase > 0.01 && paymentCashTotalBase + 0.01 < paymentChangeBase;
+  const paymentChangeInInvoiceCurrency = paymentInvoice
+    ? convertBetweenCurrencies(paymentChangeBase, baseCurrency, paymentInvoiceCurrency, 1, paymentInvoice.exchangeRate)
     : 0;
-  const paymentChangeToDeliverInInvoiceCurrency = paymentRemainingInInvoiceCurrency > 0.01
+  const paymentHasRemaining = paymentRemainingInInvoiceCurrency > 0.01;
+  const paymentHasChange = !paymentHasRemaining && paymentChangeBase > 0.01;
+  const paymentSettlementLabel = paymentHasRemaining
+    ? 'Saldo restante'
+    : paymentHasChange ? 'Vuelto a entregar' : 'Saldo cubierto';
+  const paymentSettlementAmount = paymentHasRemaining
     ? paymentRemainingInInvoiceCurrency
     : paymentChangeInInvoiceCurrency;
 
@@ -1369,7 +1345,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       header: 'N° Factura',
       width: '140px',
       render: (val, row) => {
-        const source = getInvoiceSourceBadge(row);
+        const source = getSalesInvoiceOriginBadge(row);
         return (
           <div className="flex min-w-0 flex-col items-start gap-1">
             <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={(event) => { event.stopPropagation(); void openInvoiceDetail(row); }}>{val}</span>
@@ -1523,22 +1499,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   if ((editingId || isCreating) && localDoc && !paymentDialogOpen && !creditInvoice) {
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
     const isDraftInvoice = isCreating || String(localDoc?.status || '').toUpperCase() === 'DRAFT';
-    const isCashRegisterInvoice = !isCreating && Boolean(localDoc?.registerId || localDoc?.sessionId);
-    const hasInventoryLines = (localDoc?.items || []).some((item: any) => item?.productId && resolveItemType(item) !== 'SERVICE');
-    const accountingBlocked = hasInventoryLines && (accountingPreflightLoading || !accountingPreflight?.ready);
-    const accountingErrors = accountingPreflight?.errors || [];
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); setIsCreating(false); commitLocalDoc(null); onClearInvoiceDraft?.(); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
-            <div>
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nueva Factura' : `Factura ${localDoc?.number}`}</h2>
                 {!isCreating && (() => {
-                  const source = getInvoiceSourceBadge(localDoc);
+                  const source = getSalesInvoiceOriginBadge(localDoc);
                   return source ? <Badge className={cn('border-none px-2 py-0.5 text-[8px] font-black', source.className)}>{source.label}</Badge> : null;
                 })()}
               </div>
@@ -1550,14 +1522,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2" data-tour="sales-form-actions">
+          <div className="flex min-w-0 flex-wrap items-stretch justify-start gap-2 sm:justify-end" data-tour="sales-form-actions">
             <SalesViewTutorial view="invoices" context="form" />
             {localDoc?.customerId && getCustomerPhone(localDoc) && (
-              <Button
+            <Button
                 variant="outline"
                 title={isCreating ? 'Guarda la factura como borrador para enviarla por WhatsApp' : 'Enviar factura por WhatsApp'}
                 onClick={() => void handleWhatsApp()}
-                className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 gap-2 font-black uppercase text-[10px] tracking-widest px-4"
+                className="w-full rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 gap-2 font-black uppercase text-[10px] tracking-widest px-4 sm:w-auto"
               >
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
@@ -1567,47 +1539,28 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 {isDraftInvoice && (
                   <Button
                     variant="outline"
-                    className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-4"
+                    className="w-full rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-4 sm:w-auto"
                     onClick={() => void handleSaveInvoice('DRAFT')}
                   >
                     Guardar Borrador
                   </Button>
                 )}
                 <Button
-                  variant={isDraftInvoice ? 'default' : 'outline'}
-                  className={cn(
-                    'rounded-xl font-black uppercase text-[10px] tracking-widest px-4',
-                    isDraftInvoice
-                      ? 'bg-primary shadow-xl shadow-primary/20 text-primary-foreground'
-                      : 'border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-300',
-                  )}
+                  variant="default"
+                  className="w-full rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
                   onClick={() => void handleSaveInvoice(isDraftInvoice ? 'PENDING' : 'SAVE')}
-                  disabled={isDraftInvoice ? accountingBlocked : false}
                 >
-                  {isDraftInvoice ? 'Emitir Factura' : 'Guardar Cambios'}
+                  Guardar
                 </Button>
               </>
             )}
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
-            <CardContent className="min-w-0 p-4 space-y-3 sm:p-6">
+            <CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <SalesAccountingLegend
-                flow={isCashRegisterInvoice ? 'pos' : 'invoice'}
-              />
-              {hasInventoryLines && accountingErrors.length > 0 && (
-                <div role="alert" className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
-                  <div className="space-y-1 text-[11px]">
-                    <p className="font-black uppercase tracking-wider">Advertencia contable antes de emitir</p>
-                    <p>{accountingErrors.join(' ')}</p>
-                    <p className="font-semibold">Configura la cuenta indicada antes de guardar la factura. No se registrará hasta que la validación sea correcta.</p>
-                  </div>
-                </div>
-              )}
               <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
@@ -1808,17 +1761,17 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         {/* Items */}
         <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
             <CardContent className="min-w-0 p-4 sm:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="flex min-w-0 flex-col items-stretch justify-between gap-3 mb-4 sm:flex-row sm:items-center">
                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
-               <div className="flex flex-wrap gap-2">
+               <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                  {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => {
                    const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: localDoc?.warehouseId || getDefaultWarehouseId(), serialNumbers: [] }];
                    setLocalDoc({ ...localDoc, items: newItems });
-                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
-                 <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => updateExtraCharges([...normalizeExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                 }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
+                 <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => updateExtraCharges([...normalizeExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                    <Plus className="size-3 mr-2" /> Agregar coste extra
                  </Button>
-                 <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked || Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por factura' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                 <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked || Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por factura' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                    <Plus className="size-3 mr-2" /> Agregar delivery
                  </Button>
                </div>
@@ -1836,7 +1789,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
                     <div className="flex min-w-0 flex-wrap items-center gap-1">
                       <div className="min-w-0 flex-1">
@@ -2051,6 +2004,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   </div>
                   <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
                     <Input type="number" inputMode="decimal" min="0" step="any" value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} placeholder="0"
+                      readOnly={Boolean(item.productId)}
+                      title={item.productId ? 'Precio definido por la lista de precios' : 'Precio personalizado'}
                       onChange={(e) => {
                         const newItems = [...(localDoc.items || [])];
                         const unitPrice = Number(String(e.target.value).replace(/,/g, '')) || 0;
@@ -2102,8 +2057,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 {normalizeExtraCharges(localDoc).map((charge, index) => (
                   <div key={charge.id} data-item-layout="extra-charge" className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
                     <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Coste extra {index + 1}</span>
-                    <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" disabled={isInvoiceLocked} />
-                    <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                    <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" disabled={isInvoiceLocked} />
+                    <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
                       <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" disabled={isInvoiceLocked} />
                     </div>
@@ -2113,8 +2068,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 {(localDoc.deliveryDescription || Number(localDoc.deliveryAmount || 0) > 0) && (
                   <div data-item-layout="delivery" className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
                     <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Delivery</span>
-                    <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => !isCreating && void handleUpdate(localDoc.id, { deliveryDescription: localDoc.deliveryDescription || null } as any)} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" disabled={isInvoiceLocked} />
-                    <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                    <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => !isCreating && void handleUpdate(localDoc.id, { deliveryDescription: localDoc.deliveryDescription || null } as any)} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" disabled={isInvoiceLocked} />
+                    <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
                       <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" disabled={isInvoiceLocked} />
                     </div>
@@ -2185,8 +2140,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         showHorizontalControls
         actionsWidth="w-44"
         fitContent
-        layoutMode={layoutMode}
-        highlightedRowId={highlightedAlertId}
+          layoutMode={layoutMode}
+          highlightedRowId={highlightedAlertId}
+          isRowSelectable={isInvoiceCancellableFromList}
           onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
           onRowClick={(row) => { void openInvoiceDetail(row); }}
           onBulkDelete={async (ids) => {
@@ -2250,7 +2206,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       <InvoiceDetailSheet
         key={detailInvoice?.id || 'invoice-detail'}
         invoice={detailInvoice}
-        sourceBadge={getInvoiceSourceBadge(detailInvoice)}
+        sourceBadge={getSalesInvoiceOriginBadge(detailInvoice)}
         open={Boolean(detailInvoice)}
         onClose={() => setDetailInvoice(null)}
         onOpenInvoice={(invoice) => { setDetailInvoice(null); setEditingId(invoice.id); }}
@@ -2336,14 +2292,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       </Dialog>
 
       <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
-        <DialogContent className="w-[calc(100%-2rem)] !max-w-xl rounded-3xl">
+        <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] !max-w-xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
               <CreditCard className="size-5 text-primary" /> Registrar pago de factura
             </DialogTitle>
           </DialogHeader>
           {paymentInvoice && (
-            <div className="max-h-[min(70vh,38rem)] space-y-3 overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-3 [scrollbar-gutter:stable]">
               <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentInvoice.number} · {paymentInvoice.customer?.name || 'Cliente'}</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -2368,11 +2324,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     {cashSession && <span className="text-[10px] font-black text-emerald-600">Abierta</span>}
                   </div>
                   {cashRegisters.length > 0 ? (
-                    <Select value={cashRegisterId} onValueChange={setCashRegisterId} disabled={cashLoading || paymentLoading}>
+                    <Select value={cashRegisterId || '__none__'} onValueChange={(value) => setCashRegisterId(value === '__none__' ? '' : value)} disabled={cashLoading || paymentLoading}>
                       <SelectTrigger className="h-9 text-xs">
                         <SelectValue placeholder="Selecciona la caja donde se recibió el pago" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">No asociar a una caja</SelectItem>
                         {cashRegisters.map((register) => (
                           <SelectItem key={register.id} value={register.id}>{register.name} ({register.code})</SelectItem>
                         ))}
@@ -2384,21 +2341,43 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 </div>
               )}
               <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 p-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Forma de pago</p>
-                  <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    <Switch
-                      checked={mixedPaymentEnabled}
-                      onCheckedChange={(checked) => {
-                        setMixedPaymentEnabled(checked);
-                        if (!checked) setPaymentLines((current) => current.slice(0, 1));
-                      }}
-                      disabled={paymentLoading}
-                      aria-label="Activar pago mixto"
-                    />
-                    Pago mixto
-                  </label>
+                  <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                    <label
+                      className={cn(
+                        'flex items-center gap-2 text-[10px] font-black uppercase tracking-widest',
+                        paymentPartialCreditFits ? 'cursor-pointer text-muted-foreground' : 'cursor-not-allowed text-muted-foreground/50',
+                      )}
+                      title={!paymentPartialCreditFits ? 'El saldo restante supera el crédito disponible del cliente' : undefined}
+                    >
+                      <Switch
+                        checked={paymentPartialActive}
+                        onCheckedChange={(checked) => setPartialPaymentEnabled(checked)}
+                        disabled={paymentLoading || !paymentPartialCreditFits}
+                        aria-label="Activar pago parcial"
+                      />
+                      Pago parcial
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      <Switch
+                        checked={mixedPaymentEnabled}
+                        onCheckedChange={(checked) => {
+                          setMixedPaymentEnabled(checked);
+                          if (!checked) setPaymentLines((current) => current.slice(0, 1));
+                        }}
+                        disabled={paymentLoading}
+                        aria-label="Activar pago mixto"
+                      />
+                      Pago mixto
+                    </label>
+                  </div>
                 </div>
+                {paymentHasRemaining && !paymentPartialCreditFits && !paymentHasActiveCredit && (
+                  <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                    El saldo restante supera el crédito disponible del cliente. Reduce el monto del pago para habilitar Pago parcial.
+                  </p>
+                )}
                 {paymentLines.map((line, index) => (
                   <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3 space-y-2">
                     <div className="flex items-end gap-2">
@@ -2453,10 +2432,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     {line.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
                   </div>
                 ))}
-                <label className="flex w-fit cursor-pointer select-none items-center gap-2 text-xs font-bold text-muted-foreground">
-                  <Checkbox checked={partialPaymentEnabled} onCheckedChange={(checked) => setPartialPaymentEnabled(checked === true)} />
-                  Pago parcial
-                </label>
                 {mixedPaymentEnabled && (
                   <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CARD')])}>
                     <Plus className="mr-2 size-4" /> Agregar pago mixto
@@ -2473,14 +2448,22 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <p className="mt-1 text-lg font-black text-foreground">{formatInvoiceAmount(paymentTotalInInvoiceCurrency, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
                 </div>
               </div>
-              <div className={cn('rounded-xl border p-3', paymentRemainingInInvoiceCurrency > 0.01 ? 'border-primary/25 bg-primary/5' : 'border-border/50 bg-muted/20')}>
+              <div className={cn('rounded-xl border p-3', paymentHasRemaining ? 'border-primary/25 bg-primary/5' : paymentChangeUnsupported ? 'border-rose-500/30 bg-rose-500/5' : paymentHasChange ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-border/50 bg-muted/20')}>
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo restante / cambio a entregar</p>
-                    <p className="mt-1 text-xl font-black text-primary">{formatInvoiceAmount(paymentChangeToDeliverInInvoiceCurrency, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentSettlementLabel}</p>
+                    <p className={cn('mt-1 text-xl font-black', paymentChangeUnsupported ? 'text-rose-600 dark:text-rose-400' : paymentHasChange ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary')}>
+                      {formatInvoiceAmount(paymentSettlementAmount, paymentInvoice.currency, paymentInvoice.exchangeRate)}
+                    </p>
                   </div>
                 </div>
-                {paymentRemainingInInvoiceCurrency > 0.01 && (
+                {paymentChangeUnsupported && (
+                  <p className="mt-2 border-t border-rose-500/15 pt-2 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce esos montos o agrega suficiente efectivo para cubrir el excedente.</p>
+                )}
+                {paymentHasChange && !paymentChangeUnsupported && (
+                  <p className="mt-2 border-t border-emerald-500/15 pt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">El pago supera el saldo de la factura y el excedente se devolverá al cliente.</p>
+                )}
+                {paymentHasRemaining && (
                   paymentHasActiveCredit ? (
                     <p className="mt-2 border-t border-primary/15 pt-2 text-[10px] font-bold text-primary">El saldo restante ya pertenece al crédito activo de esta factura; el abono continuará sobre ese crédito.</p>
                   ) : (
@@ -2503,7 +2486,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 )}
                 {paymentCustomerFavorAppliedBase > 0.01 && <p className="mt-2 border-t border-emerald-500/15 pt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Aplicado desde saldo a favor: {formatConvertedAmount(paymentCustomerFavorAppliedBase, baseCurrency)}{paymentCustomerFavorExceeded ? ' · supera el disponible' : ''}</p>}
               </div>
-              {(partialPaymentEnabled || paymentRemainingInInvoiceCurrency > 0.01) && (
+              {paymentRemainingInInvoiceCurrency > 0.01 && (
                 <div>
                   <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha del saldo pendiente *</p>
                   <Input type="date" value={paymentDueDate} onChange={(event) => setPaymentDueDate(event.target.value)} />
@@ -2511,9 +2494,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || paymentCustomerFavorExceeded || (!paymentHasActiveCredit && paymentRemainingBase > paymentCreditAvailableBase + 0.01) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="bg-primary font-black">
+            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || paymentChangeUnsupported || paymentCustomerFavorExceeded || (!paymentHasActiveCredit && paymentRemainingBase > paymentCreditAvailableBase + 0.01) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="bg-primary font-black">
               {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
             </Button>
           </DialogFooter>

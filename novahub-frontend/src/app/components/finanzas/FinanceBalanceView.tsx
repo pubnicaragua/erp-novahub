@@ -25,6 +25,7 @@ import {
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { getReadableForeground } from '../../utils/color-contrast';
 
 interface FinanceBalanceViewProps {
   incomes: any[];
@@ -50,7 +51,8 @@ function sortByRecentRegistration(items: any[]): any[] {
 
 export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurringExpenses }: FinanceBalanceViewProps) {
   const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canExport = canPerform('FINANCIAL_ANALYSIS', 'export') || canPerform('FINANCIAL_BALANCE', 'export');
   const { themeConfig } = useTheme();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
 
@@ -226,6 +228,8 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
 
   const sanitizeHtml2CanvasOklch = (_elementId: string, clonedDoc: Document, primaryHex: string) => {
     // 1) Inject a global style that overrides ALL CSS custom properties with safe hex values
+    const safePrimary = /^#[0-9a-f]{6}$/i.test(primaryHex.trim()) ? primaryHex.trim() : '#10b981';
+    const primaryForeground = getReadableForeground(safePrimary);
     const styleTag = clonedDoc.createElement('style');
     styleTag.innerHTML = `
       :root, *, *::before, *::after {
@@ -235,8 +239,8 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         --card-foreground: #333333 !important;
         --popover: #ffffff !important;
         --popover-foreground: #333333 !important;
-        --primary: ${primaryHex} !important;
-        --primary-foreground: #ffffff !important;
+        --primary: ${safePrimary} !important;
+        --primary-foreground: ${primaryForeground} !important;
         --secondary: #f3f4f6 !important;
         --secondary-foreground: #333333 !important;
         --muted: #f3f4f6 !important;
@@ -247,7 +251,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         --destructive-foreground: #ffffff !important;
         --border: #e5e7eb !important;
         --input: #e5e7eb !important;
-        --ring: ${primaryHex} !important;
+        --ring: ${safePrimary} !important;
         --chart-1: #10b981 !important;
         --chart-2: #ef4444 !important;
         --chart-3: #6366f1 !important;
@@ -255,12 +259,12 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         --chart-5: #ec4899 !important;
         --sidebar-background: #ffffff !important;
         --sidebar-foreground: #333333 !important;
-        --sidebar-primary: ${primaryHex} !important;
-        --sidebar-primary-foreground: #ffffff !important;
+        --sidebar-primary: ${safePrimary} !important;
+        --sidebar-primary-foreground: ${primaryForeground} !important;
         --sidebar-accent: #f3f4f6 !important;
         --sidebar-accent-foreground: #333333 !important;
         --sidebar-border: #e5e7eb !important;
-        --sidebar-ring: ${primaryHex} !important;
+        --sidebar-ring: ${safePrimary} !important;
       }
     `;
     clonedDoc.head.appendChild(styleTag);
@@ -409,6 +413,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   const fmtNum = (n: number) => formatCurrentAmount(n, displayCurrency);
 
   const exportPDF = async () => {
+    if (!canExport) return;
     try {
       toast.info("Generando PDF, por favor espere...");
       const pdfSettings = await getPdfDesignSettings('finanzas.balance');
@@ -725,6 +730,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   };
 
   const exportExcel = async () => {
+    if (!canExport) return;
     try {
       toast.info("Generando Excel, por favor espere...");
       const wb = new ExcelJS.Workbook();
@@ -1080,17 +1086,19 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
             ))}
           </div>
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-border/60 bg-background px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all hover:bg-muted hover:shadow-md">
-                <Download className="size-4" /> Exportar
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-xl border-border/50">
-              <DropdownMenuItem onClick={exportExcel} className="rounded-lg cursor-pointer"><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
-              <DropdownMenuItem onClick={exportPDF} className="rounded-lg cursor-pointer"><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {canExport && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-border/60 bg-background px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all hover:bg-muted hover:shadow-md">
+                  <Download className="size-4" /> Exportar
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="rounded-xl border-border/50">
+                <DropdownMenuItem onClick={exportExcel} className="rounded-lg cursor-pointer"><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportPDF} className="rounded-lg cursor-pointer"><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 

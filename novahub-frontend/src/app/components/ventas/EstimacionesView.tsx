@@ -641,36 +641,36 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   if (editingId && localDoc) {
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDraftRef.current = null; localDocRef.current = null; setEditingId(null); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-xl font-black uppercase tracking-tight">{isLocalEstimate(localDoc?.id) ? 'Nueva Cotización' : `Cotización ${localDoc?.number}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la cotización comercial</p>
             </div>
           </div>
-          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+          <div className="flex min-w-0 flex-wrap items-stretch justify-start gap-2 sm:justify-end" data-tour="sales-form-actions">
             <SalesViewTutorial view="quotes" context="form" />
             {localDoc?.customerId && (
-              <Button variant="outline" onClick={() => void handleWhatsApp()} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
+              <Button variant="outline" onClick={() => void handleWhatsApp()} className="w-full rounded-xl border-emerald-200 px-4 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 sm:w-auto">
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
             )}
             {canPerform('SALES_QUOTES', 'edit') && !['APPROVED', 'CANCELLED'].includes(normalizeEstimateStatus(localDoc?.status)) && (
               <>
                 {normalizeEstimateStatus(localDoc?.status) === 'DRAFT' && <>
-                  <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                  <Button variant="outline" className="w-full rounded-xl border-border/50 px-6 text-[10px] font-black uppercase tracking-widest hover:bg-muted/70 hover:text-foreground sm:w-auto"
                     onClick={() => void handleSaveEstimate('DRAFT')}>
+                    Guardar Borrador
+                  </Button>
+                  <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
+                    onClick={() => void handleSaveEstimate('IN_PROCESS')}>
                     Guardar
                   </Button>
-                  <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                    onClick={() => void handleSaveEstimate('IN_PROCESS')}>
-                    Marcar En Proceso
-                  </Button>
                 </>}
-                {normalizeEstimateStatus(localDoc?.status) === 'IN_PROCESS' && canPerform('SALES_QUOTES', 'approve') && <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                {normalizeEstimateStatus(localDoc?.status) === 'IN_PROCESS' && canPerform('SALES_QUOTES', 'approve') && <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
                   onClick={() => void handleConvertToOrder(localDoc)}>
                   Aprobar y enviar a Orden
                 </Button>}
@@ -678,9 +678,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             )}
           </div>
         </div>
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
-            <CardContent className="p-6 space-y-3">
+            <CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
@@ -834,18 +834,18 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
         {/* --- PRODUCT LINE ITEMS --- */}
         <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
+          <CardContent className="min-w-0 p-4 sm:p-6">
+            <div className="flex min-w-0 flex-col items-stretch justify-between gap-3 mb-4 sm:flex-row sm:items-center">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                 {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   commitLocalDoc({ ...localDoc, items: newItems } as Estimate);
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
-                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
+                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                   <Plus className="size-3 mr-2" /> Agregar coste extra
                 </Button>
-                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId || Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por cotización' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId || Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por cotización' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                   <Plus className="size-3 mr-2" /> Agregar delivery
                 </Button>
               </div>
@@ -863,7 +863,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className={cn("min-w-0 xl:col-span-5", pricingMode === 'individual' && "xl:col-span-5")}>
                       <div className="flex min-w-0 flex-wrap items-center gap-1"><div className="min-w-0 flex-1"><Combobox
                       options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({
@@ -1054,8 +1054,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 {normalizeSalesExtraCharges(localDoc).map((charge, index) => (
                   <div key={charge.id} data-item-layout="extra-charge" className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
                     <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Coste extra {index + 1}</span>
-                    <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" />
-                    <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                    <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" />
+                    <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
                       <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
                     </div>
@@ -1065,8 +1065,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 {(localDoc.deliveryDescription || Number(localDoc.deliveryAmount || 0) > 0) && (
                   <div data-item-layout="delivery" className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
                     <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Delivery</span>
-                    <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => updateDelivery({ deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" />
-                    <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                    <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => updateDelivery({ deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción" className="h-8 w-full min-w-0 text-xs sm:flex-1" />
+                    <div className="flex w-full min-w-0 items-center gap-1 rounded-md border border-input bg-background px-2 sm:w-auto sm:min-w-[8.5rem]">
                       <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
                       <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
                     </div>
@@ -1135,6 +1135,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           data={filteredData}
           pagination={pagination}
           columns={columns}
+          isRowSelectable={(row) => ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(row.status))}
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setDetailEstimate(row)}
           highlightedRowId={highlightedAlertId}

@@ -92,6 +92,7 @@ const prismaModels: PrismaModel[] = [
       { name: 'contactEmail', type: 'String', isOptional: true },
       { name: 'contactPhone', type: 'String', isOptional: true },
       { name: 'creditLimit', type: 'Decimal', default: '@default(0)' },
+      { name: 'creditLimitCurrency', type: 'String', default: '@default("NIO")' },
       { name: 'balance', type: 'Decimal', default: '@default(0)' },
       { name: 'status', type: 'EntityStatus', default: "@default(ACTIVE)" },
       { name: 'notes', type: 'String', isOptional: true },
@@ -1144,8 +1145,9 @@ enum PurchaseOrderStatus {
 enum ReceiptStatus {
   PENDING
   RECEIVED
-  PARTIAL
-  REJECTED
+  WITH_INCIDENTS
+  PAID
+  CANCELLED
 }
 
 enum ReturnStatus {

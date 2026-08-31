@@ -223,6 +223,9 @@ function productStockForWarehouses(product: any, warehouseIds: Set<string>): num
 export function InventoryAuditsView({ audits, warehouses, products, onRefresh, onRefreshWarehouses, pagination }: InventoryAuditsViewProps) {
   const { canPerform } = useAuth();
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
+  const canCreateAudits = canPerform('INVENTORY_AUDITS', 'create');
+  const canApproveAudits = canPerform('INVENTORY_AUDITS', 'approve');
+  const canDeleteAudits = canPerform('INVENTORY_AUDITS', 'delete');
   const [isCreating, setIsCreating] = useState(false);
   const [detailAudit, setDetailAudit] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
@@ -557,6 +560,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   };
 
   const handleWorkflow = async (audit: any, targetStatus: string) => {
+    if (targetStatus === 'CANCELLED' ? !canDeleteAudits : !canApproveAudits) return;
     const labels: Record<string, string> = {
       IN_PROGRESS: 'iniciar el conteo',
       CLOSED: 'cerrar el conteo',
@@ -667,6 +671,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   };
 
   const handleSave = async () => {
+    if (!canCreateAudits) return;
     if (!form.auditDate) { toast.error('Indica la fecha y hora de la inspección'); return; }
     if (!form.warehouseId) { toast.error('Selecciona la bodega de la inspección'); return; }
     if (form.supervisors.length === 0) { toast.error('Indica al menos un encargado del proceso'); return; }
@@ -716,6 +721,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   };
 
   const handleDelete = async (audit: any) => {
+    if (!canDeleteAudits) return;
     if (!window.confirm(`¿Eliminar el acta ${audit.number}? El archivo adjunto también se eliminará del almacenamiento.`)) return;
     try {
       setDeletingId(audit.id);
@@ -775,7 +781,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const renderAuditActions = (audit: any, mobile = false) => (
     <div className={cn('flex items-center gap-1', mobile ? 'flex-wrap justify-start' : 'justify-end')}>
-      {(audit.status === 'OPEN' || audit.status === 'COMPLETED') && (
+      {canDeleteAudits && (audit.status === 'OPEN' || audit.status === 'COMPLETED') && (
         <Button
             variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-red-50 hover:text-red-600"
             disabled={workflowLoading === audit.id}
@@ -785,7 +791,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             <XCircle className="size-4" />
         </Button>
       )}
-      {audit.status === 'IN_PROGRESS' && (
+      {canApproveAudits && audit.status === 'IN_PROGRESS' && (
         <Button
           variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-orange-50 hover:text-orange-600"
           disabled={workflowLoading === audit.id}
@@ -795,7 +801,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
           <PauseCircle className="size-4" />
         </Button>
       )}
-      {audit.status === 'CLOSED' && (
+      {canApproveAudits && audit.status === 'CLOSED' && (
         <>
           <Button
             variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-50 hover:text-emerald-600"
@@ -818,7 +824,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailAudit(audit)} title="Ver detalle" aria-label="Ver detalle">
         <Eye className="size-4" />
       </Button>
-      {(audit.status === 'PENDING' || audit.status === 'OPEN' || audit.status === 'COMPLETED' || audit.status === 'CANCELLED') && (
+      {canDeleteAudits && (audit.status === 'PENDING' || audit.status === 'OPEN' || audit.status === 'COMPLETED' || audit.status === 'CANCELLED') && (
         <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" disabled={deletingId === audit.id} onClick={() => handleDelete(audit)} title="Eliminar" aria-label="Eliminar auditoría">
           <Trash2 className="size-4" />
         </Button>
@@ -1141,9 +1147,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         </div>
         <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="inventory-audits-actions">
           <InventoryViewTutorial label="Cómo gestionar auditorías" targetPrefix="inventory-audits" copy={{ data: { description: 'Consulta las actas, inspecciones, responsables, bodegas y productos revisados.' }, actions: { description: 'Crea una nueva auditoría o abre el detalle de un acta existente.' } }} />
-          <Button onClick={() => setIsCreating(true)} data-toolbar-role="primary" className="h-10 w-full gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
+          {canCreateAudits && <Button onClick={() => setIsCreating(true)} data-toolbar-role="primary" className="h-10 w-full gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
             <Plus className="size-4" /> Nueva Auditoría
-          </Button>
+          </Button>}
         </div>
       </div>
 

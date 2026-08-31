@@ -83,6 +83,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/paymentMethods';
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
+import { normalizeCurrency } from '../../utils/currency';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { toast } from 'sonner';
 import type { Customer, Estimate, Invoice } from '../../types';
@@ -367,6 +368,7 @@ export function CustomerDetailDrawer({
   const TypeIcon = typeInfo.icon;
 
   const creditLimit = Number(customer?.creditLimit ?? 0);
+  const creditLimitCurrency = normalizeCurrency(customer?.creditLimitCurrency, baseCurrency);
   const customerDebt = getCustomerDebtAmount(customer);
   const customerFavor = getCustomerFavorAmount(customer);
   const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
@@ -386,7 +388,8 @@ export function CustomerDetailDrawer({
   const creditOutstanding = invoices
     .filter((inv) => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(String(inv.status || '').toUpperCase()))
     .reduce((sum, inv) => sum + toBaseValue(inv.balance, inv.currency, inv.exchangeRate), 0);
-  const creditUsagePct = creditLimit > 0 ? Math.min(100, (customerDebt / creditLimit) * 100) : 0;
+  const creditLimitBase = toBaseValue(creditLimit, creditLimitCurrency, exchangeRate);
+  const creditUsagePct = creditLimitBase > 0 ? Math.min(100, (customerDebt / creditLimitBase) * 100) : 0;
   const visibleMovements = movementFilter === 'ALL'
     ? relatedTransactions
     : relatedTransactions.filter((transaction) => transaction.kind === movementFilter);
@@ -481,7 +484,7 @@ export function CustomerDetailDrawer({
       <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="customer-detail-panel w-full overflow-hidden sm:max-w-3xl p-0 flex flex-col gap-0 border-l border-border/50 bg-background"
+        className="customer-detail-panel erp-detail-panel w-full overflow-hidden p-0 flex flex-col gap-0 border-l border-border/50 bg-background"
       >
         <Tabs
           value={activeTab}
@@ -572,7 +575,7 @@ export function CustomerDetailDrawer({
                 <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
                   <MetricCard label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} accent="text-rose-600 dark:text-rose-400" loading={loading} />
                   <MetricCard label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
-                  <MetricCard label="Límite Crédito" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={CreditCard} accent="text-primary" loading={loading} />
+                  <MetricCard label={`Límite Crédito (${creditLimitCurrency})`} value={formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)} icon={CreditCard} accent="text-primary" loading={loading} />
                   <MetricCard label="Tipo Cliente" value={typeInfo.label} icon={TypeIcon} accent="text-primary" loading={loading} />
                   <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent={String(customer?.status || '').toUpperCase() === 'ACTIVE' ? 'text-emerald-500' : 'text-primary'} loading={loading} />
                 </div>
@@ -608,8 +611,8 @@ export function CustomerDetailDrawer({
                       <div className="mt-1 min-h-[1.5rem]" aria-hidden="true" />
                     </div>
                     <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
-                      <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Límite de crédito</p>
-                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-primary">{formatConvertedAmount(creditLimit, baseCurrency)}</p>
+                      <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Límite de crédito ({creditLimitCurrency})</p>
+                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-primary">{formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)}</p>
                       <div className="mt-1 min-h-[1.5rem]" aria-hidden="true" />
                     </div>
                   </div>
@@ -665,7 +668,7 @@ export function CustomerDetailDrawer({
                     <InfoField label="Identificación Fiscal" value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
                     <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
-                    <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={DollarSign} mono />
+                    <InfoField label={`Límite de Crédito Concedido (${creditLimitCurrency})`} value={formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)} icon={DollarSign} mono />
                     <InfoField label="Plazo de Crédito" value={creditDays > 0 ? `${creditDays} días` : 'Contado (0 días)'} icon={Clock} mono />
                     <InfoField label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} mono />
                     <InfoField label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} mono />

@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { soporteTecnicoService } from '../../services/soporte-tecnico.service';
 import { cn } from '../ui/utils';
+import { useAuth } from '../../contexts/AuthContext';
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
   OPEN: { label: 'Abierto', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20', icon: Clock },
@@ -37,8 +38,12 @@ interface SoporteTecnicoAdminViewProps {
 }
 
 export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: SoporteTecnicoAdminViewProps) {
-  const ticketsQuery = useTenantQuery<any[]>(['technical-support', 'all-tickets'], signal => soporteTecnicoService.getAll(signal));
-  const statsQuery = useTenantQuery<any>(['technical-support', 'stats'], signal => soporteTecnicoService.getStats(signal));
+  const { canPerform } = useAuth();
+  const canViewSupport = canPerform('SUPPORT_TECH', 'view');
+  const canEditSupport = canPerform('SUPPORT_TECH', 'edit');
+  const canDeleteSupport = canPerform('SUPPORT_TECH', 'delete');
+  const ticketsQuery = useTenantQuery<any[]>(['technical-support', 'all-tickets'], signal => soporteTecnicoService.getAll(signal), { enabled: canViewSupport });
+  const statsQuery = useTenantQuery<any>(['technical-support', 'stats'], signal => soporteTecnicoService.getStats(signal), { enabled: canViewSupport });
   const tickets = Array.isArray(ticketsQuery.data) ? ticketsQuery.data : [];
   const stats = statsQuery.data || {};
   const loading = ticketsQuery.isLoading || statsQuery.isLoading || ticketsQuery.isFetching || statsQuery.isFetching;
@@ -72,7 +77,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
   };
 
   const handleRespond = async () => {
-    if (!selectedTicket) return;
+    if (!selectedTicket || !canEditSupport) return;
     try {
       setSaving(true);
       await soporteTecnicoService.respond(selectedTicket.id, {
@@ -89,6 +94,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeleteSupport) return;
     setPendingDeleteId(id);
   };
 
@@ -180,7 +186,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
                       {(ticket.evidenceUrl1 || ticket.evidenceUrl2) && <Badge variant="outline" className="text-[9px] font-bold gap-1"><ImagePlus className="size-3" />{[ticket.evidenceUrl1, ticket.evidenceUrl2].filter(Boolean).length}</Badge>}
                       {ticket.adminResponse ? <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-bold gap-1"><CheckCircle2 className="size-3" />Respondido</Badge> : <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[9px] font-bold gap-1"><AlertTriangle className="size-3" />Sin respuesta</Badge>}
                       <span className="text-[10px] text-muted-foreground">{new Date(ticket.createdAt).toLocaleDateString()}</span>
-                      <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10" onClick={(e) => { e.stopPropagation(); handleDelete(ticket.id); }}><Trash2 className="size-4" /></Button>
+                      {canDeleteSupport && <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10" onClick={(e) => { e.stopPropagation(); handleDelete(ticket.id); }}><Trash2 className="size-4" /></Button>}
                       <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary" />
                     </div>
                   </CardContent>
@@ -200,14 +206,14 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
       {/* Respond Modal */}
       <AnimatePresence>
         {selectedTicket && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedTicket(null)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative my-4 max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-2xl overflow-y-auto rounded-[32px] border border-border/40 bg-background p-4 shadow-2xl sm:my-8 sm:max-h-[90vh] sm:p-8">
-              <div className="mb-6 flex min-w-0 items-start justify-between gap-3">
+          <div className="nh-modal-root fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedTicket(null)} className="nh-modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div role="dialog" aria-modal="true" aria-labelledby="admin-ticket-detail-title" initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="nh-modal-surface relative my-4 max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-2xl overflow-y-auto rounded-[32px] border border-border/40 bg-background p-4 shadow-2xl sm:my-8 sm:max-h-[90vh] sm:p-8">
+              <div className="nh-modal-header mb-6 flex min-w-0 items-start justify-between gap-3 border-b border-border/50 pb-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="p-3 bg-primary/10 rounded-2xl"><Eye className="size-6 text-primary" /></div>
                   <div className="min-w-0">
-                    <h2 className="break-words text-xl font-black tracking-tighter uppercase italic leading-none sm:text-2xl">{selectedTicket.number}</h2>
+                    <h2 id="admin-ticket-detail-title" className="break-words text-xl font-black tracking-tighter uppercase italic leading-none sm:text-2xl">{selectedTicket.number}</h2>
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">{selectedTicket.clientTenant?.name}</p>
                   </div>
                 </div>
@@ -253,9 +259,11 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Respuesta</label>
                     <textarea placeholder="Escribe la respuesta para la empresa..." value={adminResponse} onChange={(e) => setAdminResponse(e.target.value)} className="w-full min-h-[120px] p-4 rounded-2xl font-bold bg-muted/30 border-transparent focus:bg-background resize-none text-sm outline-none" />
                   </div>
-                  <Button onClick={handleRespond} disabled={saving} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest h-14 rounded-2xl shadow-xl shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50">
+                  <div className="nh-modal-footer border-t border-border/50 pt-4">
+                  {canEditSupport && <Button onClick={handleRespond} disabled={saving} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest h-14 rounded-2xl shadow-xl shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50">
                     {saving ? <Loader2 className="size-5 animate-spin" /> : <><Send className="size-5 mr-2" />Enviar Respuesta</>}
-                  </Button>
+                  </Button>}
+                  </div>
                 </div>
               </div>
             </motion.div>

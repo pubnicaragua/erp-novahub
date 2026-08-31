@@ -21,6 +21,7 @@ import { StatCard } from './StatCard';
 import { formatDateEs } from '../../utils/dateFormat';
 import { HRViewTutorial } from './HRViewTutorial';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { pdfStatusLabel } from '../../utils/pdfStatus';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { displayCurrency, displayMode, valuationMode, valuationModeLabel, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
@@ -136,6 +137,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   };
 
   const handleProcessPayroll = async () => {
+    if (!canPerform('HR_PAYROLL', 'approve')) return;
     try {
       const today = new Date();
       const periodStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -214,8 +216,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   };
 
   const handleExportPDF = async () => {
+    if (!canPerform('HR_PAYROLL', 'export')) return;
     try {
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: filteredPayrolls, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => row.status === 'PAID' ? 'Pagado' : row.status === 'PENDING' ? 'Pendiente' : row.status }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: filteredPayrolls, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => pdfStatusLabel(row.status) }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
       if (configured) { toast.success('Reporte PDF descargado'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings)) as any;
@@ -230,7 +233,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           payrollDisplay(p, 'grossPay', 'grossPayBase'),
           payrollDisplay(p, 'netPay', 'netPayBase'),
           payrollDisplay(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'),
-          p.status === 'PAID' ? 'Pagado' : p.status === 'PENDING' ? 'Pendiente' : p.status
+          pdfStatusLabel(p.status)
         ];
       });
 
@@ -325,10 +328,12 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           </select>
         </div>
         <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="hr-payroll-actions">
-          <Button variant="outline" size="sm" onClick={handleExportPDF}>
-            <Download className="size-4 mr-2" />
-            Descargar PDF
-          </Button>
+          {canPerform('HR_PAYROLL', 'export') && (
+            <Button variant="outline" size="sm" onClick={handleExportPDF}>
+              <Download className="size-4 mr-2" />
+              Descargar PDF
+            </Button>
+          )}
           {pendingCount > 0 && canPerform('HR_PAYROLL', 'approve') && (
             <Button size="sm" onClick={handleRequestAllPayments} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
               <Send className="size-4 mr-2" />
@@ -347,7 +352,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               Incluir Comisiones
             </label>
           </div>
-          {canPerform('HR_PAYROLL', 'create') && (
+          {canPerform('HR_PAYROLL', 'approve') && (
             <Button size="sm" onClick={handleProcessPayroll} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
               <Calculator className="size-4 mr-2" />
               Procesar Nómina

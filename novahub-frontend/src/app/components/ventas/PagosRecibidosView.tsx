@@ -34,8 +34,10 @@ import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
-import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
+import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
+import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase, getPaymentTotalBase } from '../../utils/paymentSettlement';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -63,6 +65,25 @@ const methodOptions = [
 const currencyLabels: Record<string, string> = {
   NIO: 'Córdobas (NIO)',
   USD: 'Dólares (USD)',
+};
+
+const paymentStatusLabels: Record<string, string> = {
+  PENDING: 'Pendiente',
+  PARTIAL: 'Pago parcial',
+  PAID: 'Pagado',
+  OVERDUE: 'Vencido',
+  CREDIT: 'A crédito',
+  CANCELLED: 'Cancelado',
+  VOIDED: 'Anulado',
+  ISSUED: 'Emitido',
+  APPLIED: 'Aplicado',
+  DRAFT: 'Borrador',
+};
+
+const formatPaymentStatus = (value?: unknown) => {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (!normalized) return 'Sin estado';
+  return paymentStatusLabels[normalized] || normalized.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
 type ReceivedPaymentLine = {
@@ -141,6 +162,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [paymentLines, setPaymentLines] = useState<ReceivedPaymentLine[]>([]);
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
+  const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
+  const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
+  const [cashRegisterId, setCashRegisterId] = useState('');
+  const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
+  const [cashLoading, setCashLoading] = useState(false);
   const [detailPayment, setDetailPayment] = useState<PaymentReceived | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const localDocRef = useRef<any>(null);
@@ -167,6 +193,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         const paymentLines = stored.metadata?.paymentLines;
         if (Array.isArray(paymentLines)) setPaymentLines(paymentLines as ReceivedPaymentLine[]);
         setMixedPaymentEnabled(Boolean(stored.metadata?.mixedPaymentEnabled));
+        setPartialPaymentEnabled(Boolean(stored.metadata?.partialPaymentEnabled));
       }
       setDraftHydrated(true);
     }, 0);
@@ -183,9 +210,52 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       editingId: null,
       isCreating: true,
       document: localDoc,
-      metadata: { paymentLines, mixedPaymentEnabled },
+      metadata: { paymentLines, mixedPaymentEnabled, partialPaymentEnabled },
     });
-  }, [draftHydrated, isCreating, localDoc, mixedPaymentEnabled, paymentLines, salesDraftStorageKey]);
+  }, [draftHydrated, isCreating, localDoc, mixedPaymentEnabled, partialPaymentEnabled, paymentLines, salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!isCreating) {
+      setCashRegisters([]);
+      setCashRegisterId('');
+      setCashSession(null);
+      return;
+    }
+    let active = true;
+    setCashLoading(true);
+    cajaService.getRegisters()
+      .then((response: any) => {
+        if (!active) return;
+        const registers = (Array.isArray(response) ? response : response?.data || [])
+          .filter((register: CashRegister) => register.hasActiveSession);
+        setCashRegisters(registers);
+        setCashRegisterId((current) => registers.some((register: CashRegister) => register.id === current)
+          ? current
+          : registers.length === 1 ? registers[0].id : '');
+      })
+      .catch(() => {
+        if (active) {
+          setCashRegisters([]);
+          setCashRegisterId('');
+        }
+      })
+      .finally(() => { if (active) setCashLoading(false); });
+    return () => { active = false; };
+  }, [isCreating]);
+
+  useEffect(() => {
+    if (!isCreating || !cashRegisterId) {
+      setCashSession(null);
+      return;
+    }
+    let active = true;
+    setCashLoading(true);
+    cajaService.getActiveSession(cashRegisterId)
+      .then((session) => { if (active) setCashSession(session?.status === 'OPEN' ? session : null); })
+      .catch(() => { if (active) setCashSession(null); })
+      .finally(() => { if (active) setCashLoading(false); });
+    return () => { active = false; };
+  }, [isCreating, cashRegisterId]);
 
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: ReceivedPaymentLine['method'], amount = 0, currency: 'NIO' | 'USD' = displayCurrency): ReceivedPaymentLine => ({
@@ -195,11 +265,12 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     exchangeRate: paymentLineRate(currency),
     reference: '',
   });
-  const paymentTotalBase = paymentLines.reduce((sum, line) => sum + toBaseAmount(
+  const getPaymentLineBase = (line: ReceivedPaymentLine) => toBaseAmount(
     Number(line.amount || 0),
     line.currency,
     line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
-  ), 0);
+  );
+  const paymentTotalBase = getPaymentTotalBase(paymentLines, getPaymentLineBase);
   const paymentCustomerFavorBase = getCustomerFavorAmount(
     customers.find((customer) => customer.id === localDoc?.customerId),
   );
@@ -211,22 +282,51 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
     ), 0);
   const paymentCustomerFavorExceeded = paymentCustomerFavorAppliedBase > paymentCustomerFavorBase + 0.01;
-  const linkedDocumentBalanceBase = (() => {
-    const linkedDocument = localDoc?.invoiceId
-      ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
-      : localDoc?.creditNoteId
-        ? credits.find((credit) => credit.id === localDoc.creditNoteId)
-        : undefined;
-    if (!linkedDocument) return 0;
-    return toBaseAmount(
-      Number((linkedDocument as any).balance ?? (linkedDocument as any).total ?? 0),
-      (linkedDocument as any).currency,
-      Number((linkedDocument as any).exchangeRate || globalRate),
-    );
-  })();
-  const paymentChangeBase = linkedDocumentBalanceBase > 0 && paymentLines.some((line) => line.method === 'CASH')
-    ? Math.max(0, paymentTotalBase - linkedDocumentBalanceBase)
+  const linkedPaymentDocument = localDoc?.invoiceId
+    ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
+    : localDoc?.creditNoteId
+      ? credits.find((credit) => credit.id === localDoc.creditNoteId)
+      : undefined;
+  const linkedDocumentBalanceBase = linkedPaymentDocument
+    ? toBaseAmount(
+      Number((linkedPaymentDocument as any).balance ?? (linkedPaymentDocument as any).total ?? 0),
+      (linkedPaymentDocument as any).currency,
+      Number((linkedPaymentDocument as any).exchangeRate || globalRate),
+    )
     : 0;
+  const paymentChangeBase = linkedPaymentDocument
+    ? getPaymentChangeBase(paymentLines, linkedDocumentBalanceBase, getPaymentLineBase)
+    : 0;
+  const paymentCashBase = getPaymentCashBase(paymentLines, getPaymentLineBase);
+  const paymentChangeUnsupported = paymentChangeBase > 0.01 && !cashCoversPaymentChange(paymentLines, linkedDocumentBalanceBase, getPaymentLineBase);
+  const paymentRemainingBase = Math.max(0, linkedDocumentBalanceBase - paymentTotalBase);
+  const paymentHasActiveCredit = Boolean(
+    localDoc?.invoiceId
+      && (linkedPaymentDocument as any)?.creditNotes?.some((credit: any) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status || '').toUpperCase())),
+  );
+  const paymentCreditAvailableBase = linkedPaymentDocument && localDoc?.invoiceId
+    ? (() => {
+      const apiAvailable = Number((linkedPaymentDocument as any).creditAvailableBase);
+      if (Number.isFinite(apiAvailable)) return Math.max(0, apiAvailable);
+      const customer = customers.find((item) => item.id === (linkedPaymentDocument as any).customerId);
+      const limitCurrency = customer?.creditLimitCurrency === 'USD' ? 'USD' : 'NIO';
+      const creditLimitBase = toBaseAmount(
+        Number(customer?.creditLimit || 0),
+        limitCurrency,
+        limitCurrency === baseCurrency ? 1 : Number(globalRate || 1),
+      );
+      const debtWithoutInvoice = Math.max(0, getCustomerDebtAmount(customer) - linkedDocumentBalanceBase);
+      return Math.max(0, Number((creditLimitBase - debtWithoutInvoice).toFixed(2)));
+    })()
+    : 0;
+  const paymentPartialCreditFits = !linkedPaymentDocument
+    || !localDoc?.invoiceId
+    || paymentHasActiveCredit
+    || paymentRemainingBase <= paymentCreditAvailableBase + 0.01;
+  const paymentPartialActive = partialPaymentEnabled && paymentPartialCreditFits;
+  const paymentSettlementLabel = paymentRemainingBase > 0.01
+    ? 'Saldo restante'
+    : paymentChangeBase > 0.01 ? 'Vuelto a entregar' : linkedPaymentDocument ? 'Saldo cubierto' : 'Anticipo';
   const handlePaymentMethodChange = (index: number, nextMethod: ReceivedPaymentLine['method']) => {
     setPaymentLines((current) => current.map((item, itemIndex) => {
       if (itemIndex !== index) return item;
@@ -299,11 +399,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     setIsCreating(true);
     setPaymentLines([initialLine]);
     setMixedPaymentEnabled(false);
+    setPartialPaymentEnabled(false);
     commitLocalDoc({
       customerId: '',
       invoiceId: '',
       creditNoteId: '',
       date: new Date().toISOString().split('T')[0],
+      dueDate: '',
       amount: 0,
       currency: initialLine.currency,
       exchangeRate: initialLine.exchangeRate,
@@ -324,35 +426,41 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       .map((line) => ({ ...line, amount: Number(line.amount || 0), reference: String(line.reference || '').trim() }))
       .filter((line) => line.amount > 0);
     if (!effectiveLines.length) { toast.error('Agrega al menos un medio de pago con monto mayor a 0'); return; }
-    const linkedDocument = localDoc.invoiceId
-      ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
-      : localDoc.creditNoteId
-        ? credits.find((credit) => credit.id === localDoc.creditNoteId)
-        : null;
-    const documentBalanceBase = linkedDocument
-      ? toBaseAmount(
-        Number((linkedDocument as any).balance ?? (linkedDocument as any).total ?? 0),
-        (linkedDocument as any).currency,
-        Number((linkedDocument as any).exchangeRate || globalRate),
-      )
-      : 0;
-    let remainingToApplyBase = documentBalanceBase;
-    let nonCashOverpayment = false;
+    const linkedDocument = linkedPaymentDocument;
+    const documentBalanceBase = linkedDocumentBalanceBase;
+    if (linkedDocument && paymentChangeBase > 0.01 && !cashCoversPaymentChange(effectiveLines, documentBalanceBase, getPaymentLineBase)) {
+      toast.error('No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce ese excedente o agrega efectivo.');
+      return;
+    }
     const submittedLines = linkedDocument
-      ? effectiveLines.flatMap((line) => {
-        const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate);
-        const lineBase = toBaseAmount(line.amount, line.currency, lineRate);
-        if (line.method !== 'CASH' && lineBase > remainingToApplyBase + 0.01) nonCashOverpayment = true;
-        const appliedBase = Math.min(lineBase, remainingToApplyBase);
-        if (appliedBase <= 0.005) return [];
-        remainingToApplyBase = Number(Math.max(0, remainingToApplyBase - appliedBase).toFixed(2));
-        return [{
-          ...line,
-          amount: Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2)),
-        }];
-      })
+      ? allocatePaymentLinesToBalance(
+        effectiveLines,
+        documentBalanceBase,
+        getPaymentLineBase,
+        (appliedBase, line) => {
+          const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate);
+          return Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2));
+        },
+      )
       : effectiveLines;
-    if (nonCashOverpayment) { toast.error('Solo el efectivo puede superar el saldo y generar vuelto'); return; }
+    const appliedBase = linkedDocument ? getPaymentTotalBase(submittedLines, getPaymentLineBase) : 0;
+    const remainingToApplyBase = linkedDocument ? Math.max(0, documentBalanceBase - appliedBase) : 0;
+    if (linkedDocument && !submittedLines.length) {
+      toast.error('El documento seleccionado no tiene saldo pendiente.');
+      return;
+    }
+    if (linkedDocument && remainingToApplyBase > 0.01 && !partialPaymentEnabled) {
+      toast.error('Activa "Pago parcial" para registrar un importe menor al saldo del documento.');
+      return;
+    }
+    if (linkedDocument && localDoc.invoiceId && remainingToApplyBase > 0.01 && !paymentPartialCreditFits) {
+      toast.error('El saldo restante supera el crédito disponible del cliente. Reduce el monto del pago para habilitar Pago parcial.');
+      return;
+    }
+    if (linkedDocument && remainingToApplyBase > 0.01 && !localDoc.dueDate) {
+      toast.error('Indica la fecha límite para el saldo restante.');
+      return;
+    }
     const customerFavorAppliedBase = submittedLines
       .filter((line) => line.method === 'CUSTOMER_BALANCE')
       .reduce((sum, line) => sum + toBaseAmount(
@@ -381,6 +489,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         bankAccountId: isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
         reference: requiresPaymentReference(firstLine.method) ? firstLine.reference : undefined,
         notes: localDoc.notes || undefined,
+        dueDate: remainingToApplyBase > 0.01 ? new Date(`${localDoc.dueDate}T12:00:00`).toISOString() : undefined,
+        cashRegisterId: cashRegisterId || undefined,
+        cashSessionId: cashSession?.id || undefined,
         cardCommissionPercent: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionPercent || undefined : undefined,
         cardCommissionAmount: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionAmount || undefined : undefined,
         cardCommissionAccountId: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionAccountId || undefined : undefined,
@@ -408,7 +519,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       toast.success('Pago registrado', { id: saveToastId });
       clearSalesEditorDraft(salesDraftStorageKey);
       localDocRef.current = null;
-      setIsCreating(false); commitLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); onRefresh();
+      setIsCreating(false); commitLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); setPartialPaymentEnabled(false); onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago', { id: saveToastId }); }
   };
 
@@ -444,7 +555,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
 
   // Invoices filtered by selected customer
   const customerInvoices = localDoc?.customerId
-    ? invoices.filter(i => i.customerId === localDoc.customerId && ['PENDING', 'PARTIAL', 'OVERDUE'].includes((i.status || '').toUpperCase()))
+    ? invoices.filter(i => i.customerId === localDoc.customerId && ['PENDING', 'PARTIAL', 'OVERDUE', 'CREDIT'].includes((i.status || '').toUpperCase()))
     : [];
 
   const setPaymentDocument = (kind: 'invoice' | 'creditNote', id: string) => {
@@ -468,6 +579,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       ? paymentLines.map((line, index) => index === 0 ? { ...line, amount } : line)
       : [{ ...currentLine, amount }];
     setPaymentLines(nextLines);
+    setPartialPaymentEnabled(false);
     setLocalDoc({
       ...localDoc,
       invoiceId: kind === 'invoice' ? id : '',
@@ -475,6 +587,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       amount,
       currency: currentLine.currency,
       exchangeRate: currentLine.exchangeRate,
+      dueDate: '',
     });
   };
 
@@ -521,13 +634,23 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     },
   ];
 
-  const rawMainMethod = groupedPayments.length > 0
-    ? Object.entries(groupedPayments.reduce((acc, p) => { const m = (p.method || 'TRANSFER').toUpperCase(); acc[m] = (acc[m] || 0) + 1; return acc; }, {} as Record<string, number>))
-      .sort(([, a], [, b]) => b - a)[0]?.[0] || 'SIN_DATOS'
-    : 'SIN_DATOS';
-  
-  const mainMethodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque', SIN_DATOS: 'Sin datos' };
-  const mainMethod = mainMethodMap[rawMainMethod] || 'Sin especificar';
+  const paymentMethodCounts = groupedPayments.reduce((acc, payment) => {
+    // Un pago mixto se representa como una fila agrupada en la tabla, pero sus
+    // métodos reales viven en `payments`. El KPI debe contar esas líneas y no
+    // la etiqueta sintética MIXED del grupo.
+    const movements = payment.payments?.length ? payment.payments : [payment];
+    movements
+      .filter((movement) => movement.isActive !== false)
+      .forEach((movement) => {
+        const method = String(movement.method || '').trim().toUpperCase();
+        if (method) acc[method] = (acc[method] || 0) + 1;
+      });
+    return acc;
+  }, {} as Record<string, number>);
+
+  const rawMainMethod = Object.entries(paymentMethodCounts)
+    .sort(([methodA, countA], [methodB, countB]) => countB - countA || methodA.localeCompare(methodB))[0]?.[0] || 'SIN_DATOS';
+  const mainMethod = rawMainMethod === 'SIN_DATOS' ? 'Sin datos' : paymentMethodLabel(rawMainMethod);
 
   const totalCollectedInDisplayCurrency = groupedPayments.reduce(
     (acc, payment) => acc + (payment.baseAmount !== null && payment.baseAmount !== undefined
@@ -558,6 +681,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const detailRate = Number(detailDocument?.exchangeRate || detailPayment?.exchangeRate || 1) || 1;
   const detailIsCreditSettled = Boolean(detailPayment?.creditNoteId || detailPayment?.creditNote)
     && String(detailPayment?.creditNote?.status || detailPayment?.invoice?.status || '').toUpperCase() === 'PAID';
+  const detailDocumentStatus = detailPayment?.invoice?.status || detailPayment?.creditNote?.status;
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if (isCreating && localDoc) {
@@ -565,7 +689,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setIsCreating(false); commitLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setIsCreating(false); commitLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); setPartialPaymentEnabled(false); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">Registrar Pago</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Completar datos del pago recibido</p>
@@ -574,7 +698,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="payments" context="form" />
             {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)}>
+            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || paymentChangeUnsupported || Boolean(cashRegisterId && (cashLoading || !cashSession)) || (Boolean(linkedPaymentDocument) && paymentRemainingBase > 0.01 && (!partialPaymentEnabled || !paymentPartialCreditFits || !localDoc.dueDate)) || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)}>
               Confirmar Pago
             </Button>
             )}
@@ -612,6 +736,12 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-3 text-xs text-muted-foreground sm:col-span-2">
                   Selecciona una o varias formas de pago. Cada línea puede llevar su propia moneda, banco y referencia.
                 </div>
+                {linkedPaymentDocument && <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-3 sm:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div><p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Liquidación del documento</p><p className="mt-1 text-xs text-muted-foreground">Puedes registrar solo una parte y completar el saldo después.</p></div>
+                  </div>
+                  {partialPaymentEnabled && <div className="mt-3 max-w-xs"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fecha límite del saldo restante</p><Input type="date" value={localDoc.dueDate || ''} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-9 text-xs" /></div>}
+                </div>}
               </div>
             </CardContent>
           </Card>
@@ -621,20 +751,33 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto</p>
               <div className="space-y-4">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
-                    <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                      <Switch
-                        checked={mixedPaymentEnabled}
-                        onCheckedChange={(checked) => {
-                          setMixedPaymentEnabled(checked);
-                          if (!checked) setPaymentLines((current) => current.slice(0, 1));
-                        }}
-                        aria-label="Activar pago mixto"
-                      />
-                      Pago mixto
-                    </label>
+                    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                      {linkedPaymentDocument && <label
+                        className={cn(
+                          'flex items-center gap-2 text-[10px] font-black uppercase tracking-widest',
+                          paymentPartialCreditFits ? 'cursor-pointer text-muted-foreground' : 'cursor-not-allowed text-muted-foreground/50',
+                        )}
+                        title={!paymentPartialCreditFits ? 'El saldo restante supera el crédito disponible del cliente' : undefined}
+                      >
+                        <Switch checked={paymentPartialActive} onCheckedChange={setPartialPaymentEnabled} disabled={!paymentPartialCreditFits} aria-label="Activar pago parcial" />
+                        Pago parcial
+                      </label>}
+                      <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        <Switch
+                          checked={mixedPaymentEnabled}
+                          onCheckedChange={(checked) => {
+                            setMixedPaymentEnabled(checked);
+                            if (!checked) setPaymentLines((current) => current.slice(0, 1));
+                          }}
+                          aria-label="Activar pago mixto"
+                        />
+                        Pago mixto
+                      </label>
+                    </div>
                   </div>
+                  {linkedPaymentDocument && paymentRemainingBase > 0.01 && !paymentPartialCreditFits && !paymentHasActiveCredit && <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">El saldo restante supera el crédito disponible del cliente. Reduce el monto del pago para habilitar Pago parcial.</p>}
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-start">
@@ -664,8 +807,15 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
                   <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
-                  {paymentChangeBase > 0.01 && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Cambio / vuelto</span><span className="font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(paymentChangeBase, baseCurrency)}</span></div>}
+                  {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className={cn("font-black uppercase tracking-widest", paymentSettlementLabel === 'Saldo restante' ? 'text-amber-600' : 'text-muted-foreground')}>{paymentSettlementLabel}</span><span className={cn("font-black", paymentSettlementLabel === 'Saldo restante' ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentSettlementLabel === 'Saldo restante' ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</span></div>}
+                  {!linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Destino</span><span className="font-black text-muted-foreground">Anticipo de cliente</span></div>}
+                  {paymentChangeBase > 0.01 && <p className={cn("rounded-lg px-3 py-2 text-[10px] font-bold", paymentChangeUnsupported ? 'bg-rose-500/10 text-rose-600' : 'bg-emerald-500/10 text-emerald-600')}>{paymentChangeUnsupported ? 'No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe ser efectivo.' : `Vuelto a entregar: ${formatConvertedAmount(paymentChangeBase, baseCurrency)} · efectivo disponible: ${formatConvertedAmount(paymentCashBase, baseCurrency)}`}</p>}
                 </div>
+                {linkedPaymentDocument && <div className="space-y-2 rounded-xl border border-border/60 bg-muted/10 p-3">
+                  <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Caja (opcional)</p>{cashSession && <span className="text-[10px] font-black text-emerald-600">Abierta</span>}</div>
+                  {cashRegisters.length > 0 ? <Select value={cashRegisterId || '__none__'} onValueChange={(value) => setCashRegisterId(value === '__none__' ? '' : value)} disabled={cashLoading}><SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Selecciona la caja donde se recibió el pago" /></SelectTrigger><SelectContent><SelectItem value="__none__">Sin caja</SelectItem>{cashRegisters.map((register) => <SelectItem key={register.id} value={register.id}>{register.name} · {register.code}</SelectItem>)}</SelectContent></Select> : <p className="text-[10px] font-medium text-muted-foreground">Sin caja abierta. El pago se registrará sin movimiento en Control de Caja.</p>}
+                  {cashRegisterId && !cashSession && !cashLoading && <p className="text-[10px] text-rose-600">La caja seleccionada no tiene una sesión abierta disponible.</p>}
+                </div>}
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Notas</p>
                   <textarea value={localDoc.notes} onChange={(e) => setLocalDoc({ ...localDoc, notes: e.target.value })}
@@ -711,7 +861,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         </div>
         <EditableDataTable data={filteredData}
           pagination={pagination}
-          columns={columns} onRowUpdate={handleUpdate} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           showSelection={false}
           layoutMode={layoutMode}
           highlightedRowId={highlightedAlertId}
@@ -724,7 +874,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       </div>
 
       <Sheet open={Boolean(detailPayment)} onOpenChange={(open) => { if (!open) setDetailPayment(null); }}>
-        <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-xl">
+        <SheetContent side="right" className="erp-detail-panel erp-detail-panel--compact flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
           <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="sales-payment-detail-title">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Wallet className="size-5" /></div>
@@ -739,9 +889,10 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
               <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto recibido</p>
                 <p className="mt-1 text-3xl font-black tabular-nums text-primary">{formatConvertedAmount(Number(detailPayment.amount || 0), detailPayment.currency, detailPayment.exchangeRate)}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold tracking-wider text-muted-foreground">
                   <Badge className={cn('border-none', detailIsCreditSettled ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-600')}>{detailIsCreditSettled ? 'Cancelado' : 'Registrado'}</Badge>
                   <Badge variant="outline" className="border-primary/20 text-primary">{detailPayment.paymentLabel || 'Pago único'}</Badge>
+                  {detailDocumentStatus && <Badge variant="outline" className="border-amber-500/30 text-amber-700 dark:text-amber-300">Estado: {formatPaymentStatus(detailDocumentStatus)}</Badge>}
                   <span>Moneda: {currencyLabels[String(detailPayment.currency || baseCurrency).toUpperCase()] || 'No especificada'}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { 
-  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft
+  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft, Ban
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -35,6 +35,7 @@ import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehou
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { normalizeSalesExtraCharges, getSalesExtraChargesPayload, getSalesExtraChargesAmount, getLegacySalesExtraCostFields, type SalesExtraChargeLine } from '../../utils/salesCharges';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -55,6 +56,7 @@ const statusOptions = [
   { label: 'Activa',     value: 'ACTIVE',  color: SALES_STATUS_COLORS.ACTIVE },
   { label: 'Pausada',    value: 'PAUSED',  color: SALES_STATUS_COLORS.PAUSED },
   { label: 'Finalizada', value: 'EXPIRED', color: SALES_STATUS_COLORS.EXPIRED },
+  { label: 'Cancelada',  value: 'CANCELLED', color: SALES_STATUS_COLORS.CANCELLED },
 ];
 
 const frequencyOptions = [
@@ -196,6 +198,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     };
   };
 
+  const getRecurringAdditionalChargesAmount = (doc: any = localDoc) => (
+    getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0))
+  );
+
   const filtered = data.filter(r =>
     (statusFilter === 'ALL' || String(r.status || '').toUpperCase() === statusFilter) &&
     ((r as any).profileName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -244,6 +250,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
        subtotal: 0,
       discountAmount: 0,
       taxAmount: 0,
+      extraCharges: [],
+      extraCostDescription: null,
+      extraCostAmount: 0,
+      deliveryDescription: null,
+      deliveryAmount: 0,
       total: 0,
     });
     setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
@@ -313,7 +324,27 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const gross = Number(it.quantity || 0) * Number(it.unitPrice || 0);
       return acc + (gross - gross * Number(it.discount || 0) / 100) * Number(it.taxRate || 0) / 100;
     }, 0);
-    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irRate: 0, irAmount: 0, total: base + taxAmount };
+    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irRate: 0, irAmount: 0, total: base + taxAmount + getRecurringAdditionalChargesAmount() };
+  };
+
+  const updateRecurringExtraCharges = (charges: SalesExtraChargeLine[]) => {
+    if (!localDoc) return;
+    const payload = getSalesExtraChargesPayload({ extraCharges: charges });
+    const legacyFields = getLegacySalesExtraCostFields(payload);
+    const nextDoc = { ...localDoc, extraCharges: charges, ...legacyFields };
+    const lineTotal = Number(localDoc.total || 0) - getRecurringAdditionalChargesAmount(localDoc);
+    setLocalDoc({ ...nextDoc, total: lineTotal + getRecurringAdditionalChargesAmount(nextDoc) });
+  };
+
+  const updateRecurringDelivery = (updates: { deliveryDescription?: string | null; deliveryAmount?: number }) => {
+    if (!localDoc) return;
+    const nextDoc = {
+      ...localDoc,
+      ...updates,
+      deliveryAmount: Math.max(0, Number(updates.deliveryAmount ?? localDoc.deliveryAmount ?? 0)),
+    };
+    const lineTotal = Number(localDoc.total || 0) - getRecurringAdditionalChargesAmount(localDoc);
+    setLocalDoc({ ...nextDoc, total: lineTotal + getRecurringAdditionalChargesAmount(nextDoc) });
   };
 
   useEffect(() => {
@@ -399,6 +430,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
 
     try {
       if (isCreating) {
+        const extraCharges = getSalesExtraChargesPayload(localDoc);
+        const legacyExtraFields = getLegacySalesExtraCostFields(extraCharges);
         const created = await recurringInvoicesService.create({
           customerId: localDoc.customerId,
           frequency: localDoc.frequency,
@@ -413,6 +446,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           discountAmount: localDoc.discountAmount,
           taxAmount: localDoc.taxAmount,
           total: localDoc.total,
+          extraCharges,
+          ...legacyExtraFields,
+          deliveryDescription: String(localDoc.deliveryDescription || '').trim() || null,
+          deliveryAmount: Math.max(0, Number(localDoc.deliveryAmount || 0)),
            status: 'ACTIVE',
            warehouseId: localDoc.warehouseId || null,
          } as any);
@@ -531,6 +568,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     }];
   // ─── INLINE EDITOR ─────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
+    const recurringStatus = String(localDoc.status || '').toUpperCase();
+    const canEditDocument = isCreating || ['ACTIVE', 'PAUSED'].includes(recurringStatus);
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -543,10 +582,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           </div>
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="recurring" context="form" />
-            {canPerform('SALES_RECURRING', 'edit') && (
+            {canEditDocument && canPerform('SALES_RECURRING', 'edit') && (
               <>
-                {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => { try { await recurringInvoicesService.delete(localDoc.id); clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); commitLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
+                {!isCreating && ['ACTIVE', 'PAUSED'].includes(String(localDoc?.status || '').toUpperCase()) && canPerform('SALES_RECURRING', 'delete') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={async () => { if (!window.confirm('¿Cancelar esta factura recurrente? Se conservarán el contrato y las facturas ya generadas.')) return; try { await recurringInvoicesService.cancel(localDoc.id); clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); commitLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo cancelar'); } }}><Ban className="size-3 mr-2" /> Cancelar</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   Guardar Factura Recurrente
                 </Button>
@@ -554,7 +593,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             )}
           </div>
         </div>
+        {!canEditDocument && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">Esta programación ya finalizó o fue cancelada. Se muestra en modo consulta y las facturas ya generadas se conservan.</div>}
 
+        <fieldset disabled={!canEditDocument} className="contents">
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
             <CardContent className="p-6 space-y-3">
@@ -650,6 +691,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                   }} /> Aplicar 15%</label>}
                   {formatConvertedAmount(Number(localDoc?.taxAmount || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}
                 </div></div>
+                {getSalesExtraChargesPayload(localDoc).map((charge, index) => <div key={`extra-summary-${index}`} className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}</span><span>{formatConvertedAmount(Number(charge.amount || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>)}
+                {Number(localDoc?.deliveryAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.deliveryDescription || 'Delivery'}</span><span>{formatConvertedAmount(Number(localDoc.deliveryAmount || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>}
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50"><span className="font-black">Total por Ciclo</span>
                   <span className="text-primary font-black text-lg">{formatConvertedAmount(Number(localDoc?.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
               </div>
@@ -666,6 +709,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                 const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', serviceName: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0 }];
                 setLocalDoc({ ...localDoc, items: newItems });
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border border-primary/20"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
+                <Button type="button" variant="outline" size="sm" onClick={() => updateRecurringExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Coste extra</Button>
+                <Button type="button" variant="outline" size="sm" disabled={Number(localDoc?.deliveryAmount || 0) > 0 || Boolean(String(localDoc?.deliveryDescription || '').trim())} onClick={() => updateRecurringDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Delivery</Button>
               </div>
             </div>
             <div className="space-y-2">
@@ -759,11 +804,22 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               })}
               {(!localDoc.items || localDoc.items.length === 0) && <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">Sin ítems. Haz clic en "Agregar Item".</div>}
             </div>
+            {(normalizeSalesExtraCharges(localDoc).length > 0 || String(localDoc?.deliveryDescription || '').trim() || Number(localDoc?.deliveryAmount || 0) > 0) && <div className="mt-6 grid gap-3 border-t border-border/50 pt-5 md:grid-cols-2">
+              {normalizeSalesExtraCharges(localDoc).map((charge, index) => <div key={charge.id} className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra {index + 1}</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label={`Eliminar coste extra ${index + 1}`} onClick={() => updateRecurringExtraCharges(normalizeSalesExtraCharges(localDoc).filter((entry) => entry.id !== charge.id))}><Trash2 className="size-3.5" /></Button></div>
+                <div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={charge.description} placeholder="Descripción" onChange={(event) => updateRecurringExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, description: event.target.value } : entry))} /><Input type="number" min="0" step="0.01" value={charge.amount || ''} placeholder="Monto" onChange={(event) => updateRecurringExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, amount: Math.max(0, Number(event.target.value) || 0) } : entry))} /></div>
+              </div>)}
+              {(String(localDoc?.deliveryDescription || '').trim() || Number(localDoc?.deliveryAmount || 0) > 0) && <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label="Eliminar delivery" onClick={() => updateRecurringDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button></div>
+                <div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={localDoc.deliveryDescription || ''} placeholder="Descripción del delivery" onChange={(event) => updateRecurringDelivery({ deliveryDescription: event.target.value })} /><Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} placeholder="Monto" onChange={(event) => updateRecurringDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} /></div>
+              </div>}
+            </div>}
           </CardContent>
         </Card>
   
       
-    </div>
+        </fieldset>
+      </div>
   );
 }
 
@@ -795,13 +851,15 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         </div>
         <EditableDataTable data={filtered}
           pagination={pagination}
-          onBulkDelete={async (ids) => { const deleteToastId = toast.loading(`Eliminando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados', { id: deleteToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); } }}
+          bulkAction="cancel"
+          isRowSelectable={(row) => ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())}
+          onBulkDelete={async (ids) => { const cancelToastId = toast.loading(`Cancelando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.cancel(id as string); } toast.success('Facturas recurrentes canceladas', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron cancelar', { id: cancelToastId }); } }}
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailRecurring(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-               {canPerform('SALES_RECURRING', 'edit') && (
+               {canPerform('SALES_RECURRING', 'edit') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
                  (row.status||'').toUpperCase() === 'ACTIVE' ? (
                    <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 transition-colors"><Pause className="size-4" /></Button>
                  ) : (
@@ -809,8 +867,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                  )
                )}
                <Button title="Ver factura recurrente completa" aria-label="Ver factura recurrente completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailRecurring(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
-               {canPerform('SALES_RECURRING', 'delete') && (
-                 <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+               {canPerform('SALES_RECURRING', 'delete') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
+                 <Button title="Cancelar factura recurrente" aria-label="Cancelar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
                )}
             </div>
           )}
@@ -832,18 +890,18 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       <ConfirmDialog
               open={pendingDeleteId !== null}
               onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-              title={"¿Eliminar factura recurrente?"}
-              description="¿Estás seguro de que deseas eliminar esta factura recurrente? Esta acción no se puede deshacer."
-              confirmLabel="Eliminar"
+              title={"¿Cancelar factura recurrente?"}
+              description="La programación quedará cancelada y se conservarán tanto el contrato como las facturas ya generadas."
+              confirmLabel="Cancelar factura"
               variant="destructive"
               loading={deleteLoading}
               onConfirm={async () => {
                 if (!pendingDeleteId) return;
-                const deleteToastId = toast.loading('Eliminando factura recurrente...');
+                const deleteToastId = toast.loading('Cancelando factura recurrente...');
                 try {
                   setDeleteLoading(true);
-                   await recurringInvoicesService.delete(pendingDeleteId);
-                   toast.success('Factura recurrente eliminada', { id: deleteToastId });
+                   await recurringInvoicesService.cancel(pendingDeleteId);
+                   toast.success('Factura recurrente cancelada', { id: deleteToastId });
                    clearSalesEditorDraft(salesDraftStorageKey);
                    localDocRef.current = null;
                    setEditingId(null);
@@ -851,9 +909,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                 } catch (error: any) {
                    const msg = error?.response?.data?.message || error?.message || '';
                   if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-                    toast.error('No se puede eliminar: tiene dependencias en el sistema.', { id: deleteToastId });
+                    toast.error('No se puede cancelar esta programación.', { id: deleteToastId });
                   } else {
-                    toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`, { id: deleteToastId });
+                    toast.error(`Error al cancelar: ${msg || 'Error desconocido'}`, { id: deleteToastId });
                   }
                 } finally {
                   setDeleteLoading(false);

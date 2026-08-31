@@ -603,6 +603,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     canCreate={false}
                     canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
                     canDelete={false}
+                    canExport={canPerform('FINANCIAL_INCOMES', 'export')}
                     detailsRenderer={renderIncomeDetails}
                     targetItemId={targetFinanceId?.tab === 'ingresos' ? targetFinanceId.id : null}
                     onClearTargetItem={() => setTargetFinanceId(null)}
@@ -627,6 +628,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     canCreate={false}
                     canEdit={canPerform('FINANCIAL_EXPENSES', 'edit')}
                     canDelete={false}
+                    canExport={canPerform('FINANCIAL_EXPENSES', 'export')}
                     targetItemId={targetFinanceId?.tab === 'gastos' ? targetFinanceId.id : null}
                     onClearTargetItem={() => setTargetFinanceId(null)}
                   />
@@ -656,6 +658,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           canCreate={false}
                           canEdit={false}
                           canDelete={false}
+                          canExport={canPerform('FINANCIAL_INCOMES_REC', 'export')}
                         />
                       </div>
                       <div>
@@ -671,6 +674,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           canCreate={false}
                           canEdit={false}
                           canDelete={false}
+                          canExport={canPerform('FINANCIAL_EXPENSES_REC', 'export')}
                         />
                       </div>
                     </div>

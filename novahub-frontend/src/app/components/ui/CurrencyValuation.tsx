@@ -1,5 +1,6 @@
 import { Clock3, TrendingUp } from 'lucide-react';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { formatExchangeRate } from '../../utils/currency';
 import { cn } from './utils';
 
 interface CurrencyValuationAmountProps {
@@ -68,7 +69,7 @@ export function CurrencyValuationAmount({
       {showRate && (
         <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-semibold text-muted-foreground">
           <Clock3 className="size-3 shrink-0" />
-          Tasa histórica: {hasHistoricalRate ? rateValue.toFixed(4) : `${exchangeRate.toFixed(4)} (vigente)`}
+          Tasa histórica: {hasHistoricalRate ? formatExchangeRate(rateValue) : `${formatExchangeRate(exchangeRate)} (vigente)`}
         </span>
       )}
       {shouldShowLegend && (
@@ -108,9 +109,9 @@ export function CurrencyValuationBanner({ className, compact = false }: Currency
       <span className="shrink-0 uppercase tracking-wider">{valuationModeLabel}</span>
       <span className="min-w-0 truncate font-medium text-muted-foreground">
         {compact
-          ? `${displayModeLabel}${displayMode === 'ORIGINAL' ? '' : ` · ${displayCurrency}`} · tasa ${exchangeRate.toFixed(4)}`
+          ? `${displayModeLabel}${displayMode === 'ORIGINAL' ? '' : ` · ${displayCurrency}`} · tasa ${formatExchangeRate(exchangeRate)}`
           : isCurrent
-            ? `${displayMode === 'ORIGINAL' ? 'Moneda original' : `Importes en ${displayCurrency}`} con tasa vigente ${exchangeRate.toFixed(4)}; no modifica documentos.`
+            ? `${displayMode === 'ORIGINAL' ? 'Moneda original' : `Importes en ${displayCurrency}`} con tasa vigente ${formatExchangeRate(exchangeRate)}; no modifica documentos.`
             : `${displayMode === 'ORIGINAL' ? 'Moneda original' : `Importes en ${displayCurrency}`} · base ${baseCurrency}.`}
       </span>
     </div>
@@ -137,7 +138,7 @@ export function CurrencyRateDetails({ sourceCurrency, sourceExchangeRate, classN
         {hasHistoricalRate ? 'Tasa histórica' : 'Tasa de referencia'}
       </span>
       <span className="font-mono tabular-nums">
-        {hasHistoricalRate ? parsedRate.toFixed(4) : `${exchangeRate.toFixed(4)} vigente`}
+        {hasHistoricalRate ? formatExchangeRate(parsedRate) : `${formatExchangeRate(exchangeRate)} vigente`}
       </span>
       <span>· origen {normalizedSource} · base {baseCurrency}</span>
     </div>

@@ -58,6 +58,9 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
     return hasAccess && (!tab.superOnly || isSuperAdmin);
   }), [user, canPerform]);
 
+  const activeReportTab = REPORT_TAB_CONFIG.find((tab) => tab.id === activeTab);
+  const canExportActiveReport = Boolean(activeReportTab && canPerform(activeReportTab.module, 'export'));
+
   useEffect(() => {
     if (visibleReportTabs.length > 0 && !visibleReportTabs.some((tab) => tab.id === activeTab)) {
       const fallback = visibleReportTabs[0].id;
@@ -81,6 +84,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   };
 
   const handleExportPDF = () => {
+    if (!canExportActiveReport) return;
     switch (activeTab) {
       case 'reportes-financieros': financeRef.current?.exportPDF(); break;
       case 'reportes-ventas': salesRef.current?.exportPDF(); break;
@@ -93,7 +97,13 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
     }
   };
 
+  const handleReportTabChange = (value: string) => {
+    if (!visibleReportTabs.some((tab) => tab.id === value)) return;
+    handleTabChange(value);
+  };
+
   const handleExportExcel = () => {
+    if (!canExportActiveReport) return;
     switch (activeTab) {
       case 'reportes-financieros': financeRef.current?.exportExcel(); break;
       case 'reportes-ventas': salesRef.current?.exportExcel(); break;
@@ -139,10 +149,10 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <SelectItem value="todo">Histórico completo</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={handleExportPDF} className="gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={!canExportActiveReport} className="gap-2">
             <Download className="w-4 h-4" /> PDF
           </Button>
-          <Button variant="default" size="sm" onClick={handleExportExcel} className="gap-2">
+          <Button variant="default" size="sm" onClick={handleExportExcel} disabled={!canExportActiveReport} className="gap-2">
             <FileSpreadsheet className="w-4 h-4" /> Excel
           </Button>
         </div>
@@ -150,7 +160,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
       <CurrencyValuationBanner />
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+      <Tabs value={activeTab} onValueChange={handleReportTabChange} className="w-full">
         <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {visibleReportTabs.map((tab) => {
             return (

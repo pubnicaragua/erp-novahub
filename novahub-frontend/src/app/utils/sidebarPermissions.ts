@@ -48,10 +48,16 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Productos, Servicios, Ajustes, Auditorías y Pérdidas son vistas del
   // mismo catálogo/control de inventario y usan sus permisos existentes.
   { id: 'INVENTORY_PRODUCTS', label: 'Productos', parent: 'INVENTORY' },
+  { id: 'INVENTORY_SERVICES', label: 'Servicios', parent: 'INVENTORY' },
+  { id: 'INVENTORY_ATTRIBUTES', label: 'Atributos y categorías', parent: 'INVENTORY' },
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
   { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', parent: 'INVENTORY' },
   { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', parent: 'INVENTORY' },
   { id: 'INVENTORY_MOVEMENTS', label: 'Movimientos', parent: 'INVENTORY' },
+  { id: 'INVENTORY_AUDITS', label: 'Auditorías', parent: 'INVENTORY' },
+  { id: 'INVENTORY_LOSSES', label: 'Pérdidas', parent: 'INVENTORY' },
+  { id: 'INVENTORY_ASSETS', label: 'Mobiliario y equipos', parent: 'INVENTORY' },
+  { id: 'INVENTORY_CONFIG', label: 'Configuración de inventario', parent: 'INVENTORY' },
 
   // Finanzas
   { id: 'FINANCIAL_DASHBOARD', label: 'Resumen Financiero', parent: 'FINANCIAL' },
@@ -163,7 +169,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   empleados: ['HR_EMPLOYEES'],
   departamentos: ['HR_EMPLOYEES'],
   nominas: ['HR_PAYROLL'],
-  comisiones: ['HR_PAYROLL'],
+  comisiones: ['HR_COMMISSIONS'],
   asistencia: ['HR_ATTENDANCE'],
   ausencias: ['HR_LEAVES'],
   evaluaciones: ['HR_PERFORMANCE'],
@@ -173,25 +179,27 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
 
   'resumen-financiero': ['FINANCIAL_DASHBOARD'],
   'caja-bancos': ['FINANCIAL_BANK', 'FINANCIAL_DASHBOARD'],
-  'cuentas-cobrar': ['FINANCIAL_INCOMES'],
-  'cuentas-pagar': ['FINANCIAL_EXPENSES'],
+  'cuentas-cobrar': ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES'],
+  'cuentas-pagar': ['FINANCIAL_PAYABLES', 'FINANCIAL_EXPENSES'],
   ingresos: ['FINANCIAL_INCOMES'],
   egresos: ['FINANCIAL_EXPENSES'],
   'movimientos-recurrentes': ['FINANCIAL_EXPENSES_REC'],
-  'calendario-financiero': ['FINANCIAL_DASHBOARD'],
-  'analisis-ingresos-gastos': ['FINANCIAL_REPORTS', 'FINANCIAL_BALANCE'],
+  'calendario-financiero': ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD'],
+  'analisis-ingresos-gastos': ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   'balance-general': ['FINANCIAL_BALANCE'],
-  'finanzas:perdidas': ['FINANCIAL_EXPENSES'],
+  'finanzas:perdidas': ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
 
   productos: ['INVENTORY_PRODUCTS'],
-  servicios: ['INVENTORY_PRODUCTS'],
+  servicios: ['INVENTORY_SERVICES', 'INVENTORY_PRODUCTS'],
+  atributos: ['INVENTORY_ATTRIBUTES', 'INVENTORY_PRODUCTS'],
   almacenes: ['INVENTORY_WAREHOUSES'],
   transferencias: ['INVENTORY_TRANSFERS'],
   ajustes: ['INVENTORY_ADJUSTMENTS'],
-  auditorias: ['INVENTORY_ADJUSTMENTS'],
-  'inventario:perdidas': ['INVENTORY_ADJUSTMENTS'],
+  auditorias: ['INVENTORY_AUDITS', 'INVENTORY_ADJUSTMENTS'],
+  'inventario:perdidas': ['INVENTORY_LOSSES', 'INVENTORY_ADJUSTMENTS'],
+  'mobiliario-equipos': ['INVENTORY_ASSETS'],
   movimientos: ['INVENTORY_MOVEMENTS'],
-  'inventario:configuracion': ['INVENTORY_WAREHOUSES'],
+  'inventario:configuracion': ['INVENTORY_CONFIG', 'INVENTORY_WAREHOUSES'],
 
   alertas: ['NOTIFICATIONS_ALERTS'],
   mensajes: ['NOTIFICATIONS_MESSAGES'],
@@ -245,6 +253,12 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   configuracion: ['ACCOUNTING_CONFIG'],
 };
 
+/** Vistas diferidas: permanecen implementadas, pero no se exponen todavía. */
+export const HIDDEN_DEFERRED_SALES_VIEW_IDS = new Set(['entregas']);
+
+/** Alias para impedir que permisos históricos vuelvan a mostrarse en Roles. */
+export const HIDDEN_PERMISSION_MODULE_IDS = new Set(['ENTREGAS', 'SALES_DELIVERIES']);
+
 /** Permiso exacto de cada vista del sidebar. Puede diferir del módulo que habilita la suscripción. */
 export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'cuentas-cobrar': ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES'],
@@ -252,6 +266,14 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'calendario-financiero': ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD'],
   'analisis-ingresos-gastos': ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   'finanzas:perdidas': ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
+  'rh:comisiones': ['HR_COMMISSIONS'],
+  'inventario:productos': ['INVENTORY_PRODUCTS'],
+  'inventario:servicios': ['INVENTORY_SERVICES', 'INVENTORY_PRODUCTS'],
+  'inventario:atributos': ['INVENTORY_ATTRIBUTES', 'INVENTORY_PRODUCTS'],
+  'inventario:auditorias': ['INVENTORY_AUDITS', 'INVENTORY_ADJUSTMENTS'],
+  'inventario:perdidas': ['INVENTORY_LOSSES', 'INVENTORY_ADJUSTMENTS'],
+  'inventario:mobiliario-equipos': ['INVENTORY_ASSETS'],
+  'inventario:configuracion': ['INVENTORY_CONFIG', 'INVENTORY_WAREHOUSES'],
 };
 
 /** Tabs internos que no son entradas propias del sidebar, pero sí requieren autorización individual. */

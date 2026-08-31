@@ -39,7 +39,6 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
-import { CurrencySelector } from '../ui/CurrencySelector';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -47,6 +46,7 @@ import { getPurchaseOrderStatusOption, normalizePurchaseOrderStatus, PURCHASE_OR
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
+import { getPurchaseOrderOriginBadge } from '../../utils/document-origin-badges';
 
 interface Props {
   data: PurchaseOrder[];
@@ -163,6 +163,7 @@ interface PurchaseImportPreviewProps {
   progress: number;
   currency: string;
   importCurrency: string;
+  warehouseName?: string;
   conversionRate?: number;
   categoryOptions: any[];
   exchangeRate?: number;
@@ -177,7 +178,7 @@ interface PurchaseImportPreviewProps {
   onBack: () => void;
 }
 
-function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, importing, progress, currency, importCurrency, conversionRate, categoryOptions, exchangeRate, taxOptions, withholdingOptions, onRowUpdate, onCategoryChange, onCreateCategory, onImportCurrencyChange, onDownloadErrors, onConfirm, onBack }: PurchaseImportPreviewProps) {
+function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, importing, progress, currency, importCurrency, warehouseName, conversionRate, categoryOptions, exchangeRate, taxOptions, withholdingOptions, onRowUpdate, onCategoryChange, onCreateCategory, onImportCurrencyChange, onDownloadErrors, onConfirm, onBack }: PurchaseImportPreviewProps) {
   useImportPreviewLayout();
   const validRows = rows.filter((row) => !row._hasError).length;
   const errorRows = rows.filter((row) => row._hasError).length;
@@ -241,10 +242,10 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           <ImportPreviewField label="Stock actual"><div className="flex h-9 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-black text-primary">{row.currentStock ?? '—'}</div></ImportPreviewField>
           <ImportPreviewField label="Aviso / vínculo" className="sm:col-span-2"><div className="space-y-2"><p className={`break-words text-xs ${row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}`}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</p>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo</option></select>}</div></ImportPreviewField>
           <ImportPreviewField label="Descripción *" className="sm:col-span-2"><Input value={row.description} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={`${importPreviewFieldClass} ${!row.description ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label="Nota comercial"><div><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><p className="mt-1 text-[10px] text-muted-foreground">{Array.from(row.commercialNoteSnapshot || '').length}/100</p></div></ImportPreviewField>
+          <ImportPreviewField label="Notas"><div><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><p className="mt-1 text-[10px] text-muted-foreground">{Array.from(row.commercialNoteSnapshot || '').length}/100</p></div></ImportPreviewField>
           <ImportPreviewField label="Categoría" className="sm:col-span-2"><div className="flex min-w-0 items-center gap-1"><select aria-label={`Categoría de ${row.sku || `fila ${index + 1}`}`} value={categoryValue} onChange={(event) => onCategoryChange(index, event.target.value === '__none__' ? '' : event.target.value)} className={`${importPreviewFieldClass} min-w-0 flex-1 ${row._hasError ? 'border-red-500' : matchingCategory ? '' : 'border-amber-500/70 text-amber-700'}`} disabled={importing}><option value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'}</option>{categoryOptions.filter((category: any) => category.isActive !== false).map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg border-amber-500/50 p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button></div></ImportPreviewField>
           <ImportPreviewField label="Cantidad"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label={`Precio unitario (${currencySymbol})`}><Input type="number" min={0} step="any" value={row.unitPrice} onChange={(event) => onRowUpdate(index, 'unitPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label={`Precio unitario (${currencySymbol})`}><Input type="text" inputMode="decimal" value={String(row.unitPrice ?? '')} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Tipo IVA"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="">Seleccionar IVA</option>{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
           <ImportPreviewField label={`Base IVA (${currencySymbol})`}><Input type="number" value={isTaxExempt(taxValue) ? 0 : tax.taxBase} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
           <ImportPreviewField label="IVA %"><Input type="number" value={tax.taxRate} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
@@ -284,6 +285,9 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
               <option value="USD">USD · Dólares</option>
             </select>
             {importCurrencyCode !== currencyCode && <span className="text-muted-foreground">Se convirtió a {currencyCode} · tasa {Number(conversionRate || exchangeRate || 1).toFixed(2)} NIO/USD</span>}
+            <span className="h-4 w-px bg-primary/20" />
+            <span className="font-black uppercase tracking-wider text-primary">Bodega destino</span>
+            <Badge variant="outline" className="max-w-full truncate border-primary/30 bg-background font-black text-primary" title={warehouseName || undefined}>{warehouseName || 'La seleccionada en la orden'}</Badge>
           </div>
         </div>
 
@@ -308,7 +312,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                 <TableHead className="w-36 text-[10px] uppercase">SKU</TableHead>
                 <TableHead className="min-w-[300px] text-[10px] uppercase">Aviso / vínculo</TableHead>
                 <TableHead className="min-w-[240px] text-[10px] uppercase">Descripción</TableHead>
-                <TableHead className="w-44 text-[10px] uppercase">Nota comercial</TableHead>
+                <TableHead className="w-44 text-[10px] uppercase">Notas</TableHead>
                 <TableHead className="w-40 text-[10px] uppercase">Categoría</TableHead>
                 <TableHead className="w-24 text-right text-[10px] uppercase">Stock actual</TableHead>
                 <TableHead className="w-28 text-right text-[10px] uppercase">Cantidad</TableHead>
@@ -363,7 +367,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                   </TableCell>
                   <TableCell className="p-1 text-right text-xs font-black text-primary">{row.currentStock ?? '—'}</TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className="h-8 border-2 border-border bg-background text-right text-xs shadow-sm" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} step="any" value={row.unitPrice} onChange={(event) => onRowUpdate(index, 'unitPrice', event.target.value)} className="h-8 border-2 border-primary/30 bg-background text-right text-xs shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={String(row.unitPrice ?? '')} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className="h-8 border-2 border-primary/30 bg-background text-right text-xs shadow-sm" /></TableCell>
                   <TableCell className="p-1"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="">Seleccionar IVA</option>{taxValue && !taxOptionExists && <option value={taxValue}>{taxValue}</option>}{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
                   <TableCell className="p-1"><Input type="number" value={isTaxExempt(taxValue) ? 0 : tax.taxBase} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
                   <TableCell className="p-1"><Input type="number" value={tax.taxRate} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
@@ -490,6 +494,14 @@ const formatInputNumber = (value: unknown) => {
   return String(value);
 };
 
+const normalizePurchaseDecimalInput = (value: unknown) => {
+  const raw = String(value ?? '').replace(',', '.');
+  const cleaned = raw.replace(/[^\d.]/g, '');
+  const dotIndex = cleaned.indexOf('.');
+  if (dotIndex < 0) return cleaned;
+  return `${cleaned.slice(0, dotIndex)}.${cleaned.slice(dotIndex + 1).replace(/\./g, '')}`;
+};
+
 const formatInputInteger = (value: unknown) => {
   if (value === '' || value === null || value === undefined) return '';
   const numeric = Number(value);
@@ -504,7 +516,7 @@ const normalizeProductCode = (product: any) => String(product?.code || product?.
 
 export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-orders-layout', 'table', 24 * 365);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
@@ -669,7 +681,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         sku && product && forceManualSku ? 'SKU coincide con inventario; escribe otro SKU para crear un producto nuevo' : '',
       ].filter(Boolean);
 
-      const commercialNoteSnapshot = String(linkedProduct?.commercialNote || row.commercialNoteSnapshot || '').trim();
+      // Si el archivo trae una nota explícita, prevalece sobre la nota del
+      // catálogo. La nota del producto solo sirve como valor de respaldo.
+      const commercialNoteSnapshot = String(row.commercialNoteSnapshot || linkedProduct?.commercialNote || '').trim();
       const noteLength = Array.from(commercialNoteSnapshot).length;
       const noteError = noteLength > 100 ? 'La nota comercial no puede superar los 100 caracteres' : '';
 
@@ -765,7 +779,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   }, [products]);
 
   const handleDownloadPurchaseTemplate = useCallback(() => {
-    const headers = ['SKU', 'Descripción', 'Nota comercial', 'Categoría', 'Cantidad', 'Precio unitario', 'Tipo IVA', 'Base IVA', 'Tasa IVA', 'Retención', 'Base retención', 'Tasa retención'];
+    const headers = ['SKU', 'Descripción', 'Notas', 'Categoría', 'Cantidad', 'Precio unitario', 'Tipo IVA', 'Base IVA', 'Tasa IVA', 'Retención', 'Base retención', 'Tasa retención'];
     const exampleProduct = products[0];
     // taxOptions/withholdingOptions ya contienen el catálogo del tenant; solo
     // contienen los respaldos cuando el catálogo aún no responde.
@@ -777,7 +791,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       : 'No hay opciones activas configuradas';
     const ws = XLSX.utils.aoa_to_sheet([
       headers,
-      [exampleProduct?.code || 'SKU-001', exampleProduct?.name || 'Producto de ejemplo', exampleProduct?.commercialNote || 'Nota comercial de ejemplo', exampleProduct?.category?.name || exampleProduct?.category || 'Categoría', 1, Number(exampleProduct?.costPrice || exampleProduct?.cost || 0), exampleTax.name, '', exampleTax.rate, 'Sin retención', '', 0],
+      [exampleProduct?.code || 'SKU-001', exampleProduct?.name || 'Producto de ejemplo', exampleProduct?.commercialNote || 'Nota de la línea', exampleProduct?.category?.name || exampleProduct?.category || 'Categoría', 1, Number(exampleProduct?.costPrice || exampleProduct?.cost || 0), exampleTax.name, '', exampleTax.rate, 'Sin retención', '', 0],
     ]);
     ws['!cols'] = headers.map((header) => ({ wch: Math.max(13, Math.min(30, header.length + 3)) }));
     const guide = XLSX.utils.aoa_to_sheet([
@@ -786,7 +800,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       ['Campo', 'Regla'],
       ['SKU', 'Obligatorio. Si existe en el inventario, se vinculará automáticamente; si se repite en el archivo se marcará como error.'],
       ['Descripción / Categoría', 'Si el SKU existe, se completan desde inventario cuando estén vacíos. Para un SKU no encontrado, ambos campos son obligatorios y se agregará como producto nuevo al recepcionar.'],
-      ['Nota comercial', 'Opcional. Máximo 100 caracteres; se conservará como nota de la línea y se mostrará en ventas, compras y factura.'],
+      ['Notas', 'Opcional. Es la nota de la línea del producto; máximo 100 caracteres. Si se deja vacía y el SKU existe, se usará la nota del catálogo como respaldo.'],
+      ['Bodega destino', `No se captura por fila. Todos los productos se agregarán a la bodega seleccionada en la orden actual: ${availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name || 'la bodega seleccionada en el formulario'}.`],
       ['Cantidad / Precio unitario', 'La cantidad debe ser mayor que cero y el precio no puede ser negativo.'],
       ['Tipo IVA / Base IVA / Tasa IVA', 'Escribe el nombre en español de una opción configurada. La base y la tasa se calculan automáticamente según la cantidad, el precio y la opción seleccionada; no son editables.'],
       ['Opciones de IVA configuradas', formatGuideOptions(activeTaxOptions)],
@@ -798,11 +813,23 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     ]);
     guide['!cols'] = [{ wch: 34 }, { wch: 115 }];
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, ws, 'Órdenes de compra');
+    const context = XLSX.utils.aoa_to_sheet([
+      ['CONTEXTO DE LA ORDEN ACTUAL'],
+      ['La plantilla importa productos a la orden abierta; no crea órdenes nuevas ni cambia la bodega desde Excel.'],
+      ['Campo', 'Valor'],
+      ['Proveedor', suppliers.find((supplier) => String(supplier.id) === String(localDoc?.supplierId))?.name || 'El proveedor de la orden actual'],
+      ['Bodega destino', availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name || 'La bodega seleccionada en el formulario'],
+      ['Tipo de compra', String(localDoc?.purchaseType || 'INVENTORY').toUpperCase()],
+      ['Moneda', getCurrencyLabel(String(localDoc?.currency || displayCurrency))],
+      ['Notas generales', String(localDoc?.notes || '').trim() || 'Se editan en la orden después de importar los productos.'],
+    ]);
+    context['!cols'] = [{ wch: 24 }, { wch: 90 }];
+    XLSX.utils.book_append_sheet(workbook, ws, 'Productos de la orden');
+    XLSX.utils.book_append_sheet(workbook, context, 'Contexto de la orden');
     XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
-    XLSX.writeFile(workbook, 'plantilla_importacion_ordenes_compra.xlsx');
-    toast.success('Plantilla de órdenes descargada');
-  }, [products, taxOptions, withholdingOptions]);
+    XLSX.writeFile(workbook, 'plantilla_importacion_productos_orden_compra.xlsx');
+    toast.success('Plantilla de productos para orden descargada');
+  }, [availableWarehouseCatalog, displayCurrency, localDoc?.currency, localDoc?.notes, localDoc?.purchaseType, localDoc?.supplierId, localDoc?.warehouseId, products, suppliers, taxOptions, withholdingOptions]);
 
   const handlePurchaseImportFile = useCallback(async (file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
@@ -822,7 +849,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           const fieldAliases: Record<string, string[]> = {
             sku: ['sku', 'codigo / sku', 'codigo', 'código', 'code', 'product code'],
             description: ['descripcion', 'descripción', 'description', 'nombre', 'producto'],
-            commercialNote: ['nota comercial', 'nota', 'commercial note', 'commercialnote'],
+            commercialNote: ['notas', 'nota', 'nota comercial', 'notas comerciales', 'commercial note', 'commercialnote'],
             category: ['categoria', 'categoría', 'category'],
             quantity: ['cantidad', 'quantity', 'qty'],
             unitPrice: ['precio unitario', 'precio', 'unit price', 'cost price'],
@@ -980,7 +1007,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
       SKU: row.sku,
       Descripción: row.description,
-      'Nota comercial': row.commercialNoteSnapshot || '',
+      Notas: row.commercialNoteSnapshot || '',
       Categoría: row.category,
       Cantidad: row.quantity,
       'Precio unitario': row.unitPrice,
@@ -1254,11 +1281,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       render: (val, row) => (
         <div className="flex flex-col items-start gap-1">
           <span className="font-black font-mono text-primary text-xs">{val}</span>
-          {(row.purchaseRequestId || row.purchaseRequestNumber) && (
-            <Badge className="border-none bg-orange-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-orange-500">
-              Desde solicitud
-            </Badge>
-          )}
+          {(() => {
+            const source = getPurchaseOrderOriginBadge(row);
+            return source ? <Badge className={cn('border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge> : null;
+          })()}
         </div>
       ) },
     { key: 'supplier', header: 'Proveedor',
@@ -1307,7 +1333,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       if (editingId && cancelIds.includes(editingId)) setEditingId(null);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId });
+      toast.error(e?.response?.data?.message || e?.message || 'Error al rechazar', { id: cancelToastId });
     } finally {
       setCancelLoading(false);
     }
@@ -1703,6 +1729,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           progress={importProgress}
           currency={normalizePurchaseCurrency(localDoc?.currency || displayCurrency)}
           importCurrency={importCurrency}
+          warehouseName={availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name || (String(localDoc?.purchaseType || 'INVENTORY').toUpperCase() === 'SERVICE' ? 'No aplica · Servicio' : undefined)}
           conversionRate={globalRate}
           categoryOptions={categories}
           exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
@@ -1786,11 +1813,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Orden de Compra' : `Orden ${localDoc.number}`}</h2>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle del registro</p>
-                {localDoc.purchaseRequestNumber && (
-                  <Badge className="border-none bg-orange-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-orange-500">
-                    Desde solicitud
-                  </Badge>
-                )}
+                {(() => {
+                  const source = getPurchaseOrderOriginBadge(localDoc);
+                  return source ? <Badge className={cn('border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge> : null;
+                })()}
               </div>
             </div>
           </div>
@@ -1904,19 +1930,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     className="h-8 text-xs" 
                   />
                 </div>
-                <CurrencySelector
-                  value={localDoc.currency || displayCurrency}
-                  baseCurrency={baseCurrency}
-                  exchangeRate={globalRate}
-                  label="Moneda de la orden"
-                  rateDecimals={2}
-                  disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                  onChange={(nextCurrency) => setLocalDoc({
-                    ...localDoc,
-                    currency: nextCurrency,
-                    exchangeRate: nextCurrency === baseCurrency ? 1 : globalRate,
-                  })}
-                />
                 <div>
                     <p className="text-[10px] text-foreground mb-1">Tipo de Compra</p>
                     <Select
@@ -2186,11 +2199,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Precio</p>
                       <Input
                         disabled={!canEditOrderItems}
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={formatInputNumber(item.unitPrice)}
-                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
+                        onChange={(e) => handleItemChange(idx, 'unitPrice', normalizePurchaseDecimalInput(e.target.value))}
                         className="h-8 text-xs text-right"
                         placeholder="0"
                       />
@@ -2254,7 +2266,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-muted-foreground">
                   <li>Descarga la plantilla con sus hojas de ítems y guía de llenado.</li>
                   <li>Completa un producto por fila con SKU, cantidad y precio.</li>
-                  <li>Revisa la previsualización: los SKU existentes se vinculan automáticamente.</li>
+                  <li>Revisa la previsualización: los SKU existentes se vinculan automáticamente y todos los productos respetan la Bodega destino de esta orden.</li>
                   <li>Confirma para agregar los ítems a esta orden; todavía deberás guardar la orden.</li>
                 </ol>
               </div>

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useLayoutEffect,
 import { brandingService, type Branding } from '../services/branding.service';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
-import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
+import { ensureReadableForeground, validateThemeRoot } from '../utils/color-contrast';
 
 export interface BrandColors {
   primary: string;
@@ -16,6 +16,8 @@ export interface BrandColors {
 }
 
 export interface ThemeConfig {
+  /** Usuario propietario de la preferencia visual; nunca es un rol. */
+  userId: string;
   tenantId: string;
   tenantName: string;
   logo?: string;
@@ -27,13 +29,13 @@ interface ThemeContextType {
   /** El panel no debe montarse antes de resolver el branding del tenant activo. */
   isBrandingReady: boolean;
   updateTheme: (colors: Partial<BrandColors>) => void;
-  updateConfig: (config: Partial<Omit<ThemeConfig, 'colors'>>) => void;
+  updateConfig: (config: Partial<Omit<ThemeConfig, 'colors' | 'userId'>>) => void;
   resetTheme: () => void;
 }
 
 const defaultColors: BrandColors = {
   primary: 'oklch(0.65 0.2 155)',
-  primaryForeground: 'oklch(0.985 0 0)',
+  primaryForeground: 'oklch(0.145 0 0)',
   accent: 'oklch(0.22 0.02 155)',
   accentForeground: 'oklch(0.985 0 0)',
   sidebar: 'oklch(0.16 0.01 155)',
@@ -43,99 +45,81 @@ const defaultColors: BrandColors = {
 };
 
 const defaultTheme: ThemeConfig = {
+  userId: 'anonymous',
   tenantId: 'default',
   tenantName: 'Nova Hub ERP',
   colors: defaultColors,
 };
 
-const roleThemeTokens: Record<string, { surface: string; accent: string; border: string }> = {
-  superadmin: {
-    surface: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(99, 102, 241, 0.06))',
-    accent: 'oklch(0.64 0.19 250)',
-    border: 'rgba(14, 165, 233, 0.22)',
-  },
-  partner: {
-    surface: 'linear-gradient(135deg, rgba(20, 184, 166, 0.08), rgba(59, 130, 246, 0.05))',
-    accent: 'oklch(0.67 0.15 185)',
-    border: 'rgba(20, 184, 166, 0.22)',
-  },
-  admin: {
-    surface: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(14, 165, 233, 0.05))',
-    accent: 'oklch(0.65 0.16 155)',
-    border: 'rgba(16, 185, 129, 0.2)',
-  },
-  manager: {
-    surface: 'linear-gradient(135deg, rgba(245, 158, 11, 0.07), rgba(34, 197, 94, 0.05))',
-    accent: 'oklch(0.72 0.16 80)',
-    border: 'rgba(245, 158, 11, 0.2)',
-  },
-  employee: {
-    surface: 'linear-gradient(135deg, rgba(148, 163, 184, 0.08), rgba(59, 130, 246, 0.04))',
-    accent: 'oklch(0.62 0.08 230)',
-    border: 'rgba(148, 163, 184, 0.2)',
-  },
-  viewer: {
-    surface: 'linear-gradient(135deg, rgba(148, 163, 184, 0.07), rgba(226, 232, 240, 0.04))',
-    accent: 'oklch(0.58 0.05 240)',
-    border: 'rgba(148, 163, 184, 0.18)',
-  },
-};
-
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-function createDefaultTheme(tenantId = 'default'): ThemeConfig {
+function createDefaultTheme(userId = 'anonymous', tenantId = 'default'): ThemeConfig {
   return {
     ...defaultTheme,
+    userId,
     tenantId,
     colors: { ...defaultColors },
   };
 }
 
-function themeStorageKey(tenantId: string) {
-  return `erp-theme-config:${tenantId}`;
+function themeStorageKey(userId: string) {
+  return `erp-theme-config:user:${userId}`;
 }
 
 function brandingColors(branding: Branding): Partial<BrandColors> {
   const colors: Partial<BrandColors> = {};
-  if (branding.primaryColor) colors.primary = branding.primaryColor;
+  if (branding.primaryColor) {
+    colors.primary = branding.primaryColor;
+    colors.sidebarPrimary = branding.primaryColor;
+  }
   if (branding.sidebarColor) colors.sidebar = branding.sidebarColor;
-  if (branding.accentColor) colors.accent = branding.accentColor;
+  if (branding.accentColor) {
+    colors.accent = branding.accentColor;
+    colors.sidebarAccent = branding.accentColor;
+  }
   return colors;
 }
 
-function readStoredTheme(tenantId: string): ThemeConfig {
+function userThemeColors(branding: Branding): Partial<BrandColors> {
+  const colors = branding.userTheme?.colors;
+  return colors && typeof colors === 'object' ? colors : {};
+}
+
+function readStoredTheme(userId: string, tenantId: string): ThemeConfig {
   try {
-    const saved = localStorage.getItem(themeStorageKey(tenantId));
+    const saved = localStorage.getItem(themeStorageKey(userId));
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<ThemeConfig>;
       const colors = { ...defaultColors, ...(parsed.colors || {}) };
-      if (parsed.tenantName === 'Solcom ERP') return createDefaultTheme(tenantId);
+      if (parsed.tenantName === 'Solcom ERP') return createDefaultTheme(userId, tenantId);
       return {
-        ...createDefaultTheme(tenantId),
-        ...parsed,
+        ...createDefaultTheme(userId, tenantId),
+        userId,
         tenantId,
         colors: {
           ...colors,
-          primaryForeground: defaultColors.primaryForeground,
+          primaryForeground: ensureReadableForeground(colors.primary, colors.primaryForeground),
           accentForeground: ensureReadableForeground(colors.accent, colors.accentForeground),
           sidebarForeground: ensureReadableForeground(colors.sidebar, colors.sidebarForeground),
         },
       };
     }
   } catch {
-    return createDefaultTheme(tenantId);
+    return createDefaultTheme(userId, tenantId);
   }
 
-  return createDefaultTheme(tenantId);
+  return createDefaultTheme(userId, tenantId);
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const themeUserId = user?.id || 'anonymous';
   // clientTenantId is the canonical active tenant after a group/branch
-  // context switch. Using tenantId alone can read/write the wrong theme key.
+  // context switch. It remains context for the fallback corporate branding,
+  // but the saved visual preference is always keyed by the user id.
   const activeTenantId = user?.clientTenantId || user?.tenantId || 'default';
   const brandingSessionKey = user ? `${user.id}:${activeTenantId}` : 'anonymous';
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme(activeTenantId));
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme(themeUserId, activeTenantId));
   const [readyBrandingSessionKey, setReadyBrandingSessionKey] = useState<string | null>(
     () => user && activeTenantId !== 'default' ? null : 'anonymous',
   );
@@ -148,7 +132,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const nextColors = { ...prev.colors, ...colors };
         return {
           ...nextColors,
-          primaryForeground: defaultColors.primaryForeground,
+          primaryForeground: ensureReadableForeground(nextColors.primary, nextColors.primaryForeground),
           accentForeground: ensureReadableForeground(nextColors.accent, nextColors.accentForeground),
           sidebarForeground: ensureReadableForeground(nextColors.sidebar, nextColors.sidebarForeground),
         };
@@ -156,26 +140,31 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  const updateConfig = useCallback((config: Partial<Omit<ThemeConfig, 'colors'>>) => {
+  const updateConfig = useCallback((config: Partial<Omit<ThemeConfig, 'colors' | 'userId'>>) => {
     setThemeConfig(prev => ({
       ...prev,
       ...config,
     }));
   }, []);
 
-  const applyServerBranding = useCallback((branding: Branding, tenantId: string) => {
-    const colors = brandingColors(branding);
+  const applyServerBranding = useCallback((branding: Branding, tenantId: string, userId: string) => {
+    const colors = { ...brandingColors(branding), ...userThemeColors(branding) };
     setThemeConfig(previous => {
-      const base = previous.tenantId === tenantId ? previous : readStoredTheme(tenantId);
-      const nextColors = { ...base.colors, ...colors };
+      const base = previous.userId === userId && previous.tenantId === tenantId
+        ? previous
+        : readStoredTheme(userId, tenantId);
+      const nextColors = { ...defaultColors, ...colors };
       return {
         ...base,
+        userId,
         tenantId,
         tenantName: branding.companyName || base.tenantName,
-        logo: branding.logo || base.logo,
+        // Logo y nombre pertenecen a la identidad corporativa del contexto
+        // actual; no se recuperan del almacenamiento privado del usuario.
+        logo: branding.logo || undefined,
         colors: {
           ...nextColors,
-          primaryForeground: defaultColors.primaryForeground,
+          primaryForeground: ensureReadableForeground(nextColors.primary, nextColors.primaryForeground),
           accentForeground: ensureReadableForeground(nextColors.accent, nextColors.accentForeground),
           sidebarForeground: ensureReadableForeground(nextColors.sidebar, nextColors.sidebarForeground),
         },
@@ -184,12 +173,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Cada empresa mantiene su propio tema. Esto evita reutilizar el color de la
-    // empresa anterior mientras se cambia de usuario o contexto. El id del
-    // usuario también forma parte de la dependencia para que dos sesiones
-    // distintas en el mismo tenant no compartan estado visual en memoria.
-    setThemeConfig(() => (!user ? createDefaultTheme('default') : readStoredTheme(activeTenantId)));
-  }, [activeTenantId, user?.id, user?.userType]);
+    // Cada usuario mantiene su propia preferencia visual. El tenant solo aporta
+    // el fallback corporativo cuando ese usuario aún no ha personalizado el tema.
+    setThemeConfig(() => (!user ? createDefaultTheme() : readStoredTheme(themeUserId, activeTenantId)));
+  }, [activeTenantId, themeUserId]);
 
   useLayoutEffect(() => {
     // Apply brand colors while allowing the light/dark CSS variants to control
@@ -201,61 +188,70 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Read the active tenant's persisted theme synchronously during the
     // transition. Applying the global default here caused a visible gray/
     // default-color flash until the synchronization effect finished.
-    const activeTheme = themeConfig.tenantId === activeTenantId
+    const activeTheme = themeConfig.userId === themeUserId && themeConfig.tenantId === activeTenantId
       ? themeConfig
-      : readStoredTheme(activeTenantId);
+      : readStoredTheme(themeUserId, activeTenantId);
     const sidebarKeys = new Set(['sidebar', 'sidebarForeground', 'sidebarPrimary', 'sidebarAccent']);
     Object.entries(activeTheme.colors).forEach(([key, value]) => {
       if (sidebarKeys.has(key)) return;
       const cssVarName = `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-      root.style.setProperty(cssVarName, value);
+      const safeValue = key === 'primaryForeground'
+        ? ensureReadableForeground(activeTheme.colors.primary, value)
+        : key === 'accentForeground'
+          ? ensureReadableForeground(activeTheme.colors.accent, value)
+          : value;
+      root.style.setProperty(cssVarName, safeValue);
     });
+
+    const validateAppliedTheme = () => {
+      const issues = validateThemeRoot(root);
+      root.dataset.themeContrast = issues.length === 0 ? 'pass' : 'issues';
+      if (import.meta.env.DEV && issues.length > 0) {
+        console.warn('[NovaHub theme] Combinaciones con contraste insuficiente:', issues);
+      }
+    };
 
     const applySidebarVariant = () => {
       const isDark = root.classList.contains('dark');
       const sidebar = isDark ? 'oklch(0.16 0.01 155)' : activeTheme.colors.sidebar;
-      const foreground = isDark ? 'oklch(0.985 0 0)' : ensureReadableForeground(activeTheme.colors.sidebar, activeTheme.colors.sidebarForeground);
+      const foreground = ensureReadableForeground(
+        sidebar,
+        isDark ? 'oklch(0.985 0 0)' : activeTheme.colors.sidebarForeground,
+      );
       const primary = activeTheme.colors.sidebarPrimary;
       const accent = isDark ? 'oklch(0.22 0.02 155)' : activeTheme.colors.sidebarAccent;
+      const primaryForeground = ensureReadableForeground(primary, activeTheme.colors.primaryForeground);
+      const accentForeground = ensureReadableForeground(accent, activeTheme.colors.accentForeground);
       root.style.setProperty('--sidebar', sidebar);
       root.style.setProperty('--sidebar-foreground', foreground);
       root.style.setProperty('--sidebar-primary', primary);
+      root.style.setProperty('--sidebar-primary-foreground', primaryForeground);
       root.style.setProperty('--sidebar-accent', accent);
-      root.style.setProperty('--sidebar-accent-foreground', getReadableForeground(accent));
+      root.style.setProperty('--sidebar-accent-foreground', accentForeground);
+      validateAppliedTheme();
     };
 
     applySidebarVariant();
     const observer = new MutationObserver(applySidebarVariant);
     observer.observe(root, { attributes: true, attributeFilter: ['class'] });
 
-    // No persistir un tema antiguo dentro del tenant nuevo durante la transición.
-    if (activeTheme.tenantId === activeTenantId && themeConfig.tenantId === activeTenantId) {
-      safeSetItem(themeStorageKey(activeTenantId), JSON.stringify(themeConfig));
+    // No persistir un tema de otra sesión durante una transición de usuario.
+    if (activeTheme.userId === themeUserId && activeTheme.tenantId === activeTenantId && themeConfig.userId === themeUserId) {
+      safeSetItem(themeStorageKey(themeUserId), JSON.stringify(themeConfig));
     }
     return () => observer.disconnect();
-  }, [themeConfig, activeTenantId]);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const role = user?.role || 'viewer';
-    const tokens = roleThemeTokens[role] || roleThemeTokens.viewer;
-
-    root.dataset.userRole = role;
-    root.style.setProperty('--role-surface', tokens.surface);
-    root.style.setProperty('--role-accent', tokens.accent);
-    root.style.setProperty('--role-border', tokens.border);
-  }, [user?.role]);
+  }, [themeConfig, activeTenantId, themeUserId]);
 
   // Handle branding from server — re-fetch when user/token changes (login/switch/logout).
   // No se usa polling: `user` de useAuth cambia en login, switch de empresa y logout,
-  // y el evento `storage` cubre los cambios desde otras pestañas. El tema por usuario
-  // (clave por tenant + tokens de rol) se conserva intacto.
+  // y el evento `storage` cubre los cambios desde otras pestañas. La identidad
+  // corporativa puede ser compartida, pero el tema visual se conserva por usuario.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key !== 'nh-auth-token') return;
       if (!e.newValue) {
         // Logged out — reset branding
-        setThemeConfig(createDefaultTheme('default'));
+        setThemeConfig(createDefaultTheme());
       }
     };
     window.addEventListener('storage', onStorage);
@@ -282,7 +278,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // Never replace a valid persisted theme with a default palette just
         // because the endpoint returned a partial/empty branding object.
         if (cancelled || !branding) return;
-        applyServerBranding(branding, activeTenantId);
+        applyServerBranding(branding, activeTenantId, themeUserId);
       })
       .catch(err => {
         if (!cancelled && err?.name !== 'AbortError') {
@@ -299,11 +295,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       controller.abort();
     };
-  }, [user?.id, user?.userType, activeTenantId, brandingSessionKey, applyServerBranding]);
+  }, [user?.id, activeTenantId, brandingSessionKey, themeUserId, applyServerBranding]);
 
   const resetTheme = () => {
-    setThemeConfig(createDefaultTheme(activeTenantId));
-    localStorage.removeItem(themeStorageKey(activeTenantId));
+    setThemeConfig(createDefaultTheme(themeUserId, activeTenantId));
+    localStorage.removeItem(themeStorageKey(themeUserId));
   };
 
   return (

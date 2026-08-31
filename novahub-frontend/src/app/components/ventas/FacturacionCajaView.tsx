@@ -61,6 +61,7 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { playNotificationSound } from '../../utils/notificationSound';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
+import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentTotalBase } from '../../utils/paymentSettlement';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -189,18 +190,17 @@ function escapeTicketHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character] || character));
 }
 
-async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaymentLine[], currency: PaymentCurrency, exchangeRate: number, companyName: string, companyLogo?: string, paperSize: 'ticket' | 'letter' = 'ticket') {
-  const isTicket = paperSize === 'ticket';
-  const winWidth = isTicket ? 420 : 900;
-  const winHeight = isTicket ? 700 : 700;
+async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaymentLine[], currency: PaymentCurrency, exchangeRate: number, companyName: string, companyLogo?: string) {
+  const winWidth = 420;
+  const winHeight = 700;
   const win = window.open('', '_blank', `width=${winWidth},height=${winHeight}`);
   if (!win) return;
   // Se consulta la vista específica para que el ticket no herede la plantilla de una factura.
   const ticketSettings = await getPdfDesignSettings('ventas.cash-ticket');
   // Las impresoras térmicas deben recibir una salida monocromática, aunque la
   // plantilla general de documentos tenga una paleta corporativa.
-  const ticketPrimary = isTicket ? '#000' : (typeof ticketSettings.primaryColor === 'string' ? ticketSettings.primaryColor : '#000');
-  const ticketText = isTicket ? '#000' : (typeof ticketSettings.textColor === 'string' ? ticketSettings.textColor : '#000');
+  const ticketPrimary = '#000';
+  const ticketText = '#000';
   const ticketFont = typeof ticketSettings.fontFamily === 'string' ? ticketSettings.fontFamily.replace(/["'<>]/g, '') : 'monospace';
   const logo = ticketSettings.logoUrl || companyLogo;
   const money = (value: number) => `${currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(value)}`;
@@ -215,33 +215,29 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
     const paymentSymbol = paymentCurrency === 'USD' ? '$' : 'C$';
     return `<div class="row"><span>${paymentLabel(payment.method)}</span><span>${paymentSymbol} ${formatSalesAmount(Number(payment.amount || 0))}</span></div>`;
   }).join('');
-  const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div>${item.commercialNoteSnapshot ? `<div style="font-size:9px">Nota: ${escapeTicketHtml(item.commercialNoteSnapshot)}</div>` : ''}<div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
+  const itemRows = cart.map(item => {
+    const commercialNote = item.commercialNoteSnapshot || (item as any).commercialNote || (item as any).product?.commercialNote || '';
+     const noteHtml = commercialNote ? `<div style="font-size:9px">Nota: ${escapeTicketHtml(commercialNote)}</div>` : '';
+    return `<div class="item"><div>${escapeTicketHtml(item.description)}</div>${noteHtml}<div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`;
+  }).join('');
   const discount = Number(invoice.discountAmount || 0);
   const delivery = Number(invoice.deliveryAmount || 0);
   const extraCharges = normalizeSalesExtraCharges(invoice).filter((charge) => charge.amount > 0);
   const additionalRows = `${extraCharges.map((charge) => `<div class="row"><span>${escapeTicketHtml(charge.description || 'Coste extra')}</span><span>${money(charge.amount / (currency === 'USD' ? exchangeRate : 1))}</span></div>`).join('')}${delivery > 0 ? `<div class="row"><span>${escapeTicketHtml(invoice.deliveryDescription || 'Delivery')}</span><span>${money(delivery / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}`;
   const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
   const registerCode = invoice.register?.code || 'N/D';
-  const printFileName = buildPdfFileName(['factura', invoice.number || 'sin_numero'], isTicket ? 'roll-80' : 'configured');
+  const printFileName = buildPdfFileName(['factura', invoice.number || 'sin_numero'], 'roll-80');
 
-  const pageStyle = isTicket
-    ? '@page{size:80mm auto;margin:0}*{box-sizing:border-box}html{width:80mm;min-width:80mm;max-width:80mm;margin:0;padding:0;background:#fff}body{display:flex;justify-content:center;align-items:flex-start;width:80mm;min-width:80mm;max-width:80mm;margin:0;padding:0;background:#fff;color:#000;font:10px monospace;filter:grayscale(1);-webkit-filter:grayscale(1)}body>div{width:72mm;max-width:72mm;margin:0;padding:4mm 0}.center{text-align:center;line-height:1.35}.line{border-top:1px dashed #000;margin:8px 0 0;padding:6px 0 0}.label{font-weight:800;letter-spacing:.08em;margin:4px 0}.item{padding:3px 0;border-bottom:1px dotted #555}.row{display:flex;justify-content:space-between;gap:8px;line-height:1.35}.row>span:first-child{min-width:0;overflow-wrap:anywhere}.row>span:last-child{flex:0 0 auto;text-align:right}.totals{margin-top:6px}.total{font-weight:800;border-top:1px solid #000;margin-top:4px;padding-top:4px}.footer{text-align:center;border-top:1px dashed #000;margin-top:10px;padding-top:6px}.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}'
-    : '@page{size:letter portrait;margin:15mm}body{margin:0;padding:0;font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif;font-size:11pt;color:#000;background:#fff}';
-
-  const containerStyle = isTicket
-    ? ''
-    : 'style="max-width:800px;margin:0 auto;padding:20px;"';
+  const pageStyle = '@page{size:80mm auto;margin:0}*{box-sizing:border-box}html{width:100%;min-width:0;max-width:none;margin:0;padding:0;background:#fff}body{display:flex;justify-content:center;align-items:flex-start;width:100%;min-width:0;max-width:none;margin:0;padding:0;background:#fff;color:#000;font:10px monospace;filter:grayscale(1);-webkit-filter:grayscale(1);overflow-x:hidden}body>div{width:72mm;max-width:72mm;margin:0 auto;padding:4mm 0}.center{text-align:center;line-height:1.35}.line{border-top:1px dashed #000;margin:8px 0 0;padding:6px 0 0}.label{font-weight:800;letter-spacing:.08em;margin:4px 0}.item{padding:3px 0;border-bottom:1px dotted #555}.row{display:flex;justify-content:space-between;gap:8px;line-height:1.35}.row>span:first-child{min-width:0;overflow-wrap:anywhere}.row>span:last-child{flex:0 0 auto;text-align:right}.totals{margin-top:6px}.total{font-weight:800;border-top:1px solid #000;margin-top:4px;padding-top:4px}.footer{text-align:center;border-top:1px dashed #000;margin-top:10px;padding-top:6px}.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}';
 
   const logoHtml = logo
-    ? `<img src="${escapeTicketHtml(logo)}" alt="Logo" style="display:block;width:auto;height:auto;max-width:${isTicket ? '42mm' : '180px'};max-height:${isTicket ? '16mm' : '55px'};object-fit:contain;margin:0 auto 6px;" />`
-    : '';
-  const headerHtml = isTicket
-    ? `${logoHtml}<h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3>`
-    : `<div style="text-align:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #000;">${logoHtml}<h1 style="font-size:18pt;font-weight:800;margin:0 0 5px;text-transform:uppercase;">${escapeTicketHtml(companyName)}</h1><p style="font-size:10pt;color:#555;margin:0;">Comprobante de venta</p></div>`;
+     ? `<img src="${escapeTicketHtml(logo)}" alt="Logo" style="display:block;width:auto;height:auto;max-width:42mm;max-height:16mm;object-fit:contain;margin:0 auto 6px;" />`
+     : '';
+  const headerHtml = `${logoHtml}<h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3>`;
 
-  win.document.write(`<html><head><title>${escapeTicketHtml(printFileName)}</title><style>${pageStyle}</style></head><body><div ${containerStyle}>${headerHtml}<div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${additionalRows}<div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></div></body></html>`);
+  win.document.write(`<html><head><title>${escapeTicketHtml(printFileName)}</title><style>${pageStyle}</style></head><body><div>${headerHtml}<div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${additionalRows}<div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></div></body></html>`);
   const designStyle = win.document.createElement('style');
-  designStyle.textContent = ['body{font-family:', ticketFont, ';color:', ticketText, '}', 'h2,.label,.total{color:', ticketPrimary, '}', '.line{border-color:', ticketPrimary, '}', isTicket ? '.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}' : ''].join('');
+  designStyle.textContent = ['body{font-family:', ticketFont, ';color:', ticketText, '}', 'h2,.label,.total{color:', ticketPrimary, '}', '.line{border-color:', ticketPrimary, '}', '.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}'].join('');
   win.document.head.appendChild(designStyle);
   win.document.close();
   // Esperar a que el documento se pinte evita que Chrome abra una vista previa en blanco.
@@ -320,6 +316,15 @@ function formatInvoiceDate(date: string) {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function isQueueDocumentCollectible(queue: InvoiceCashQueue) {
+  const document = queue.invoice || queue.creditNote;
+  if (!document) return false;
+  const status = String(document.status || '').toUpperCase();
+  if (['PAID', 'CANCELLED', 'VOIDED'].includes(status)) return false;
+  const balance = Number(document.balance);
+  return !Number.isFinite(balance) || balance > 0.005;
 }
 
 function calculateLineTotal(quantity: number, unitPrice: number) {
@@ -475,6 +480,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [queueInvoice, setQueueInvoice] = useState<InvoiceCashQueue | null>(null);
   const [queuePayments, setQueuePayments] = useState<PosPaymentLine[]>([]);
   const [queueMixedPaymentEnabled, setQueueMixedPaymentEnabled] = useState(false);
+  const [queuePartialPaymentEnabled, setQueuePartialPaymentEnabled] = useState(false);
   const [queueSubmitting, setQueueSubmitting] = useState(false);
   const queueSubmittingRef = useRef(false);
   const [queueClaimingId, setQueueClaimingId] = useState<string | null>(null);
@@ -556,7 +562,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         const payload = (response as any)?.data || response;
         if (!Array.isArray(payload?.items)) throw new Error('La respuesta de la cola de caja no es válida.');
         if (!cashQueueEnabledRef.current) return;
-        setCashQueue(payload.items);
+        // Defensa de interfaz: una factura puede haberse pagado desde Ventas,
+        // Pagos recibidos u otra caja antes de que llegue el siguiente evento.
+        // Nunca debe ofrecerse nuevamente como documento cobrable.
+        setCashQueue(payload.items.filter((item: InvoiceCashQueue) => (
+          (item.status === 'PENDING' || item.status === 'CLAIMED')
+          && isQueueDocumentCollectible(item)
+        )));
         setCashQueueError(null);
         setCashQueueLastSyncAt(new Date());
       } catch (error: unknown) {
@@ -641,6 +653,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       setQueueInvoice(claimedQueue);
       setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]);
       setQueueMixedPaymentEnabled(false);
+      setQueuePartialPaymentEnabled(false);
       await loadCashQueue();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'El documento ya fue tomado o no se pudo reservar en esta caja.'));
@@ -661,6 +674,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         setQueueInvoice(null);
         setQueuePayments([]);
         setQueueMixedPaymentEnabled(false);
+        setQueuePartialPaymentEnabled(false);
       }
       const document = getQueueDocument(queue);
       toast.success(`${document?.number || 'Documento'} liberado para cualquier cajero.`);
@@ -681,7 +695,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     try {
       const response = await cajaService.reconcileInvoiceCashQueue();
       const result = (response as any)?.data || response;
-      toast.success(`Reconciliación completada: ${Number(result?.released || 0) + Number(result?.markedPaid || 0)} reserva(s) corregida(s).`);
+      toast.success(`Reconciliación completada: ${Number(result?.released || 0) + Number(result?.markedPaid || 0) + Number(result?.cancelled || 0)} entrada(s) corregida(s).`);
       await loadCashQueue();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'No se pudo reconciliar la cola de caja.'));
@@ -709,6 +723,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         if (disposed) return;
         setQueueInvoice(null);
         setQueuePayments([]);
+        setQueuePartialPaymentEnabled(false);
         toast.error(getErrorMessage(error, 'La reserva expiró. Toma nuevamente la factura antes de cobrar.'));
         void loadCashQueue();
       }
@@ -722,23 +737,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   }, [activeSession, loadCashQueue, queueInvoice?.claimToken, queueInvoice?.id, selectedRegisterId]);
 
   const getQueuePaymentSummary = () => {
-    if (!queueInvoice || !activeSession) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0 };
+    if (!queueInvoice || !activeSession) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0, changeUnsupported: false };
     const document = getQueueDocument(queueInvoice);
-    if (!document) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0 };
+    if (!document) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0, changeUnsupported: false };
     const invoiceCurrency = document.currency;
     const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(activeSession.exchangeRateUSD || globalRate || 1);
     const totalBase = toBaseAmount(Number(document.balance || 0), invoiceCurrency, invoiceRate);
-    const paidBase = queuePayments.reduce((sum, payment) => sum + toBaseAmount(
-      Number(payment.amount || 0),
-      payment.currency || invoiceCurrency,
-      (payment.currency || invoiceCurrency) === baseCurrency ? 1 : Number(payment.exchangeRate || activeSession.exchangeRateUSD || globalRate || 1),
-    ), 0);
+    const getQueueLineBaseAmount = (payment: PosPaymentLine) => getPaymentLineBase(payment, invoiceCurrency);
+    const paidBase = getPaymentTotalBase(queuePayments, getQueueLineBaseAmount);
+    const changeBase = getPaymentChangeBase(queuePayments, totalBase, getQueueLineBaseAmount);
     return {
       totalBase,
       paidBase,
-      changeBase: !queueMixedPaymentEnabled && queuePayments.length === 1 && queuePayments[0]?.method !== 'CASH'
-        ? 0
-        : Math.max(0, paidBase - totalBase),
+      changeBase,
+      changeUnsupported: changeBase > 0.005 && !cashCoversPaymentChange(queuePayments, totalBase, getQueueLineBaseAmount, 0.005),
       missingBase: Math.max(0, totalBase - paidBase),
     };
   };
@@ -748,24 +760,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const document = getQueueDocument(queueInvoice);
     if (!document) return [] as PosPaymentLine[];
     const invoiceCurrency = document.currency;
-    let remainingBase = getQueuePaymentSummary().totalBase;
-    return queuePayments.flatMap((payment) => {
-      if (remainingBase <= 0.005) return [];
-      const currency = payment.currency || invoiceCurrency;
-      const exchangeRate = currency === baseCurrency
-        ? 1
-        : Number(payment.exchangeRate || activeSession.exchangeRateUSD || globalRate || 1);
-      const lineBase = toBaseAmount(Number(payment.amount || 0), currency, exchangeRate);
-      const appliedBase = Math.min(lineBase, remainingBase);
-      if (appliedBase <= 0.005) return [];
-      remainingBase = Math.max(0, remainingBase - appliedBase);
-      return [{
-        ...payment,
-        amount: Number(convertBetweenCurrencies(appliedBase, baseCurrency, currency, 1, exchangeRate).toFixed(2)),
-        currency,
-        exchangeRate,
-      }];
-    });
+    return allocatePaymentLinesToBalance(
+      queuePayments,
+      getQueuePaymentSummary().totalBase,
+      (payment) => getPaymentLineBase(payment, invoiceCurrency),
+      (appliedBase, payment) => {
+        const currency = payment.currency || invoiceCurrency;
+        const exchangeRate = currency === baseCurrency
+          ? 1
+          : Number(payment.exchangeRate || activeSession.exchangeRateUSD || globalRate || 1);
+        return Number(convertBetweenCurrencies(appliedBase, baseCurrency, currency, 1, exchangeRate).toFixed(2));
+      },
+    );
   };
 
   const submitCashQueuePayment = async () => {
@@ -774,7 +780,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const document = getQueueDocument(queueReceipt);
     const isCreditQueue = Boolean(queueReceipt.creditNoteId || queueReceipt.creditNote);
     if (!document) return void toast.error('La entrada de la cola no tiene un documento cobrable.');
-    const { totalBase, paidBase } = getQueuePaymentSummary();
+    const { totalBase, paidBase, changeUnsupported } = getQueuePaymentSummary();
     const queueCustomerFavorBase = getCustomerFavorBase(document.customerId);
     const queueCustomerFavorAppliedBase = queuePayments
       .filter((payment) => payment.method === 'CUSTOMER_BALANCE')
@@ -787,7 +793,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       toast.error('Esta factura no tiene un cliente al cual aplicar saldo a favor.');
       return;
     }
+    if (changeUnsupported) {
+      toast.error('No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.');
+      return;
+    }
     if (!isCreditQueue && paidBase + 0.005 < totalBase) { toast.error('El monto recibido debe cubrir el saldo pendiente.'); return; }
+    if (isCreditQueue && paidBase + 0.005 < totalBase && !queuePartialPaymentEnabled) { toast.error('Activa "Pago parcial" para dejar un saldo pendiente.'); return; }
     if (!queueMixedPaymentEnabled && queuePayments.length === 1 && queuePayments[0]?.method !== 'CASH' && paidBase > totalBase + 0.005) {
       toast.error('El monto solo puede superar el total cuando el método es efectivo.');
       return;
@@ -833,6 +844,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       toast.success(`${isCreditQueue ? 'Crédito' : 'Factura'} ${document.number} cobrado en caja.${changeBase > 0.005 ? ` Cambio: ${baseCurrency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(changeBase)}` : ''}`);
       setQueueInvoice(null);
       setQueuePayments([]);
+      setQueuePartialPaymentEnabled(false);
       await Promise.all([loadCashQueue(), queryClient.invalidateQueries({ queryKey: ['sales'] }), queryClient.invalidateQueries({ queryKey: ['finance'] }), queryClient.invalidateQueries({ queryKey: ['accounting'] })]);
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'No se pudo registrar el cobro de la factura.'));
@@ -1135,6 +1147,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       setQueueInvoice(null);
       setQueuePayments([]);
       setQueueMixedPaymentEnabled(false);
+      setQueuePartialPaymentEnabled(false);
     }
   }, [hasOpenCashSession]);
 
@@ -1518,6 +1531,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       payment.currency || 'NIO',
       (payment.currency || 'NIO') === baseCurrency ? 1 : Number(payment.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1),
     ), 0);
+    const changeBase = getPaymentChangeBase(payments, holdTotalBase, (payment) => getPaymentLineBase(payment, 'NIO'));
+    if (changeBase > 0.005 && !cashCoversPaymentChange(payments, holdTotalBase, (payment) => getPaymentLineBase(payment, 'NIO'), 0.005)) {
+      toast.error('No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.');
+      return;
+    }
     const customerFavorBase = getCustomerFavorBase(holdCreateDto.customerId || selectedCustomerId);
     const customerFavorAppliedBase = payments
       .filter((payment) => payment.method === 'CUSTOMER_BALANCE')
@@ -1719,6 +1737,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       payment.currency || paymentCurrency,
       (payment.currency || paymentCurrency) === baseCurrency ? 1 : Number(payment.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1),
     ), 0);
+    const changeBase = getPaymentChangeBase(payments, totalBase, (payment) => getPaymentLineBase(payment, paymentCurrency));
+    if (changeBase > 0.005 && !cashCoversPaymentChange(payments, totalBase, (payment) => getPaymentLineBase(payment, paymentCurrency), 0.005)) {
+      toast.error('No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.');
+      return;
+    }
     const customerFavorBase = getCustomerFavorBase(selectedCustomerId);
     const customerFavorAppliedBase = payments
       .filter((payment) => payment.method === 'CUSTOMER_BALANCE')
@@ -1938,19 +1961,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   return (
     <div className="space-y-4">
-      {hasOpenCashSession && <Card className="overflow-hidden border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.07] via-card to-primary/[0.04] shadow-sm">
+      {hasOpenCashSession && <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.07] via-card to-primary/[0.04] shadow-sm">
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-emerald-500/15 p-2.5 text-emerald-600"><BellRing className="size-5" /></div>
+              <div className="rounded-xl bg-primary/15 p-2.5 text-primary"><BellRing className="size-5" /></div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-tight">Documentos enviados a caja</h3>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Toma una factura o crédito pendiente y registra el cobro desde esta sesión.</p>
+                <p className="mt-0.5 max-w-3xl text-[11px] text-muted-foreground">Toma una factura o crédito pendiente y registra el cobro desde esta sesión. Reconciliar libera reservas vencidas y retira documentos ya pagados o anulados.</p>
               </div>
-              <Badge className="border-none bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">{cashQueue.length}</Badge>
+              <Badge className="border-none bg-primary/15 text-primary">{cashQueue.length}</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {(['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()} disabled={reconcilingQueue}>{reconcilingQueue ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} {reconcilingQueue ? 'Reconciliando…' : 'Reconciliar'}</Button>}
+              {(['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()} disabled={reconcilingQueue} title="Libera reservas vencidas y marca como procesadas las entradas cuyo documento ya fue pagado" aria-label="Reconciliar cola de caja">{reconcilingQueue ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} {reconcilingQueue ? 'Reconciliando…' : 'Reconciliar'}</Button>}
               <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>
                 <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar
               </Button>
@@ -1988,9 +2011,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       {queue.status === 'CLAIMED' && queue.claimExpiresAt && <p className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">Reserva hasta {new Date(queue.claimExpiresAt).toLocaleTimeString('es-NI')}</p>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : `Tomar ${isCreditQueue ? 'crédito' : 'factura'}`}</Button>}
+                      {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black text-primary-foreground hover:bg-primary/90" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : `Tomar ${isCreditQueue ? 'crédito' : 'factura'}`}</Button>}
                       {queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-amber-500/40 text-xs font-black text-amber-700 dark:text-amber-300" onClick={() => void handleReleaseCashQueue(queue)} disabled={queueReleasingId !== null}>{queueReleasingId === queue.id ? 'Liberando…' : 'Liberar'}</Button>}
-                      {isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); }}>Cobrar ahora</Button>}
+                      {isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); }}>Cobrar ahora</Button>}
                     </div>
                   </div>
                 );
@@ -2043,17 +2066,17 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
           <div className="space-y-5">
-            <Card className="border-border/50 shadow-sm">
-              <CardContent className="p-5">
-                <h3 className="text-sm font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+            <Card className="min-w-0 border-border/50 shadow-sm">
+              <CardContent className="min-w-0 p-4 sm:p-5">
+                <h3 className="mb-5 flex items-center gap-2 text-sm font-black uppercase tracking-tight">
                   <Receipt className="size-4 text-primary" /> Configuración de Emisión
                 </h3>
                 <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="space-y-1.5" data-tour="pos-register">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
+                <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="min-w-0 space-y-2" data-tour="pos-register">
+                    <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Caja Operativa</Label>
                     <Select value={selectedRegisterId} onValueChange={handleRegisterChange}>
-                      <SelectTrigger className="!h-11 rounded-xl"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
+                      <SelectTrigger className="!h-11 w-full min-w-0 rounded-xl"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
                       <SelectContent>
                         {registers.map((r) => (
                           <SelectItem key={r.id} value={r.id}>
@@ -2065,8 +2088,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5" data-tour="pos-warehouse">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodega de salida</Label>
+                  <div className="min-w-0 space-y-2" data-tour="pos-warehouse">
+                    <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Bodega de salida</Label>
                     <div className="relative">
                       <Store className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-primary" />
                       <Select
@@ -2074,7 +2097,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                         onValueChange={(value) => setSelectedWarehouseId(value)}
                         disabled={isRegisterDisabled || directWarehouseOptions.length === 0}
                       >
-                        <SelectTrigger className="!h-11 rounded-xl border-primary/20 bg-primary/[0.04] pl-10 pr-3 shadow-sm">
+                        <SelectTrigger className="!h-11 w-full min-w-0 rounded-xl border-primary/20 bg-primary/[0.04] pl-10 pr-3 shadow-sm">
                           <SelectValue placeholder={directWarehouseOptions.length > 0 ? 'Seleccionar bodega' : 'Sin bodegas operativas'} />
                         </SelectTrigger>
                         <SelectContent>
@@ -2087,8 +2110,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       </Select>
                     </div>
                   </div>
-                  <div className="space-y-1.5" data-tour="pos-customer">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cliente / Empresa</Label>
+                  <div className="min-w-0 space-y-2" data-tour="pos-customer">
+                    <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Cliente / Empresa</Label>
                     <Combobox
                       options={[
                         { label: GENERAL_CUSTOMER_NAME, value: GENERAL_CUSTOMER_SELECT_VALUE },
@@ -2099,15 +2122,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       disabled={isRegisterDisabled}
                       placeholder={GENERAL_CUSTOMER_NAME}
                       emptyMessage="No se encontraron clientes"
-                      className="!h-11 rounded-xl text-sm font-normal"
+                      className="!h-11 w-full min-w-0 rounded-xl text-sm font-normal"
                     />
                     <p className="text-[10px] text-muted-foreground">
                       Lista de precios: <span className="font-semibold text-foreground">{priceLists.find((list) => sameSalesId(list.id, selectedPriceListId))?.name || 'No configurada'}</span>
                     </p>
                   </div>
-                  <div className="space-y-1.5" data-tour="pos-date">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Fecha de Emisión</Label>
-                    <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} disabled={isRegisterDisabled} className="!h-11 !py-0 rounded-xl w-full flex items-center justify-between" />
+                  <div className="min-w-0 space-y-2" data-tour="pos-date">
+                    <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Fecha de Emisión</Label>
+                    <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} disabled={isRegisterDisabled} className="!h-11 !w-full !py-0 rounded-xl" />
                   </div>
                 </div>
               </CardContent>
@@ -2397,7 +2420,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     No hay ítems agregados en esta caja{selectedRegister ? ` (${selectedRegister.code} - ${selectedRegister.name})` : ''}.
                   </p>
                 ) : (
-                  <div className="border border-border/50 rounded-xl overflow-x-auto">
+                  <>
+                  <div className="hidden overflow-x-auto rounded-xl border border-border/50 lg:block">
                     <table className="w-full min-w-[920px] text-xs xl:min-w-0">
                       <thead>
                         <tr className="bg-muted/30 border-b border-border/30">
@@ -2512,6 +2536,60 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       </tbody>
                     </table>
                   </div>
+                  <div className="space-y-3 lg:hidden" aria-label="Productos y servicios agregados">
+                    {cart.map((item) => {
+                      const product = productsById.get(item.productId);
+                      const itemTotal = pricingMode === 'individual' ? calculateIndividualLineTotal(item) : item.lineTotal;
+                      return (
+                        <article key={`${item.productId}-${item.variantId || 'base'}-${item.warehouseId || 'service'}`} data-item-layout="sales-cart" className="sales-item-row min-w-0 rounded-2xl border border-border/60 bg-card p-3 shadow-sm sm:p-4">
+                          <div className="flex min-w-0 items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                <span className="max-w-full break-all font-mono text-[10px] font-bold text-primary">{product?.code || 'SIN CÓDIGO'}</span>
+                                <Badge variant="secondary" className="text-[9px]">{product?.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
+                              </div>
+                              <h4 className="mt-1 break-words text-sm font-black leading-5">{item.description}</h4>
+                              {item.commercialNoteSnapshot && <p className="mt-1 break-words text-[10px] text-muted-foreground">Nota: {item.commercialNoteSnapshot}</p>}
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => removeItem(item.productId, item.variantId, item.warehouseId)} disabled={isRegisterDisabled} className="size-8 shrink-0 rounded-lg text-destructive hover:bg-destructive/10" aria-label={`Eliminar ${item.description}`}>
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                          <div className="mt-3 min-w-0">
+                            <SalesLinePriceListSelect productId={item.productId} productCode={product?.code} itemType={product?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} lineItems={cart} lineIndex={cart.indexOf(item)} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />
+                            {item.priceMissing && <PriceMissingBadge className="mt-1" />}
+                          </div>
+                          {product?.itemType !== 'SERVICE' && <SalesWarehouseStockHint product={product} warehouses={directWarehouseOptions} warehouseId={item.warehouseId} variantId={item.variantId} className="mt-2 px-0" />}
+                          <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div className="min-w-0 space-y-1.5 sm:col-span-2">
+                              <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Bodega de salida</Label>
+                              {product?.itemType === 'SERVICE' ? <span className="text-xs text-muted-foreground">No aplica para servicios</span> : <Select value={item.warehouseId || ''} onValueChange={(value) => changeCartItemWarehouse(item, value)} disabled={isRegisterDisabled || directWarehouseOptions.length === 0}>
+                                <SelectTrigger className="h-9 w-full min-w-0 rounded-lg text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
+                                <SelectContent>{directWarehouseOptions.map((warehouse) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent>
+                              </Select>}
+                            </div>
+                            <div className="min-w-0 space-y-1.5">
+                              <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">IVA</Label>
+                              {pricingMode === 'individual' ? <label className="flex h-9 items-center gap-2 rounded-lg border border-border/60 px-3 text-xs font-bold text-muted-foreground"><input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => updateCartItemCharges(item.productId, { taxRate: event.target.checked ? NICARAGUA_IVA_RATE : 0 }, item.variantId, item.warehouseId)} disabled={isRegisterDisabled} className="size-3.5 accent-primary" />{Number(item.taxRate || 0) > 0 ? `${Number(item.taxRate)}%` : 'No aplica'}</label> : <span className="flex h-9 items-center text-xs text-muted-foreground">Global</span>}
+                            </div>
+                            <div className="min-w-0 space-y-1.5">
+                              <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Descuento (%)</Label>
+                              {pricingMode === 'individual' ? <Input type="number" min={0} max={100} value={item.discount || ''} onChange={(event) => updateCartItemCharges(item.productId, { discount: Number(event.target.value) || 0 }, item.variantId, item.warehouseId)} disabled={isRegisterDisabled} className="h-9 w-full rounded-lg text-right text-xs font-mono" placeholder="0" /> : <span className="flex h-9 items-center text-xs text-muted-foreground">Global</span>}
+                            </div>
+                            <div className="min-w-0 space-y-1.5">
+                              <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Cantidad</Label>
+                              <Input type="number" value={item.quantity} onChange={(event) => updateQty(item.productId, normalizeQuantity(event.target.value, item.quantity), item.variantId, item.warehouseId)} disabled={isRegisterDisabled} className="h-9 w-full rounded-lg text-center text-xs font-mono" min={1} />
+                            </div>
+                          </div>
+                          <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-muted/30 p-3 text-xs">
+                            <div><span className="block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Precio unitario</span><span className="mt-1 block font-mono font-bold">{formatCurrency(item.unitPrice)}</span></div>
+                            <div className="text-right"><span className="block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Subtotal</span><span className="mt-1 block font-mono text-sm font-black text-primary">{formatCurrency(itemTotal)}</span></div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  </>
                 )}
                 {(extraCharges.length > 0 || Boolean(deliveryDescription) || deliveryAmount > 0) && (
                   <div className="mt-5 space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
@@ -2721,9 +2799,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           </div>
         )}
       {createdInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="invoice-result-title">
-          <div className="max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-4 shadow-2xl sm:p-6">
-            <div className="flex min-w-0 items-start justify-between gap-4 border-b border-border/50 pb-4">
+        <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="invoice-result-title">
+          <div className="nh-modal-surface max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-4 shadow-2xl sm:p-6">
+            <div className="nh-modal-header flex min-w-0 items-start justify-between gap-4 border-b border-border/50 pb-4">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">{createdOperationLabel}</p>
                 <h2 id="invoice-result-title" className="mt-1 text-2xl font-black uppercase italic tracking-tight">{createdInvoice.number}</h2>
@@ -2768,28 +2846,23 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               </div>
             </div>
 
-            <div className="mt-6 flex flex-col-reverse justify-end gap-2 sm:flex-row">
+            <div className="nh-modal-footer mt-6 flex flex-col-reverse justify-end gap-2 pt-4 sm:flex-row">
               <Button variant="outline" onClick={() => setCreatedInvoice(null)} className="rounded-xl font-black">Cerrar</Button>
               {canPrintPos && (
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => void printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, createdPaymentCurrency, createdExchangeRate, companyName, companyLogo, 'ticket')} className="gap-2 rounded-xl font-black">
-                    <Receipt className="size-4" /> Imprimir voucher
-                  </Button>
-                  <Button onClick={() => void printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, createdPaymentCurrency, createdExchangeRate, companyName, companyLogo, 'letter')} className="gap-2 rounded-xl font-black">
-                    <Receipt className="size-4" /> Imprimir
-                  </Button>
-                </div>
+                <Button onClick={() => void printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, createdPaymentCurrency, createdExchangeRate, companyName, companyLogo)} className="gap-2 rounded-xl font-black">
+                  <Receipt className="size-4" /> Imprimir
+                </Button>
               )}
             </div>
           </div>
         </div>
       )}
       {showPayment && activeSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-          <div className="max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-xl overflow-y-auto rounded-2xl border bg-background p-4 shadow-2xl sm:p-6">
-            <div className="mb-5 flex min-w-0 items-start justify-between gap-3">
+        <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
+          <div className="nh-modal-surface max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-xl overflow-y-auto rounded-2xl border bg-background p-4 shadow-2xl sm:p-6">
+            <div className="nh-modal-header mb-5 flex min-w-0 items-start justify-between gap-3 border-b border-border/50 pb-4">
               <div className="min-w-0">
-                <h2 className="text-lg font-black">Checkout / Pago</h2>
+                <h2 id="payment-modal-title" className="text-lg font-black">Checkout / Pago</h2>
                 {holdCreateDto && <p className="text-xs font-bold text-primary">Reserva con cobro inmediato</p>}
               </div>
                <Button type="button" variant="ghost" className="text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar pago" title="Cerrar" onClick={() => { setShowPayment(false); setHoldCreateDto(null); setMixedPaymentEnabled(false); }}>✕</Button>
@@ -2819,14 +2892,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               const totalToPayBase = holdTotal !== null
                 ? toBaseAmount(holdTotal, 'NIO', 1)
                 : toBaseAmount(summary.total, paymentCurrency, documentRate);
-              const totalPaidBase = payments.reduce((sum, item) => sum + toBaseAmount(
-                Number(item.amount || 0),
-                item.currency || paymentCurrency,
-                (item.currency || paymentCurrency) === baseCurrency ? 1 : Number(item.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1),
-              ), 0);
-              const changeLocal = !mixedPaymentEnabled && payments.length === 1 && payments[0]?.method !== 'CASH'
-                ? 0
-                : Math.max(0, totalPaidBase - totalToPayBase);
+              const getCurrentPaymentBase = (payment: PosPaymentLine) => getPaymentLineBase(payment, paymentCurrency);
+              const totalPaidBase = getPaymentTotalBase(payments, getCurrentPaymentBase);
+              const changeLocal = getPaymentChangeBase(payments, totalToPayBase, getCurrentPaymentBase);
+              const changeUnsupported = changeLocal > 0.005 && !cashCoversPaymentChange(payments, totalToPayBase, getCurrentPaymentBase, 0.005);
 
               return (
                 <>
@@ -2839,11 +2908,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       <span className="text-xs text-muted-foreground">Pagado</span>
                       <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalPaidBase)}</div>
                     </div>
-                    <div className={cn("rounded-xl p-3 border", changeLocal > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted/20 border-border/30 text-muted-foreground")}>
+                    <div className={cn("rounded-xl p-3 border", changeUnsupported ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400" : changeLocal > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted/20 border-border/30 text-muted-foreground")}>
                       <span className="text-xs font-bold">Cambio</span>
                       <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(changeLocal)}</div>
                     </div>
                   </div>
+                  {changeUnsupported && <p className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce esos montos o agrega suficiente efectivo para cubrir el excedente.</p>}
 
                    <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
                      <div>
@@ -2911,7 +2981,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 </>
               );
             })()}
-            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); setMixedPaymentEnabled(false); }}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting || selectedPaymentCustomerFavorExceeded || payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim()) || payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)}>{submitting ? <Loader2 className="size-4 animate-spin" /> : holdCreateDto ? 'Cobrar venta' : 'Confirmar y emitir'}</Button></div>
+            <div className="nh-modal-footer mt-5 flex flex-col-reverse justify-end gap-2 border-t border-border/50 pt-4 sm:flex-row"><Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); setMixedPaymentEnabled(false); }}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting || selectedPaymentCustomerFavorExceeded || payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim()) || payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)}>{submitting ? <Loader2 className="size-4 animate-spin" /> : holdCreateDto ? 'Cobrar venta' : 'Confirmar y emitir'}</Button></div>
 
           </div>
         </div>
@@ -2944,31 +3014,42 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           }));
         };
         return (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="queue-payment-title">
-          <div className="max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6">
-            <div className="flex min-w-0 items-start justify-between gap-4">
+        <div className="nh-modal-root fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="queue-payment-title">
+          <div className="nh-modal-surface max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6">
+            <div className="nh-modal-header flex min-w-0 items-start justify-between gap-4 border-b border-border/50 pb-4">
               <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Cobro desde cola de caja</p><h2 id="queue-payment-title" className="mt-1 text-xl font-black uppercase tracking-tight">{isCreditQueue ? 'Crédito' : 'Factura'} {document.number}</h2><p className="mt-1 break-words text-sm text-muted-foreground">{document.customer?.name || document.customCustomerName || GENERAL_CUSTOMER_NAME}</p></div>
-               <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={() => { if (!queueSubmitting) { setQueueInvoice(null); setQueuePayments([]); setQueueMixedPaymentEnabled(false); } }} aria-label="Cerrar cobro">×</Button>
+                <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={() => { if (!queueSubmitting) { setQueueInvoice(null); setQueuePayments([]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); } }} aria-label="Cerrar cobro">×</Button>
             </div>
             <div className="mt-5 rounded-2xl bg-primary/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p><p className="mt-1 font-mono text-2xl font-black text-primary">{document.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(document.balance || 0))}</p>{isCreditQueue && <p className="mt-1 text-xs font-semibold text-muted-foreground">Puedes registrar un abono o cancelar todo el saldo.</p>}</div>
              <div className="mt-5 space-y-3">
-               <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
                  <div>
                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Forma de pago</p>
-                   <p className="mt-1 text-[10px] text-muted-foreground">Activa pago mixto para combinar varios medios.</p>
+                   <p className="mt-1 text-[10px] text-muted-foreground">Activa Pago parcial para conservar saldo o Pago mixto para combinar medios.</p>
                  </div>
-                 <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                   <Switch
-                     checked={queueMixedPaymentEnabled}
-                     onCheckedChange={(checked) => {
-                       setQueueMixedPaymentEnabled(checked);
-                       if (!checked) setQueuePayments((current) => current.slice(0, 1));
-                     }}
-                     disabled={queueSubmitting}
-                     aria-label="Activar pago mixto"
-                   />
-                   Pago mixto
-                 </label>
+                 <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                   {isCreditQueue && <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                     <Switch
+                       checked={queuePartialPaymentEnabled}
+                       onCheckedChange={setQueuePartialPaymentEnabled}
+                       disabled={queueSubmitting}
+                       aria-label="Activar pago parcial"
+                     />
+                     Pago parcial
+                   </label>}
+                   <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                     <Switch
+                       checked={queueMixedPaymentEnabled}
+                       onCheckedChange={(checked) => {
+                         setQueueMixedPaymentEnabled(checked);
+                         if (!checked) setQueuePayments((current) => current.slice(0, 1));
+                       }}
+                       disabled={queueSubmitting}
+                       aria-label="Activar pago mixto"
+                     />
+                     Pago mixto
+                   </label>
+                 </div>
                </div>
                {queuePayments.map((payment, index) => (
                 <div key={`${payment.method}-${index}`} className="rounded-xl border border-border/50 bg-muted/10 p-3">
@@ -2990,14 +3071,17 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
             {(() => {
               const paymentSummary = getQueuePaymentSummary();
               return (
+                <>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-primary/20 bg-primary/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total a pagar</p><p className="mt-1 font-mono text-lg font-black text-primary">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.totalBase)}</p></div>
                   <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Pagado</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.paidBase)}</p></div>
-                  <div className={cn('rounded-xl border p-3', paymentSummary.changeBase > 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border/50 bg-muted/20 text-muted-foreground')}><p className="text-[10px] font-black uppercase tracking-widest">Cambio / vuelto</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.changeBase)}</p></div>
+                  <div className={cn('rounded-xl border p-3', paymentSummary.changeUnsupported ? 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300' : paymentSummary.changeBase > 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border/50 bg-muted/20 text-muted-foreground')}><p className="text-[10px] font-black uppercase tracking-widest">Cambio / vuelto</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.changeBase)}</p></div>
                 </div>
+                {paymentSummary.changeUnsupported && <p className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.</p>}
+                </>
               );
             })()}
-             <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border/50 pt-4"><Button type="button" variant="outline" onClick={() => { setQueueInvoice(null); setQueuePayments([]); setQueueMixedPaymentEnabled(false); }} disabled={queueSubmitting}>Cancelar</Button><Button type="button" onClick={() => void submitCashQueuePayment()} disabled={queueSubmitting}>{queueSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar cobro'}</Button></div>
+              <div className="nh-modal-footer mt-6 flex flex-col-reverse justify-end gap-2 border-t border-border/50 pt-4 sm:flex-row"><Button type="button" variant="outline" onClick={() => { setQueueInvoice(null); setQueuePayments([]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); }} disabled={queueSubmitting}>Cancelar</Button><Button type="button" onClick={() => void submitCashQueuePayment()} disabled={queueSubmitting || getQueuePaymentSummary().changeUnsupported}>{queueSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar cobro'}</Button></div>
           </div>
         </div>
         );

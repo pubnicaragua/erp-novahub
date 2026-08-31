@@ -431,9 +431,11 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   };
 
   const handleStatusAction = async (row: Expense, status: 'DRAFT' | 'PENDING') => {
+    if (status === 'PENDING' && !canPerform('PURCHASES_EXPENSES', 'approve')) return;
     const statusToastId = toast.loading(status === 'DRAFT' ? 'Guardando gasto como borrador...' : 'Enviando gasto a pendientes...');
     try {
-      await expensesService.update(row.id, { status } as any);
+      const update = status === 'PENDING' ? expensesService.updateStatus : expensesService.update;
+      await update(row.id, { status } as any);
       toast.success(status === 'DRAFT' ? 'Gasto guardado como borrador' : 'Gasto guardado como pendiente', { id: statusToastId });
       onRefresh();
     } catch (e: any) {
@@ -450,6 +452,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
   const handlePayment = async () => {
     if (!paymentExpense) return;
+    if (!canPerform('PURCHASES_EXPENSES', 'approve')) return;
     if (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) {
       toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
       return;
@@ -461,7 +464,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     const paymentToastId = toast.loading(`Marcando ${paymentExpense.number} como pagado...`);
     try {
       setPaymentLoading(true);
-      await expensesService.update(paymentExpense.id, {
+      await expensesService.updateStatus(paymentExpense.id, {
         status: 'PAID',
         paymentSource: paymentMethod,
         bankAccountId: isBankPaymentMethod(paymentMethod) ? paymentBankAccountId : undefined,
@@ -1006,7 +1009,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           extraActions={detailExpense && (() => {
             const status = String(detailExpense.status || '').toUpperCase();
             return <>
-              {canPerform('PURCHASES_EXPENSES', 'edit') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense, 'PENDING')}><Send className="size-4" /> Enviar a pendientes</Button>}
+              {canPerform('PURCHASES_EXPENSES', 'approve') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense, 'PENDING')}><Send className="size-4" /> Enviar a pendientes</Button>}
               {canPerform('PURCHASES_EXPENSES', 'approve') && status === 'PENDING' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => { setSelectedExpenseDetail(null); openPaymentDialog(detailExpense); }}><CircleDollarSign className="size-4" /> Registrar pago</Button>}
               {canPerform('PURCHASES_EXPENSES', 'delete') && status !== 'PAID' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
             </>;

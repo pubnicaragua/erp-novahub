@@ -58,6 +58,9 @@ export const recurringSupplierInvoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringSupplierInvoice>>('/purchases/recurring-invoices', { params: filters as any, signal }),
   create: (data: Partial<RecurringSupplierInvoice>) => api.post<RecurringSupplierInvoice>('/purchases/recurring-invoices', data),
   update: (id: string, data: Partial<RecurringSupplierInvoice>) => api.patch<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}`, data),
+  pause: (id: string) => api.patch<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}/pause`, {}),
+  resume: (id: string) => api.patch<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}/resume`, {}),
+  cancel: (id: string) => api.post<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/recurring-invoices/${id}`),
 };
 
@@ -104,6 +107,7 @@ export const expensesService = {
   create: (data: Partial<Expense>) => api.post<Expense>('/purchases/expenses', data),
   bulkImport: (data: Partial<Expense>[]) => api.post<{ success: number; count: number; failed: number }>('/purchases/expenses/bulk-import', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}`, data),
+  updateStatus: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}/status`, data),
   delete: (id: string) => api.delete<void>(`/purchases/expenses/${id}`),
 };
 

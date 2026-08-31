@@ -495,7 +495,7 @@ export function ProductDetailDrawer({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[calc(100%-1rem)] sm:max-w-3xl p-0 flex flex-col gap-0 overflow-hidden"
+        className="erp-detail-panel flex w-full flex-col gap-0 overflow-hidden p-0"
       >
         {/* ===== Tabs envuelve header + contenido para que Radix comparta contexto ===== */}
         <Tabs

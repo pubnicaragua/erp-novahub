@@ -261,7 +261,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             // La suscripción al módulo padre (HR) habilita todas sus vistas,
             // incluso con submódulos granulares contratados.
             const hasFallback = user?.enabledModules?.includes('HR');
-            const permissionModule = tab.id === 'comisiones' ? 'HR' : tab.module;
+            const permissionModule = tab.id === 'comisiones' ? 'HR_COMMISSIONS' : tab.module;
             const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(permissionModule, 'view');
             if (!hasAccess) return null;
             return (

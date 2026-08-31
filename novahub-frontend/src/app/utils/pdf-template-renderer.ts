@@ -4,6 +4,7 @@ import JsBarcode from 'jsbarcode';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { createDefaultTemplateDefinition, PDF_DEFAULT_FONT_SCALE, resolveTemplateToken, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode } from '../services/pdf-template-definition';
 import { getBase64Image, safeHtml2CanvasColor, sanitizeHtml2CanvasOklch } from './export-utils';
+import { pdfStatusLabel } from './pdfStatus';
 
 export interface PdfTemplateRenderSettings {
   paperSize: 'LETTER' | 'A4' | 'OFICIO' | 'LEGAL' | string;
@@ -83,7 +84,7 @@ function normalizeData(data: PdfTemplateData | undefined, settings: PdfTemplateR
   return {
     ...source,
     company,
-    document: { ...document, notes: document.notes || (source.defaultNotes as string) || '', page: pageNumber, pages: pageCount },
+    document: { ...document, status: document.status ? pdfStatusLabel(document.status) : '', notes: document.notes || (source.defaultNotes as string) || '', page: pageNumber, pages: pageCount },
     page: { number: pageNumber, pages: pageCount },
     ...(target.key === 'inventario.product-labels' && firstRow && typeof firstRow === 'object' ? { product: { ...firstRow, ...((source.product || {}) as Record<string, unknown>) } } : {}),
   };
@@ -171,6 +172,10 @@ function pdfPointsToCss(value: unknown, minimum = 6) {
 
 function isDecorativeSection(node: PdfTemplateNode) {
   return node.type === 'section' && /^(header|footer)(-|$)/i.test(node.id);
+}
+
+function isStatusColumn(column: PdfTemplateColumn) {
+  return /estado|status/i.test(`${column.id || ''} ${column.label || ''} ${column.token || ''}`);
 }
 
 function hasRenderablePartyValue(node: PdfTemplateNode, data: PdfTemplateData) {
@@ -294,7 +299,8 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
   setBaseNodeStyle(element, node, settings);
   appendVectorShapeBackground(element, node, settings);
   const rawContent = node.type === 'section' && isDecorativeSection(node) ? '' : node.type === 'field' ? tokenValue(node, data) : node.text || node.sample || node.label;
-  const content = node.id === 'document-status' && rawContent ? `Estado: ${rawContent}` : rawContent;
+  const isStatusField = node.type === 'field' && (node.id === 'document-status' || /estado|status/i.test(`${node.label || ''} ${node.token || ''}`));
+  const content = isStatusField && rawContent ? `Estado: ${pdfStatusLabel(rawContent)}` : rawContent;
   if (partyField(node)) {
     Object.assign(element.style, { flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: '1px', padding: '0.2% 0.4%' });
     const fieldLabel = document.createElement('span');
@@ -332,6 +338,9 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   element.style.padding = '0';
   element.style.borderStyle = 'solid'; element.style.borderWidth = '1px';
   const table = document.createElement('table');
+  // Esta tabla vive en un lienzo de impresión; no debe ser transformada en
+  // tarjetas por el hook responsive global mientras html2canvas la captura.
+  table.setAttribute('data-responsive-cards', 'false');
   table.style.width = '100%'; table.style.height = '100%'; table.style.borderCollapse = 'collapse'; table.style.borderSpacing = '0';
   const columns = node.columns?.length ? node.columns : [{ id: 'description', label: 'Descripción', token: 'description', width: 70 }, { id: 'total', label: 'Total', token: 'total', width: 30, align: 'right' as const }];
   const compact = columns.length >= 6;
@@ -349,7 +358,7 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const body = table.createTBody();
   asRows(data).slice(0, 30).forEach((row, rowIndex) => {
     const tr = body.insertRow();
-    columns.forEach(column => { const cell = tr.insertCell(); cell.textContent = escapeValue(row[column.token] ?? row[column.id]); cell.style.padding = compact ? '3px 4px' : tableLayout === 'compact' ? '4px 6px' : '6px 8px'; cell.style.borderTop = `1px solid ${lineColor}`; cell.style.textAlign = column.align || 'left'; cell.style.verticalAlign = 'middle'; cell.style.lineHeight = compact ? '1.12' : '1.25'; cell.style.whiteSpace = 'normal'; cell.style.overflowWrap = 'anywhere'; if (rowIndex % 2 && rowBackground !== 'transparent') cell.style.backgroundColor = rowBackground; if (tableLayout === 'boxed' || tableLayout === 'cards') cell.style.borderLeft = `1px solid ${lineColor}`; });
+    columns.forEach(column => { const cell = tr.insertCell(); const rawValue = row[column.token] ?? row[column.id]; cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue); cell.style.padding = compact ? '3px 4px' : tableLayout === 'compact' ? '4px 6px' : '6px 8px'; cell.style.borderTop = `1px solid ${lineColor}`; cell.style.textAlign = column.align || 'left'; const isDescription = column.token === 'description' || column.id === 'description'; cell.style.verticalAlign = isDescription ? 'top' : 'middle'; cell.style.lineHeight = compact ? '1.12' : '1.25'; cell.style.whiteSpace = isDescription ? 'pre-wrap' : 'normal'; cell.style.overflowWrap = 'anywhere'; if (rowIndex % 2 && rowBackground !== 'transparent') cell.style.backgroundColor = rowBackground; if (tableLayout === 'boxed' || tableLayout === 'cards') cell.style.borderLeft = `1px solid ${lineColor}`; });
   });
   element.appendChild(table);
   return element;

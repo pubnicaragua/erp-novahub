@@ -10,6 +10,9 @@ export interface Branding {
   whiteLabel: boolean;
   companyName: string;
   industry?: string;
+  userTheme?: {
+    colors?: Partial<Record<'primary' | 'primaryForeground' | 'accent' | 'accentForeground' | 'sidebar' | 'sidebarForeground' | 'sidebarPrimary' | 'sidebarAccent', string>>;
+  } | null;
 }
 
 /**
@@ -35,5 +38,5 @@ export const brandingService = {
     const response = await api.get<unknown>('/branding/current', { signal });
     return normalizeBrandingResponse(response);
   },
-  update: (data: Partial<Branding>) => api.post('/branding/update', data),
+  update: (data: Partial<Branding> & { userTheme?: Branding['userTheme'] }) => api.post('/branding/update', data),
 };

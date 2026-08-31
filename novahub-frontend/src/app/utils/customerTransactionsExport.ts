@@ -4,6 +4,7 @@ import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { formatCurrencyAmount } from './currency';
 import { buildDownloadFileName, sanitizeDownloadPart } from './exportFileNames';
 import type { CurrencyDisplayMode } from '../contexts/CurrencyContext';
+import { pdfStatusLabel } from './pdfStatus';
 
 export interface CustomerTransactionExportRow {
   id?: string;
@@ -35,13 +36,6 @@ interface CustomerTransactionsExportOptions {
   displayMode?: CurrencyDisplayMode;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Borrador', IN_PROCESS: 'En proceso', SENT: 'Enviada', APPROVED: 'Aprobada', REJECTED: 'Rechazada', CANCELLED: 'Cancelada',
-  CONFIRMED: 'Confirmada', IN_PROGRESS: 'En proceso', DELIVERED: 'Entregada', PENDING: 'Pendiente',
-  PARTIAL: 'Pago parcial', PAID: 'Pagada', CREDIT: 'A crédito', OVERDUE: 'Vencida', ACTIVE: 'Activa',
-  PAUSED: 'Pausada', EXPIRED: 'Vencida', ISSUED: 'Emitida', APPLIED: 'Aplicada', VOIDED: 'Anulada',
-};
-
 const formatDate = (value: unknown) => {
   if (!value) return '—';
   const date = new Date(String(value));
@@ -49,7 +43,6 @@ const formatDate = (value: unknown) => {
 };
 
 const formatMoney = (value: unknown, currency?: string | null) => formatCurrencyAmount(value, currency || 'NIO', true);
-const statusLabel = (value: unknown) => STATUS_LABELS[String(value || '').toUpperCase()] || String(value || '—').replaceAll('_', ' ');
 
 function safeHex(value: string | null | undefined, fallback = '#10b981') {
   return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
@@ -103,7 +96,7 @@ export async function exportCustomerTransactionsExcel(options: CustomerTransacti
   });
   options.rows.forEach((row, index) => {
     const excelRow = worksheet.addRow([
-      row.kind || 'Transacción', row.number || '—', formatDate(row.date), statusLabel(row.status),
+      row.kind || 'Transacción', row.number || '—', formatDate(row.date), pdfStatusLabel(row.status),
       originalOnly || row.reportAmount == null ? formatMoney(row.amount, row.currency) : formatMoney(row.reportAmount, row.reportCurrency),
       `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}`,
     ]);
@@ -142,7 +135,7 @@ export async function exportCustomerTransactionsPdf(options: CustomerTransaction
       { header: 'Tipo', value: (row) => row.kind || 'Transacción' },
       { header: 'Número', value: (row) => row.number || '—' },
       { header: 'Fecha', align: 'center', value: (row) => formatDate(row.date) },
-      { header: 'Estado', value: (row) => statusLabel(row.status) },
+      { header: 'Estado', value: (row) => pdfStatusLabel(row.status) },
       { header: amountHeader, align: 'right', value: (row) => originalOnly || row.reportAmount == null ? formatMoney(row.amount, row.currency) : formatMoney(row.reportAmount, row.reportCurrency) },
       { header: 'Tasa aplicada', value: (row) => row.reportRateLabel || '—' },
       { header: 'Descripción / sucursal', value: (row) => `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}` },

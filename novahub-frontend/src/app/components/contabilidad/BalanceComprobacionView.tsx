@@ -40,7 +40,8 @@ interface TrialBalanceRow {
 }
 
 export function BalanceComprobacionView() {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canExportTrialBalance = canPerform('ACCOUNTING_TRIAL_BALANCE', 'export');
   const today = new Date();
   const [dateFrom, setDateFrom] = useState(`${today.getFullYear()}-01-01`);
   const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10));
@@ -133,6 +134,7 @@ export function BalanceComprobacionView() {
   };
 
   const handlePrint = async () => {
+    if (!canExportTrialBalance) return;
     const exportRows = grouped.flatMap(group => group.rows);
     const exportTotalDebitos = exportRows.reduce((sum, row) => sum + row.debitos, 0);
     const exportTotalCreditos = exportRows.reduce((sum, row) => sum + row.creditos, 0);
@@ -182,9 +184,11 @@ export function BalanceComprobacionView() {
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Buscar cuenta..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="h-9 w-full pl-9 sm:w-[220px]" />
           </div>
-          <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
-            <Download className="size-4" /> Descargar PDF
-          </Button>
+          {canExportTrialBalance && (
+            <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
+              <Download className="size-4" /> Descargar PDF
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración
           </Button>

@@ -43,7 +43,9 @@ interface EditableDataTableProps<T> {
   onRowDelete?: (id: string | number) => Promise<void>;
   onBulkDelete?: (ids: (string | number)[]) => Promise<void>;
   /** Use cancel semantics for transactional records that must never be deleted. */
-  bulkAction?: 'delete' | 'cancel';
+  bulkAction?: 'delete' | 'cancel' | 'reject';
+  /** Disable selection for rows whose workflow is already approved/applied. */
+  isRowSelectable?: (row: T) => boolean;
   onBulkDuplicate?: (ids: (string | number)[]) => Promise<void>;
   onBulkUpdate?: (ids: (string | number)[], updates: Partial<T>) => Promise<void>;
   idField?: keyof T;
@@ -73,6 +75,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   onRowDelete,
   onBulkDelete,
   bulkAction = 'delete',
+  isRowSelectable,
   onBulkDuplicate,
   idField = 'id' as keyof T,
   isLoading,
@@ -91,6 +94,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   canEdit,
 }: EditableDataTableProps<T>) {
   const isBulkCancel = bulkAction === 'cancel';
+  const isBulkReject = bulkAction === 'reject';
+  const bulkActionLabel = isBulkCancel ? 'Cancelar' : isBulkReject ? 'Rechazar' : 'Eliminar';
   const isEditingAllowed = canEdit ?? Boolean(onRowUpdate);
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
@@ -118,6 +123,18 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     const match = /^w-(\d+)$/.exec(actionsWidth);
     return match ? Number(match[1]) * 4 : 128;
   })();
+  const selectableRows = data.filter((row) => isRowSelectable?.(row) ?? true);
+  const selectableIds = selectableRows.map((row) => row[idField]);
+  const allSelectableRowsSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+
+  useEffect(() => {
+    const selectableIdSet = new Set(selectableIds);
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((id) => selectableIdSet.has(id)));
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current;
+      return next;
+    });
+  }, [data, idField, isRowSelectable]);
   const markRowOpening = useCallback((row: T) => {
     const rowId = row[idField];
     setOpeningRowId(rowId);
@@ -338,14 +355,16 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === data.length) {
+    if (allSelectableRowsSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(data.map(r => r[idField])));
+      setSelectedIds(new Set(selectableIds));
     }
   };
 
   const toggleSelectRow = (id: string | number) => {
+    const row = data.find((candidate) => candidate[idField] === id);
+    if (row && !(isRowSelectable?.(row) ?? true)) return;
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -446,8 +465,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                    className="h-8 text-[10px] font-black uppercase tracking-wider"
                    onClick={() => setConfirmBulkDeleteIds(Array.from(selectedIds))}
                  >
-                    {isBulkCancel ? <Ban className="mr-2 size-3.5" /> : <Trash2 className="mr-2 size-3" />}
-                    {isBulkCancel ? 'Anular' : 'Eliminar'}
+                    {isBulkCancel || isBulkReject ? <Ban className="mr-2 size-3.5" /> : <Trash2 className="mr-2 size-3" />}
+                    {bulkActionLabel}
                  </Button>
                )}
             </div>
@@ -496,7 +515,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               {showSelection && (
                 <TableHead className="w-12 text-center h-12">
                   <Checkbox 
-                    checked={selectedIds.size === data.length && data.length > 0} 
+                    checked={allSelectableRowsSelected ? true : selectedIds.size > 0 ? 'indeterminate' : false}
+                    disabled={selectableIds.length === 0}
                     onCheckedChange={toggleSelectAll}
                   />
                 </TableHead>
@@ -525,6 +545,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               const rowId = row[idField];
               const isDraft = draftRows.has(rowId);
               const isSelected = selectedIds.has(rowId);
+              const isRowSelectableValue = isRowSelectable?.(row) ?? true;
               const isHighlighted = highlightedRowId != null && String(highlightedRowId) === String(rowId);
               const isOpening = openingRowId != null && String(openingRowId) === String(rowId);
 
@@ -547,6 +568,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                     <TableCell className="text-center">
                       <Checkbox 
                         checked={isSelected} 
+                        disabled={!isRowSelectableValue}
+                        aria-label={isRowSelectableValue ? `Seleccionar fila ${String(rowId)}` : 'Registro protegido; no se puede seleccionar'}
+                        title={isRowSelectableValue ? undefined : 'Registro aprobado o aplicado; no se puede seleccionar'}
                         onCheckedChange={() => toggleSelectRow(rowId)}
                       />
                     </TableCell>
@@ -690,6 +714,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         {data.map((row) => {
           const rowId = row[idField];
           const isSelected = selectedIds.has(rowId);
+          const isRowSelectableValue = isRowSelectable?.(row) ?? true;
           const isHighlighted = highlightedRowId != null && String(highlightedRowId) === String(rowId);
           const isOpening = openingRowId != null && String(openingRowId) === String(rowId);
           return (
@@ -712,6 +737,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                     <Checkbox
                       className="mt-0.5 shrink-0"
                       checked={isSelected}
+                      disabled={!isRowSelectableValue}
+                      aria-label={isRowSelectableValue ? `Seleccionar registro ${String(rowId)}` : 'Registro protegido; no se puede seleccionar'}
+                      title={isRowSelectableValue ? undefined : 'Registro aprobado o aplicado; no se puede seleccionar'}
                       onCheckedChange={() => toggleSelectRow(rowId)}
                     />
                   )}
@@ -900,11 +928,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       <ConfirmDialog
         open={confirmBulkDeleteIds.length > 0}
         onOpenChange={(open) => { if (!open) setConfirmBulkDeleteIds([]); }}
-        title={isBulkCancel ? '¿Anular registros seleccionados?' : '¿Eliminar registros seleccionados?'}
-        description={isBulkCancel
-          ? `${confirmBulkDeleteIds.length} registros quedarán anulados. No se borrará ningún dato y esta acción no se puede deshacer.`
+        title={isBulkCancel || isBulkReject ? `¿${bulkActionLabel} registros seleccionados?` : '¿Eliminar registros seleccionados?'}
+        description={isBulkCancel || isBulkReject
+          ? `${confirmBulkDeleteIds.length} registros quedarán ${isBulkReject ? 'rechazados' : 'cancelados'}. No se borrará ningún dato y esta acción no se puede deshacer.`
           : `Se eliminarán ${confirmBulkDeleteIds.length} registros. Esta acción no se puede deshacer.`}
-        confirmLabel={isBulkCancel ? 'Anular' : 'Eliminar'}
+        confirmLabel={bulkActionLabel}
         variant="destructive"
         loading={bulkDeleteLoading}
         onConfirm={async () => {

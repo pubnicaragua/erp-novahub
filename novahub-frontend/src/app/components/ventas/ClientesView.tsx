@@ -54,15 +54,16 @@ type CustomerDraft = {
   department: string;
   country: string;
   creditLimit: string;
+  creditLimitCurrency: SupportedCurrency;
   creditDays: string;
   notes: string;
   status: 'ACTIVE' | 'INACTIVE';
 };
 
-const emptyCustomerDraft = (): CustomerDraft => ({
+const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO'): CustomerDraft => ({
   name: '', type: 'individual', fiscalRegime: '', priceListId: '',
   taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '',
-  country: 'Nicaragua', creditLimit: '', creditDays: '', notes: '', status: 'ACTIVE',
+  country: 'Nicaragua', creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
 });
 
 const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'status'];
@@ -76,7 +77,7 @@ const customerCodeNumber = (customer: Customer) => {
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
 };
 
-const customerToDraft = (customer: Customer): CustomerDraft => ({
+const customerToDraft = (customer: Customer, fallbackCurrency: SupportedCurrency = 'NIO'): CustomerDraft => ({
   name: customer.name || '',
   type: String(customer.type || '').toUpperCase() === 'COMPANY' ? 'company' : 'individual',
   fiscalRegime: customer.fiscalRegime || '',
@@ -90,6 +91,7 @@ const customerToDraft = (customer: Customer): CustomerDraft => ({
   department: customer.department || '',
   country: customer.country || 'Nicaragua',
   creditLimit: customer.creditLimit === undefined || customer.creditLimit === null ? '' : String(customer.creditLimit),
+  creditLimitCurrency: normalizeCurrency(customer.creditLimitCurrency, fallbackCurrency),
   creditDays: customer.creditDays === undefined || customer.creditDays === null ? '' : String(customer.creditDays),
   notes: customer.notes || '',
   status: String(customer.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
@@ -110,7 +112,7 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
-  const { baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform, user } = useAuth();
   const tenantKey = user?.tenantId || 'anonymous';
   const [searchTerm, setSearchTerm] = useState('');
@@ -134,13 +136,13 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [editCustomer, setEditCustomer] = useState<CustomerDraft>(emptyCustomerDraft);
+  const [editCustomer, setEditCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency));
   const [savingEdit, setSavingEdit] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`sales-clients-columns-${tenantKey}`, DEFAULT_CUSTOMER_COLUMN_KEYS, 24 * 365);
   const [creating, setCreating] = useState(false);
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-clients-layout', 'table', 24 * 365);
-  const [newCustomer, setNewCustomer] = useState<CustomerDraft>(emptyCustomerDraft);
+  const [newCustomer, setNewCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency));
   const [pendingCustomers, setPendingCustomers] = useState<Array<CustomerDraft & { id: string }>>([]);
   const [showTutorial, setShowTutorial] = useState(false);
 
@@ -158,7 +160,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     return match ? row[match] : '';
   };
 
-  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '', country: 'Nicaragua', creditLimit: '', status: 'ACTIVE', notes: '' });
+  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '', country: 'Nicaragua', creditLimit: '', creditLimitCurrency: displayCurrency, status: 'ACTIVE', notes: '' });
 
   const validateImportRows = (rows: CustomerImportRow[]) => {
     const existingTaxIds = new Set(data.flatMap((customer) => [customer.taxId, customer.ruc]).map((value) => String(value || '').trim().toLowerCase()).filter(Boolean));
@@ -171,6 +173,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       else if (identifiers.some((identifier) => existingTaxIds.has(identifier) || seenTaxIds.has(identifier))) next.error = 'Cédula o RUC duplicado';
       else if (row.type === 'COMPANY' && !row.ruc.trim()) next.error = 'RUC obligatorio para empresas';
       else if (row.creditLimit !== '' && (!Number.isFinite(Number(row.creditLimit)) || Number(row.creditLimit) < 0)) next.error = 'Límite de crédito inválido';
+      else if (row.creditLimitCurrencyError || !['NIO', 'USD'].includes(row.creditLimitCurrency)) next.error = 'Moneda del límite inválida';
       if (!next.error && row.priceListCode && !priceListMatch) next.warning = 'Lista no encontrada; se importará sin lista';
       identifiers.forEach((identifier) => { seenTaxIds.add(identifier); existingTaxIds.add(identifier); });
       return next;
@@ -187,8 +190,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       // La plantilla todavía puede generarse con el último catálogo cargado.
     }
     const importablePriceLists = availablePriceLists.filter((list) => list.isActive !== false);
-    const headers = ['Nombre', 'Tipo', 'Cédula', 'RUC', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Régimen fiscal', 'Límite de crédito', 'Lista de precios', 'Estado', 'Notas'];
-    const example = ['Cliente Ejemplo', 'PARTICULAR', '001-010190-1000A', '', 'cliente@correo.com', '8888-8888', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', 'Nicaragua', 'Régimen general', 0, importablePriceLists[0]?.code || '', 'ACTIVO', ''];
+    const headers = ['Nombre', 'Tipo', 'Cédula', 'RUC', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Régimen fiscal', 'Límite de crédito', 'Moneda límite de crédito', 'Lista de precios', 'Estado', 'Notas'];
+    const example = ['Cliente Ejemplo', 'PARTICULAR', '001-010190-1000A', '', 'cliente@correo.com', '8888-8888', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', 'Nicaragua', 'Régimen general', 0, displayCurrency, importablePriceLists[0]?.code || '', 'ACTIVO', ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guideRows: any[][] = [
@@ -201,7 +204,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       ['Contacto y ubicación', 'Completa correo, teléfono, dirección, ciudad, departamento y país cuando aplique.'],
       ['Régimen fiscal', 'Opcional. Ejemplo: Régimen general, cuota fija o exento.'],
       ['Lista de precios', 'Opcional. Usa el código o nombre de una lista existente. Si no existe, se mostrará un aviso y se importará sin asignación.'],
-      ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. La cuenta por cobrar se calcula con las operaciones registradas.'],
+      ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. El importe se guarda en la moneda indicada en la columna Moneda límite de crédito.'],
+      ['Moneda límite de crédito', `Obligatoria si capturas un límite. Usa NIO o USD. Si el archivo no trae esta columna, se usará ${displayCurrency}, la moneda seleccionada arriba al preparar la importación.`],
       ['Estado', 'Usa ACTIVO o INACTIVO. Los clientes inactivos no podrán utilizarse en nuevas operaciones.'],
       ['Previsualización', 'Después de cargar el archivo, abre la previsualización para corregir datos. Los errores se omiten; los avisos no bloquean la importación.'],
       [],
@@ -251,6 +255,13 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         row.country = String(getCell(source, ['pais', 'country']) || 'Nicaragua').trim();
         const creditLimit = getCell(source, ['limitedecredito', 'creditlimit', 'limite']);
         row.creditLimit = creditLimit === '' || creditLimit === undefined ? '' : Number(creditLimit);
+        const creditLimitCurrency = String(getCell(source, ['monedalimitedecredito', 'creditlimitcurrency', 'monedalimite', 'monedalimit']))
+          .trim().toUpperCase();
+        if (creditLimitCurrency) {
+          const acceptedCreditLimitCurrencies = ['NIO', 'USD', 'US$', '$', 'C$', 'CORDOBA', 'CORDOBAS'];
+          row.creditLimitCurrency = creditLimitCurrency === 'USD' || creditLimitCurrency === 'US$' || creditLimitCurrency === '$' ? 'USD' : creditLimitCurrency === 'NIO' || creditLimitCurrency === 'C$' || creditLimitCurrency === 'CORDOBA' || creditLimitCurrency === 'CORDOBAS' ? 'NIO' : displayCurrency;
+          if (!acceptedCreditLimitCurrencies.includes(creditLimitCurrency)) row.creditLimitCurrencyError = true;
+        }
         const status = normalizeHeader(getCell(source, ['estado', 'status']) || 'activo');
         row.status = status.includes('inactiv') ? 'INACTIVE' : 'ACTIVE';
         row.notes = String(getCell(source, ['notas', 'notes', 'observaciones']) || '').trim();
@@ -279,7 +290,11 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   };
 
   const updateImportRow = (index: number, field: keyof CustomerImportRow, value: string) => {
-    setImportRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: field === 'creditLimit' ? (value === '' ? '' : Number(value)) : value } : row));
+    setImportRows((current) => current.map((row, rowIndex) => rowIndex === index ? {
+      ...row,
+      [field]: field === 'creditLimit' ? (value === '' ? '' : Number(value)) : value,
+      ...(field === 'creditLimitCurrency' ? { creditLimitCurrencyError: undefined } : {}),
+    } : row));
     if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
     importValidationTimerRef.current = window.setTimeout(() => {
       setImportRows((current) => validateImportRows(current));
@@ -295,10 +310,11 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     setImportResult(null);
     try {
       const result = await customersService.importMassive({
-        rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({
+        rows: validRows.map(({ error: _error, warning: _warning, creditLimitCurrencyError: _currencyError, ...row }) => ({
           ...row,
           type: row.type === 'COMPANY' ? 'company' : 'individual',
           creditLimit: row.creditLimit === '' ? undefined : row.creditLimit,
+          creditLimitCurrency: row.creditLimitCurrency,
         })),
       });
       setImportProgress(90);
@@ -352,6 +368,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
   const handleUpdate = async (id: string | number, updates: Partial<Customer>) => {
     try {
+      const effectiveUpdates = updates.creditLimit !== undefined && updates.creditLimitCurrency === undefined
+        ? { ...updates, creditLimitCurrency: displayCurrency }
+        : updates;
       if (updates.email !== undefined && String(updates.email || '').trim() && !/^\S+@\S+\.\S+$/.test(String(updates.email).trim())) {
         throw new Error('El correo no es válido (ej. cliente@correo.com)');
       }
@@ -361,6 +380,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       if (updates.creditLimit !== undefined) {
         const limit = Number(updates.creditLimit);
         if (!Number.isFinite(limit) || limit < 0) throw new Error('El límite de crédito debe ser un número mayor o igual a cero');
+      }
+      if (effectiveUpdates.creditLimitCurrency !== undefined && !['NIO', 'USD'].includes(String(effectiveUpdates.creditLimitCurrency).toUpperCase())) {
+        throw new Error('La moneda del límite de crédito debe ser NIO o USD');
       }
       if (updates.creditDays !== undefined) {
         const days = Number(updates.creditDays);
@@ -388,7 +410,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       if (nextType === 'COMPANY' && !nextRuc) {
         throw new Error('El RUC es obligatorio para una empresa');
       }
-      await customersService.update(id.toString(), updates);
+      await customersService.update(id.toString(), effectiveUpdates);
       toast.success('Cliente actualizado correctamente');
       onRefresh();
     } catch (e: any) {
@@ -411,6 +433,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     department: draft.department.trim() || undefined,
     country: draft.country.trim() || undefined,
     creditLimit: draft.creditLimit === '' ? undefined : Number(draft.creditLimit),
+    creditLimitCurrency: draft.creditLimitCurrency,
     creditDays: draft.creditDays === '' ? undefined : Number(draft.creditDays),
     notes: draft.notes.trim() || undefined,
     status: draft.status,
@@ -445,6 +468,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       toast.error('El límite de crédito debe ser un número mayor o igual a cero');
       return false;
     }
+    if (!['NIO', 'USD'].includes(draft.creditLimitCurrency)) {
+      toast.error('La moneda del límite de crédito debe ser NIO o USD');
+      return false;
+    }
     if (draft.creditDays !== '' && (!Number.isFinite(Number(draft.creditDays)) || Number(draft.creditDays) < 0 || !Number.isInteger(Number(draft.creditDays)))) {
       toast.error('El plazo de crédito debe ser un número entero de días (0 = contado)');
       return false;
@@ -454,7 +481,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
   const openEditCustomer = (customer: Customer) => {
     setEditingCustomer(customer);
-    setEditCustomer(customerToDraft(customer));
+    setEditCustomer(customerToDraft(customer, displayCurrency));
     setEditOpen(true);
   };
 
@@ -475,7 +502,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const handleAddPendingCustomer = () => {
     if (!validateCustomerDraft(newCustomer)) return;
     setPendingCustomers((current) => [...current, { ...newCustomer, id: `draft-${Date.now()}-${current.length}` }]);
-    setNewCustomer(emptyCustomerDraft());
+    setNewCustomer(emptyCustomerDraft(displayCurrency));
     toast.success('Cliente agregado a la lista de espera');
   };
 
@@ -485,7 +512,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     try {
       await customersService.create(buildCustomerPayload(newCustomer));
       toast.success('Nuevo cliente creado');
-      setNewCustomer(emptyCustomerDraft());
+      setNewCustomer(emptyCustomerDraft(displayCurrency));
       if (pendingCustomers.length === 0) setCreateOpen(false);
       onRefresh();
     } catch (e: any) {
@@ -506,7 +533,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       if (failed) toast.warning(`${created} clientes guardados y ${failed} no se pudieron guardar`);
       else toast.success(`${created} clientes guardados correctamente`);
       setPendingCustomers([]);
-      setNewCustomer(emptyCustomerDraft());
+      setNewCustomer(emptyCustomerDraft(displayCurrency));
       setCreateOpen(false);
       onRefresh();
     } finally {
@@ -515,7 +542,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   };
 
   if (importPreviewOpen) {
-    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
+    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} defaultCreditLimitCurrency={displayCurrency} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
   }
 
   const renderCustomerAmount = (
@@ -606,7 +633,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
-    { key: 'creditLimit', header: 'Límite de crédito', width: '140px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span> },
+    { key: 'creditLimit', header: 'Límite de crédito', width: '160px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val, row) => <span className="text-xs font-bold tabular-nums">{formatCurrentAmount(Number(val || 0), normalizeCurrency(row.creditLimitCurrency, baseCurrency))} <span className="text-[9px] font-black text-muted-foreground">({normalizeCurrency(row.creditLimitCurrency, baseCurrency)})</span></span> },
     { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{(val ?? 0) === 0 || val == null ? 'Contado' : `${val} días`}</span> },
     {
       key: 'balance',
@@ -743,7 +770,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             )}
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button 
-                onClick={() => setCreateOpen(true)}
+                onClick={() => { setNewCustomer(emptyCustomerDraft(displayCurrency)); setCreateOpen(true); }}
                 data-toolbar-role="primary"
                 data-tour="customers-new"
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
@@ -907,7 +934,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 <div><h3 className="text-sm font-black uppercase tracking-widest">Condiciones comerciales</h3><p className="text-xs text-muted-foreground">Estos cambios quedan registrados en el historial del cliente.</p></div>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Select value={newCustomer.fiscalRegime} onValueChange={(v) => setNewCustomer({ ...newCustomer, fiscalRegime: v })}><SelectTrigger className="h-11 rounded-xl text-sm"><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger><SelectContent>{FISCAL_REGIMES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</label><Input type="number" min="0" value={newCustomer.creditLimit} onChange={(e) => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito ({newCustomer.creditLimitCurrency})</label><Input type="number" min="0" value={newCustomer.creditLimit} onChange={(e) => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /><p className="text-[10px] text-muted-foreground">Se guarda en la moneda seleccionada arriba.</p></div>
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={newCustomer.creditDays} onChange={(e) => setNewCustomer({ ...newCustomer, creditDays: e.target.value })} placeholder="0 = contado" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><Select value={newCustomer.priceListId || '__no_price_list__'} onValueChange={(value) => setNewCustomer({ ...newCustomer, priceListId: value === '__no_price_list__' ? '' : value })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent></Select></div>
                 </div>
@@ -923,7 +950,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                   <Badge variant="secondary" className="shrink-0">{pendingCustomers.length}</Badge>
                 </div>
                 <div className="mt-4 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
-                  {pendingCustomers.map((customer, index) => <div key={customer.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/50 bg-background/50 p-3"><div className="min-w-0"><p className="truncate text-sm font-bold">{index + 1}. {customer.name}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{customer.taxId || customer.ruc || 'Sin identificación'} · {priceLists.find((list) => list.id === customer.priceListId)?.name || 'Sin lista asignada'}</p></div><Button variant="ghost" size="icon" title="Quitar de la lista" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:text-destructive" onClick={() => setPendingCustomers((current) => current.filter((item) => item.id !== customer.id))}><CircleX className="size-4" /></Button></div>)}
+                  {pendingCustomers.map((customer, index) => <div key={customer.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/50 bg-background/50 p-3"><div className="min-w-0"><p className="truncate text-sm font-bold">{index + 1}. {customer.name}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{customer.taxId || customer.ruc || 'Sin identificación'} · {priceLists.find((list) => list.id === customer.priceListId)?.name || 'Sin lista asignada'} · Límite {customer.creditLimitCurrency}</p></div><Button variant="ghost" size="icon" title="Quitar de la lista" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:text-destructive" onClick={() => setPendingCustomers((current) => current.filter((item) => item.id !== customer.id))}><CircleX className="size-4" /></Button></div>)}
                 </div>
               </aside>
             )}
@@ -972,7 +999,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               <div><h3 className="text-sm font-black uppercase tracking-widest">Condiciones comerciales</h3><p className="text-xs text-muted-foreground">Estos cambios quedan registrados en el historial del cliente.</p></div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Select value={editCustomer.fiscalRegime} onValueChange={(v) => setEditCustomer({ ...editCustomer, fiscalRegime: v })}><SelectTrigger className="h-11 rounded-xl text-sm"><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger><SelectContent>{FISCAL_REGIMES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</label><Input type="number" min="0" value={editCustomer.creditLimit} onChange={(e) => setEditCustomer({ ...editCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito ({editCustomer.creditLimitCurrency})</label><Input type="number" min="0" value={editCustomer.creditLimit} onChange={(e) => setEditCustomer({ ...editCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /><p className="text-[10px] text-muted-foreground">Moneda guardada para este cliente.</p></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={editCustomer.creditDays} onChange={(e) => setEditCustomer({ ...editCustomer, creditDays: e.target.value })} placeholder="0 = contado" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><Select value={editCustomer.priceListId || '__no_price_list__'} onValueChange={(value) => setEditCustomer({ ...editCustomer, priceListId: value === '__no_price_list__' ? '' : value })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent></Select></div>
               </div>

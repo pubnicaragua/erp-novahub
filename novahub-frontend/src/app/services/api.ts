@@ -4,6 +4,7 @@
 // ============================================================
 
 import { isSafeAuthToken } from './auth-token';
+import { notifyErpMutation } from '../utils/action-lock';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -226,7 +227,7 @@ function extractServerMessages(errorBody: ApiErrorBody | null) {
   ];
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function apiRequestInternal<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, rawBody, params, headers = {}, signal } = options;
   const context = describeRequest(path, method);
 
@@ -335,6 +336,23 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     return text ? JSON.parse(text) : (null as T);
   } catch {
     return text as T;
+  }
+}
+
+/**
+ * Announces mutation boundaries to the application shell. The UI uses this
+ * only to keep the clicked action busy until the server operation settles;
+ * request semantics and idempotency remain inside apiRequestInternal.
+ */
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = options.method || 'GET';
+  const isMutation = method !== 'GET';
+  if (isMutation) notifyErpMutation('start', method, path);
+
+  try {
+    return await apiRequestInternal<T>(path, options);
+  } finally {
+    if (isMutation) notifyErpMutation('end', method, path);
   }
 }
 

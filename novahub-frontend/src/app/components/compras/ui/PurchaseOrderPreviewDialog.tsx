@@ -121,7 +121,7 @@ export function PurchaseOrderPreviewDialog({
 
   return (
     <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
-      <SheetContent side="right" className="flex w-full min-w-0 max-w-full gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-2xl">
+      <SheetContent side="right" className="erp-detail-panel erp-detail-panel--medium flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
         {order && (
           <>
             <SheetHeader className="sticky top-0 z-10 min-w-0 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="purchase-order-detail-title">

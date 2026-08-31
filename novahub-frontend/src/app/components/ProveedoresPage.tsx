@@ -113,7 +113,9 @@ export function ProveedoresPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
+          {canPerform('PURCHASES_PROVIDERS', 'export') && (
+            <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
+          )}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('PURCHASES_PROVIDERS', 'create') && (
               <DialogTrigger asChild>

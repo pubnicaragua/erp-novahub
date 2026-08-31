@@ -564,7 +564,7 @@ export function InvoiceAuditView() {
           </div>
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" disabled={reviewTarget?.saving} onClick={() => setReviewTarget(null)}>Cancelar</Button>
-            <Button className={cn('gap-2 rounded-xl text-white', reviewTarget?.decision === 'APPROVE' ? 'bg-destructive hover:bg-destructive/90' : 'bg-primary hover:bg-primary/90')} disabled={reviewTarget?.saving || (reviewTarget?.decision === 'REJECT' && !reviewTarget.reason.trim())} onClick={reviewCancellationRequest}>
+            <Button className={cn('gap-2 rounded-xl', reviewTarget?.decision === 'APPROVE' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-primary text-primary-foreground hover:bg-primary/90')} disabled={reviewTarget?.saving || (reviewTarget?.decision === 'REJECT' && !reviewTarget.reason.trim())} onClick={reviewCancellationRequest}>
               {reviewTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : reviewTarget?.decision === 'APPROVE' ? <Ban className="size-4" /> : <X className="size-4" />}
               {reviewTarget?.decision === 'APPROVE' ? 'Aprobar y anular' : 'Rechazar solicitud'}
             </Button>
