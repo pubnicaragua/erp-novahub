@@ -37,10 +37,11 @@ import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAcc
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
-import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
+import { SalesWarehouseSelect, getDefaultSalesWarehouseId, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { normalizeCurrency, summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { SalesVariantSelect } from './SalesVariantSelect';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase } from '../../utils/paymentSettlement';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
@@ -777,6 +778,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                                 : baseSalePrice;
                               updateItem(index, {
                                 productId: value,
+                                variantId: null,
                                 description: selectedProduct?.name || '',
                                 commercialNoteSnapshot: selectedProduct?.commercialNote || null,
                                 priceListId: itemType === 'SERVICE' ? null : (localDoc?.priceListId || getCustomerPriceListId(localDoc?.customerId)),
@@ -787,8 +789,14 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                             placeholder={itemType === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                           />
                         </div>
+                        <SalesVariantSelect
+                          product={product}
+                          value={item.variantId}
+                          onChange={(variantId) => updateItem(index, { variantId })}
+                        />
                         <SalesLinePriceListSelect
                           productId={item.productId}
+                          variantId={item.variantId}
                           productCode={product?.code || item.code || item.productCode}
                           productName={item.description}
                           itemType={itemType}
@@ -799,7 +807,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                           currency={localDoc?.currency}
                           exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
                            onChange={(priceListId, result) => {
-                             if (hasSalesProductPriceListConflict(localDoc.items || [], item.productId, priceListId, index, localDoc.priceListId || getCustomerPriceListId(localDoc.customerId))) {
+                             if (hasSalesProductPriceListConflict(localDoc.items || [], item.productId, priceListId, index, localDoc.priceListId || getCustomerPriceListId(localDoc.customerId), item.variantId)) {
                                toast.error('Este producto ya está agregado con la misma lista de precios.');
                                return;
                              }
@@ -817,8 +825,8 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                       </div>
                       {item.productId && product && (
                         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 px-1">
-                          <Badge variant="outline" className={cn('border-none px-1.5 py-0 text-[9px] font-black', itemType === 'SERVICE' ? 'bg-emerald-500/10 text-emerald-500' : Number(product.stock || 0) <= 0 ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500')}>
-                            {itemType === 'SERVICE' ? 'DISPONIBLE' : `STOCK: ${Number(product.stock || 0)}`}
+                          <Badge variant="outline" className={cn('border-none px-1.5 py-0 text-[9px] font-black', itemType === 'SERVICE' ? 'bg-emerald-500/10 text-emerald-500' : getProductStockForSalesWarehouse(product, localDoc?.warehouseId, item.variantId) <= 0 ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500')}>
+                            {itemType === 'SERVICE' ? 'DISPONIBLE' : `STOCK: ${getProductStockForSalesWarehouse(product, localDoc?.warehouseId, item.variantId)}`}
                           </Badge>
                           {itemType !== 'SERVICE' && (
                             <SalesWarehouseStockHint

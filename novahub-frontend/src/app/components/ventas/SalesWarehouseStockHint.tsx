@@ -57,7 +57,7 @@ export function SalesWarehouseStockHint({ product, warehouseId, warehouses = [],
   const exactVariantLevels = normalizedVariantId
     ? rawLevels.filter((level: any) => String(level?.variantId || '').trim() === normalizedVariantId)
     : rawLevels;
-  const levels = normalizedVariantId && exactVariantLevels.length > 0 ? exactVariantLevels : rawLevels;
+  const levels = normalizedVariantId ? exactVariantLevels : rawLevels;
   const warehouseNames = new Map(
     warehouses.map((warehouse) => [String(warehouse.id), warehouse.name]),
   );
@@ -93,6 +93,7 @@ export function SalesWarehouseStockHint({ product, warehouseId, warehouses = [],
     .map((row) => `${row.warehouseName}: ${formatStock(row.stock)}`)
     .join(' · ');
   const hasSelectedStock = selectedStock > 0;
+  const hasOtherStock = otherWarehouses.length > 0;
 
   return (
     <div
@@ -103,19 +104,24 @@ export function SalesWarehouseStockHint({ product, warehouseId, warehouses = [],
       )}
       role="status"
       aria-label={hasSelectedStock
-        ? `Stock en ${selectedWarehouseName}: ${formatStock(selectedStock)}. También disponible en ${fullOtherSummary}`
-        : `Sin stock en ${selectedWarehouseName}. Disponible en ${fullOtherSummary}`}
+        ? (hasOtherStock
+          ? `Stock en ${selectedWarehouseName}: ${formatStock(selectedStock)}. También disponible en ${fullOtherSummary}`
+          : `Stock en ${selectedWarehouseName}: ${formatStock(selectedStock)}`)
+        : (hasOtherStock
+          ? `Sin stock en ${selectedWarehouseName}. Disponible en ${fullOtherSummary}`
+          : `Sin stock en ${selectedWarehouseName}`)}
       title={fullOtherSummary || undefined}
     >
       <Warehouse className="size-3 shrink-0" aria-hidden="true" />
       <span className="font-semibold">
         {hasSelectedStock ? `En ${selectedWarehouseName}: ${formatStock(selectedStock)}` : `Sin stock en ${selectedWarehouseName}`}
       </span>
-      <span className={cn('font-medium', hasSelectedStock ? 'text-primary' : 'font-bold')}>
-        · {hasSelectedStock ? 'También disponible' : 'Disponible en'}: {otherSummary}
-        {remainingWarehouses > 0 ? ` · +${remainingWarehouses} bodega(s)` : ''}
-      </span>
+      {hasOtherStock && (
+        <span className={cn('font-medium', hasSelectedStock ? 'text-primary' : 'font-bold')}>
+          · {hasSelectedStock ? 'También disponible' : 'Disponible en'}: {otherSummary}
+          {remainingWarehouses > 0 ? ` · +${remainingWarehouses} bodega(s)` : ''}
+        </span>
+      )}
     </div>
   );
 }
-

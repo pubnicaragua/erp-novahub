@@ -164,13 +164,20 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const linkedProduct = products.find((product) => product.id === item.productId);
     return [...catalog, linkedProduct || { id: item.productId, code: '', name: item.description || 'Artículo vinculado', itemType: item.itemType || 'PRODUCT' }];
   };
-  const getProductStockForWarehouse = (product: any, warehouseId?: string | null) => {
+  const getProductStockForWarehouse = (product: any, warehouseId?: string | null, variantId?: string | null) => {
     if (!product) return 0;
     const normalizedWarehouseId = String(warehouseId || '').trim();
-    if (!normalizedWarehouseId) return Number(product.stock || 0);
+    const normalizedVariantId = String(variantId || '').trim();
     const stockLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
-    if (stockLevels.length === 0) return 0;
-    return stockLevels
+    const variantLevels = normalizedVariantId
+      ? stockLevels.filter((level: any) => String(level?.variantId || '').trim() === normalizedVariantId)
+      : stockLevels;
+    if (!normalizedWarehouseId) {
+      if (normalizedVariantId) return variantLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || level?.stock || 0), 0);
+      return Number(product.stock || 0);
+    }
+    if (variantLevels.length === 0) return 0;
+    return variantLevels
       .filter((level: any) => String(level?.warehouseId || '') === normalizedWarehouseId)
       .reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
   };
@@ -184,7 +191,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       || '';
   };
   const getItemWarehouseId = (item: any) => item?.warehouseId || localDoc?.warehouseId || getDefaultWarehouseId();
-  const getItemStock = (item: any, product?: any) => getProductStockForWarehouse(product || findProductForItem(item), getItemWarehouseId(item));
+  const getItemStock = (item: any, product?: any) => getProductStockForWarehouse(product || findProductForItem(item), getItemWarehouseId(item), item?.variantId);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const [isCreating, setIsCreating] = useState(false);
@@ -1809,6 +1816,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         newItems[idx] = {
                           ...newItems[idx],
                           productId: val,
+                          variantId: null,
                           productCode: selectedProd?.code || newItems[idx].productCode,
                           itemType: selectedItemType,
                           priceListId: selectedItemType === 'SERVICE'
@@ -1847,6 +1855,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       />
                       <SalesLinePriceListSelect
                         productId={findProductForItem(item)?.id || item.productId}
+                        variantId={item.variantId}
                         productCode={findProductForItem(item)?.code || (item as any).productCode || (item as any).code}
                         productName={item.description}
                         itemType={item.itemType}

@@ -15,11 +15,18 @@ export function getDefaultSalesWarehouseId(warehouses: SalesWarehouseOption[] = 
     || '';
 }
 
-export function getProductStockForSalesWarehouse(product: any, warehouseId?: string | null) {
+export function getProductStockForSalesWarehouse(product: any, warehouseId?: string | null, variantId?: string | null) {
   if (!product) return 0;
   const selectedId = String(warehouseId || '').trim();
-  const levels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
-  if (!selectedId) return Number(product.stock || 0);
+  const selectedVariantId = String(variantId || '').trim();
+  const rawLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
+  const levels = selectedVariantId
+    ? rawLevels.filter((level: any) => String(level?.variantId || '').trim() === selectedVariantId)
+    : rawLevels;
+  if (!selectedId) {
+    if (selectedVariantId) return levels.reduce((total: number, level: any) => total + Number(level?.stock || level?.quantity || 0), 0);
+    return Number(product.stock || 0);
+  }
   if (!levels.length) return 0;
   return levels
     .filter((level: any) => String(level?.warehouseId || '').trim() === selectedId)

@@ -883,6 +883,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                           return;
                         }
                         newItems[idx].productId = val;
+                        newItems[idx].variantId = null;
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
                           newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
@@ -923,6 +924,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       }}
                     /><SalesLinePriceListSelect
                       productId={(products.find((product) => product.id === item.productId) || products.find((product) => String(product.name).trim().toLowerCase() === String(item.description || '').trim().toLowerCase()))?.id || item.productId}
+                      variantId={item.variantId}
                       productCode={(products.find((product) => product.id === item.productId) || products.find((product) => String(product.name).trim().toLowerCase() === String(item.description || '').trim().toLowerCase()))?.code || item.productCode || item.code}
                       productName={item.description}
                       itemType={item.itemType}

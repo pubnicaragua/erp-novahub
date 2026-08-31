@@ -165,6 +165,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       ...newItems[idx],
       itemType,
       productId: value,
+      variantId: null,
       serviceName: itemType === 'SERVICE' ? (selectedProduct?.name || newItems[idx].serviceName || '') : '',
       description: selectedProduct?.name || newItems[idx].description || '',
       commercialNoteSnapshot: selectedProduct?.commercialNote || null,
@@ -744,6 +745,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                       />
                       <SalesLinePriceListSelect
                         productId={item.productId}
+                        variantId={item.variantId}
                         productCode={findProductForItem(item)?.code || item.code}
                         productName={item.description}
                         itemType={item.itemType}

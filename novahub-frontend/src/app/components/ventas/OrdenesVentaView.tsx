@@ -254,7 +254,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           return;
         }
         const availableStock = product && product.itemType !== 'SERVICE'
-          ? getProductStockForSalesWarehouse(product, orderForConversion.warehouseId)
+          ? getProductStockForSalesWarehouse(product, orderForConversion.warehouseId, item.variantId)
           : undefined;
         if (availableStock !== undefined && availableStock < Number(item.quantity)) {
           toast.error(`Stock insuficiente para ${item.description} en la bodega seleccionada`);
@@ -1126,6 +1126,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                               return;
                             }
                             newItems[idx].productId = val;
+                            newItems[idx].variantId = null;
                             if (selectedProd) {
                               newItems[idx].description = selectedProd.name;
                               newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
@@ -1157,6 +1158,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       />
                       <SalesLinePriceListSelect 
                         productId={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || item.productId} 
+                        variantId={item.variantId}
                         productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code} 
                         itemType={item.itemType}
                         value={item.priceListId} 
@@ -1211,7 +1213,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                               </>
                             );
                           }
-                          const stock = getProductStockForSalesWarehouse(p, localDoc?.warehouseId);
+                          const stock = getProductStockForSalesWarehouse(p, localDoc?.warehouseId, item.variantId);
                           return (
                             <>
                               <Badge variant="outline" className={cn(
@@ -1275,14 +1277,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     <Input 
                       type="number" 
                       min="0"
-                       max={resolveItemType(item) === 'SERVICE' ? 1000000 : (products.find(x => x.id === item.productId) ? getProductStockForSalesWarehouse(products.find(x => x.id === item.productId), localDoc?.warehouseId) : 1000000)}
+                       max={resolveItemType(item) === 'SERVICE' ? 1000000 : (products.find(x => x.id === item.productId) ? getProductStockForSalesWarehouse(products.find(x => x.id === item.productId), localDoc?.warehouseId, item.variantId) : 1000000)}
                       value={Number(item.quantity) || ''} 
                       placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);
                         const p = products.find(x => x.id === item.productId);
                         const availableStock = p && resolveItemType(item) !== 'SERVICE'
-                          ? getProductStockForSalesWarehouse(p, localDoc?.warehouseId)
+                          ? getProductStockForSalesWarehouse(p, localDoc?.warehouseId, item.variantId)
                           : undefined;
                         if (availableStock !== undefined && newQty > availableStock) {
                           toast.warning(`Stock insuficiente en la bodega seleccionada. Disponible: ${availableStock}`, { id: `stock-warn-${idx}` });

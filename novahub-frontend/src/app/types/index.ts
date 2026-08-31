@@ -170,6 +170,7 @@ export interface EstimateItem {
   id: string;
   estimateId: string;
   productId?: string;
+  variantId?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -238,6 +239,7 @@ export interface SalesOrderItem {
   id: string;
   salesOrderId: string;
   productId?: string;
+  variantId?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -328,6 +330,7 @@ export interface InvoiceItem {
   id: string;
   invoiceId: string;
   productId?: string;
+  variantId?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -385,6 +388,7 @@ export interface RecurringInvoiceItem {
   recurringInvoiceId: string;
   itemType?: 'product' | 'service' | 'PRODUCT' | 'SERVICE';
   productId?: string;
+  variantId?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   serviceName?: string;
@@ -473,6 +477,7 @@ export interface SalesReturnItem {
   salesReturnId: string;
   invoiceItemId?: string;
   productId?: string;
+  variantId?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -542,6 +547,7 @@ export interface CreditNoteItem {
   id: string;
   creditNoteId: string;
   productId?: string;
+  variantId?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
