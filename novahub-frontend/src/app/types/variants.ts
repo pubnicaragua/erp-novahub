@@ -55,6 +55,10 @@ export interface VariantCombination {
   variantId: string;
 }
 
+type VariantWithAttributes = {
+  attributes?: VariantAttribute[];
+};
+
 export function buildVariantDescription(variant: ProductVariant): string {
   if (!variant.attributes?.length) return variant.name || variant.sku;
   return variant.attributes.map((a) => a.value).join(' / ');
@@ -71,7 +75,7 @@ export function getVariantAttributeValue(variant: ProductVariant, attributeName:
   )?.value;
 }
 
-export function extractVariantAttributes(variants: ProductVariant[]): VariantSelectorOption[] {
+export function extractVariantAttributes<T extends VariantWithAttributes>(variants: T[]): VariantSelectorOption[] {
   const map = new Map<string, Set<string>>();
   variants.forEach((v) => {
     v.attributes?.forEach((a) => {
@@ -85,16 +89,19 @@ export function extractVariantAttributes(variants: ProductVariant[]): VariantSel
   }));
 }
 
-export function findVariantByAttributes(
-  variants: ProductVariant[],
+export function findVariantByAttributes<T extends VariantWithAttributes>(
+  variants: T[],
   selected: Record<string, string>
-): ProductVariant | undefined {
+): T | undefined {
+  const selectedEntries = Object.entries(selected).filter(([, value]) => Boolean(value));
+  if (selectedEntries.length === 0) return undefined;
+
   return variants.find((v) => {
-    if (!v.attributes?.length) return false;
-    return Object.entries(selected).every(([attrName, attrValue]) =>
-      v.attributes!.some(
-        (a) => a.attributeName.toLowerCase() === attrName.toLowerCase() && a.value === attrValue
-      )
-    );
+    if (!v.attributes?.length || v.attributes.length !== selectedEntries.length) return false;
+    return v.attributes.every((attribute) => selectedEntries.some(
+      ([attributeName, attributeValue]) =>
+        attribute.attributeName.toLowerCase() === attributeName.toLowerCase()
+        && attribute.value === attributeValue,
+    ));
   });
 }

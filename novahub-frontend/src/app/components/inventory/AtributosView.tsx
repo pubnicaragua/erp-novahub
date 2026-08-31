@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Tag, Plus, Trash2, X, Edit2, Loader2, Tags, Layers, FolderOpen } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Tag, Plus, Trash2, X, Edit2, Loader2, Tags, Layers, FolderOpen, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -79,6 +79,8 @@ function AtributosTab() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const loadAttributes = useCallback(async () => {
     setLoading(true);
@@ -101,6 +103,19 @@ function AtributosTab() {
   const filtered = attributes.filter(
     (a) => !search || a.name.toLowerCase().includes(search.toLowerCase())
   );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedAttributes = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, pageSize]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -198,7 +213,7 @@ function AtributosTab() {
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Buscar atributo..."
             className="h-9 w-full rounded-xl sm:w-44"
           />
@@ -230,7 +245,7 @@ function AtributosTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((attr) => (
+              {paginatedAttributes.map((attr) => (
                 <TableRow key={attr.id} className="hover:bg-muted/20 transition-colors">
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -270,6 +285,18 @@ function AtributosTab() {
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {filtered.length > 0 && (
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={filtered.length}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          dataTour="inventory-attributes-pagination"
+        />
       )}
 
       {/* Modal crear/editar */}
@@ -378,6 +405,8 @@ function CategoriasTab() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const loadCategories = useCallback(async () => {
     setLoading(true);
@@ -400,6 +429,19 @@ function CategoriasTab() {
   const filtered = categories.filter(
     (c) => !search || c.name.toLowerCase().includes(search.toLowerCase())
   );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedCategories = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, pageSize]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -466,7 +508,7 @@ function CategoriasTab() {
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Buscar categoría..."
             className="h-9 w-full rounded-xl sm:w-44"
           />
@@ -498,7 +540,7 @@ function CategoriasTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((cat) => (
+              {paginatedCategories.map((cat) => (
                 <TableRow key={cat.id} className="hover:bg-muted/20 transition-colors">
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -534,6 +576,18 @@ function CategoriasTab() {
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {filtered.length > 0 && (
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={filtered.length}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          dataTour="inventory-categories-pagination"
+        />
       )}
 
       {/* Modal crear/editar */}
@@ -593,6 +647,48 @@ function CategoriasTab() {
         onConfirm={handleDelete}
         loading={deleting}
       />
+    </div>
+  );
+}
+
+interface TablePaginationProps {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  dataTour?: string;
+}
+
+function TablePagination({ page, pageSize, total, totalPages, onPageChange, onPageSizeChange, dataTour }: TablePaginationProps) {
+  const firstItem = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastItem = Math.min(page * pageSize, total);
+
+  return (
+    <div className="mt-4 flex flex-col items-stretch justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center" data-tour={dataTour}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span>Mostrar</span>
+        <select
+          value={pageSize}
+          onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none"
+          aria-label="Registros por página"
+        >
+          {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+        </select>
+        <span>por página</span>
+        <span className="ml-2 rounded-lg border border-border/40 px-2 py-1">
+          {firstItem}-{lastItem} de {total}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-1 sm:justify-end">
+        <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label="Primera página"><ChevronsLeft className="size-4" /></button>
+        <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
+        <span className="min-w-24 text-center font-bold text-foreground">Pág. {page} / {totalPages}</span>
+        <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages} aria-label="Página siguiente"><ChevronRight className="size-4" /></button>
+        <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => onPageChange(totalPages)} disabled={page >= totalPages} aria-label="Última página"><ChevronsRight className="size-4" /></button>
+      </div>
     </div>
   );
 }

@@ -365,6 +365,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
       return {
         productId: item.productId || null,
+        variantId: item.variantId || null,
         code: item.code || product?.code || product?.sku || '',
         name: item.name || product?.name || item.description || '',
         description: item.description || product?.name || '',

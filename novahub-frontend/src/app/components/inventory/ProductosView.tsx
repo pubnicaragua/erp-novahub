@@ -662,6 +662,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [solicitudProducts, setSolicitudProducts] = useState<Array<{
     productId: string; productName: string; code: string;
     currentStock: number; minStock: number; quantity: number;
+    isVariable?: boolean;
+    variants?: Array<{ id: string; name?: string; sku?: string; attributes?: Array<{ value: string }> }>;
+    variantQuantities?: Record<string, number>;
   }>>([]);
   const [solicitudWarehouseId, setSolicitudWarehouseId] = useState('');
   const [solicitudJustification, setSolicitudJustification] = useState('');
@@ -853,6 +856,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const buildSolicitudItems = (list: any[]) => list.map((p: any) => {
     const { currentStock, minStock } = getSolicitudProductSnapshot(p);
+    const variants = Array.isArray(p.variants) ? p.variants : [];
+    const isVariable = Boolean(p.isVariable || variants.length > 1) && variants.length > 0;
     return {
       productId: p.id,
       productName: p.name,
@@ -860,6 +865,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       currentStock: Number(currentStock ?? 0),
       minStock: Number(minStock ?? 0),
       quantity: 1,
+      isVariable,
+      variants,
+      variantQuantities: isVariable
+        ? Object.fromEntries(variants.map((variant: any) => [variant.id, 0]))
+        : undefined,
     };
   });
 
@@ -894,14 +904,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           return quantity <= (minimum > 0 ? minimum : 2);
         });
       });
-      startTransition(() => setSolicitudProducts(lowStock.map((product: any) => ({
-        productId: product.id,
-        productName: product.name,
-        code: product.code ?? '',
-        currentStock: 0,
-        minStock: 0,
-        quantity: 1,
-      }))));
+      startTransition(() => setSolicitudProducts(buildSolicitudItems(lowStock)));
     }, 0);
   };
 
@@ -930,6 +933,39 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       : item));
   };
 
+  const updateSolicitudVariantQuantity = (productId: string, variantId: string, quantity: number) => {
+    setSolicitudProducts((prev) => prev.map((item) => {
+      if (item.productId !== productId) return item;
+      const nextQuantity = quantity === 0 ? 0 : Math.max(0, Number.isFinite(quantity) ? quantity : 0);
+      const nextAllocated = (item.variants || []).reduce(
+        (sum, variant) => sum + (variant.id === variantId ? nextQuantity : Number(item.variantQuantities?.[variant.id] || 0)),
+        0,
+      );
+      if (nextAllocated > Number(item.quantity || 0)) {
+        toast.error(`${item.productName}: las variantes no pueden superar ${item.quantity} unidades.`);
+      }
+      return {
+        ...item,
+        variantQuantities: { ...(item.variantQuantities || {}), [variantId]: nextQuantity },
+      };
+    }));
+  };
+
+  const variantLabel = (variant: { name?: string; sku?: string; attributes?: Array<{ value: string }> }) =>
+    variant.name || variant.attributes?.map((attribute) => attribute.value).join(' / ') || variant.sku || 'Variante';
+
+  const getSolicitudVariantAllocation = (item: typeof solicitudProducts[number]) => {
+    const allocated = item.variants?.reduce(
+      (sum, variant) => sum + Number(item.variantQuantities?.[variant.id] || 0),
+      0,
+    ) || 0;
+    return {
+      allocated,
+      exceeds: Boolean(item.isVariable && allocated > Number(item.quantity || 0)),
+      complete: !item.isVariable || Math.abs(allocated - Number(item.quantity || 0)) <= 0.000001,
+    };
+  };
+
   const toggleSolicitudProduct = (product: any) => {
     const item = buildSolicitudItems([product])[0];
     if (!item) return;
@@ -944,20 +980,50 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setSolicitudCreating(true);
     try {
       if (!solicitudEmployeeId) { setSolicitudCreating(false); toast.error('Selecciona el empleado solicitante'); return; }
+      const invalidAllocation = solicitudProducts.find((item) => !getSolicitudVariantAllocation(item).complete);
+      if (invalidAllocation) {
+        const allocation = getSolicitudVariantAllocation(invalidAllocation);
+        toast.error(allocation.exceeds
+          ? `${invalidAllocation.productName}: las variantes suman ${allocation.allocated}, pero el total permitido es ${invalidAllocation.quantity}.`
+          : `${invalidAllocation.productName}: distribuye exactamente ${invalidAllocation.quantity} unidades entre sus variantes.`);
+        setSolicitudCreating(false);
+        return;
+      }
       const catalog = summaryProducts && summaryProducts.length > 0 ? summaryProducts : solicitudCatalogProducts;
-      const items = solicitudProducts.map(item => {
+      const items = solicitudProducts.flatMap(item => {
         const product = catalog.find((candidate: any) => String(candidate.id) === String(item.productId));
         const snapshot = product
           ? getSolicitudProductSnapshot(product, solicitudWarehouseId)
           : { currentStock: item.currentStock, minStock: item.minStock };
-        return {
-        productId: item.productId,
-        description: item.productName,
-        quantity: item.quantity,
-        warehouseId: solicitudWarehouseId,
-        currentStock: Number(snapshot.currentStock ?? 0),
-        minStock: Number(snapshot.minStock ?? 0),
-      };
+        if (item.isVariable && item.variants?.length) {
+          const allocated = item.variants.map((variant) => ({
+            variant,
+            quantity: Number(item.variantQuantities?.[variant.id] || 0),
+          }));
+          const allocatedTotal = allocated.reduce((sum, entry) => sum + entry.quantity, 0);
+          if (Math.abs(allocatedTotal - Number(item.quantity || 0)) > 0.000001) {
+            throw new Error(`Distribuye ${item.quantity} unidades de ${item.productName}. Actualmente distribuiste ${allocatedTotal}.`);
+          }
+          return allocated
+            .filter((entry) => entry.quantity > 0)
+            .map(({ variant, quantity }) => ({
+              productId: item.productId,
+              variantId: variant.id,
+              description: `${item.productName} · ${variantLabel(variant)}`,
+              quantity,
+              warehouseId: solicitudWarehouseId,
+              currentStock: Number(snapshot.currentStock ?? 0),
+              minStock: Number(snapshot.minStock ?? 0),
+            }));
+        }
+        return [{
+          productId: item.productId,
+          description: item.productName,
+          quantity: item.quantity,
+          warehouseId: solicitudWarehouseId,
+          currentStock: Number(snapshot.currentStock ?? 0),
+          minStock: Number(snapshot.minStock ?? 0),
+        }];
       });
       await purchaseRequestsService.create({
         status: 'PENDING_APPROVAL',
@@ -3929,13 +3995,44 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                   <div className="min-w-0">
                                     <span className="block break-words">{product.name}</span>
                                     <span className="block break-all font-mono text-[10px] text-muted-foreground">{product.code || 'Sin código'}</span>
+                                    {isSelected && selectedItem?.isVariable && selectedItem.variants?.length ? (
+                                      <div className="mt-2 space-y-1.5 rounded-lg border border-primary/20 bg-primary/5 p-2 text-left">
+                                        <div className="flex items-center justify-between gap-2 text-[9px] font-black uppercase tracking-wide text-primary">
+                                          <span>Distribución por variante</span>
+                                          <span className={`tabular-nums ${getSolicitudVariantAllocation(selectedItem).exceeds ? 'text-destructive' : ''}`}>
+                                            {getSolicitudVariantAllocation(selectedItem).allocated} / {selectedItem.quantity}
+                                          </span>
+                                        </div>
+                                        {selectedItem.variants.map((variant) => (
+                                          <div key={variant.id} className="flex items-center justify-between gap-2">
+                                            <span className="min-w-0 truncate text-[10px] font-medium">{variantLabel(variant)}</span>
+                                            <Input
+                                              type="number"
+                                              min={0}
+                                              className="h-7 w-16 shrink-0 text-right text-[10px] tabular-nums"
+                                              value={selectedItem.variantQuantities?.[variant.id] || ''}
+                                              onChange={(event) => updateSolicitudVariantQuantity(product.id, variant.id, Number(event.target.value))}
+                                              disabled={solicitudCreating}
+                                              aria-label={`Cantidad de ${variantLabel(variant)}`}
+                                            />
+                                          </div>
+                                        ))}
+                                        {!getSolicitudVariantAllocation(selectedItem).complete && (
+                                          <p className="text-[9px] font-semibold text-destructive">
+                                            {getSolicitudVariantAllocation(selectedItem).exceeds
+                                              ? 'La suma supera el total permitido.'
+                                              : 'Completa la distribución antes de enviar.'}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : null}
                                   </div>
                                 </TableCell>
                                 <TableCell className="max-w-0 whitespace-normal align-middle text-xs text-muted-foreground"><span className="block break-words">{product.category?.name || product.categoryName || 'Sin categoría'}</span></TableCell>
                                 <TableCell className={`align-middle text-right text-xs tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'font-bold text-orange-500' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</TableCell>
                                 <TableCell className="align-middle text-right text-xs tabular-nums">{snapshot.minStock === null ? '—' : snapshot.minStock}</TableCell>
                                 <TableCell className="align-middle text-right">
-                                  <Input type="number" min={1} className="ml-auto h-8 w-full max-w-[6rem] text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad a solicitar de ${product.name}`} />
+                                  <Input type="number" min={1} className="ml-auto h-8 w-full max-w-[6rem] text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad total a solicitar de ${product.name}`} />
                                 </TableCell>
                               </TableRow>
                             );
@@ -3969,9 +4066,40 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                               </div>
                             </div>
                             <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-3">
-                              <label htmlFor={`solicitud-quantity-${product.id}`} className="min-w-0 text-xs font-bold">Cantidad a solicitar</label>
-                              <Input id={`solicitud-quantity-${product.id}`} type="number" min={1} className="h-9 w-24 shrink-0 text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad a solicitar de ${product.name}`} />
+                              <label htmlFor={`solicitud-quantity-${product.id}`} className="min-w-0 text-xs font-bold">Cantidad total a solicitar</label>
+                              <Input id={`solicitud-quantity-${product.id}`} type="number" min={1} className="h-9 w-24 shrink-0 text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad total a solicitar de ${product.name}`} />
                             </div>
+                            {isSelected && selectedItem?.isVariable && selectedItem.variants?.length ? (
+                              <div className="mt-3 space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+                                <div className="flex items-center justify-between gap-2 text-[9px] font-black uppercase tracking-wide text-primary">
+                                  <span>Distribución por variante</span>
+                                  <span className={`tabular-nums ${getSolicitudVariantAllocation(selectedItem).exceeds ? 'text-destructive' : ''}`}>
+                                    {getSolicitudVariantAllocation(selectedItem).allocated} / {selectedItem.quantity}
+                                  </span>
+                                </div>
+                                {selectedItem.variants.map((variant) => (
+                                  <div key={variant.id} className="flex items-center justify-between gap-2">
+                                    <span className="min-w-0 truncate text-[10px] font-medium">{variantLabel(variant)}</span>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="h-8 w-20 shrink-0 text-right text-xs tabular-nums"
+                                      value={selectedItem.variantQuantities?.[variant.id] || ''}
+                                      onChange={(event) => updateSolicitudVariantQuantity(product.id, variant.id, Number(event.target.value))}
+                                      disabled={solicitudCreating}
+                                      aria-label={`Cantidad de ${variantLabel(variant)}`}
+                                    />
+                                  </div>
+                                ))}
+                                {!getSolicitudVariantAllocation(selectedItem).complete && (
+                                  <p className="text-[9px] font-semibold text-destructive">
+                                    {getSolicitudVariantAllocation(selectedItem).exceeds
+                                      ? 'La suma supera el total permitido.'
+                                      : 'Completa la distribución antes de enviar.'}
+                                  </p>
+                                )}
+                              </div>
+                            ) : null}
                           </article>
                         );
                       })}

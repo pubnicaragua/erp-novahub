@@ -44,6 +44,15 @@ import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getSalesOrderOriginBadge } from '../../utils/document-origin-badges';
 
+const paymentMethodOptions = [
+  { label: 'Efectivo', value: 'CASH' },
+  { label: 'Tarjeta', value: 'CARD' },
+  { label: 'Transferencia', value: 'TRANSFER' },
+  { label: 'Cheque', value: 'CHECK' },
+  { label: 'Crédito', value: 'CREDIT' },
+  { label: 'Otro', value: 'OTHER' },
+];
+
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
   loading: boolean;
@@ -121,8 +130,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`sales-orders-columns-${tenantKey}`, [
     'number', 'customer', 'itemCount', 'total', 'status', 'date',
-    'invoiceNumber', 'invoicedAt', 'invoicedBy',
-  ], 24 * 365);
+    'paymentMethod', 'invoiceNumber', 'invoicedAt', 'invoicedBy',
+  ],24 * 365);
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-orders-layout', 'table', 24 * 365);
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
@@ -469,6 +478,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     baseTotal: localDoc?.baseTotal,
     warehouseId: localDoc?.warehouseId || null,
     notes: localDoc?.notes,
+    paymentMethod: localDoc?.paymentMethod || null,
     items: localDoc?.items || [],
     status,
   } as Partial<SalesOrder>);
@@ -788,10 +798,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   if (editingId && localDoc) {
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
-        <div className="flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); }} className="rounded-full">
+      <div className="sales-document-editor min-w-0 space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
+        <div className="sales-document-header flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+            <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); }} className="shrink-0 rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div className="min-w-0">
@@ -799,7 +809,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la orden de venta</p>
             </div>
           </div>
-          <div className="flex min-w-0 flex-wrap items-stretch justify-start gap-2 sm:justify-end" data-tour="sales-form-actions">
+          <div className="sales-document-actions flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end" data-tour="sales-form-actions">
             <SalesViewTutorial view="orders" context="form" />
             {canPerform('SALES_ORDERS', 'edit') && !['APPROVED', 'CANCELLED'].includes(normalizeOrderStatus(localDoc?.status)) && (
               <>
@@ -957,6 +967,21 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   <p className="mt-1 text-[10px] text-muted-foreground/70">
                     Tasa de cambio configurada: <span className="font-bold">{formatNumber2(Number(localDoc?.currency === 'NIO' ? 1 : localDoc?.exchangeRate || globalRate || 1))}</span>
                   </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Forma de pago</p>
+                  <Select
+                    value={localDoc?.paymentMethod || ''}
+                    onValueChange={(paymentMethod) => {
+                      setLocalDoc({ ...localDoc, paymentMethod } as any);
+                      void handleUpdate(localDoc!.id, { paymentMethod } as Partial<SalesOrder>);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
+                    <SelectContent>
+                      {paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
@@ -1311,7 +1336,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       />
                     </div>
                   )}
-                  <div className="col-span-2 flex items-center justify-end gap-2">
+                  <div data-item-role="total-actions" className="col-span-2 flex items-center justify-end gap-2">
                     <span className="text-sm font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(item.total)}</span>
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
@@ -1399,7 +1424,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             <SalesViewTutorial view="orders" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as OrderStatusFilter)}>
-              <SelectTrigger className="h-10 w-44 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectTrigger className="h-10 w-full rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest sm:w-44"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Todos los estados</SelectItem>
                 <SelectItem value="DRAFT">Borradores</SelectItem>
@@ -1412,7 +1437,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
                 placeholder="Buscar orden..." 
-                className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
+                className="pl-9 h-10 w-full sm:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
@@ -1447,7 +1472,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           isLoading={loading}
           isRowSelectable={(row) => ['DRAFT', 'IN_PROCESS'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber}
            actions={(row) => (
-             <div className="flex min-w-max items-center justify-end gap-2 pr-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 pr-1 xl:min-w-max xl:flex-nowrap" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                 <WhatsAppActionButton
                   phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
                   documentLabel="orden de venta"
@@ -1573,4 +1598,3 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     </div>
   );
 }
-

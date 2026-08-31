@@ -37,12 +37,14 @@ export function hasSalesProductPriceListConflict(
   priceListId: unknown,
   excludeIndex = -1,
   fallbackPriceListId?: string | null,
+  variantId?: unknown,
 ): boolean {
   if (!productId || !priceListId) return false;
   return items.some((item, index) =>
     index !== excludeIndex
     && String(item?.itemType || '').toUpperCase() !== 'SERVICE'
     && sameSalesId(item?.productId, productId)
+    && String(item?.variantId || '') === String(variantId || '')
     && sameSalesId(getSalesLinePriceListId(item, fallbackPriceListId), priceListId),
   );
 }
@@ -58,7 +60,7 @@ export function hasSalesProductPriceListConflicts(
     if (!item?.productId || String(item?.itemType || '').toUpperCase() === 'SERVICE') continue;
     const priceListId = getSalesLinePriceListId(item, fallbackPriceListId);
     if (!priceListId) continue;
-    const key = `${String(item.productId)}:${priceListId}`;
+    const key = `${String(item.productId)}:${String(item?.variantId || '')}:${priceListId}`;
     if (seen.has(key)) return true;
     seen.add(key);
   }

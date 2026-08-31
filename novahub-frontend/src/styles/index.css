@@ -1217,6 +1217,56 @@ th .column-filter-menu .column-filter-icon,
 }
 
 @media (max-width: 639px) {
+  /* Los formularios de ventas apilan sus acciones para que el encabezado no
+     comprima el título ni desborde horizontalmente. */
+  .sales-document-actions {
+    align-items: stretch;
+  }
+
+  .sales-document-actions > [data-slot="button"],
+  .sales-document-actions > button {
+    width: 100%;
+    max-width: 100%;
+    justify-content: center;
+  }
+
+  /* Los campos de cargos adicionales pasan a dos líneas: descripción arriba
+     y monto/acción abajo, conservando espacio para escribir en móvil. */
+  .sales-document-editor [data-item-layout="extra-charge"] > input,
+  .sales-document-editor [data-item-layout="delivery"] > input {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .sales-document-editor [data-item-layout="extra-charge"] > div,
+  .sales-document-editor [data-item-layout="delivery"] > div {
+    flex: 1 1 auto;
+  }
+
+  .sales-document-editor [data-item-layout="extra-charge"] > button,
+  .sales-document-editor [data-item-layout="delivery"] > button {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 1279px) {
+  /* En las filas compactas, el total y eliminar permanecen juntos en una
+     única línea y no se convierten en un botón/registro desbordado. */
+  .sales-document-editor .sales-item-row > [data-item-role="total-actions"] {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    white-space: nowrap;
+  }
+
+  .sales-document-editor .sales-item-row > [data-item-role="total-actions"]::before {
+    content: "Total y acciones";
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 639px) {
   .purchases-module .purchase-item-fields {
     grid-template-columns: minmax(0, 1fr);
   }

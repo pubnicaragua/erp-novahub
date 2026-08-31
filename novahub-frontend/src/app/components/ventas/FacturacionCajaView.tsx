@@ -50,7 +50,7 @@ import { createIdempotencyKey } from '../../services/api';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
-import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { formatSalesAmount, getConfiguredPriceForVariant, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
@@ -437,7 +437,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
-  const [priceListItems, setPriceListItems] = useState<Array<{ priceListId: string; productId: string; price: number; currency: string; exchangeRate: number; basePrice: number }>>([]);
+  const [priceListItems, setPriceListItems] = useState<Array<{ priceListId: string; productId: string; variantId?: string | null; price: number; currency: string; exchangeRate: number; basePrice: number }>>([]);
   const [selectedPriceListId, setSelectedPriceListId] = useState('');
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -909,6 +909,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       setPriceListItems(normalizedMatrix.items.map((item) => ({
         priceListId: String(item.priceListId),
         productId: String(item.productId),
+        variantId: item.variantId || item.variant?.id ? String(item.variantId || item.variant.id) : null,
         price: Number(item.price),
         currency: String(item.currency || 'NIO'),
         exchangeRate: Number(item.exchangeRate || 1),
@@ -923,9 +924,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     return () => { active = false; };
   }, [user?.tenantId]);
 
-  const getConfiguredPrice = (priceListId: string, productId: string) => {
-    const entry = priceListItems.find((item) => sameSalesId(item.priceListId, priceListId) && sameSalesId(item.productId, productId));
-    return entry ? getSalesUnitPrice(entry, paymentCurrency, Number(activeSession?.exchangeRateUSD || 1)) : undefined;
+  const getConfiguredPrice = (priceListId: string, productId: string, variantId?: string | null) => {
+    const resolved = getConfiguredPriceForVariant(
+      priceListItems,
+      priceListId,
+      productId,
+      variantId,
+      paymentCurrency,
+      Number(activeSession?.exchangeRateUSD || 1),
+    );
+    return resolved.priceMissing ? undefined : resolved.unitPrice;
   };
 
   const getCatalogPrice = (product: PosProduct) => {
@@ -1215,12 +1223,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     [products, catalogItemFilter],
   );
 
-  const getGlobalCartQuantity = (productId: string) => {
+  const getGlobalCartQuantity = (productId: string, variantId?: string, warehouseId?: string) => {
     let total = 0;
     cartSessions.current.forEach((session, regId) => {
       if (regId !== selectedRegisterId) {
-        const item = session.cart.find((i: any) => i.productId === productId);
-        if (item) total += item.quantity;
+        total += session.cart
+          .filter((item) => item.productId === productId
+            && (variantId ? item.variantId === variantId : !item.variantId)
+            && item.warehouseId === warehouseId)
+          .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
       }
     });
     return total;
@@ -1253,7 +1264,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       addItem(product);
       return;
     }
-    if (product.isVariable && product.variants && product.variants.length > 1) {
+    if (product.isVariable && product.variants && product.variants.length > 0) {
       setVariantPickerProduct(product);
       setVariantPickerOpen(true);
       return;
@@ -1268,16 +1279,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const handleVariantSelected = (product: PosProduct, variant: PosProductVariant) => {
     const isService = product.itemType === 'SERVICE';
     const warehouseId = isService ? undefined : (selectedWarehouseId || undefined);
-    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
+    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id, variant.id);
     const priceMissing = !isService && (configuredPrice === undefined || configuredPrice === 0);
     const variantDescription = variant.attributes?.length
       ? `${product.name} - ${variant.attributes.map((a) => a.value).join(' / ')}`
       : product.name;
-    const globalQty = getGlobalCartQuantity(product.id);
+    const globalQty = getGlobalCartQuantity(product.id, variant.id, warehouseId);
     const existing = cart.find((i) => i.productId === product.id && i.variantId === variant.id && i.warehouseId === warehouseId);
     const requestedQty = (existing?.quantity || 0) + 1;
 
-    if (!isService && hasSalesProductPriceListConflict(cart, product.id, selectedPriceListId, existing ? cart.indexOf(existing) : -1, selectedPriceListId)) {
+    if (!isService && hasSalesProductPriceListConflict(cart, product.id, selectedPriceListId, existing ? cart.indexOf(existing) : -1, selectedPriceListId, variant.id)) {
       toast.error('Este producto ya está agregado con la misma lista de precios.');
       return;
     }
@@ -1287,8 +1298,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       return;
     }
 
-    if (product.trackInventory && variant.currentStock != null && requestedQty + globalQty > variant.currentStock) {
-      toast.error(`Stock insuficiente para ${variantDescription}. Disponible: ${variant.currentStock}`);
+    if (product.trackInventory && (variant.currentStock == null || requestedQty + globalQty > variant.currentStock)) {
+      const available = Math.max(0, Number(variant.currentStock || 0) - globalQty);
+      toast.error(`Stock insuficiente para ${variantDescription}. Disponible en esta bodega: ${available}`);
       return;
     }
 
@@ -1334,7 +1346,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       toast.warning(`El producto "${product.name}" no tiene precio en esta lista. Puedes agregarlo, pero selecciona otra lista antes de emitir.`);
     }
     const existing = cart.find((i) => i.productId === product.id && i.warehouseId === warehouseId);
-    const globalQty = getGlobalCartQuantity(product.id);
+    const globalQty = getGlobalCartQuantity(product.id, undefined, warehouseId);
     const requestedQty = (existing?.quantity || 0) + 1;
 
     if (!isService && hasSalesProductPriceListConflict(cart, product.id, selectedPriceListId, existing ? cart.indexOf(existing) : -1, selectedPriceListId)) {
@@ -1391,15 +1403,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const product = productsById.get(productId);
     let finalQty = quantity;
     if (product && product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
-      const globalQty = getGlobalCartQuantity(productId);
-      if (quantity + globalQty > product.currentStock) {
-        toast.error(stockBlockedMessage(product, globalQty), {
+      const variant = variantId ? product.variants?.find((candidate) => candidate.id === variantId) : undefined;
+      const availableStock = variantId ? Number(variant?.currentStock || 0) : Number(product.currentStock);
+      const globalQty = getGlobalCartQuantity(productId, variantId, warehouseId);
+      if (quantity + globalQty > availableStock) {
+        const message = variant
+          ? `Stock insuficiente para ${product.name} - ${variant.attributes?.map((attribute) => attribute.value).join(' / ') || variant.name}. Disponible en esta bodega: ${Math.max(0, availableStock - globalQty)}`
+          : stockBlockedMessage(product, globalQty);
+        toast.error(message, {
           action: {
             label: 'Ver otras sucursales',
             onClick: () => void openAvailabilityFor(product, quantity),
           },
         });
-        finalQty = Math.max(1, product.currentStock - globalQty);
+        finalQty = Math.max(1, availableStock - globalQty);
       }
     }
 
@@ -1662,7 +1679,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       : retailList?.id || priceLists.find((list) => list.isDefault)?.id || priceLists[0]?.id || '';
     const nextCart = cart.map((item) => {
       const isService = productsById.get(item.productId)?.itemType === 'SERVICE';
-      const price = isService ? Number(productsById.get(item.productId)?.salePrice || item.unitPrice || 0) : getConfiguredPrice(nextListId, item.productId);
+      const price = isService ? Number(productsById.get(item.productId)?.salePrice || item.unitPrice || 0) : getConfiguredPrice(nextListId, item.productId, item.variantId);
       return price === undefined
         ? { ...item, priceListId: nextListId, unitPrice: 0, lineTotal: 0, priceMissing: true }
         : { ...item, priceListId: isService ? undefined : nextListId, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
@@ -2422,28 +2439,38 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 ) : (
                   <>
                   <div className="hidden overflow-x-auto rounded-xl border border-border/50 lg:block">
-                    <table className="w-full min-w-[920px] text-xs xl:min-w-0">
+                    <table className="w-full min-w-[1120px] table-fixed text-xs">
+                      <colgroup>
+                        <col className="w-[17rem]" />
+                        <col className="w-[13rem]" />
+                        <col className="w-[6rem]" />
+                        <col className="w-[8rem]" />
+                        <col className="w-[5rem]" />
+                        <col className="w-[8rem]" />
+                        <col className="w-[8rem]" />
+                        <col className="w-[5rem]" />
+                      </colgroup>
                       <thead>
                         <tr className="bg-muted/30 border-b border-border/30">
-                          <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descripción</th>
-                          <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Bodega de salida</th>
-                          <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">IVA</th>
-                          <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descuento (%)</th>
-                          <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Cant</th>
-                          <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Precio Unit.</th>
-                          <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Subtotal</th>
-                          <th data-actions-column="compact" className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Acción</th>
+                          <th scope="col" className="whitespace-nowrap px-3.5 py-3 text-left font-black uppercase tracking-widest text-[10px] leading-4 text-muted-foreground">Descripción</th>
+                          <th scope="col" className="whitespace-nowrap px-3.5 py-3 text-left font-black uppercase tracking-widest text-[10px] leading-4 text-muted-foreground">Bodega de salida</th>
+                          <th scope="col" className="whitespace-nowrap px-3.5 py-3 text-center font-black uppercase tracking-widest text-[10px] leading-4 text-muted-foreground">IVA</th>
+                          <th scope="col" className="whitespace-nowrap px-3.5 py-3 text-right font-black uppercase tracking-widest text-[10px] leading-4 text-muted-foreground">Descuento (%)</th>
+                          <th scope="col" className="whitespace-nowrap px-3.5 py-3 text-center font-black uppercase tracking-widest text-[10px] leading-4 text-muted-foreground">Cant.</th>
+                          <th scope="col" className="whitespace-nowrap px-3.5 py-3 text-right font-black uppercase tracking-widest text-[10px] leading-4 text-muted-foreground">Precio unit.</th>
+                          <th scope="col" className="whitespace-nowrap px-3.5 py-3 text-right font-black uppercase tracking-widest text-[10px] leading-4 text-muted-foreground">Subtotal</th>
+                          <th scope="col" data-actions-column="compact" className="whitespace-nowrap px-3.5 py-3 text-center font-black uppercase tracking-widest text-[10px] leading-4 text-muted-foreground">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/20">
                         {cart.map((item) => (
-                          <tr key={`${item.productId}-${item.variantId || 'base'}-${item.warehouseId || 'service'}`} className="hover:bg-muted/20 transition-colors">
-                            <td className="px-3 py-2 font-bold">
-                              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                <span className="min-w-0 flex-1">{item.description}</span>
-                                {item.commercialNoteSnapshot && <span className="basis-full truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}
-                                <SalesLinePriceListSelect productId={item.productId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} lineItems={cart} lineIndex={cart.indexOf(item)} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />
-                                {item.priceMissing && <PriceMissingBadge className="basis-full" />}
+                          <tr key={`${item.productId}-${item.variantId || 'base'}-${item.warehouseId || 'service'}`} className="align-top transition-colors hover:bg-muted/20">
+                            <td className="px-3.5 py-3 font-bold">
+                              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_7rem] items-start gap-2">
+                                <span className="min-w-0">{item.description}</span>
+                                <SalesLinePriceListSelect productId={item.productId} variantId={item.variantId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} lineItems={cart} lineIndex={cart.indexOf(item)} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />
+                                {item.commercialNoteSnapshot && <span className="col-span-2 min-w-0 truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}
+                                {item.priceMissing && <PriceMissingBadge className="col-span-2 min-w-0 max-w-full whitespace-normal leading-3" />}
                               </div>
                               {productsById.get(item.productId)?.itemType !== 'SERVICE' && (
                                 <SalesWarehouseStockHint
@@ -2455,7 +2482,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 />
                               )}
                             </td>
-                            <td className="px-3 py-2 align-top">
+                            <td className="px-3.5 py-3">
                               {productsById.get(item.productId)?.itemType === 'SERVICE' ? (
                                 <span className="text-[10px] text-muted-foreground">No aplica</span>
                               ) : (
@@ -2475,7 +2502,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 </Select>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-center">
+                            <td className="px-3.5 py-3 text-center">
                               {pricingMode === 'individual' ? (
                                 <label className="inline-flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                                   <input
@@ -2489,7 +2516,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 </label>
                               ) : <span className="text-[10px] text-muted-foreground">Global</span>}
                             </td>
-                            <td className="px-3 py-2 text-right">
+                            <td className="px-3.5 py-3 text-right">
                               {pricingMode === 'individual' ? (
                                 <Input
                                   type="number"
@@ -2503,7 +2530,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 />
                               ) : <span className="text-[10px] text-muted-foreground">Global</span>}
                             </td>
-                            <td data-actions-column="compact" className="px-3 py-2 text-center">
+                            <td data-actions-column="compact" className="px-3.5 py-3 text-center">
                               <div className="mx-auto w-12 max-w-12">
                                 <Input
                                   type="number"
@@ -2522,9 +2549,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 />
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
-                            <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(pricingMode === 'individual' ? calculateIndividualLineTotal(item) : item.lineTotal)}</td>
-                            <td className="px-3 py-2 text-center">
+                            <td className="px-3.5 py-3 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
+                            <td className="px-3.5 py-3 text-right font-mono font-bold">{formatCurrency(pricingMode === 'individual' ? calculateIndividualLineTotal(item) : item.lineTotal)}</td>
+                            <td className="px-3.5 py-3 text-center">
                               <Button variant="ghost" onClick={() => removeItem(item.productId, item.variantId, item.warehouseId)}
                                 disabled={isRegisterDisabled}
                                 className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 rounded-lg">
@@ -2556,7 +2583,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                             </Button>
                           </div>
                           <div className="mt-3 min-w-0">
-                            <SalesLinePriceListSelect productId={item.productId} productCode={product?.code} itemType={product?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} lineItems={cart} lineIndex={cart.indexOf(item)} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />
+                            <SalesLinePriceListSelect productId={item.productId} variantId={item.variantId} productCode={product?.code} itemType={product?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} lineItems={cart} lineIndex={cart.indexOf(item)} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />
                             {item.priceMissing && <PriceMissingBadge className="mt-1" />}
                           </div>
                           {product?.itemType !== 'SERVICE' && <SalesWarehouseStockHint product={product} warehouses={directWarehouseOptions} warehouseId={item.warehouseId} variantId={item.variantId} className="mt-2 px-0" />}

@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import type { PosProduct, PosProductVariant } from '../../services/caja.service';
-import { extractVariantAttributes, findVariantByAttributes, buildVariantDisplayName } from '../../types/variants';
+import { extractVariantAttributes, findVariantByAttributes } from '../../types/variants';
 
 interface VariantPickerModalProps {
   open: boolean;
@@ -14,20 +14,24 @@ interface VariantPickerModalProps {
 }
 
 export function VariantPickerModal({ open, onOpenChange, product, onSelect }: VariantPickerModalProps) {
-  const variants = product?.variants || [];
-  const attributes = useMemo(() => extractVariantAttributes(variants as any[]), [variants]);
+  const variants = useMemo(() => product?.variants || [], [product?.variants]);
+  const attributes = useMemo(() => extractVariantAttributes(variants), [variants]);
   const [selected, setSelected] = useState<Record<string, string>>({});
 
   const matchedVariant = useMemo(
-    () => findVariantByAttributes(variants as any[], selected),
+    () => findVariantByAttributes(variants, selected),
     [variants, selected]
   );
+  const matchedVariantHasStock = !product?.trackInventory
+    || Boolean(matchedVariant && Number(matchedVariant.currentStock || 0) > 0);
 
   const toggleValue = (attribute: string, value: string) => {
-    setSelected((prev) => ({
-      ...prev,
-      [attribute]: prev[attribute] === value ? undefined as any : value,
-    }));
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[attribute] === value) delete next[attribute];
+      else next[attribute] = value;
+      return next;
+    });
   };
 
   const handleConfirm = () => {
@@ -86,11 +90,11 @@ export function VariantPickerModal({ open, onOpenChange, product, onSelect }: Va
                 <span className="text-muted-foreground">SKU:</span>
                 <span className="font-mono font-bold">{matchedVariant.sku}</span>
               </div>
-              {matchedVariant.currentStock != null && (
+              {product.trackInventory && (
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-muted-foreground">Stock:</span>
-                  <Badge variant={matchedVariant.currentStock > 0 ? 'secondary' : 'destructive'} className="text-[10px]">
-                    {matchedVariant.currentStock} unidades
+                  <Badge variant={matchedVariantHasStock ? 'secondary' : 'destructive'} className="text-[10px]">
+                    {matchedVariant.currentStock == null ? 'Sin existencia' : `${matchedVariant.currentStock} unidades`}
                   </Badge>
                 </div>
               )}
@@ -100,7 +104,7 @@ export function VariantPickerModal({ open, onOpenChange, product, onSelect }: Va
 
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button variant="outline" onClick={handleClose}>Cancelar</Button>
-          <Button onClick={handleConfirm} disabled={!matchedVariant}>
+          <Button onClick={handleConfirm} disabled={!matchedVariant || !matchedVariantHasStock}>
             Seleccionar
           </Button>
         </div>

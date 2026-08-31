@@ -1500,10 +1500,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
     const isDraftInvoice = isCreating || String(localDoc?.status || '').toUpperCase() === 'DRAFT';
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
-        <div className="flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); setIsCreating(false); commitLocalDoc(null); onClearInvoiceDraft?.(); }} className="rounded-full">
+      <div className="sales-document-editor min-w-0 space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
+        <div className="sales-document-header flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+          <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); setIsCreating(false); commitLocalDoc(null); onClearInvoiceDraft?.(); }} className="shrink-0 rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div className="min-w-0">
@@ -2029,7 +2029,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       />
                     </div>
                   )}
-                  <div className="flex min-w-0 items-center justify-end gap-2 text-right xl:col-span-2">
+                  <div data-item-role="total-actions" className="flex min-w-0 items-center justify-end gap-2 text-right xl:col-span-2">
                     <span className="text-sm font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(item.total)}</span>
                      <Button type="button" variant="ghost" size="icon" disabled={isInvoiceLocked} className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
                       const newItems = [...(localDoc.items || [])]; newItems.splice(idx, 1);
@@ -2120,7 +2120,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input
                 placeholder="Buscar factura..."
-                className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
+                className="pl-9 h-10 w-full sm:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
@@ -2168,7 +2168,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           isLoading={loading}
           bulkActions={() => null}
           actions={(row) => (
-            <div className="flex min-w-max items-center justify-end gap-1 pr-1">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 pr-1 xl:min-w-max xl:flex-nowrap">
               <WhatsAppActionButton
                 phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
                 documentLabel="factura"

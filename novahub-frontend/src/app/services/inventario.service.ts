@@ -12,7 +12,10 @@ export const inventoryService = {
     const product = await api.get<Product>(`/inventory/products/${id}`, { signal });
     return resolveStorageReferences(product);
   },
-  createProduct: (data: Partial<Product> & { initialStock?: number }) => api.post<Product>('/inventory/products', data),
+  createProduct: (data: Partial<Product> & {
+    initialStock?: number;
+    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number }>;
+  }) => api.post<Product>('/inventory/products', data),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   updateProductStatus: (id: string, isActive: boolean) => api.patch<Product>(`/inventory/products/${id}/status`, { isActive }),
   duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`),

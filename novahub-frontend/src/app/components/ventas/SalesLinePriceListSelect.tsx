@@ -22,7 +22,7 @@ interface SalesLinePriceListSelectProps {
   exchangeRate?: number;
   disabled?: boolean;
   /** Líneas del documento para impedir repetir producto+lista desde cualquier orden de selección. */
-  lineItems?: Array<{ productId?: string | null; priceListId?: string | null }>;
+  lineItems?: Array<{ productId?: string | null; variantId?: string | null; priceListId?: string | null }>;
   lineIndex?: number;
   onChange: (priceListId: string, result: { unitPrice?: number; priceMissing: boolean }, source?: 'initial' | 'user') => void;
 }
@@ -55,11 +55,11 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
     : lists.find((list: any) => list.isDefault)?.id || lists[0]?.id || '';
   const blockedPriceListIds = useMemo(() => new Set(
     lineItems
-      .filter((line, index) => index !== lineIndex && sameSalesId(line?.productId, productId))
+      .filter((line, index) => index !== lineIndex && sameSalesId(line?.productId, productId) && String(line?.variantId || '') === String(variantId || ''))
       .map((line) => getSalesLinePriceListId(line, inheritedPriceListId))
       .filter(Boolean)
       .map((id) => String(id)),
-  ), [lineItems, lineIndex, productId, inheritedPriceListId]);
+  ), [lineItems, lineIndex, productId, variantId, inheritedPriceListId]);
 
   // Lista resuelta: la asignada al item, la de la orden, la default o la primera.
   // Si la lista heredada ya está ocupada por el mismo producto, se elige una
@@ -141,7 +141,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
 
   /** Cuando el usuario elige explícitamente un tipo de precio */
   const handleUserSelect = (priceListId: string) => {
-    if (hasSalesProductPriceListConflict(lineItems, productId, priceListId, lineIndex, inheritedPriceListId)) return;
+    if (hasSalesProductPriceListConflict(lineItems, productId, priceListId, lineIndex, inheritedPriceListId, variantId)) return;
     const result = calcPrice(priceListId, productId);
     latestOnChange.current(priceListId, result, 'user');
   };

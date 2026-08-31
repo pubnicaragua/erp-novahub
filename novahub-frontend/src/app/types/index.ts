@@ -634,6 +634,7 @@ export interface PurchaseOrderItem {
   id: string;
   purchaseOrderId: string;
   productId?: string;
+  variantId?: string;
   description?: string;
   commercialNoteSnapshot?: string | null;
   code?: string;
@@ -1498,6 +1499,7 @@ export interface PurchaseRequestItem {
   id: string;
   purchaseRequestId: string;
   productId?: string;
+  variantId?: string;
   description: string;
   quantity: number;
   currentStock: number;
@@ -1542,6 +1544,7 @@ export interface PurchaseManagementItem {
   id: string;
   purchaseManagementId: string;
   productId?: string;
+  variantId?: string;
   description: string;
   quantityRequested: number;
   quantityProposed: number;

@@ -458,6 +458,34 @@ export function ProductDetailDrawer({
     [stockByWarehouse],
   );
 
+  const variantStockDistribution = useMemo(() => {
+    const variants = Array.isArray(product?.variants) ? product.variants : [];
+    const stockLevels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
+
+    return variants.map((variant: any) => {
+      const variantLevels = stockLevels.filter((level: any) => String(level?.variantId || '') === String(variant.id));
+      const levelQuantity = variantLevels.reduce((total: number, level: any) => total + Number(level?.quantity || 0), 0);
+      const fallbackQuantity = Number(variant?.currentStock ?? variant?.stock ?? 0);
+      const attributes = Array.isArray(variant?.attributes) ? variant.attributes : [];
+      const label = attributes.length > 0
+        ? attributes.map((attribute: any) => attribute?.value).filter(Boolean).join(' / ')
+        : variant?.name || variant?.sku || 'Variante';
+
+      return {
+        id: String(variant.id),
+        label,
+        attributes,
+        sku: variant?.sku || '',
+        quantity: variantLevels.length > 0 ? levelQuantity : fallbackQuantity,
+      };
+    });
+  }, [product]);
+
+  const totalVariantStock = useMemo(
+    () => variantStockDistribution.reduce((total, variant) => total + variant.quantity, 0),
+    [variantStockDistribution],
+  );
+
   /**
    * Kardex del producto: prioriza lo traído del endpoint, fallback a props globales.
    */
@@ -531,7 +559,7 @@ export function ProductDetailDrawer({
               )}
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <SheetTitle className="text-base font-bold truncate">
+                  <SheetTitle className="min-w-0 whitespace-normal break-words text-base font-bold leading-tight [overflow-wrap:anywhere]">
                     {product?.name || 'Cargando…'}
                   </SheetTitle>
                   {product?.status && (
@@ -553,13 +581,13 @@ export function ProductDetailDrawer({
                     </Badge>
                   )}
                 </div>
-                <SheetDescription className="flex items-center gap-3 text-xs">
-                  <span className="font-mono">{product?.code || product?.sku || '—'}</span>
+                <SheetDescription className="flex min-w-0 flex-wrap items-start gap-x-3 gap-y-1 text-xs">
+                  <span className="min-w-0 max-w-full break-words font-mono [overflow-wrap:anywhere]">{product?.code || product?.sku || '—'}</span>
                   {product?.category?.name && (
                     <>
                       <span className="text-border">·</span>
-                      <span className="flex items-center gap-1">
-                        <Tag className="size-3" />
+                      <span className="flex min-w-0 max-w-full items-start gap-1 break-words [overflow-wrap:anywhere]">
+                        <Tag className="mt-0.5 size-3 shrink-0" />
                         {product.category.name}
                       </span>
                     </>
@@ -567,8 +595,8 @@ export function ProductDetailDrawer({
                   {product?.updatedAt && (
                     <>
                       <span className="text-border">·</span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="size-3" />
+                      <span className="flex min-w-0 max-w-full items-start gap-1 break-words [overflow-wrap:anywhere]">
+                        <Calendar className="mt-0.5 size-3 shrink-0" />
                         {format(new Date(product.updatedAt), 'dd MMM yyyy', { locale: es })}
                       </span>
                     </>
@@ -630,7 +658,7 @@ export function ProductDetailDrawer({
                 {/* ============================ TAB: GENERAL ============================ */}
                 <TabsContent value="general" className="mt-0 space-y-4">
                   {/* Grid de métricas principales */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-4">
                       {!isService && (
                       <MetricCard
                         label="Stock total"
@@ -792,6 +820,48 @@ export function ProductDetailDrawer({
                             });
                           })()}
                         </div>
+                        {variantStockDistribution.length > 0 && (
+                          <div className="mt-4 border-t border-border/40 pt-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Stock por variante</p>
+                                <p className="mt-1 text-[10px] text-muted-foreground">Así se distribuye el stock entre los atributos seleccionados.</p>
+                              </div>
+                              <Badge variant="outline" className="font-mono text-[10px]">
+                                Total: {totalVariantStock} unidades
+                              </Badge>
+                            </div>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              {variantStockDistribution.map((variant) => {
+                                const percentage = totalVariantStock > 0
+                                  ? Math.round((variant.quantity / totalVariantStock) * 100)
+                                  : 0;
+                                return (
+                                  <div key={variant.id} className="rounded-lg border border-border/50 bg-background/70 p-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="break-words text-xs font-bold leading-tight [overflow-wrap:anywhere]" title={variant.label}>{variant.label}</p>
+                                        <p className="mt-1 break-words text-[10px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" title={variant.attributes.map((attribute: any) => `${attribute?.attributeName || 'Atributo'}: ${attribute?.value || '—'}`).join(' · ')}>
+                                          {variant.attributes.length > 0
+                                            ? variant.attributes.map((attribute: any) => `${attribute?.attributeName || 'Atributo'}: ${attribute?.value || '—'}`).join(' · ')
+                                            : variant.sku || 'Sin atributos'}
+                                        </p>
+                                        {variant.sku && <p className="mt-1 font-mono text-[9px] text-muted-foreground/80">SKU: {variant.sku}</p>}
+                                      </div>
+                                      <Badge variant={variant.quantity > 0 ? 'secondary' : 'outline'} className="shrink-0 font-mono text-[10px]">
+                                        {variant.quantity} u.
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <Progress value={percentage} className="h-1.5" />
+                                      <span className="w-8 text-right text-[9px] font-bold tabular-nums text-muted-foreground">{percentage}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </Card>
                   )}
@@ -1002,8 +1072,8 @@ export function ProductDetailDrawer({
                                     <span className="text-muted-foreground">-</span>
                                   )}
                                  </TableCell>}
-                                <TableCell className="max-w-[220px] text-xs font-mono text-muted-foreground" title={reference.full || undefined}>
-                                  <span className="block truncate">{reference.label}</span>
+                                <TableCell className="max-w-[220px] whitespace-normal break-words text-xs font-mono text-muted-foreground [overflow-wrap:anywhere]" title={reference.full || undefined}>
+                                  <span className="block break-words">{reference.label}</span>
                                 </TableCell>
                                 <TableCell className="text-xs">{warehouseName}</TableCell>
                                 <TableCell>
@@ -1155,17 +1225,17 @@ interface MetricCardProps {
 
 function MetricCard({ label, value, icon: Icon, accent = 'text-foreground', loading }: MetricCardProps) {
   return (
-    <Card className="p-3 gap-1.5 hover:border-primary/30 transition-colors">
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+    <Card className="min-w-0 overflow-hidden p-3 gap-1.5 transition-colors hover:border-primary/30">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-w-0 whitespace-normal break-words text-[10px] font-bold uppercase leading-tight tracking-widest text-muted-foreground [overflow-wrap:anywhere]">
           {label}
         </p>
-        <Icon className={`size-3.5 ${accent}`} />
+        <Icon className={`size-3.5 shrink-0 ${accent}`} />
       </div>
       {loading ? (
         <Skeleton className="h-5 w-3/4 mt-1" />
       ) : (
-        <div className={`text-base font-black tabular-nums ${accent} min-w-0`}>
+        <div className={`min-w-0 whitespace-normal break-words text-base font-black leading-tight tabular-nums ${accent} [overflow-wrap:anywhere]`}>
           {value}
         </div>
       )}
@@ -1183,13 +1253,13 @@ interface InfoFieldProps {
 
 function InfoField({ label, value, icon: Icon, mono, muted }: InfoFieldProps) {
   return (
-    <div className="space-y-1">
-      <Label className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-        <Icon className="size-3" />
+    <div className="min-w-0 space-y-1">
+      <Label className="flex min-w-0 items-start gap-1.5 whitespace-normal break-words text-[10px] uppercase leading-tight tracking-widest text-muted-foreground [overflow-wrap:anywhere]">
+        <Icon className="mt-0.5 size-3 shrink-0" />
         {label}
       </Label>
       <p
-        className={`text-xs ${mono ? 'font-mono' : 'font-medium'} ${muted ? 'text-muted-foreground italic' : ''} break-words`}
+        className={`min-w-0 whitespace-normal break-words text-xs leading-snug [overflow-wrap:anywhere] ${mono ? 'font-mono' : 'font-medium'} ${muted ? 'text-muted-foreground italic' : ''}`}
       >
         {value}
       </p>

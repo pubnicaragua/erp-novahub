@@ -1022,7 +1022,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       />
                     </div>
                   )}
-                  <div className="flex min-w-0 items-center justify-end gap-3 whitespace-nowrap xl:col-span-2">
+                  <div data-item-role="total-actions" className="flex min-w-0 items-center justify-end gap-3 whitespace-nowrap xl:col-span-2">
                     <span className="min-w-[7rem] shrink-0 text-right text-sm font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'}{formatSalesAmount(item.total)}</span>
                     <Button variant="ghost" size="icon" className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
@@ -1112,7 +1112,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
                 placeholder="Buscar cotización..." 
-                className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
+                className="pl-9 h-10 w-full sm:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
@@ -1145,7 +1145,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           layoutMode={layoutMode}
           showHorizontalControls
           actions={(row) => (
-            <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 pr-1 xl:min-w-max xl:flex-nowrap" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <WhatsAppActionButton
                 phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
                 documentLabel="cotización"

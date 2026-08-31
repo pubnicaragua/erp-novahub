@@ -38,6 +38,7 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   trackSerialNumbers: false,
   isActive: true,
   initialStock: '',
+  variantInitialStocks: {} as Record<string, number>,
   initialWarehouseId: '',
   imageFile: null as File | null,
   imagePreviewUrl: '',
@@ -45,6 +46,26 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   linkedAttributes: [] as Array<{ attributeId: string; selectedOptions: string[] }>,
   imeiNumber: '',
 });
+
+type VariantCombination = Array<{ attributeId: string; attributeName: string; value: string }>;
+
+const buildVariantCombinations = (linkedAttributes: any[] = []): VariantCombination[] => {
+  const attributes = linkedAttributes.filter((attribute) => Array.isArray(attribute.selectedOptions) && attribute.selectedOptions.length > 0);
+  if (attributes.length === 0) return [];
+
+  return attributes.reduce<VariantCombination[]>((combinations, attribute) => {
+    const options = attribute.selectedOptions.map((value: string) => ({
+      attributeId: attribute.attributeId,
+      attributeName: attribute.name || attribute.attributeId,
+      value,
+    }));
+    if (combinations.length === 0) return options.map((option: any) => [option]);
+    return combinations.flatMap((combination) => options.map((option: any) => [...combination, option]));
+  }, []);
+};
+
+const variantCombinationKey = (combination: VariantCombination) =>
+  combination.map((attribute) => `${attribute.attributeId}::${attribute.value}`).join('|');
 
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
@@ -131,6 +152,47 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       const selectedCount = linked?.selectedOptions?.length || attr.options?.length || 0;
       return acc * Math.max(1, selectedCount);
     }, 1);
+  };
+
+  const variantCombinations = useMemo(
+    () => buildVariantCombinations(draftProduct.linkedAttributes),
+    [draftProduct.linkedAttributes],
+  );
+
+  const allocatedVariantStock = variantCombinations.reduce(
+    (total, combination) => total + Number(draftProduct.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
+    0,
+  );
+
+  const updateVariantInitialStock = (combination: VariantCombination, value: string) => {
+    const key = variantCombinationKey(combination);
+    const parsed = value === '' ? 0 : Math.max(0, Number(value));
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      variantInitialStocks: {
+        ...(prev.variantInitialStocks || {}),
+        [key]: Number.isFinite(parsed) ? parsed : 0,
+      },
+    }));
+  };
+
+  const validateVariableStockDistribution = (product: any) => {
+    if (!product.isVariable) return true;
+    const total = Number(product.initialStock || 0);
+    if (!Number.isFinite(total) || total < 0) {
+      toast.error('El stock total del producto padre no es válido');
+      return false;
+    }
+    const combinations = buildVariantCombinations(product.linkedAttributes);
+    const allocated = combinations.reduce(
+      (sum, combination) => sum + Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
+      0,
+    );
+    if (Math.abs(allocated - total) > 0.000001) {
+      toast.error(`Distribuye exactamente ${total} unidades entre las variantes. Actualmente distribuiste ${allocated}.`);
+      return false;
+    }
+    return true;
   };
 
   const toggleAttribute = (attrId: string) => {
@@ -231,6 +293,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         toast.error('Cada atributo debe tener al menos una opción seleccionada');
         return;
       }
+      if (!validateVariableStockDistribution(draftProduct)) return;
     }
     if (draftProduct.itemType === 'PRODUCT' && !draftProduct.initialWarehouseId) {
       toast.error('Debes seleccionar una Bodega para el producto');
@@ -282,6 +345,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           toast.error('Cada atributo debe tener al menos una opción seleccionada');
           return;
         }
+        if (!validateVariableStockDistribution(draftProduct)) return;
       }
       if (!draftProduct.isVariable && draftProduct.itemType === 'PRODUCT' && !draftProduct.initialWarehouseId) {
         toast.error('Debes seleccionar una Bodega para el producto');
@@ -299,6 +363,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     }
 
     if (listToSave.length === 0) return;
+    for (const product of listToSave) {
+      if (!validateVariableStockDistribution(product)) return;
+    }
     
     setIsSaving(true);
     let successCount = 0;
@@ -334,7 +401,13 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           description: product.description || '',
           commercialNote: product.commercialNote || '',
           itemType: product.itemType || 'PRODUCT',
-          initialStock: 0,
+          initialStock: product.isVariable ? Number(product.initialStock || 0) : 0,
+          variantInitialStocks: product.isVariable
+            ? buildVariantCombinations(product.linkedAttributes).map((combination) => ({
+              attributes: combination,
+              quantity: Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
+            }))
+            : undefined,
           imageUrl: uploadedImageUri || undefined,
           isVariable: Boolean(product.isVariable),
           linkedAttributes: product.isVariable ? product.linkedAttributes : undefined,
@@ -513,8 +586,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   className={`h-8 w-full mt-1 text-[10px] uppercase tracking-wider gap-1.5 ${draftProduct.isVariable ? 'bg-primary text-primary-foreground' : ''}`}
                   onClick={() => {
                     handleUpdateDraft('isVariable', !draftProduct.isVariable);
-                    if (!draftProduct.isVariable && draftProduct.attributes.length === 0) {
-                      setDraftProduct((prev: any) => ({ ...prev, isVariable: true, attributes: [{ name: '', options: [] }] }));
+                    if (!draftProduct.isVariable && draftProduct.linkedAttributes.length === 0) {
+                      setDraftProduct((prev: any) => ({ ...prev, isVariable: true }));
                     }
                   }}
                 >
@@ -615,10 +688,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-1 sm:col-span-2 md:col-span-2 flex items-end">
-                    <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 w-full h-8 flex items-center">
-                      <p className="text-[10px] text-muted-foreground"><span className="font-bold text-primary">Stock:</span> Se configura después por variante.</p>
-                    </div>
+                  <div className="col-span-1 sm:col-span-2 md:col-span-2">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock total del padre</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={draftProduct.initialStock}
+                      onChange={(e) => handleUpdateDraft('initialStock', e.target.value)}
+                      className="h-8 text-xs text-right mt-1 tabular-nums"
+                      placeholder="0"
+                    />
                   </div>
                 </>
                 )
@@ -751,6 +831,41 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   })}
                 </div>
               )}
+
+              {variantCombinations.length > 0 && (
+                <div className="rounded-lg border border-primary/25 bg-background/80 p-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h5 className="text-[10px] font-black uppercase tracking-wider text-foreground">Distribución del stock por variante</h5>
+                      <p className="mt-1 text-[10px] text-muted-foreground">El total distribuido debe coincidir con el stock del producto padre.</p>
+                    </div>
+                    <Badge variant={allocatedVariantStock === Number(draftProduct.initialStock || 0) ? 'secondary' : 'destructive'} className="text-[9px] tabular-nums">
+                      {allocatedVariantStock} / {Number(draftProduct.initialStock || 0)} unidades
+                    </Badge>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {variantCombinations.map((combination) => {
+                      const key = variantCombinationKey(combination);
+                      return (
+                        <div key={key} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-card px-3 py-2">
+                          <span className="min-w-0 truncate text-xs font-semibold" title={combination.map((attribute) => attribute.value).join(' / ')}>
+                            {combination.map((attribute) => attribute.value).join(' / ')}
+                          </span>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={draftProduct.variantInitialStocks?.[key] || ''}
+                            onChange={(e) => updateVariantInitialStock(combination, e.target.value)}
+                            className="h-8 w-20 shrink-0 text-right text-xs tabular-nums"
+                            aria-label={`Stock inicial para ${combination.map((attribute) => attribute.value).join(' / ')}`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -788,7 +903,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                           {allCategories.find(c => c.id === product.categoryId)?.name}
                        </TableCell>
                         <TableCell className="text-xs text-right p-2 tabular-nums">
-                          {product.itemType === 'SERVICE' ? '-' : product.isVariable ? `${(() => {
+                          {product.itemType === 'SERVICE' ? '-' : product.isVariable ? `${Number(product.initialStock || 0)} total · ${(() => {
                             const attrs = catalogAttributes.filter((a: any) => product.linkedAttributes?.some((la: any) => la.attributeId === a.id));
                             return attrs.length > 0 ? attrs.reduce((acc: number, attr: any) => {
                               const linked = product.linkedAttributes?.find((la: any) => la.attributeId === attr.id);
