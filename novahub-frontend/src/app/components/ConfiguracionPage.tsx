@@ -8,8 +8,8 @@ import {
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
-  CalendarDays, Headphones, BellRing, FileText, Activity, Settings,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Utensils
+  CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned,
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, MessageSquare, Utensils
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -68,6 +68,7 @@ const AVAILABLE_MODULES = [
   { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
+  { id: 'FORCE_SALES', label: 'Fuerza Comercial', icon: MapPinned, description: 'Prospección, rutas, visitas y seguimiento comercial' },
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
   { id: 'SUPPORT_TECH', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },

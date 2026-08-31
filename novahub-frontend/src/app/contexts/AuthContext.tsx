@@ -74,6 +74,7 @@ export type Module =
   | 'inventario_movimientos'
   | 'proveedores'
   | 'actividades'
+  | 'proyectos'
   | 'tickets'
   | 'documentos'
   | 'notificaciones'
@@ -92,7 +93,8 @@ export type Module =
   | 'inventario_productos'
   | 'contabilidad'
   | 'dashboard-ventas'
-  | 'qa-console';
+  | 'qa-console'
+  | 'fuerza-comercial';
 
 export type SubModule = string;
 
@@ -283,11 +285,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ALL_MODULES: Module[] = [
   'dashboard', 'inventario', 'ventas', 'restaurante', 'compras', 'finanzas', 'rh',
-  'clientes', 'proveedores', 'actividades', 'tickets',
+  'clientes', 'proveedores', 'actividades', 'proyectos', 'tickets',
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
   'financiamiento-pyme', 'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
-  'contabilidad', 'novachat', 'qa-console',
+  'contabilidad', 'novachat', 'qa-console', 'fuerza-comercial',
 ];
 
 const getPermissionsByRole = (role: Role): Permission[] => {
@@ -431,6 +433,7 @@ const createUserObject = (apiPayload: any): User => {
     'CONFIG_USERS': 'usuarios',
     'SUBSCRIPTIONS': 'suscripciones',
     'QA_CONSOLE': 'qa-console',
+    'FORCE_SALES': 'fuerza-comercial',
     'RETAIL_POS': 'ventas',
     'FINANCING': 'financiamiento-pyme',
     'LEGAL': 'asesoria-legal',
@@ -703,12 +706,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
 
+    // Fuerza Comercial es una superficie cerrada: solo Super Admin y
+    // colaboradores expresamente habilitados pueden verla.
+    if (module === 'fuerza-comercial') {
+      if (user.isPlatformAdmin) return user.role === 'superadmin';
+      if (user.userType !== 'collaborator') return false;
+    }
+
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
       const platformModules = [
         'dashboard', 'suscripciones', 'tenant-admin', 'configuracion', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
-        'qa-console',
+        'qa-console', 'fuerza-comercial',
       ];
       const platformConfigurationModules = [
         'CONFIGURATION', 'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF',
@@ -751,6 +761,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'centro-capacitacion': 'HR_TRAINING',
       'soporte-tecnico': 'SUPPORT_TECH',
       'novachat': 'NOVACHAT',
+      'fuerza-comercial': 'FORCE_SALES',
       'roles': 'CONFIG_ROLES',
       'usuarios': 'CONFIG_USERS',
       'configuracion': 'CONFIGURATION',
@@ -786,6 +797,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'ACTIVITIES',
         'ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS',
       ],
+      proyectos: [
+        'PROJECTS',
+        'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS',
+      ],
       documentos: [
         'DOCUMENTS',
         'DOCUMENTS_FILES', 'DOCUMENTS_CONTRACTS', 'DOCUMENTS_INVOICES', 'DOCUMENTS_REPORTS',
@@ -816,6 +831,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'centro-capacitacion': ['HR_TRAINING', 'TRAINING'],
       'soporte-tecnico': ['SUPPORT_TECH', 'SUPPORT'],
       'novachat': ['NOVACHAT'],
+      'fuerza-comercial': ['FORCE_SALES'],
     };
 
     const backendModuleName = moduleEnumMap[module] || module.toUpperCase();
@@ -888,6 +904,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'ACTIVITIES_': 'ACTIVITIES',
       'PROVIDERS_': 'PROVIDERS',
       'CLIENTS_': 'CLIENTS',
+      'PROJECTS_': 'PROJECTS',
       'ACCOUNTING_': 'ACCOUNTING',
       'CONFIG_': 'CONFIGURATION',
       'MY_COMPANY_': 'MY_COMPANY',
@@ -931,6 +948,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'centro-capacitacion': 'HR_TRAINING',
         'soporte-tecnico': 'SUPPORT_TECH',
         'novachat': 'NOVACHAT',
+        'fuerza-comercial': 'FORCE_SALES',
       };
       const mappedModule = Object.entries(moduleEnumMap).find(([, v]) => v === normalizedModule)?.[0];
       if (mappedModule) permission = findPermission(mappedModule);

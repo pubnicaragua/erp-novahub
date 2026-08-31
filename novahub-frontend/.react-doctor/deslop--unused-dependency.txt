@@ -1,0 +1,35 @@
+Rule: deslop/unused-dependency
+Severity: warning
+Category: Maintainability
+Count: 9
+
+Unused dependency: `@popperjs/core`
+
+Unused dependency: `@sentry/browser`
+
+Unused dependency: `next-themes`
+
+Unused dependency: `react-dnd-html5-backend`
+
+Unused dependency: `react-dnd`
+
+Unused dependency: `react-hot-toast`
+
+Unused dependency: `react-popper`
+
+Unused dependency: `react-responsive-masonry`
+
+Unused dependency: `react-slick`
+
+Suggestion: An unused dependency adds install time and supply-chain surface without being used; remove it from package.json if it is genuinely unused.
+
+Files:
+  package.json
+  package.json
+  package.json
+  package.json
+  package.json
+  package.json
+  package.json
+  package.json
+  package.json

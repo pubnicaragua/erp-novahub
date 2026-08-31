@@ -1,0 +1,14 @@
+Rule: react-doctor/unsafe-json-in-html
+Severity: warning
+Category: Security
+Count: 2
+
+JSON.stringify is embedded in HTML/script markup without HTML-escaping; data containing `</script>` or `<` breaks out and becomes XSS.
+
+Suggestion: JSON.stringify does not HTML-escape, so a `</script>` (or `<`) in the data breaks out and becomes XSS. Use an HTML-safe serializer (serialize-javascript, devalue) or escape `<`, `>`, and `&`, or pass data via a JSON `<script type="application/json">` read with JSON.parse.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/unsafe-json-in-html
+
+Files:
+  .codex-build-currency/assets/pdf-dpzDaAzT.js:38
+  .codex-build-modal/assets/pdf-dpzDaAzT.js:38

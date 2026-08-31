@@ -10,6 +10,7 @@ import { LoginPage } from './components/LoginPage';
 import { BrandLogoLoader } from './components/BrandLogo';
 import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
 import LandingPage from './components/LandingPage';
+import ModulosLandingPage from './components/ModulosLandingPage';
 import { TrialExpiredPage } from './components/auth/TrialExpiredPage';
 import { SessionClosedPage } from './components/auth/SessionClosedPage';
 import { SessionMonitor } from './components/auth/SessionMonitor';
@@ -69,6 +70,8 @@ const RecursosHumanosPage = lazyWithChunkRecovery(() => import('./components/Rec
 const ClientesPage = lazyWithChunkRecovery(() => import('./components/ClientesPage').then(m => ({ default: m.ClientesPage })), 'clientes');
 const ProveedoresPage = lazyWithChunkRecovery(() => import('./components/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })), 'proveedores');
 const ActividadesPage = lazyWithChunkRecovery(() => import('./components/ActividadesPage').then(m => ({ default: m.ActividadesPage })), 'actividades');
+const ProyectosPage = lazyWithChunkRecovery(() => import('./components/ProyectosPage').then(m => ({ default: m.ProyectosPage })), 'proyectos');
+const FuerzaComercialPage = lazyWithChunkRecovery(() => import('./components/FuerzaComercialPage').then(m => ({ default: m.FuerzaComercialPage })), 'fuerza-comercial');
 const TicketsPage = lazyWithChunkRecovery(() => import('./components/TicketsPage').then(m => ({ default: m.TicketsPage })), 'tickets');
 const DocumentosPage = lazyWithChunkRecovery(() => import('./components/DocumentosPage').then(m => ({ default: m.DocumentosPage })), 'documentos');
 const NotificacionesPage = lazyWithChunkRecovery(() => import('./components/NotificacionesPage').then(m => ({ default: m.NotificacionesPage })), 'notificaciones');
@@ -408,6 +411,8 @@ function DashboardLayout() {
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;
       case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
+      case 'proyectos': return <ModuleErrorBoundary moduleName="Proyectos"><ProyectosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
+      case 'fuerza-comercial': return <FuerzaComercialPage />;
       case 'tickets': return <TicketsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'documentos': return <DocumentosPage activeSubModule={activeSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
@@ -583,6 +588,10 @@ function AppContent() {
         <Toaster position="top-right" />
       </>
     );
+  }
+
+  if (location.pathname === '/modulos') {
+    return <ModulosLandingPage />;
   }
 
   if (location.pathname === '/register') {
