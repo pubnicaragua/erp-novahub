@@ -6,7 +6,10 @@
 import { isSafeAuthToken } from './auth-token';
 import { notifyErpMutation } from '../utils/action-lock';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const DEFAULT_API_URL = import.meta.env.PROD
+  ? 'https://backenderpnh.onrender.com/api'
+  : 'http://localhost:3000/api';
+const BASE_URL = String(import.meta.env.VITE_API_URL || DEFAULT_API_URL).replace(/\/+$/, '');
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
