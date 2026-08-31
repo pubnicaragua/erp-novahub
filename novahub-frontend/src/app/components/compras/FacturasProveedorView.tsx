@@ -49,6 +49,7 @@ interface Props {
 const statusOpts = [
   { label: 'Pendiente',   value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
   { label: 'Parcial',     value: 'PARTIAL',  color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'A crédito',   value: 'CREDIT',   color: 'bg-primary/10 text-primary' },
   { label: 'Pagada',      value: 'PAID',     color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Vencida',     value: 'OVERDUE',  color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
@@ -141,7 +142,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter((b) => {
     const st = (b.status || '').toUpperCase();
-    if (statusFilter === 'PENDING') { if (st !== 'PENDING' && st !== 'PARTIAL') return false; }
+    if (statusFilter === 'PENDING') { if (!['PENDING', 'PARTIAL', 'CREDIT'].includes(st)) return false; }
+    else if (statusFilter === 'CREDIT') { if (st !== 'CREDIT') return false; }
     else if (statusFilter === 'OVERDUE') { if (st !== 'OVERDUE') return false; }
     else if (statusFilter === 'PAID') { if (st !== 'PAID') return false; }
     if (!normalizedSearchTerm) return true;
@@ -758,7 +760,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   }
 
   const pendingTotalInDisplayCurrency = data
-    .filter(invoice => ['PENDING', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
+    .filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT'].includes((invoice.status || '').toUpperCase()))
     .reduce((acc, invoice) => {
       const amount = Number(invoice.total ?? invoice.baseTotal ?? 0);
       const converted = valuationMode === 'CURRENT'
@@ -767,7 +769,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       return acc + converted;
     }, 0);
   const originalPendingAmounts = summarizeAmountsByCurrency(
-    data.filter(invoice => ['PENDING', 'PARTIAL'].includes((invoice.status || '').toUpperCase())),
+    data.filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT'].includes((invoice.status || '').toUpperCase())),
     (invoice) => Number(invoice.total ?? invoice.baseTotal ?? 0),
     (invoice) => invoice.currency,
     baseCurrency,

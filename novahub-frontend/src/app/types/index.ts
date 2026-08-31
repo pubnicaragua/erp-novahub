@@ -825,15 +825,12 @@ export interface RecurringSupplierInvoice {
   startDate: string;
   endDate?: string;
   nextInvoiceDate: string;
+  warehouseId?: string | null;
+  warehouse?: { id: string; name: string } | null;
   description?: string;
   subtotal?: number;
   taxAmount?: number;
   withholdingTotal?: number;
-  extraCostDescription?: string | null;
-  extraCostAmount?: number;
-  extraCharges?: Array<{ description?: string; amount?: number }> | null;
-  deliveryDescription?: string | null;
-  deliveryAmount?: number;
   total: number;
   currency: Currency;
   exchangeRate?: number;

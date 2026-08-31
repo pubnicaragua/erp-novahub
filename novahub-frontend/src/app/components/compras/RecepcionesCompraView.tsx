@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, Pencil, Ban,
-  AlertTriangle, XCircle, ArrowDown, FileText, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign, RefreshCw
+  AlertTriangle, XCircle, ArrowDown, FileText, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign, RefreshCw, Send
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -39,7 +39,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
+interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; onOpenCredits?: () => void; }
 
 const statusOpts = [
   { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
@@ -484,7 +484,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
   );
 }
 
-export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
+export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId, onOpenCredits }: Props) {
   const { canPerform, user } = useAuth();
   const { formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
@@ -519,6 +519,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseReceipt> | null>(null);
   const [inventoryCostOperations, setInventoryCostOperations] = useState<InventoryCostOperation[] | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<ReceiptPaymentDraft | null>(null);
+  const [creditDraft, setCreditDraft] = useState<{ receipt: PurchaseReceipt; invoice: any } | null>(null);
+  const [creditReason, setCreditReason] = useState('');
+  const [creditQuantities, setCreditQuantities] = useState<Record<string, number>>({});
+  const [creditLoading, setCreditLoading] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
@@ -842,6 +846,56 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     });
   };
 
+  const openReceiptCredit = (receipt: PurchaseReceipt, invoice: any) => {
+    const receiptStatus = getReceiptDisplayStatus(receipt);
+    if (!['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus)) {
+      toast.error('La recepción debe estar recibida antes de crear un crédito.');
+      return;
+    }
+    if (!invoice?.id || String(invoice.status || '').toUpperCase() === 'CANCELLED') {
+      toast.error('La recepción no tiene una factura de proveedor válida para crear el crédito.');
+      return;
+    }
+    setCreditDraft({ receipt, invoice });
+    setCreditReason('');
+    setCreditQuantities(Object.fromEntries((receipt.items || []).map((item: any) => [item.id, 0])));
+  };
+
+  const handleCreateCreditFromReceipt = async () => {
+    if (!creditDraft) return;
+    const items = Object.entries(creditQuantities)
+      .map(([receiptItemId, quantity]) => ({ receiptItemId, quantity: Number(quantity || 0) }))
+      .filter((item) => item.quantity > 0);
+    if (!creditReason.trim()) {
+      toast.error('Indica el motivo del crédito.');
+      return;
+    }
+    if (items.length === 0) {
+      toast.error('Selecciona al menos un artículo y una cantidad para acreditar.');
+      return;
+    }
+    setCreditLoading(true);
+    const createToastId = toast.loading('Creando crédito del proveedor...');
+    try {
+      await purchaseReceiptsService.createCredit(creditDraft.receipt.id, {
+        date: new Date().toISOString(),
+        reason: creditReason.trim(),
+        items,
+      });
+      toast.success('Crédito creado como borrador', { id: createToastId });
+      setCreditDraft(null);
+      setCreditReason('');
+      setCreditQuantities({});
+      onRefresh();
+      void queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      onOpenCredits?.();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo crear el crédito', { id: createToastId });
+    } finally {
+      setCreditLoading(false);
+    }
+  };
+
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!localDoc?.purchaseOrderId) return toast.error('Debe seleccionar una orden de compra');
@@ -1036,6 +1090,76 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const currentAvailableOrders = orders.filter(o => o.supplierId === localDoc?.supplierId && ['APPROVED'].includes((o.status||'').toUpperCase()) && !(o.receipts || []).some((receipt: any) => String(receipt.status || '').toUpperCase() === 'PENDING'));
 
   const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} onRegisterInvoice={registerInvoiceFromPaymentModal} />;
+  const creditDialog = (
+    <Dialog open={Boolean(creditDraft)} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditDraft(null); setCreditReason(''); setCreditQuantities({}); } }}>
+      <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+            <Send className="size-5 text-primary" /> Crear crédito del proveedor
+          </DialogTitle>
+          <DialogDescription>
+            Selecciona únicamente los artículos recibidos que serán devueltos o acreditados. El documento se guardará como borrador para revisarlo antes de emitirlo.
+          </DialogDescription>
+        </DialogHeader>
+        {creditDraft && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                {creditDraft.receipt.number || 'Recepción'} · {creditDraft.invoice.number || 'Factura de proveedor'}
+              </p>
+              <p className="mt-1 text-sm font-black text-primary">{creditDraft.receipt.supplier?.name || 'Sin proveedor'}</p>
+              <p className="mt-2 text-[10px] font-bold text-muted-foreground">
+                Factura origen: {creditDraft.invoice.number || 'Sin número'} · Las existencias ya recibidas no se modificarán al crear el borrador.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-muted/10 p-3">
+              <div className="mb-2 grid grid-cols-[minmax(0,1fr)_7rem_7rem] gap-3 px-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                <span>Artículo recibido</span><span className="text-right">Recibido</span><span className="text-right">Acreditar</span>
+              </div>
+              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                {(creditDraft.receipt.items || []).filter((item: any) => Number(item.quantityReceived || 0) > 0).map((item: any) => {
+                  const received = Number(item.quantityReceived || 0);
+                  const quantity = Number(creditQuantities[item.id] || 0);
+                  return (
+                    <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_7rem_7rem] items-center gap-3 rounded-xl border border-border/50 bg-background/80 px-2 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold">{item.description || item.name || item.code || 'Artículo sin descripción'}</p>
+                        <p className="truncate text-[10px] text-muted-foreground">{item.productId ? 'Producto de inventario' : 'Servicio'} · {formatReceiptAmount(Number(item.unitPrice || 0), creditDraft.receipt.currency)}</p>
+                      </div>
+                      <span className="text-right text-xs font-black tabular-nums">{received}</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        max={received}
+                        step="0.01"
+                        value={quantity || ''}
+                        aria-label={`Cantidad a acreditar de ${item.description || item.name || 'artículo'}`}
+                        onChange={(event) => {
+                          const next = Math.min(received, Math.max(0, Number(event.target.value) || 0));
+                          setCreditQuantities((current) => ({ ...current, [item.id]: next }));
+                        }}
+                        className="h-9 text-right text-xs font-black tabular-nums"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Motivo del crédito *</p>
+              <Input value={creditReason} onChange={(event) => setCreditReason(event.target.value)} maxLength={500} placeholder="Ej. Devolución por producto dañado o faltante" disabled={creditLoading} />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => { setCreditDraft(null); setCreditReason(''); setCreditQuantities({}); }} disabled={creditLoading}>Cancelar</Button>
+          <Button type="button" onClick={() => void handleCreateCreditFromReceipt()} disabled={creditLoading} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
+            {creditLoading ? 'Creando...' : 'Crear borrador'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
@@ -1585,6 +1709,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               ? (row.supplierInvoices || []).find((invoice: any) => String(invoice.status || '').toUpperCase() !== 'CANCELLED')
               : undefined;
             const payableInvoice = activeInvoice && Number(activeInvoice.balance || 0) > 0 ? activeInvoice : undefined;
+            const canCreateCredit = Boolean(activeInvoice)
+              && !needsInventorySync
+              && canPerform('PURCHASES_RECEIPTS', 'approve')
+              && canPerform('PURCHASES_RETURNS', 'create');
             const canRegisterPayment = Boolean(payableInvoice)
               && canPerform('PURCHASES_PAYMENTS', 'create')
               && canPerform('PURCHASES_PAYMENTS', 'approve');
@@ -1621,6 +1749,18 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     <Banknote className="size-4" />
                   </Button>
                 )}
+                {canCreateCredit && (
+                  <Button
+                    title="Crear crédito del proveedor"
+                    aria-label={`Crear crédito del proveedor desde ${row.number || 'recepción'}`}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10 hover:text-primary"
+                    onClick={() => openReceiptCredit(row, activeInvoice)}
+                  >
+                    <Send className="size-4" />
+                  </Button>
+                )}
                 {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'approve') && (
                   <Button
                     title="Reintentar sincronización con inventario"
@@ -1651,6 +1791,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         />
       </div>
       {paymentDialog}
+      {creditDialog}
 
       <SalesDocumentDetailSheet
         key={detailReceipt?.id || 'receipt-detail'}

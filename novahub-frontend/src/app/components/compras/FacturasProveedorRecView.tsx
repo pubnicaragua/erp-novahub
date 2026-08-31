@@ -27,7 +27,7 @@ import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 
-interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; warehouseCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const freqOpts = [
   { label: 'Semanal',    value: 'weekly' },  
@@ -43,7 +43,38 @@ const statusOpts = [
   { label: 'Cancelado',  value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], pagination, onSearchChange }: Props) {
+// Estos campos pertenecen a facturas de compra normales y ventas, no a una
+// plantilla recurrente de proveedor. También se filtran al editar registros
+// antiguos para que no vuelvan a viajar en el payload.
+const RECURRING_INVOICE_CHARGE_FIELDS = new Set([
+  'extraCostDescription',
+  'extraCostAmount',
+  'extraCharges',
+  'deliveryDescription',
+  'deliveryAmount',
+]);
+
+function stripRecurringInvoiceCharges(value: Record<string, any>) {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !RECURRING_INVOICE_CHARGE_FIELDS.has(key)));
+}
+
+function calculateRecurringInvoiceTotals(items: any[]) {
+  const subtotal = items.reduce((acc, item) => acc + (Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0);
+  const taxAmount = items.reduce((acc, item) => {
+    const taxType = String(item.taxType || 'EXENTO').toUpperCase();
+    if (['EXENTO', 'EXONERADO', 'NO_GRAVADO', 'NO_SUJETO'].includes(taxType)) return acc;
+    return acc + (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.taxRate || 0) / 100);
+  }, 0);
+  const withholdingTotal = items.reduce((acc, item) => acc + (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.withholdingRate || 0) / 100), 0);
+  return {
+    subtotal,
+    taxAmount,
+    withholdingTotal,
+    total: Math.max(0, subtotal + taxAmount - withholdingTotal),
+  };
+}
+
+export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], warehouseCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,20 +104,21 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
         currency: displayCurrency,
         exchangeRate: globalRate,
         status: 'ACTIVE',
+        warehouseId: null,
         items: [],
         subtotal: 0,
         taxAmount: 0,
         withholdingTotal: 0,
-        extraCostDescription: '',
-        extraCostAmount: 0,
-        extraCharges: [],
-        deliveryDescription: '',
-        deliveryAmount: 0,
         total: 0,
       } as any);
     } else if (id) {
       const found = data.find(x => x.id === id);
-      setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+      if (!found) {
+        setLocalDoc(null);
+      } else {
+        const cleanDocument = stripRecurringInvoiceCharges(JSON.parse(JSON.stringify(found)));
+        setLocalDoc({ ...cleanDocument, ...calculateRecurringInvoiceTotals(cleanDocument.items || []) });
+      }
     } else {
       setLocalDoc(null);
     }
@@ -100,17 +132,17 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
   });
 
   const handleExportListPdf = async (format: PdfDownloadFormat) => {
-    const exportToastId = toast.loading('Generando reporte de facturas recurrentes...');
+    const exportToastId = toast.loading('Generando reporte de compras recurrentes...');
     try {
       await generatePurchaseListPDF({
-        title: 'Facturas recurrentes',
+        title: 'Compras recurrentes',
         rows: filtered,
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.recurring-supplier-invoice',
         columns: [
-          { label: 'Descripción', value: (row) => row.description || 'Factura automática' },
+          { label: 'Descripción', value: (row) => row.description || 'Compra automática' },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
           { label: 'Monto', align: 'right', value: (row) => formatCurrentAmount(Number(row.total || row.amount || 0), row.currency || displayCurrency) },
           { label: 'Frecuencia', align: 'center', value: (row) => freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—' },
@@ -124,7 +156,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
   };
 
   const handleDownloadRecurringInvoicePdf = async (invoice: RecurringSupplierInvoice, format: PdfDownloadFormat) => {
-    const exportToastId = toast.loading('Generando PDF de la factura recurrente...');
+    const exportToastId = toast.loading('Generando PDF de la compra recurrente...');
     try {
       await generatePurchaseRecordPDF({
         tenantName: user?.tenantName || 'Empresa',
@@ -132,13 +164,13 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
         format,
         targetKey: 'compras.recurring-supplier-invoice',
         document: {
-          title: 'Factura recurrente de proveedor',
+          title: 'Compra recurrente de proveedor',
           number: String(invoice.id),
           status: statusOpts.find((option) => option.value === String(invoice.status || '').toUpperCase())?.label || invoice.status,
           supplier: invoice.supplier?.name || 'Sin proveedor',
           fields: [
             { label: 'Frecuencia', value: freqMap[String(invoice.frequency || '').toLowerCase()] || invoice.frequency || '—' },
-            { label: 'Próxima factura', value: invoice.nextInvoiceDate ? new Date(invoice.nextInvoiceDate).toLocaleDateString('es-NI') : '—' },
+            { label: 'Próxima compra', value: invoice.nextInvoiceDate ? new Date(invoice.nextInvoiceDate).toLocaleDateString('es-NI') : '—' },
             { label: 'Inicio', value: invoice.startDate ? new Date(invoice.startDate).toLocaleDateString('es-NI') : '—' },
           ],
           lines: ((invoice as any).items || []).map((item: any) => ({ description: item.description || 'Concepto sin descripción', quantity: item.quantity || 0, unitPrice: formatCurrentAmount(Number(item.unitPrice || 0), invoice.currency || displayCurrency), total: formatCurrentAmount(Number(item.total || 0), invoice.currency || displayCurrency), secondary: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
@@ -157,6 +189,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
       render: (_, row) => <span className="text-xs font-bold text-primary">{(row as any).description || 'Factura Automática'}</span> },
     { key: 'supplier' as any,    header: 'Proveedor',
       render: (_, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
+    { key: 'warehouse' as any,   header: 'Bodega',
+      render: (_, row) => <span className="text-xs text-muted-foreground">{(row as any).warehouse?.name || 'Sin configurar'}</span> },
     { key: 'total' as any,       header: 'Monto Estimado',       width: '120px',
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || (row as any).amount || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
@@ -175,11 +209,11 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
   const handleStatusAction = async (row: RecurringSupplierInvoice) => {
     const current = String((row as any).status || '').toUpperCase();
     const status = current === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
-    const statusToastId = toast.loading(status === 'ACTIVE' ? 'Activando factura recurrente...' : 'Pausando factura recurrente...');
+    const statusToastId = toast.loading(status === 'ACTIVE' ? 'Activando compra recurrente...' : 'Pausando compra recurrente...');
     try {
       if (status === 'ACTIVE') await recurringSupplierInvoicesService.resume(row.id);
       else await recurringSupplierInvoicesService.pause(row.id);
-      toast.success(status === 'ACTIVE' ? 'Factura recurrente activada' : 'Factura recurrente pausada', { id: statusToastId });
+      toast.success(status === 'ACTIVE' ? 'Compra recurrente activada' : 'Compra recurrente pausada', { id: statusToastId });
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado', { id: statusToastId });
@@ -188,22 +222,31 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
 
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
-    if (!localDoc?.nextInvoiceDate) return toast.error('Debe configurar la próxima fecha de factura');
+    if (!localDoc?.nextInvoiceDate) return toast.error('Debe configurar la próxima fecha de compra');
 
-    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando factura recurrente...' : 'Guardando factura recurrente...');
+    const items = (localDoc as any).items || [];
+    if (items.length === 0) return toast.error('Agregue al menos un producto a la compra recurrente');
+    if (!items.some((item: any) => Boolean(item.productId))) return toast.error('Seleccione al menos un producto del catálogo');
+    if (!localDoc.warehouseId) return toast.error('Seleccione la bodega donde se recibirán los productos');
+
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando compra recurrente...' : 'Guardando compra recurrente...');
     try {
-      const finalDoc = { ...localDoc, total: Number(localDoc.total || (localDoc as any).amount || 0), items: (localDoc as any).items || [] };
+      const finalDoc = {
+        ...stripRecurringInvoiceCharges(localDoc as Record<string, any>),
+        ...calculateRecurringInvoiceTotals(items),
+        items,
+      };
       if (editingId === 'NEW') {
         await recurringSupplierInvoicesService.create(finalDoc as any);
-        toast.success('Factura recurrente creada', { id: saveToastId });
+        toast.success('Compra recurrente creada', { id: saveToastId });
       } else {
         await recurringSupplierInvoicesService.update(editingId!, finalDoc as any);
-        toast.success('Factura recurrente guardada', { id: saveToastId });
+        toast.success('Compra recurrente guardada', { id: saveToastId });
       }
       openEditor(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura recurrente', { id: saveToastId });
+        toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la compra recurrente', { id: saveToastId });
     }
   };
 
@@ -237,9 +280,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
         return acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0) * Number(it.taxRate || 0) / 100);
       }, 0);
       const withholdingTotal = items.reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0) * Number(it.withholdingRate || 0) / 100), 0);
-      const extraCostAmount = Number(next.extraCostAmount || 0);
-      const deliveryAmount = Number(next.deliveryAmount || 0);
-      return { ...next, subtotal, taxAmount, withholdingTotal, total: Math.max(0, subtotal + taxAmount - withholdingTotal + extraCostAmount + deliveryAmount) };
+      return { ...next, subtotal, taxAmount, withholdingTotal, total: Math.max(0, subtotal + taxAmount - withholdingTotal) };
     });
   };
 
@@ -256,8 +297,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Agregar Factura Recurrente' : 'Editar Factura Recurrente'}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Creación automática de facturas</p>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Agregar Compra Recurrente' : 'Editar Compra Recurrente'}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Generación periódica de órdenes y recepciones</p>
             </div>
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
@@ -270,7 +311,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
              )}
             {((isNew && canPerform('PURCHASES_INVOICES_REC', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES_REC', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar Factura Recurrente
+                Guardar Compra Recurrente
               </Button>
             )}
           </div>
@@ -279,7 +320,10 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Reglas de Generación</p>
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Reglas de la compra</p>
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+                Cada ciclo genera una orden de compra aprobada y una recepción pendiente. El inventario y el saldo del proveedor se actualizan únicamente cuando la recepción se confirma y se registra la factura correspondiente.
+              </div>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Nombre Descriptivo</p>
@@ -300,7 +344,20 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                       .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
                     value={localDoc.supplierId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
-                    placeholder="Seleccionar proveedor de la factura..."
+                    placeholder="Seleccionar proveedor de la compra..."
+                  />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-2">
+                  <p className="text-[10px] font-black text-primary mb-1 tracking-widest">Bodega de recepción *</p>
+                  <Combobox
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                    options={warehouseCatalog
+                      .filter((warehouse: any) => warehouse?.isActive !== false || warehouse.id === localDoc.warehouseId)
+                      .map((warehouse: any) => ({ label: warehouse.name || 'Bodega sin nombre', value: warehouse.id, description: warehouse.location || 'Bodega de la sucursal' }))}
+                    value={localDoc.warehouseId || ''}
+                    onChange={(value) => setLocalDoc({ ...localDoc, warehouseId: value || null })}
+                    placeholder="Seleccionar bodega donde se recibirán los productos..."
+                    emptyMessage="No hay bodegas activas disponibles"
                   />
                 </div>
                 <div>
@@ -325,7 +382,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black text-rose-500 mb-1 tracking-widest">Siguiente Factura *</p>
+                  <p className="text-[10px] font-black text-rose-500 mb-1 tracking-widest">Siguiente compra *</p>
                   <Input 
                     disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                     type="date" 
@@ -377,7 +434,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                             nextItems[idx] = { ...nextItems[idx], productId: value, description: product?.name || nextItems[idx].description };
                             recalculateTotals(nextItems);
                           }}
-                          placeholder="Seleccionar producto o dejar concepto manual"
+                          placeholder="Seleccionar producto del catálogo..."
                           emptyMessage="No hay productos disponibles"
                         />
                         <Input 
@@ -427,54 +484,10 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                   ))}
                   {(!(localDoc as any).items || (localDoc as any).items.length === 0) && (
                     <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">
-                      Plantilla vacía. Agrega los ítems que se generarán automáticamente.
+                      Aún no hay productos. Agrega los artículos que se comprarán en cada ciclo.
                     </div>
                   )}
                 </div>
-                
-                <div className="mt-5 grid grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/10 p-4 sm:grid-cols-2" data-tour="purchases-form-charges">
-                  <div>
-                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra</p>
-                    <Input
-                      disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
-                      value={(localDoc as any).extraCostDescription || ''}
-                      onChange={(event) => recalculateTotals((localDoc as any).items || [], { extraCostDescription: event.target.value })}
-                      placeholder="Ej. instalación, seguro o gestión"
-                      className="h-9 text-xs"
-                    />
-                    <Input
-                      disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={(localDoc as any).extraCostAmount || ''}
-                      onChange={(event) => recalculateTotals((localDoc as any).items || [], { extraCostAmount: Number(event.target.value) || 0 })}
-                      placeholder="Monto del coste extra"
-                      className="mt-2 h-9 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery / transporte</p>
-                    <Input
-                      disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
-                      value={(localDoc as any).deliveryDescription || ''}
-                      onChange={(event) => recalculateTotals((localDoc as any).items || [], { deliveryDescription: event.target.value })}
-                      placeholder="Ej. Entrega mensual"
-                      className="h-9 text-xs"
-                    />
-                    <Input
-                      disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={(localDoc as any).deliveryAmount || ''}
-                      onChange={(event) => recalculateTotals((localDoc as any).items || [], { deliveryAmount: Number(event.target.value) || 0 })}
-                      placeholder="Monto del delivery"
-                      className="mt-2 h-9 text-xs"
-                    />
-                  </div>
-                </div>
-
                 <div className="flex justify-end mt-4" data-tour="purchases-form-summary">
                    <div className="w-full max-w-sm space-y-3 rounded-xl border border-border/50 bg-muted/10 p-4 text-sm">
                       <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
@@ -493,7 +506,6 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                       <div className="space-y-2 text-xs">
                         <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{localDoc.currency === 'USD' ? '$' : 'C$'} {Number((localDoc as any).subtotal || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">IVA / impuestos</span><span>{localDoc.currency === 'USD' ? '$' : 'C$'} {Number((localDoc as any).taxAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Costes adicionales</span><span>{localDoc.currency === 'USD' ? '$' : 'C$'} {(Number((localDoc as any).extraCostAmount || 0) + Number((localDoc as any).deliveryAmount || 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
                       </div>
                       <div className="flex justify-between items-center border-t border-border/50 pt-3 text-[10px] uppercase tracking-widest font-black text-rose-500">
                          <span>Total estimado:</span>
@@ -508,15 +520,15 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}
           loading={deleteLoading}
-          title="Anular Factura Recurrente"
-          description="¿Estás seguro de anular esta factura recurrente? No se generarán más facturas automáticamente."
+          title="Anular Compra Recurrente"
+          description="¿Estás seguro de anular esta compra recurrente? No se generarán más órdenes ni recepciones automáticamente."
           onConfirm={async () => {
             if (!pendingDeleteId) return;
-            const deleteToastId = toast.loading('Anulando factura recurrente...');
+            const deleteToastId = toast.loading('Anulando compra recurrente...');
             setDeleteLoading(true);
             try {
                await recurringSupplierInvoicesService.cancel(pendingDeleteId);
-               toast.success('Factura recurrente anulada', { id: deleteToastId });
+               toast.success('Compra recurrente anulada', { id: deleteToastId });
                setPendingDeleteId(null);
                openEditor(null);
                onRefresh();
@@ -561,26 +573,29 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas Recurrentes</h2></div>
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Compras Recurrentes</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Cada programación crea una orden y una recepción pendiente por ciclo.</p>
+          </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-invoices" />
             <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas recurrentes de proveedor" />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de compras recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES_REC', 'create') && (
-              <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Factura Recurrente</Button>
+              <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Compra Recurrente</Button>
             )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'delete') ? async (ids) => {
-            const deleteToastId = toast.loading(`Anulando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrente${ids.length === 1 ? '' : 's'}...`);
+            const deleteToastId = toast.loading(`Anulando ${ids.length} compra${ids.length === 1 ? '' : 's'} recurrente${ids.length === 1 ? '' : 's'}...`);
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
                 await recurringSupplierInvoicesService.cancel(id as string);
               }
-              toast.success('Facturas recurrentes anuladas', { id: deleteToastId });
+              toast.success('Compras recurrentes anuladas', { id: deleteToastId });
               onRefresh();
             } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
@@ -588,8 +603,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           } : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="Ver detalle" aria-label="Ver detalle de la factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailInvoice(row)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_INVOICES_REC', 'edit') && <Button title="Editar factura recurrente" aria-label="Editar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailInvoice(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
+              <Button title="Ver detalle" aria-label="Ver detalle de la compra recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailInvoice(row)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_INVOICES_REC', 'edit') && <Button title="Editar compra recurrente" aria-label="Editar compra recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailInvoice(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           )}
         />
@@ -597,7 +612,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           document={detailInvoice ? {
             id: detailInvoice.id,
             number: String(detailInvoice.id),
-            title: 'Factura recurrente de proveedor',
+            title: 'Compra recurrente de proveedor',
             customerName: detailInvoice.supplier?.name || 'Sin proveedor',
             hideCustomer: true,
             status: String(detailInvoice.status || 'ACTIVE').toUpperCase(),
@@ -605,7 +620,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
             sourceCurrency: detailInvoice.currency || displayCurrency,
             sourceExchangeRate: detailInvoice.exchangeRate,
             summaryDetails: [{ label: 'Frecuencia', value: freqMap[String(detailInvoice.frequency || '').toLowerCase()] || detailInvoice.frequency || '—' }],
-            metadata: [{ label: 'Proveedor', value: detailInvoice.supplier?.name || 'No disponible' }, { label: 'Próxima factura', value: detailInvoice.nextInvoiceDate ? new Date(detailInvoice.nextInvoiceDate).toLocaleDateString('es-NI') : 'No disponible' }, { label: 'Inicio', value: detailInvoice.startDate ? new Date(detailInvoice.startDate).toLocaleDateString('es-NI') : 'No disponible' }],
+            metadata: [{ label: 'Proveedor', value: detailInvoice.supplier?.name || 'No disponible' }, { label: 'Bodega', value: detailInvoice.warehouse?.name || 'No disponible' }, { label: 'Próxima compra', value: detailInvoice.nextInvoiceDate ? new Date(detailInvoice.nextInvoiceDate).toLocaleDateString('es-NI') : 'No disponible' }, { label: 'Inicio', value: detailInvoice.startDate ? new Date(detailInvoice.startDate).toLocaleDateString('es-NI') : 'No disponible' }],
             lines: ((detailInvoice as any).items || []).map((item: any, index: number) => ({ id: String(item.id || index), description: item.description || 'Concepto sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: formatCurrentAmount(Number(item.unitPrice || 0), detailInvoice.currency || displayCurrency), totalLabel: formatCurrentAmount(Number(item.total || 0), detailInvoice.currency || displayCurrency), secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
           } : null}
           entity="RECURRING_SUPPLIER_INVOICE"

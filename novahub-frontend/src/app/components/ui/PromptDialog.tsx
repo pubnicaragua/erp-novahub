@@ -10,7 +10,7 @@ import {
 import { Button } from './button';
 import { Input } from './input';
 import { Label } from './label';
-import { MessageSquare } from 'lucide-react';
+import { Loader2, MessageSquare } from 'lucide-react';
 
 interface PromptDialogProps {
   open: boolean;
@@ -78,11 +78,11 @@ export function PromptDialog({
           />
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" className="cursor-pointer" onClick={() => onOpenChange(false)} disabled={loading}>
-            {cancelLabel}
+          <Button type="button" variant="outline" className="min-w-0 max-w-full cursor-pointer overflow-hidden" onClick={() => onOpenChange(false)} disabled={loading}>
+            <span className="min-w-0 truncate">{cancelLabel}</span>
           </Button>
-          <Button type="button" className="cursor-pointer" onClick={() => void submit()} disabled={loading || (required && !value.trim())}>
-            {loading ? 'Procesando…' : confirmLabel}
+          <Button type="button" className="min-w-0 max-w-full cursor-pointer overflow-hidden" onClick={() => void submit()} disabled={loading || (required && !value.trim())}>
+            {loading ? <><Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" /><span className="min-w-0 truncate">Procesando…</span></> : <span className="min-w-0 truncate">{confirmLabel}</span>}
           </Button>
         </DialogFooter>
       </DialogContent>

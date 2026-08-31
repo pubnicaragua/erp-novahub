@@ -1447,10 +1447,17 @@ th .column-filter-menu .column-filter-icon,
 [data-overlay-surface="novahub-modal"],
 [data-overlay-surface="novahub-panel"] {
   min-width: 0;
-  max-width: 100vw;
   border-color: color-mix(in srgb, var(--border) 72%, transparent);
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
+}
+
+/* El ancho de cada diálogo lo define su propio max-w-* (o el fallback de
+   DialogContent). No imponer 100vw aquí: esa regla anulaba los límites de
+   muchos modales centrados. Los paneles laterales sí conservan su guardrail
+   independiente más abajo. */
+[data-overlay-surface="novahub-panel"] {
+  max-width: 100vw;
 }
 
 [data-overlay-surface="novahub-modal"] input,

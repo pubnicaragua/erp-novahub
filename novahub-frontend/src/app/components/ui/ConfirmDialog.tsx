@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from './dialog';
 import { Button } from './button';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './utils';
 
@@ -100,27 +100,27 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           {children && <div className="w-full px-2">{children}</div>}
         </div>
 
-        <DialogFooter className="px-6 pb-6 pt-2 flex gap-3 sm:gap-3">
+        <DialogFooter className="min-w-0 px-6 pb-6 pt-2 flex gap-3 sm:gap-3">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={loading || disabled}
-            className="flex-1 h-11 rounded-xl font-bold uppercase text-xs tracking-widest"
+            className="min-w-0 max-w-full flex-1 overflow-hidden h-11 rounded-xl font-bold uppercase text-xs tracking-widest"
           >
-            {cancelLabel}
+            <span className="min-w-0 max-w-full truncate">{cancelLabel}</span>
           </Button>
           <Button
             onClick={handleConfirm}
             disabled={loading || disabled}
-            className={`flex-1 h-11 rounded-xl font-bold uppercase text-xs tracking-widest ${config.buttonClass}`}
+            className={`min-w-0 max-w-full flex-1 overflow-hidden h-11 rounded-xl font-bold uppercase text-xs tracking-widest ${config.buttonClass}`}
           >
             {loading ? (
-              <div className="flex items-center gap-2">
-                <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Procesando...
-              </div>
+              <span className="inline-flex min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden">
+                <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+                <span className="min-w-0 truncate">Procesando…</span>
+              </span>
             ) : (
-              confirmLabel
+              <span className="min-w-0 max-w-full truncate">{confirmLabel}</span>
             )}
           </Button>
         </DialogFooter>

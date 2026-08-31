@@ -853,14 +853,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const buildSolicitudItems = (list: any[]) => list.map((p: any) => {
     const { currentStock, minStock } = getSolicitudProductSnapshot(p);
-    const suggested = minStock > 0 ? minStock * 2 : 4;
     return {
       productId: p.id,
       productName: p.name,
       code: p.code ?? '',
       currentStock: Number(currentStock ?? 0),
       minStock: Number(minStock ?? 0),
-      quantity: Math.max(1, Math.ceil(suggested - Number(currentStock ?? 0))),
+      quantity: 1,
     };
   });
 

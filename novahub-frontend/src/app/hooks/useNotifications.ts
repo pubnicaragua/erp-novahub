@@ -9,16 +9,23 @@ export function useNotifications() {
     const { user } = useAuth();
     const authUser = user as (typeof user & { clientTenantId?: string }) | null | undefined;
     const tenantKey = authUser?.clientTenantId || authUser?.tenantId || 'current';
-    const queryKey = ['tenant-module', tenantKey, 'notifications', 'inbox'] as const;
+    const userKey = authUser?.id || 'current';
+    // El buzón es tenant + usuario: evitar reutilizar en memoria el inbox de
+    // otra sesión cuando se cambia de cuenta sin recargar la aplicación.
+    const queryKey = ['tenant-module', tenantKey, 'notifications', userKey, 'inbox'] as const;
     const notificationsQuery = useTenantQuery<Notification[]>(
-        ['notifications', 'inbox'],
+        ['notifications', userKey, 'inbox'],
         signal => notificationsService.getAll(signal),
         {
             // Las alertas de Compras deben aparecer casi en tiempo real para
             // que la aprobación de una solicitud/orden no dependa de una
             // ventana de espera de 30 segundos.
             refetchInterval: 5000,
-            refetchIntervalInBackground: false,
+            // El shell global mantiene el inbox activo aunque el usuario esté
+            // en otra pestaña o módulo; el hook de alertas usa este cambio
+            // para reproducir el aviso sin esperar a abrir Notificaciones.
+            refetchIntervalInBackground: true,
+            refetchOnWindowFocus: true,
         },
     );
     const notifications = notificationsQuery.data ?? [];

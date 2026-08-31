@@ -49,13 +49,14 @@ const COMPRAS_SECTIONS = [
   { id: 'gastos-rec',    label: 'Gastos Recurrentes',   icon: CalendarClock,  description: 'Gastos fijos periódicos', requiredModules: ['PURCHASES_EXPENSES_REC', 'PURCHASES'] },
   { id: 'ordenes',       label: 'Órdenes de Compra',    icon: ClipboardList,  description: 'Pedidos a proveedores', requiredModules: ['PURCHASES_ORDERS', 'PURCHASES'] },
   { id: 'recepciones',   label: 'Recepciones',          icon: PackageCheck,   description: 'Entrada de mercancía', requiredModules: ['PURCHASES_RECEIPTS', 'PURCHASES'] },
-  { id: 'facturas-rec',  label: 'Facturas Recurrentes', icon: RotateCcw,      description: 'Contratos periódicos', requiredModules: ['PURCHASES_INVOICES_REC', 'PURCHASES'] },
+  { id: 'facturas-rec',  label: 'Compras Recurrentes',  icon: RotateCcw,      description: 'Compras de productos periódicas', requiredModules: ['PURCHASES_INVOICES_REC', 'PURCHASES'] },
   { id: 'pagos',         label: 'Pagos Realizados',    icon: Banknote,       description: 'Histórico de pagos', requiredModules: ['PURCHASES_PAYMENTS', 'PURCHASES'] },
   { id: 'creditos',      label: 'Créditos Proveedor',  icon: BadgeDollarSign, description: 'Créditos que el proveedor otorga a favor de la empresa', requiredModules: ['PURCHASES_RETURNS', 'PURCHASES'] },
 ];
 
 interface ComprasPageProps {
   activeSubModule?: string;
+  onSubModuleChange?: (subModule?: string) => void;
   isSidebarCollapsed?: boolean;
 }
 
@@ -71,7 +72,7 @@ type ComprasData = {
   solicitudes:   PurchaseRequest[];
 };
 
-export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageProps) {
+export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ComprasPageProps) {
   const { user, canPerform } = useAuth();
   const { isRestricted, accessibleBranches, selectedBranchId } = useBranchScope();
   const normalize = (s?: string) => {
@@ -94,6 +95,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   };
 
   const tabsRef = useRef<HTMLDivElement>(null);
+  const lastSyncedSubModuleRef = useRef(activeSubModule);
   const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
   const queryClient = useQueryClient();
   const tenantKey = user?.tenantId || 'anonymous';
@@ -144,10 +146,21 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
 
   const handleApprovedOrderReceipt = () => {
     setActiveSection('recepciones');
+    onSubModuleChange?.('recepciones');
+  };
+
+  const handleReceiptCreditCreated = () => {
+    setActiveSection('creditos');
+    onSubModuleChange?.('creditos');
   };
 
   useEffect(() => {
     if (!activeSubModule) return;
+    // No vuelvas a aplicar el mismo valor en cada render. Las invalidaciones
+    // de React Query pueden refrescar el árbol mientras una acción de
+    // recepción/pago está en curso y no deben devolvernos a Solicitudes.
+    if (lastSyncedSubModuleRef.current === activeSubModule) return;
+    lastSyncedSubModuleRef.current = activeSubModule;
     const nextSection = normalize(activeSubModule);
     if (COMPRAS_SECTIONS.some((section) => section.id === nextSection) && canViewPurchasesSection(nextSection)) {
       setActiveSection(nextSection);
@@ -236,7 +249,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     }, signal),
     // Compras también tiene autorización para consultar este catálogo; no
     // debe depender del permiso de la pantalla completa de Inventario.
-    enabled: (canReadInventory || canReadPurchases) && ['solicitudes', 'ordenes', 'recepciones'].includes(activeSection),
+    enabled: (canReadInventory || canReadPurchases) && ['solicitudes', 'ordenes', 'recepciones', 'facturas-rec'].includes(activeSection),
     staleTime: 30_000,
   });
   const productCatalogQuery = useQuery({
@@ -464,7 +477,12 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
           </div>
           <CurrencyValuationBanner className="mb-5" />
 
-          <Tabs value={activeSection} className="w-full" onValueChange={(val) => { if (canViewPurchasesSection(val)) setActiveSection(val); }}>
+          <Tabs value={activeSection} className="w-full" onValueChange={(val) => {
+            if (!canViewPurchasesSection(val)) return;
+            setActiveSection(val);
+            lastSyncedSubModuleRef.current = val;
+            onSubModuleChange?.(val);
+          }}>
         <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
         <TabsList ref={tabsRef} className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {COMPRAS_SECTIONS.map((section) => {
@@ -500,8 +518,8 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                     {section.id === 'gastos'        && <GastosView         {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'gastos' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
                      {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} warehouseCatalog={warehouseCatalog} selectedBranchId={selectedBranchId} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
-                    {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog.filter((warehouse: any) => !selectedBranchId || warehouse?.clientTenantId === selectedBranchId)} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
-                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}
+                    {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} onOpenCredits={handleReceiptCreditCreated} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog.filter((warehouse: any) => !selectedBranchId || warehouse?.clientTenantId === selectedBranchId)} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
+                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} warehouseCatalog={warehouseCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}
                    {section.id === 'pagos'         && (
                     <PagosRealizadosView
                       {...commonProps}

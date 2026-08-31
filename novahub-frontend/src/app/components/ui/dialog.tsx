@@ -11,7 +11,7 @@ const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
 
-const hasExplicitDialogWidth = (className?: string) => /(?:^|\s)(?:[a-z-]+:)*!?(?:w-|max-w-|min-w-)/.test(className || "");
+const hasExplicitDialogWidth = (className?: string) => /(?:^|\s)(?:[a-z-]+:)*!?(?:w-|max-w-)/.test(className || "");
 
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,

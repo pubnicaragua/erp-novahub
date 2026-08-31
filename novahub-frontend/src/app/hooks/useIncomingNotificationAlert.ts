@@ -17,15 +17,17 @@ export function useIncomingNotificationAlert() {
   const { notifications, isFetched } = useNotifications();
   const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null | undefined;
   const storageKey = `nh-notification-seen:${authUser?.clientTenantId || authUser?.tenantId || 'current'}:${authUser?.id || 'current'}`;
-  const seenIds = useRef<Set<string>>(new Set());
+  // Guardamos ids y claves de evento. El id cambia si un scheduler reintenta
+  // crear la misma alerta, pero la clave de negocio debe sonar una sola vez.
+  const seenEvents = useRef<Set<string>>(new Set());
   const initialized = useRef(false);
 
   useEffect(() => {
     initialized.current = false;
-    seenIds.current = new Set();
+    seenEvents.current = new Set();
     try {
       const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      if (Array.isArray(stored)) seenIds.current = new Set(stored.map(String));
+      if (Array.isArray(stored)) seenEvents.current = new Set(stored.map(String));
     } catch { /* notification history is optional */ }
   }, [storageKey]);
 
@@ -35,22 +37,32 @@ export function useIncomingNotificationAlert() {
 
     // The first response is the existing history, not an incoming event.
     // Seed it so a remount/F5 does not replay dozens of old notifications.
-    if (seenIds.current.size === 0 && notifications.length > 0) {
-      notifications.forEach(notification => seenIds.current.add(notification.id));
-      try { localStorage.setItem(storageKey, JSON.stringify([...seenIds.current].slice(-500))); } catch { /* optional history */ }
+    if (seenEvents.current.size === 0 && notifications.length > 0) {
+      notifications.forEach(notification => {
+        seenEvents.current.add(notification.id);
+        seenEvents.current.add(notificationEventKey(notification));
+      });
+      try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1000))); } catch { /* optional history */ }
       return;
     }
 
     const fresh = dedupeNotificationRecords(
-      notifications.filter(n => !n.read && !seenIds.current.has(n.id)),
+      notifications.filter((notification) => (
+        !notification.read
+        && !seenEvents.current.has(notification.id)
+        && !seenEvents.current.has(notificationEventKey(notification))
+      )),
     );
     if (fresh.length === 0) return;
 
     const freshKeys = new Set(fresh.map(notificationEventKey));
     notifications
       .filter(notification => freshKeys.has(notificationEventKey(notification)))
-      .forEach(notification => seenIds.current.add(notification.id));
-    try { localStorage.setItem(storageKey, JSON.stringify([...seenIds.current].slice(-500))); } catch { /* optional history */ }
+      .forEach(notification => {
+        seenEvents.current.add(notification.id);
+        seenEvents.current.add(notificationEventKey(notification));
+      });
+    try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1000))); } catch { /* optional history */ }
 
     const newest = [...fresh].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] || fresh[0];
     playNotificationSound();
@@ -74,5 +86,5 @@ export function useIncomingNotificationAlert() {
         // Algunos navegadores bloquean la construcción; la campana interna sigue funcionando.
       }
     }
-  }, [notifications]);
+  }, [isFetched, notifications, storageKey]);
 }

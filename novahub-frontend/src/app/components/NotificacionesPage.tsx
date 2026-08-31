@@ -60,7 +60,8 @@ interface NotificacionesPageProps {
 }
 
 export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: NotificacionesPageProps) => {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const notificationUserKey = user?.id || 'current';
   const tabs = [
     { id: 'alertas', label: 'Alertas', icon: AlertTriangle, module: 'NOTIFICATIONS_ALERTS' },
     { id: 'mensajes', label: 'Mensajes', icon: MessageSquare, module: 'NOTIFICATIONS_MESSAGES' },
@@ -70,15 +71,16 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   const tabIds = tabs.map((tab) => tab.id);
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
   const [showTour, setShowTour] = useState(false);
-  const alertsQuery = useTenantQuery<any[]>(['notifications', 'alerts'], signal => alertsService.getAll(signal), {
+  const alertsQuery = useTenantQuery<any[]>(['notifications', notificationUserKey, 'alerts'], signal => alertsService.getAll(signal), {
     enabled: activeTab === 'alertas' && canPerform('NOTIFICATIONS_ALERTS', 'view'),
   });
-  const messagesQuery = useTenantQuery<any[]>(['notifications', 'messages'], signal => messagesService.getAll(signal), {
+  const messagesQuery = useTenantQuery<any[]>(['notifications', notificationUserKey, 'messages'], signal => messagesService.getAll(signal), {
     enabled: activeTab === 'mensajes' && canPerform('NOTIFICATIONS_MESSAGES', 'view'),
     refetchInterval: activeTab === 'mensajes' ? 5000 : false,
-    refetchIntervalInBackground: false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
-  const pushQuery = useTenantQuery<any[]>(['notifications', 'push'], signal => pushNotificationsService.getAll(signal), {
+  const pushQuery = useTenantQuery<any[]>(['notifications', notificationUserKey, 'push'], signal => pushNotificationsService.getAll(signal), {
     enabled: activeTab === 'push' && canPerform('NOTIFICATIONS_PUSH', 'view'),
   });
   const data = {
