@@ -85,6 +85,14 @@ function userThemeColors(branding: Branding): Partial<BrandColors> {
   return colors && typeof colors === 'object' ? colors : {};
 }
 
+function resolveThemeForeground(background: string, foreground?: string): string {
+  // A manually selected foreground is part of the user's branding choice.
+  // Keep it when present; use the contrast helper only when no value exists.
+  return typeof foreground === 'string' && foreground.trim()
+    ? foreground.trim()
+    : ensureReadableForeground(background);
+}
+
 function readStoredTheme(userId: string, tenantId: string): ThemeConfig {
   try {
     const saved = localStorage.getItem(themeStorageKey(userId));
@@ -98,9 +106,9 @@ function readStoredTheme(userId: string, tenantId: string): ThemeConfig {
         tenantId,
         colors: {
           ...colors,
-          primaryForeground: ensureReadableForeground(colors.primary, colors.primaryForeground),
-          accentForeground: ensureReadableForeground(colors.accent, colors.accentForeground),
-          sidebarForeground: ensureReadableForeground(colors.sidebar, colors.sidebarForeground),
+          primaryForeground: resolveThemeForeground(colors.primary, colors.primaryForeground),
+          accentForeground: resolveThemeForeground(colors.accent, colors.accentForeground),
+          sidebarForeground: resolveThemeForeground(colors.sidebar, colors.sidebarForeground),
         },
       };
     }
@@ -132,9 +140,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const nextColors = { ...prev.colors, ...colors };
         return {
           ...nextColors,
-          primaryForeground: ensureReadableForeground(nextColors.primary, nextColors.primaryForeground),
-          accentForeground: ensureReadableForeground(nextColors.accent, nextColors.accentForeground),
-          sidebarForeground: ensureReadableForeground(nextColors.sidebar, nextColors.sidebarForeground),
+          primaryForeground: resolveThemeForeground(nextColors.primary, nextColors.primaryForeground),
+          accentForeground: resolveThemeForeground(nextColors.accent, nextColors.accentForeground),
+          sidebarForeground: resolveThemeForeground(nextColors.sidebar, nextColors.sidebarForeground),
         };
       })(),
     }));
@@ -164,9 +172,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         logo: branding.logo || undefined,
         colors: {
           ...nextColors,
-          primaryForeground: ensureReadableForeground(nextColors.primary, nextColors.primaryForeground),
-          accentForeground: ensureReadableForeground(nextColors.accent, nextColors.accentForeground),
-          sidebarForeground: ensureReadableForeground(nextColors.sidebar, nextColors.sidebarForeground),
+          primaryForeground: resolveThemeForeground(nextColors.primary, nextColors.primaryForeground),
+          accentForeground: resolveThemeForeground(nextColors.accent, nextColors.accentForeground),
+          sidebarForeground: resolveThemeForeground(nextColors.sidebar, nextColors.sidebarForeground),
         },
       };
     });
@@ -179,9 +187,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [activeTenantId, themeUserId]);
 
   useLayoutEffect(() => {
-    // Apply brand colors while allowing the light/dark CSS variants to control
-    // the sidebar surface. Previously an inline --sidebar value from branding
-    // overrode .dark and left the sidebar white in dark mode.
+    // Apply brand colors while keeping the sidebar preference consistent in
+    // light and dark mode. The sidebar is a branded surface, so the selected
+    // color must not be replaced by the static dark-mode token.
     const root = document.documentElement;
     // During login, logout, or tenant switching, the previous tenant can remain
     // in state for one render. Never apply or persist that stale configuration.
@@ -196,9 +204,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (sidebarKeys.has(key)) return;
       const cssVarName = `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
       const safeValue = key === 'primaryForeground'
-        ? ensureReadableForeground(activeTheme.colors.primary, value)
+        ? resolveThemeForeground(activeTheme.colors.primary, value)
         : key === 'accentForeground'
-          ? ensureReadableForeground(activeTheme.colors.accent, value)
+          ? resolveThemeForeground(activeTheme.colors.accent, value)
           : value;
       root.style.setProperty(cssVarName, safeValue);
     });
@@ -212,16 +220,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
 
     const applySidebarVariant = () => {
-      const isDark = root.classList.contains('dark');
-      const sidebar = isDark ? 'oklch(0.16 0.01 155)' : activeTheme.colors.sidebar;
-      const foreground = ensureReadableForeground(
-        sidebar,
-        isDark ? 'oklch(0.985 0 0)' : activeTheme.colors.sidebarForeground,
-      );
+      const sidebar = activeTheme.colors.sidebar;
+      const foreground = resolveThemeForeground(sidebar, activeTheme.colors.sidebarForeground);
       const primary = activeTheme.colors.sidebarPrimary;
-      const accent = isDark ? 'oklch(0.22 0.02 155)' : activeTheme.colors.sidebarAccent;
-      const primaryForeground = ensureReadableForeground(primary, activeTheme.colors.primaryForeground);
-      const accentForeground = ensureReadableForeground(accent, activeTheme.colors.accentForeground);
+      const accent = activeTheme.colors.sidebarAccent;
+      const primaryForeground = resolveThemeForeground(primary, activeTheme.colors.primaryForeground);
+      const accentForeground = resolveThemeForeground(accent, activeTheme.colors.accentForeground);
       root.style.setProperty('--sidebar', sidebar);
       root.style.setProperty('--sidebar-foreground', foreground);
       root.style.setProperty('--sidebar-primary', primary);

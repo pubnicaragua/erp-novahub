@@ -8,8 +8,8 @@ import {
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
-  CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, MessageSquare, Utensils
+  CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned, ChevronDown,
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Utensils
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -242,40 +242,6 @@ export const ALL_PERM_MODULES = AVAILABLE_MODULES.flatMap(mod => [
     .map(s => ({ ...s, icon: Activity, description: `Vista de ${mod.label}` }))
 ]);
 
-// ---- Hex / OKLCH conversion helpers ----
-function hexToRgb(hex: string): [number, number, number] {
-  hex = hex.replace('#', '');
-  if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-  const r = parseInt(hex.slice(0, 2), 16) / 255;
-  const g = parseInt(hex.slice(2, 4), 16) / 255;
-  const b = parseInt(hex.slice(4, 6), 16) / 255;
-  return [r, g, b];
-}
-
-function linearize(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-}
-
-function rgbToOklch(r: number, g: number, b: number): string {
-  const lr = linearize(r), lg = linearize(g), lb = linearize(b);
-  const l_ = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
-  const m_ = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
-  const s_ = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
-  const l = Math.cbrt(l_), m = Math.cbrt(m_), s = Math.cbrt(s_);
-  const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
-  const a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
-  const bv = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
-  const C = Math.sqrt(a * a + bv * bv);
-  let h = Math.atan2(bv, a) * 180 / Math.PI;
-  if (h < 0) h += 360;
-  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${h.toFixed(3)})`;
-}
-
-function hexToOklch(hex: string): string {
-  const [r, g, b] = hexToRgb(hex);
-  return rgbToOklch(r, g, b);
-}
-
 function oklchToApproxHex(oklch: string): string {
   // Simple approximation - extract lightness and hue for a rough color
   const match = oklch.match(/oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)/);
@@ -328,19 +294,31 @@ const colorPresets: ColorPreset[] = [
 ];
 
 function generateThemeFromColor(hex: string, sidebarHex: string, accentHex: string): BrandColors {
-  const fgColor = getReadableForeground(hex);
-  const sFgColor = getReadableForeground(sidebarHex);
+  // Mantener el hex elegido por el usuario evita que una conversión a OKLCH
+  // y su posterior aproximación cambien el color después de recargar.
+  const primary = normalizeHexColor(hex, '#10b981');
+  const sidebar = normalizeHexColor(sidebarHex, '#0c1a12');
+  const accent = normalizeHexColor(accentHex, '#064e3b');
 
   return {
-    primary: hexToOklch(hex),
-    primaryForeground: hexToOklch(fgColor),
-    accent: hexToOklch(accentHex),
-    accentForeground: hexToOklch(getReadableForeground(accentHex)),
-    sidebar: hexToOklch(sidebarHex),
-    sidebarForeground: hexToOklch(sFgColor),
-    sidebarPrimary: hexToOklch(hex),
-    sidebarAccent: hexToOklch(accentHex),
+    primary,
+    primaryForeground: getReadableForeground(primary),
+    accent,
+    accentForeground: getReadableForeground(accent),
+    sidebar,
+    sidebarForeground: getReadableForeground(sidebar),
+    sidebarPrimary: primary,
+    sidebarAccent: accent,
   };
+}
+
+function normalizeHexColor(value: string, fallback: string): string {
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : fallback;
+}
+
+function hexWithAlpha(value: string, alpha: string): string {
+  const hex = normalizeHexColor(value, '#000000');
+  return `${hex}${alpha}`;
 }
 
 // ---- Color Picker Component ----
@@ -397,6 +375,141 @@ function ColorField({ label, description, hexValue, onHexChange }: ColorFieldPro
         className="w-28 font-mono text-xs"
       />
     </div>
+  );
+}
+
+interface SidebarPreviewProps {
+  companyName: string;
+  logo?: string | null;
+  primaryHex: string;
+  primaryForeground: string;
+  sidebarHex: string;
+  sidebarForeground: string;
+  sidebarAccentHex: string;
+  sidebarAccentForeground: string;
+}
+
+function SidebarPreview({
+  companyName,
+  logo,
+  primaryHex,
+  primaryForeground,
+  sidebarHex,
+  sidebarForeground,
+  sidebarAccentHex,
+  sidebarAccentForeground,
+}: SidebarPreviewProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const borderColor = hexWithAlpha(sidebarForeground, '35');
+  const mutedForeground = hexWithAlpha(sidebarForeground, 'a6');
+  const previewItems = [
+    { label: 'Dashboard', icon: BarChart3 },
+    { label: 'Ventas', icon: TrendingUp },
+    { label: 'Compras', icon: HandCoins },
+    { label: 'Inventario', icon: Package },
+    { label: 'Configuración', icon: Settings2 },
+  ];
+
+  return (
+    <Card className="overflow-hidden border-border/50 shadow-sm">
+      <CardHeader className="border-b border-border/30 bg-muted/10">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 text-lg font-black">
+              <Eye className="size-5 text-primary" />Previsualización del Sidebar
+            </CardTitle>
+            <CardDescription>Así se verá el menú con los colores que estás editando.</CardDescription>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCollapsed(value => !value)}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-pressed={collapsed}
+            aria-label={collapsed ? 'Mostrar sidebar expandido' : 'Mostrar sidebar contraído'}
+          >
+            {collapsed ? 'Expandir' : 'Contraer'}
+            <ChevronDown className={cn('size-3.5 transition-transform', collapsed && '-rotate-90')} />
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 p-3 sm:p-4">
+        <div className="flex min-h-[310px] overflow-hidden rounded-2xl border border-border/60 bg-muted/20 shadow-inner">
+          <aside
+            className={cn('flex shrink-0 flex-col transition-[width] duration-300', collapsed ? 'w-[68px]' : 'w-[208px]')}
+            style={{ backgroundColor: sidebarHex, color: sidebarForeground }}
+            aria-label="Previsualización del menú lateral"
+          >
+            <div className="flex min-h-16 items-center gap-2 border-b px-3" style={{ borderColor }}>
+              {logo ? (
+                <img src={logo} alt="Logo de la empresa" className="size-8 shrink-0 rounded-lg object-contain" />
+              ) : (
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-black" style={{ backgroundColor: primaryHex, color: primaryForeground }}>
+                  {(companyName || 'N').trim().charAt(0).toUpperCase()}
+                </div>
+              )}
+              {!collapsed && (
+                <div className="min-w-0 leading-none">
+                  <p className="truncate text-xs font-black">{companyName || 'Mi Empresa'}</p>
+                  <p className="mt-1 truncate text-[9px] uppercase tracking-widest" style={{ color: mutedForeground }}>NovaHub ERP</p>
+                </div>
+              )}
+            </div>
+
+            <nav className="min-h-0 flex-1 space-y-1 overflow-hidden p-2" aria-label="Elementos de ejemplo del sidebar">
+              <p className={cn('px-2 pb-1 pt-2 text-[9px] font-black uppercase tracking-[0.18em]', collapsed && 'text-center')} style={{ color: mutedForeground }}>
+                {collapsed ? '•••' : 'Operaciones'}
+              </p>
+              {previewItems.map(({ label, icon: Icon }, index) => (
+                <div
+                  key={label}
+                  className={cn('flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-semibold', collapsed && 'justify-center px-0')}
+                  style={index === 0
+                    ? { backgroundColor: primaryHex, color: primaryForeground }
+                    : { color: mutedForeground }}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  {!collapsed && <span className="truncate">{label}</span>}
+                </div>
+              ))}
+            </nav>
+
+            <div className="border-t p-2" style={{ borderColor }}>
+              <div className={cn('flex items-center gap-2 rounded-lg p-2', collapsed && 'justify-center')} style={{ backgroundColor: sidebarAccentHex, color: sidebarAccentForeground }}>
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black" style={{ backgroundColor: primaryHex, color: primaryForeground }}>R</div>
+                {!collapsed && <span className="truncate text-[10px] font-bold">Usuario activo</span>}
+              </div>
+            </div>
+          </aside>
+
+          <div className="min-w-0 flex-1 space-y-4 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-2">
+                <div className="h-2.5 w-28 rounded-full bg-foreground/10" />
+                <div className="h-2 w-40 max-w-full rounded-full bg-foreground/5" />
+              </div>
+              <div className="size-8 shrink-0 rounded-lg" style={{ backgroundColor: primaryHex }} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[primaryHex, sidebarAccentHex, sidebarHex, primaryHex].map((color, index) => (
+                <div key={`${color}-${index}`} className="h-16 rounded-xl border border-border/40 bg-background/80 p-2">
+                  <div className="h-2 w-2/3 rounded-full" style={{ backgroundColor: color }} />
+                  <div className="mt-3 h-2 w-1/2 rounded-full bg-foreground/10" />
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-lg px-2.5 py-1.5 text-[10px] font-black" style={{ backgroundColor: primaryHex, color: primaryForeground }}>Activo</span>
+              <span className="rounded-lg px-2.5 py-1.5 text-[10px] font-black" style={{ backgroundColor: sidebarAccentHex, color: sidebarAccentForeground }}>Acento</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[10px] font-bold text-muted-foreground">
+          <span className="rounded-full border border-border/60 px-2.5 py-1">Fondo: {sidebarHex}</span>
+          <span className="rounded-full border border-border/60 px-2.5 py-1">Primario: {primaryHex}</span>
+          <span className="rounded-full border border-border/60 px-2.5 py-1">Acento: {sidebarAccentHex}</span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -641,6 +754,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [companyIndustry, setCompanyIndustry] = useState('OTHER');
   const [industryOptions, setIndustryOptions] = useState<{ id?: string; code: string; name: string; isDefault: boolean }[]>([]);
   const [newIndustryName, setNewIndustryName] = useState('');
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
+  const themeDraftDirtyRef = useRef(false);
   const [showAddIndustry, setShowAddIndustry] = useState(false);
   const resolvedInitialTab = visibleTabs.find(tab => tab.id === initialTab)?.id || visibleTabs[0]?.id || 'branding';
   const [activeTab, setActiveTab] = useState(resolvedInitialTab);
@@ -784,24 +899,29 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setPrimaryFgHex(getReadableForeground(preset.primary));
     setSidebarFgHex(getReadableForeground(preset.sidebar));
     setActivePreset(preset.name);
+    themeDraftDirtyRef.current = true;
   }, []);
 
   const handleSave = async () => {
-    if (!canEditBranding) return;
+    if (!canEditBranding || isSavingTheme) return;
+    setIsSavingTheme(true);
     try {
       const colors = generateThemeFromColor(primaryHex, sidebarHex, accentHex);
-      const safePrimaryFgHex = ensureReadableForeground(primaryHex, primaryFgHex);
-      const safeSidebarFgHex = ensureReadableForeground(sidebarHex, sidebarFgHex);
-      setPrimaryFgHex(safePrimaryFgHex);
-      setSidebarFgHex(safeSidebarFgHex);
-      colors.primaryForeground = hexToOklch(safePrimaryFgHex);
-      colors.sidebarForeground = hexToOklch(safeSidebarFgHex);
-
-      updateTheme(colors);
+      // El color manual debe conservarse tal como lo eligió el usuario. La
+      // accesibilidad se puede advertir en la interfaz, pero no debe cambiar
+      // silenciosamente el valor que se está guardando.
+      const selectedPrimaryFgHex = normalizeHexColor(primaryFgHex, getReadableForeground(colors.primary));
+      const selectedSidebarFgHex = normalizeHexColor(sidebarFgHex, getReadableForeground(colors.sidebar));
+      setPrimaryFgHex(selectedPrimaryFgHex);
+      setSidebarFgHex(selectedSidebarFgHex);
+      colors.primaryForeground = selectedPrimaryFgHex;
+      colors.sidebarForeground = selectedSidebarFgHex;
 
       await brandingService.update({
         userTheme: { colors },
       });
+      updateTheme(colors);
+      themeDraftDirtyRef.current = false;
       await refetchConfiguration();
 
       toast.success('Tema actualizado correctamente', {
@@ -810,6 +930,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     } catch (error) {
       console.error('Error saving theme:', error);
       toast.error('Error al guardar el tema en el servidor');
+    } finally {
+      setIsSavingTheme(false);
     }
   };
 
@@ -823,6 +945,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setActivePreset('Emerald Default');
     try {
       await brandingService.update({ userTheme: null });
+      themeDraftDirtyRef.current = false;
       await refetchConfiguration();
       toast.info('Tema personal restaurado al predeterminado');
     } catch (error) {
@@ -999,11 +1122,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     const resolvedAccent = userThemeColors.accent || branding?.accentColor;
     const resolvedPrimaryForeground = userThemeColors.primaryForeground;
     const resolvedSidebarForeground = userThemeColors.sidebarForeground;
-    if (resolvedPrimary) setPrimaryHex(resolvedPrimary.startsWith('oklch') ? oklchToApproxHex(resolvedPrimary) : resolvedPrimary);
-    if (resolvedSidebar) setSidebarHex(resolvedSidebar.startsWith('oklch') ? oklchToApproxHex(resolvedSidebar) : resolvedSidebar);
-    if (resolvedAccent) setAccentHex(resolvedAccent.startsWith('oklch') ? oklchToApproxHex(resolvedAccent) : resolvedAccent);
-    if (resolvedPrimaryForeground) setPrimaryFgHex(resolvedPrimaryForeground.startsWith('oklch') ? oklchToApproxHex(resolvedPrimaryForeground) : resolvedPrimaryForeground);
-    if (resolvedSidebarForeground) setSidebarFgHex(resolvedSidebarForeground.startsWith('oklch') ? oklchToApproxHex(resolvedSidebarForeground) : resolvedSidebarForeground);
+    if (!themeDraftDirtyRef.current) {
+      if (resolvedPrimary) setPrimaryHex(resolvedPrimary.startsWith('oklch') ? oklchToApproxHex(resolvedPrimary) : resolvedPrimary);
+      if (resolvedSidebar) setSidebarHex(resolvedSidebar.startsWith('oklch') ? oklchToApproxHex(resolvedSidebar) : resolvedSidebar);
+      if (resolvedAccent) setAccentHex(resolvedAccent.startsWith('oklch') ? oklchToApproxHex(resolvedAccent) : resolvedAccent);
+      if (resolvedPrimaryForeground) setPrimaryFgHex(resolvedPrimaryForeground.startsWith('oklch') ? oklchToApproxHex(resolvedPrimaryForeground) : resolvedPrimaryForeground);
+      if (resolvedSidebarForeground) setSidebarFgHex(resolvedSidebarForeground.startsWith('oklch') ? oklchToApproxHex(resolvedSidebarForeground) : resolvedSidebarForeground);
+    }
     if (branding?.portalPrimaryColor) setPortalPrimaryHex(branding.portalPrimaryColor);
     if (branding?.portalAccentColor) setPortalAccentHex(branding.portalAccentColor);
     if (branding?.companyName) setCompanyName(branding.companyName);
@@ -1012,7 +1137,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (branding?.whiteLabel !== undefined) setWhiteLabel(branding.whiteLabel);
     // El tema personal tiene prioridad sobre los colores corporativos. Si aún
     // no existe, la marca del tenant se usa como fallback visual.
-    if (branding && (resolvedPrimary || resolvedSidebar || resolvedAccent || resolvedPrimaryForeground || resolvedSidebarForeground)) {
+    if (!themeDraftDirtyRef.current && branding && (resolvedPrimary || resolvedSidebar || resolvedAccent || resolvedPrimaryForeground || resolvedSidebarForeground)) {
       const serverColors: Partial<BrandColors> = {};
       if (resolvedPrimary) {
         serverColors.primary = resolvedPrimary;
@@ -1254,8 +1379,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setEditingRole({ ...editingRole, permissions: newPerms });
   };
 
-  const previewPrimaryForeground = ensureReadableForeground(primaryHex, primaryFgHex);
-  const previewSidebarForeground = ensureReadableForeground(sidebarHex, sidebarFgHex);
+  const previewPrimaryForeground = normalizeHexColor(primaryFgHex, getReadableForeground(primaryHex));
+  const previewSidebarForeground = normalizeHexColor(sidebarFgHex, getReadableForeground(sidebarHex));
   const previewAccentForeground = getReadableForeground(accentHex);
 
   return (
@@ -1345,16 +1470,17 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Colores Principales</p>
-                  <ColorField label="Color Primario" description="Botones, enlaces y elementos activos" hexValue={primaryHex} onHexChange={v => { setPrimaryHex(v); setActivePreset(null); }} />
-                  <ColorField label="Texto sobre Primario" description="Color del texto en botones primarios" hexValue={primaryFgHex} onHexChange={v => { setPrimaryFgHex(v); setActivePreset(null); }} />
-                  <ColorField label="Color de Acento" description="Elementos secundarios y hovers" hexValue={accentHex} onHexChange={v => { setAccentHex(v); setActivePreset(null); }} />
+                  <ColorField label="Color Primario" description="Botones, enlaces y elementos activos" hexValue={primaryHex} onHexChange={v => { setPrimaryHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
+                  <ColorField label="Texto sobre Primario" description="Color del texto en botones primarios" hexValue={primaryFgHex} onHexChange={v => { setPrimaryFgHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
+                  <ColorField label="Color de Acento" description="Elementos secundarios y hovers" hexValue={accentHex} onHexChange={v => { setAccentHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
                   <Separator className="my-2" />
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Colores del Sidebar</p>
-                  <ColorField label="Fondo del Sidebar" description="Color de fondo del menú lateral" hexValue={sidebarHex} onHexChange={v => { setSidebarHex(v); setActivePreset(null); }} />
-                  <ColorField label="Texto del Sidebar" description="Color del texto en el menú lateral" hexValue={sidebarFgHex} onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); }} />
+                  <ColorField label="Fondo del Sidebar" description="Color de fondo del menú lateral" hexValue={sidebarHex} onHexChange={v => { setSidebarHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
+                  <ColorField label="Texto del Sidebar" description="Color del texto en el menú lateral" hexValue={sidebarFgHex} onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
                   <div className="flex gap-3 pt-2">
-                    <Button onClick={handleSave} disabled={!canEditBranding} className="rounded-xl gap-2 font-bold">
-                      <Save className="size-4" />Guardar Tema
+                    <Button onClick={handleSave} disabled={!canEditBranding || isSavingTheme} className="rounded-xl gap-2 font-bold">
+                      {isSavingTheme ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
+                      {isSavingTheme ? 'Guardando...' : 'Guardar Tema'}
                     </Button>
                     <Button variant="outline" onClick={handleReset} className="rounded-xl gap-2">
                       <RotateCcw className="size-4" />Restaurar
@@ -1412,43 +1538,16 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 </CardContent>
               </Card>
 
-              {/* Live Preview */}
-              <Card className="border-border/50 shadow-sm">
-                <CardHeader className="border-b border-border/30 bg-muted/10">
-                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Eye className="size-5 text-primary" />Vista Previa</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-4">
-                  <div className="rounded-xl overflow-hidden border border-border shadow-lg" style={{ backgroundColor: sidebarHex, color: previewSidebarForeground }}>
-                    <div className="p-3 border-b" style={{ borderColor: `${previewSidebarForeground}20` }}>
-                      <div className="flex items-center gap-2">
-                        {logoPreview ? (
-                          <img src={logoPreview} alt="Logo" className="size-8 object-contain rounded" />
-                        ) : (
-                          <div className="size-8 rounded-lg flex items-center justify-center font-black text-sm" style={{ backgroundColor: primaryHex, color: previewPrimaryForeground }}>N</div>
-                        )}
-                        <div>
-                          <p className="text-xs font-bold" style={{ color: previewSidebarForeground }}>{companyName || 'Mi Empresa'}</p>
-                          <p className="text-[9px]" style={{ color: previewSidebarForeground }}>Dashboard ERP</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-2 space-y-1">
-                      {['Dashboard', 'Ventas', 'Compras', 'Inventario de Mercancías'].map((item, i) => (
-                        <div key={item} className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
-                          style={i === 0 ? { backgroundColor: primaryHex, color: previewPrimaryForeground } : { color: previewSidebarForeground }}>
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="p-3 border-t space-y-2" style={{ borderColor: `${previewSidebarForeground}20` }}>
-                      <div className="flex gap-2">
-                        <button className="flex-1 rounded-lg px-2 py-1 text-[10px] font-bold transition-all" style={{ backgroundColor: primaryHex, color: previewPrimaryForeground }}>Primario</button>
-                        <button className="flex-1 rounded-lg px-2 py-1 text-[10px] font-bold transition-all" style={{ backgroundColor: accentHex, color: previewAccentForeground }}>Acento</button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <SidebarPreview
+                companyName={companyName}
+                logo={logoPreview}
+                primaryHex={primaryHex}
+                primaryForeground={previewPrimaryForeground}
+                sidebarHex={sidebarHex}
+                sidebarForeground={previewSidebarForeground}
+                sidebarAccentHex={accentHex}
+                sidebarAccentForeground={previewAccentForeground}
+              />
             </div>
           </motion.div>
         </TabsContent>
