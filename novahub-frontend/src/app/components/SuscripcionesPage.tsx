@@ -797,7 +797,7 @@ export function SuscripcionesPage() {
                 </div>
               </div>
               <DialogFooter className="gap-3">
-                <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => { setIsTenantDialogOpen(false); setSelectedTenant(null); resetTenantForm(); }}>Cancelar</Button>
+                <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => { setIsTenantDialogOpen(false); setSelectedTenant(null); resetTenantForm(); }} disabled={uploading}>Cancelar</Button>
                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={selectedTenant ? handleUpdateTenant : handleCreateTenant} disabled={uploading || checkingTenantAdminEmail || !!tenantAdminEmailError || !isValidEmail(tenantForm.adminEmail) || (!selectedTenant && !!getPasswordError(tenantForm.adminPassword))}>
                   {selectedTenant ? 'Guardar Cambios' : 'Crear Entidad'}
                 </Button>

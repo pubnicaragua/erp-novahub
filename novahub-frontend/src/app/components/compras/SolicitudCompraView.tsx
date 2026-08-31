@@ -102,7 +102,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const canApproveManagement = canPerform('PURCHASES_REQUESTS', 'approve');
   const canRejectManagement = canPerform('PURCHASES_REQUESTS', 'reject');
   const canConvertManagement = canPerform('PURCHASES_REQUESTS', 'convert');
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, convertBetweenCurrencies, formatConvertedAmount } = useCurrency();
   const [search, setSearch] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-requests-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -349,10 +349,27 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       : (request.requestedById || 'Admin');
     const items = (request.items || []).map((item: any) => {
       const product = item.product || productCatalog.find((candidate) => String(candidate.id) === String(item.productId));
+      const variant = item.variant || product?.variants?.find((candidate: any) => String(candidate.id) === String(item.variantId));
+      const hasCostSnapshot = item.unitCost !== undefined
+        && item.unitCost !== null
+        && Number.isFinite(Number(item.unitCost));
+      const snapshotCostBase = Math.max(0, Number(item.unitCost || 0));
+      const snapshotCost = hasCostSnapshot
+        ? Number(convertBetweenCurrencies(
+          snapshotCostBase,
+          baseCurrency,
+          displayCurrency,
+          1,
+          Number(globalRate || 1),
+        ).toFixed(6))
+        : undefined;
       const priceCandidates = [item.unitPrice, product?.lastPurchasePrice, product?.costPrice, product?.cost, product?.price]
         .map((value) => Number(value))
         .filter((value) => Number.isFinite(value) && value > 0);
-      const unitPrice = priceCandidates[0] || 0;
+      // Las solicitudes nuevas traen un snapshot del costo funcional. Se
+      // conserva incluso si el producto cambia de costo antes de aprobarla;
+      // solo las solicitudes históricas sin snapshot usan el catálogo actual.
+      const unitPrice = hasCostSnapshot ? snapshotCost! : priceCandidates[0] || 0;
       const quantity = Math.max(0, Number(item.quantity || 0));
       const taxRateValue = Number(product?.taxRate);
       const taxRate = Number.isFinite(taxRateValue) && taxRateValue >= 0
@@ -365,10 +382,10 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
       return {
         productId: item.productId || null,
-        variantId: item.variantId || null,
+        variantId: item.variantId || variant?.id || null,
         code: item.code || product?.code || product?.sku || '',
         name: item.name || product?.name || item.description || '',
-        description: item.description || product?.name || '',
+        description: item.description || (variant?.name ? `${product?.name || ''} · ${variant.name}` : product?.name) || '',
         category: item.category || (product as any)?.category?.name || (product as any)?.category || '',
         categoryId: item.categoryId || product?.categoryId || null,
         stock: Number(item.currentStock || product?.stock || 0),

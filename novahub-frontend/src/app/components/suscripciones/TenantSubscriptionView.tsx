@@ -983,7 +983,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUserDialogOpen(false)} className="h-11 px-6">Cancelar</Button>
+            <Button variant="outline" onClick={() => setIsUserDialogOpen(false)} disabled={uploading} className="h-11 px-6">Cancelar</Button>
             <Button 
               className="bg-primary text-primary-foreground font-bold h-11 px-8" 
               onClick={handleAddUser}

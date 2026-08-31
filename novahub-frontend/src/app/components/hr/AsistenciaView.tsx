@@ -557,7 +557,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
                   <FileDown className="size-4" /> Descargar plantilla Excel
                 </Button>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scrollbar-overlay" data-import-preview-horizontal-scroller="true">
                 <table className="w-full min-w-[560px] text-left">
                   <thead>
                     <tr className="border-b border-border/40 bg-muted/40">
@@ -606,7 +606,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
             )}
           </div>
           <DialogFooter data-tour="hr-attendance-import-actions">
-            <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
+            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cerrar</Button>
             <Button onClick={handleImportAttendance} disabled={importing || !importFile} className="gap-2">
               <Upload className="size-4" /> {importing ? 'Importando...' : importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar asistencia'}
             </Button>

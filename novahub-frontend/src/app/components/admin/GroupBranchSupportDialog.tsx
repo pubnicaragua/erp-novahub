@@ -230,7 +230,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
 
           <DialogFooter className="flex-wrap gap-2">
             {tab === 'summary' && <Button className="rounded-xl" disabled={savingDetails || !isValidEmail(details?.users?.[0]?.email || 'support@example.com')} onClick={saveDetails}><Save className="mr-2 size-4" /> {savingDetails ? 'Guardando…' : 'Guardar detalles'}</Button>}
-            <Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>Cerrar</Button>
+            <Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)} disabled={savingDetails}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -244,7 +244,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
           <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Nueva contraseña" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
           <PasswordRequirements value={newPassword} />
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl" onClick={() => setPasswordUser(null)}>Cancelar</Button>
+            <Button variant="outline" className="rounded-xl" onClick={() => setPasswordUser(null)} disabled={savingPassword}>Cancelar</Button>
             <Button className="rounded-xl" disabled={savingPassword || !!getPasswordError(newPassword)} onClick={savePassword}>{savingPassword ? 'Guardando…' : 'Guardar contraseña'}</Button>
           </DialogFooter>
         </DialogContent>

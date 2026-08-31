@@ -540,7 +540,7 @@ export function FlujoEfectivoView() {
             )}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => handleSettingsOpenChange(false)} className="rounded-xl text-[10px] font-black uppercase tracking-widest">
+            <Button variant="outline" onClick={() => handleSettingsOpenChange(false)} disabled={settingsSaving} className="rounded-xl text-[10px] font-black uppercase tracking-widest">
               Cancelar
             </Button>
             <Button onClick={handleSettingsSave} disabled={settingsSaving || !settingsLoaded} className="rounded-xl font-black uppercase text-[10px] tracking-widest">

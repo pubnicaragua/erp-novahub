@@ -1868,7 +1868,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           {importRows.length > 0 && (
             <div className="space-y-3">
               <ImportReviewSummary total={importPreview.length} valid={importValidCount} skipped={importPreview.length - importValidCount} entityLabel="productos" />
-              <div className="hidden min-w-0 max-w-full max-h-60 overflow-x-auto overflow-y-hidden rounded-xl border border-border/40 scrollbar-overlay sm:block">
+              <div data-import-preview-horizontal-scroller="true" className="hidden min-w-0 max-w-full max-h-60 overflow-x-auto overflow-y-hidden rounded-xl border border-border/40 scrollbar-overlay sm:block">
                 <table className="w-full min-w-[640px]">
                   <thead className="bg-muted/40 sticky top-0">
                     <tr>
@@ -1880,28 +1880,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                       <th className={TH}>Estado</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/40">
-                    {importPreview.slice(0, 0).map((r) => (
-                      <tr key={r.row} className={r.error ? 'bg-rose-500/5' : 'hover:bg-muted/30'}>
-                        <td className={`${TD} font-mono text-[10px]`}>{r.rawCode || '—'}</td>
-                        <td className={`${TD} font-bold max-w-[200px]`}>
-                          <span className="block truncate">{r.productName || '—'}</span>
-                        </td>
-                        <td className={`${TD} font-bold`}>{fmtQty(r.qty)}</td>
-                        <td className={TD}>{r.error ? '—' : fmtQty(r.currentStock)}</td>
-                        <td className={`${TD} font-black ${r.error ? 'text-muted-foreground' : r.difference > 0 ? 'text-emerald-500' : r.difference < 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>
-                          {r.error ? '—' : fmtQty(r.difference)}
-                        </td>
-                        <td className={TD}>
-                          {r.error ? (
-                            <Badge variant="destructive" className="text-[9px]">{r.error}</Badge>
-                          ) : (
-                            <Badge className="text-[9px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Válida</Badge>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
+                  <tbody className="divide-y divide-border/40" />
                 </table>
                 <VirtualizedImportList count={importPreview.length} estimateSize={38} className="h-60 min-w-[640px]" renderItem={(index) => {
                   const r = importPreview[index];
@@ -1920,18 +1899,6 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Revisión móvil</p>
                   <Badge variant="secondary" className="text-[10px]">{importPreview.length} filas</Badge>
                 </div>
-                {importPreview.slice(0, 0).map((r) => (
-                  <ImportPreviewMobileCard key={r.row} index={r.row} title={r.productName || r.rawCode} error={r.error}>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <ImportPreviewField label="Código"><p className="break-words font-mono text-xs">{r.rawCode || '—'}</p></ImportPreviewField>
-                      <ImportPreviewField label="Fila"><p className="font-mono text-xs">{r.row + 2}</p></ImportPreviewField>
-                      <ImportPreviewField label="Producto" className="col-span-2"><p className="break-words text-xs font-bold">{r.productName || '—'}</p></ImportPreviewField>
-                      <ImportPreviewField label="Cantidad"><p className="text-right text-xs font-bold">{fmtQty(r.qty)}</p></ImportPreviewField>
-                      <ImportPreviewField label="Stock actual"><p className="text-right text-xs">{r.error ? '—' : fmtQty(r.currentStock)}</p></ImportPreviewField>
-                      <ImportPreviewField label="Diferencia" className="col-span-2"><p className={`text-right text-xs font-black ${r.error ? 'text-muted-foreground' : r.difference > 0 ? 'text-emerald-500' : r.difference < 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>{r.error ? '—' : fmtQty(r.difference)}</p></ImportPreviewField>
-                    </div>
-                  </ImportPreviewMobileCard>
-                ))}
                 <VirtualizedImportList count={importPreview.length} estimateSize={220} className="h-[min(62vh,40rem)] space-y-3" renderItem={(index) => {
                   const r = importPreview[index];
                   return <ImportPreviewMobileCard key={r.row} index={r.row} title={r.productName || r.rawCode} error={r.error}>

@@ -26,7 +26,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
-import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -366,7 +366,9 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
                   <div className="flex justify-between items-center text-base pt-2">
                     <span className="font-black uppercase text-[10px] tracking-widest">Base Estimada</span>
                     <span className="font-black text-muted-foreground tabular-nums text-xs text-right">
-                       {localDoc.currency === 'USD' ? `C$ ${(Number(localDoc.amount||0) * (localDoc.exchangeRate || globalRate)).toLocaleString()}` : `$ ${(Number(localDoc.amount||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}`}
+                       {localDoc.currency === 'USD'
+                         ? formatCurrencyAmount(Number(localDoc.amount || 0) * (localDoc.exchangeRate || globalRate), 'NIO')
+                         : formatCurrencyAmount(Number(localDoc.amount || 0) / (localDoc.exchangeRate || globalRate), 'USD')}
                     </span>
                   </div>
                 </div>

@@ -41,7 +41,7 @@ const statusLabels: Record<string, string> = {
   PRODUCTO_EXISTENTE: 'Producto existente',
 };
 
-const rowCode = (row: Record<string, unknown>) => String(row['Código / SKU'] ?? row.Código ?? row.Codigo ?? row.code ?? row.codigo ?? row.SKU ?? row.sku ?? '').trim();
+const rowCode = (row: Record<string, unknown>) => String(row['Código producto'] ?? row.parentCode ?? row['Código / SKU'] ?? row.Código ?? row.Codigo ?? row.code ?? row.codigo ?? row.SKU ?? row.sku ?? '').trim();
 
 const safeFileNamePart = (value: string) =>
   value
@@ -106,18 +106,25 @@ async function readSpreadsheetRows(file: File, onProgress?: (progress: number) =
     const distributions = readSheet(distributionSheetName);
     const productByCode = new Map<string, Record<string, unknown>>();
     products.forEach((product) => {
-      const code = String(readImportValue(product, ['Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? '').trim();
-      if (code) productByCode.set(normalizeImportKey(code), product);
+      const code = String(readImportValue(product, ['Código producto', 'Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? '').trim();
+      const variantSku = String(readImportValue(product, ['SKU variante', 'Código variante', 'variantSku']) ?? '').trim();
+      if (code) productByCode.set(normalizeImportKey(code), { ...product, parentCode: code, variantSku });
+      if (variantSku) productByCode.set(normalizeImportKey(variantSku), { ...product, parentCode: code, variantSku });
     });
     if (productSheetName && distributionSheetName) {
       const distributionHeaderRow = sheetHeaderRows.get(distributionSheetName) || 0;
       const rows = distributions.map((distribution, index) => {
-        const code = String(readImportValue(distribution, ['Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? '').trim();
+        const code = String(readImportValue(distribution, ['SKU variante', 'Código variante', 'Código producto', 'Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? '').trim();
         const product = productByCode.get(normalizeImportKey(code)) || {};
-        const productCode = String(readImportValue(product, ['Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? code).trim() || code;
+        const productCode = String(readImportValue(product, ['Código producto', 'Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? code).trim() || code;
+        const variantSku = String(readImportValue(distribution, ['SKU variante', 'Código variante', 'variantSku']) ?? readImportValue(product, ['SKU variante', 'Código variante', 'variantSku']) ?? '').trim();
         return {
           __importRowNumber: distributionHeaderRow + index + 2,
           code: productCode,
+          parentCode: productCode,
+          variantSku,
+          variantName: String(readImportValue(product, ['Nombre variante', 'variantName']) ?? '').trim(),
+          variantAttributes: readImportValue(product, ['Atributos variante (JSON)', 'Atributos variante', 'variantAttributes']) ?? undefined,
           name: String(readImportValue(product, ['Nombre', 'Producto', 'Producto / servicio', 'name']) ?? '').trim(),
           category: String(readImportValue(product, ['Categoría', 'Categoria', 'category']) ?? '').trim(),
           unit: String(readImportValue(product, ['Unidad', 'unit']) ?? 'unidad').trim() || 'unidad',
@@ -133,7 +140,11 @@ async function readSpreadsheetRows(file: File, onProgress?: (progress: number) =
     const firstSheet = sheetNames[0];
     const legacyRows = readSheet(firstSheet).map((row, index) => ({
       __importRowNumber: (sheetHeaderRows.get(firstSheet) || 0) + index + 2,
-      code: String(readImportValue(row, ['Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? '').trim(),
+      code: String(readImportValue(row, ['Código producto', 'Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? '').trim(),
+      parentCode: String(readImportValue(row, ['Código producto', 'Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? '').trim(),
+      variantSku: String(readImportValue(row, ['SKU variante', 'Código variante', 'variantSku']) ?? '').trim(),
+      variantName: String(readImportValue(row, ['Nombre variante', 'variantName']) ?? '').trim(),
+      variantAttributes: readImportValue(row, ['Atributos variante (JSON)', 'Atributos variante', 'variantAttributes']) ?? undefined,
       name: String(readImportValue(row, ['Nombre', 'Producto', 'Producto / servicio', 'name']) ?? '').trim(),
       category: String(readImportValue(row, ['Categoría', 'Categoria', 'category']) ?? '').trim(),
       unit: String(readImportValue(row, ['Unidad', 'unit']) ?? 'unidad').trim() || 'unidad',
@@ -389,17 +400,21 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
 
       const products = workbook.addWorksheet('Productos');
       products.columns = [
-        { header: 'Código / SKU', key: 'code', width: 20 },
+        { header: 'Código producto', key: 'parentCode', width: 20 },
+        { header: 'SKU variante', key: 'variantSku', width: 24 },
+        { header: 'Nombre variante', key: 'variantName', width: 24 },
+        { header: 'Atributos variante (JSON)', key: 'variantAttributes', width: 48 },
         { header: 'Nombre', key: 'name', width: 30 },
         { header: 'Categoría', key: 'category', width: 24 },
         { header: 'Unidad', key: 'unit', width: 14 },
         { header: 'Costo', key: 'cost', width: 16 },
       ];
-      products.addRow({ code: '', name: '', category: '', unit: 'unidad', cost: '' });
+      products.addRow({ parentCode: '', variantSku: '', variantName: '', variantAttributes: '', name: '', category: '', unit: 'unidad', cost: '' });
 
       const distribution = workbook.addWorksheet('Distribución');
       distribution.columns = [
-        { header: 'Código / SKU', key: 'code', width: 20 },
+        { header: 'Código producto', key: 'parentCode', width: 20 },
+        { header: 'SKU variante', key: 'variantSku', width: 24 },
         { header: 'Ubicación destino', key: 'location', width: 48 },
         { header: 'Stock inicial', key: 'stock', width: 16 },
         { header: 'Stock mínimo', key: 'minStock', width: 16 },
@@ -407,7 +422,8 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
       ];
       uniquePhysicalLocations.forEach((location) => {
         distribution.addRow({
-          code: '',
+          parentCode: '',
+          variantSku: '',
           location: displayLocationLabel(location),
           stock: 0,
           minStock: 0,
@@ -448,12 +464,14 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
       const guide = workbook.addWorksheet('Guía de llenado');
       [
         ['GUÍA DE LLENADO · IMPORTACIÓN POR RUBRO'],
-        ['Productos contiene cada SKU una sola vez. Distribución repite únicamente el SKU para asignar stock a varias ubicaciones.'],
+        ['Productos contiene una fila por presentación vendible. Distribución repite el Código producto + SKU variante para asignar stock a varias ubicaciones.'],
         ['Los nombres de bodega y almacén son únicos dentro del rubro, por eso normalmente basta seleccionar “Bodega 1” o “Almacén central”. Si existe un registro histórico duplicado, el sistema agrega la sucursal como contexto.'],
         ['Campo', 'Hoja', 'Regla'],
-        ['Código / SKU', 'Productos y Distribución', 'Obligatorio. Relaciona ambas hojas; no escribas IDs.'],
+        ['Código producto', 'Productos y Distribución', 'Obligatorio. Es el código padre; se repite en sus variantes y no requiere IDs.'],
+        ['SKU variante', 'Productos y Distribución', 'Obligatorio para cada presentación vendible. Debe ser único en el catálogo.'],
+        ['Nombre variante / Atributos variante (JSON)', 'Productos', 'Describe la presentación. Los atributos deben existir en el catálogo de Inventario.'],
         ['Nombre', 'Productos', 'Obligatorio cuando el producto todavía no existe en el rubro.'],
-        ['Costo', 'Productos', 'Obligatorio y único para el mismo SKU en todas sus ubicaciones.'],
+        ['Costo', 'Productos', 'Obligatorio para la presentación; puede variar entre variantes, pero debe ser igual en todas sus ubicaciones.'],
         ['Ubicación destino', 'Distribución', 'Selecciona una opción del dropdown. Una bodega ya incluye su sucursal; un almacén corporativo no pertenece a ninguna sucursal y el sistema aplica su configuración de abastecimiento.'],
         ['Stock inicial', 'Distribución', 'Cantidad final o cantidad a sumar según el modo seleccionado. Puede ser 0.'],
         ['Stock mínimo', 'Distribución', 'Nivel mínimo de inventario para esa relación de stock.'],
@@ -724,9 +742,10 @@ function PreviewPanel({
   const renderDesktopRow = (index: number) => {
     const row = preview.rows[index];
     const category = String(valueFor(row, 'category', '') || '');
-    return <div className="grid min-w-[2240px] grid-cols-[3.5rem_8rem_14rem_11rem_7rem_8rem_14rem_7rem_7rem_8rem_7rem_7rem_15rem_20rem] items-start border-t border-border/50 align-top text-xs">
+    return <div className="grid min-w-[2340px] grid-cols-[3.5rem_8rem_9rem_14rem_11rem_7rem_8rem_14rem_7rem_7rem_8rem_7rem_7rem_15rem_20rem] items-start border-t border-border/50 align-top text-xs">
       <div className="px-2 py-2 text-muted-foreground">{row.rowNumber}</div>
       <div className="p-1"><Input value={String(valueFor(row, 'code', row.code) || '')} onChange={(event) => onRowUpdate(row, 'code', event.target.value)} className={`${inputClass} font-mono`} /></div>
+      <div className="p-1"><Input value={String(valueFor(row, 'variantSku', row.variantSku || '') || '')} onChange={(event) => onRowUpdate(row, 'variantSku', event.target.value)} className={`${inputClass} font-mono`} /></div>
       <div className="p-1"><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></div>
       <div className="p-1"><div className="flex min-w-0 items-center gap-1"><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={`${inputClass} ${categoryIsNew(row) ? 'border-amber-500/60' : ''}`} />{categoryIsNew(row) && <Button type="button" variant="ghost" size="icon" className={`size-8 shrink-0 rounded-lg ${categoryIsPrepared(row) ? 'text-emerald-600' : 'text-amber-600'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-4" /> : <Plus className="size-4" />}</Button>}</div></div>
       <div className="p-1"><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></div>
@@ -745,9 +764,10 @@ function PreviewPanel({
     const row = preview.rows[index];
     const category = String(valueFor(row, 'category', '') || '');
     return <div className={`rounded-2xl border bg-card p-3 shadow-sm ${row.issues.length ? 'border-destructive/40 bg-destructive/[0.03]' : 'border-border/60'}`}>
-      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-sm font-black">{String(valueFor(row, 'code', row.code) || 'Sin SKU')}</p><p className="text-xs text-muted-foreground">Fila {row.rowNumber} · {row.locationLabel || 'Destino por resolver'}</p></div>{renderStatus(row)}</div>
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-sm font-black">{String(valueFor(row, 'code', row.code) || 'Sin código')}</p><p className="text-xs text-muted-foreground">SKU variante: {String(valueFor(row, 'variantSku', row.variantSku || '') || '—')} · Fila {row.rowNumber} · {row.locationLabel || 'Destino por resolver'}</p></div>{renderStatus(row)}</div>
       <div className="mt-2">{renderImageStatus(row)}</div>
       <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">SKU variante</span><Input value={String(valueFor(row, 'variantSku', row.variantSku || '') || '')} onChange={(event) => onRowUpdate(row, 'variantSku', event.target.value)} className={`${inputClass} font-mono`} /></label>
         <label className="space-y-1 sm:col-span-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Nombre</span><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></label>
         <label className="space-y-1 sm:col-span-2"><span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Categoría {categoryIsNew(row) && <>{categoryIsPrepared(row) ? <span className="font-normal text-emerald-600">· preparada</span> : <span className="font-normal text-amber-600">· pulsa + para agregar</span>}<Button type="button" variant="ghost" size="icon" className={`size-6 rounded-md ${categoryIsPrepared(row) ? 'text-emerald-600' : 'text-amber-600'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-3.5" /> : <Plus className="size-3.5" />}</Button></>}</span><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={inputClass} /></label>
         <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Unidad</span><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></label>
@@ -814,58 +834,17 @@ function PreviewPanel({
       </div>
     </div>
 
-    <div ref={tableScrollerRef} id="manager-inventory-import-preview-table" className="hidden min-w-0 max-w-full overflow-x-auto overflow-y-hidden rounded-xl border border-border/60 scrollbar-overlay lg:block">
-      <table className="w-full min-w-[2240px] table-fixed text-left text-xs">
+    <div ref={tableScrollerRef} id="manager-inventory-import-preview-table" data-import-preview-horizontal-scroller="true" className="hidden min-w-0 max-w-full overflow-x-auto overflow-y-hidden rounded-xl border border-border/60 scrollbar-overlay lg:block">
+      <table className="w-full min-w-[2340px] table-fixed text-left text-xs">
         <thead className="bg-muted/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-          <tr><th className="w-14 px-2 py-2">Fila</th><th className="w-32 px-2 py-2">SKU</th><th className="w-56 px-2 py-2">Nombre</th><th className="w-44 px-2 py-2">Categoría</th><th className="w-28 px-2 py-2">Unidad</th><th className="w-32 px-2 py-2">Costo</th><th className="w-56 px-2 py-2">Ubicación destino</th><th className="w-28 px-2 py-2">Stock</th><th className="w-28 px-2 py-2">Mínimo</th><th className="w-32 px-2 py-2">Catálogo</th><th className="w-28 px-2 py-2">Actual</th><th className="w-28 px-2 py-2">Resultado</th><th className="w-60 px-2 py-2">Imagen por SKU</th><th className="w-80 px-2 py-2">Estado / observación</th></tr>
+          <tr><th className="w-14 px-2 py-2">Fila</th><th className="w-32 px-2 py-2">Código producto</th><th className="w-36 px-2 py-2">SKU variante</th><th className="w-56 px-2 py-2">Nombre</th><th className="w-44 px-2 py-2">Categoría</th><th className="w-28 px-2 py-2">Unidad</th><th className="w-32 px-2 py-2">Costo</th><th className="w-56 px-2 py-2">Ubicación destino</th><th className="w-28 px-2 py-2">Stock</th><th className="w-28 px-2 py-2">Mínimo</th><th className="w-32 px-2 py-2">Catálogo</th><th className="w-28 px-2 py-2">Actual</th><th className="w-28 px-2 py-2">Resultado</th><th className="w-60 px-2 py-2">Imagen por SKU</th><th className="w-80 px-2 py-2">Estado / observación</th></tr>
         </thead>
-        <tbody>
-          {preview.rows.slice(0, 0).map((row) => {
-            const category = String(valueFor(row, 'category', '') || '');
-            return <tr key={`${row.rowNumber}-${row.code}-${row.warehouseId}`} className="border-t border-border/50 align-top">
-              <td className="px-2 py-2 text-muted-foreground">{row.rowNumber}</td>
-              <td className="p-1"><Input value={String(valueFor(row, 'code', row.code) || '')} onChange={(event) => onRowUpdate(row, 'code', event.target.value)} className={`${inputClass} font-mono`} /></td>
-              <td className="p-1"><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></td>
-              <td className="p-1"><div className="flex min-w-0 items-center gap-1"><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={`${inputClass} ${categoryIsNew(row) ? 'border-amber-500/60' : ''}`} />{categoryIsNew(row) && <Button type="button" variant="ghost" size="icon" className={`size-8 shrink-0 rounded-lg ${categoryIsPrepared(row) ? 'text-emerald-600' : 'text-amber-600'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-4" /> : <Plus className="size-4" />}</Button>}</div></td>
-              <td className="p-1"><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></td>
-              <td className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'costPrice', row.costPrice ?? '') ?? '')} onChange={(event) => onRowUpdate(row, 'costPrice', parseImportNumber(event.target.value))} className={`${inputClass} text-right`} /></td>
-              <td className="p-1"><select value={selectedLocationValue(row)} onChange={(event) => onRowUpdate(row, 'warehouseSelection', event.target.value)} className={`${inputClass} ${locationIssue(row) ? 'border-destructive/60 text-destructive' : ''}`}><option value="">Seleccionar ubicación activa</option>{currentLocationOptions(row).map((option) => <option key={`${option.value}-${option.type}`} value={option.value}>{option.value}{option.type === 'INVALID' ? ' · no disponible' : ''}</option>)}</select>{locationContext(row) && <p className="max-w-56 px-1 pt-1 text-[10px] leading-4 text-muted-foreground">{locationContext(row)}</p>}{locationIssue(row) && <p className="max-w-56 px-1 pt-1 text-[10px] leading-4 text-destructive">{locationIssue(row)}</p>}</td>
-              <td className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'stock', row.stock) ?? 0)} onChange={(event) => onRowUpdate(row, 'stock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></td>
-              <td className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'minStock', 0) ?? 0)} onChange={(event) => onRowUpdate(row, 'minStock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></td>
-              <td className="p-1"><select value={String(valueFor(row, 'registerCatalog', 'SI') || 'SI').toUpperCase()} onChange={(event) => onRowUpdate(row, 'registerCatalog', event.target.value)} className={inputClass}><option value="SI">SI</option><option value="NO">NO</option></select></td>
-              <td className="px-2 py-2 font-bold">{formatNumber(row.currentQty)}</td>
-              <td className="px-2 py-2 font-black text-primary">{formatNumber(row.resultingQty)}</td>
-              <td className="px-2 py-2">{renderImageStatus(row)}</td>
-              <td className="w-80 px-2 py-2"><div className="min-w-0">{renderStatus(row)}</div><p className={`mt-1 break-words whitespace-normal ${row.issues.length ? 'text-destructive' : 'text-muted-foreground'}`}>{row.issues.join(' · ') || 'Sin observaciones'}</p></td>
-            </tr>;
-          })}
-        </tbody>
+        <tbody />
       </table>
-      <VirtualizedImportList count={preview.rows.length} estimateSize={86} className="h-[min(60vh,42rem)] min-w-[2240px]" renderItem={renderDesktopRow} />
+      <VirtualizedImportList count={preview.rows.length} estimateSize={86} className="h-[min(60vh,42rem)] min-w-[2340px]" renderItem={renderDesktopRow} />
       <p className="px-3 py-2 text-xs text-muted-foreground">Mostrando las {preview.rows.length} filas; solo se dibujan las visibles para mantener fluida la previsualización.</p>
     </div>
 
-    <div className="space-y-3 lg:hidden">
-      {preview.rows.slice(0, 0).map((row) => {
-        const category = String(valueFor(row, 'category', '') || '');
-        return <div key={`${row.rowNumber}-${row.code}-${row.warehouseId}`} className={`rounded-2xl border bg-card p-3 shadow-sm ${row.issues.length ? 'border-destructive/40 bg-destructive/[0.03]' : 'border-border/60'}`}>
-          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-sm font-black">{String(valueFor(row, 'code', row.code) || 'Sin SKU')}</p><p className="text-xs text-muted-foreground">Fila {row.rowNumber} · {row.locationLabel || 'Destino por resolver'}</p></div>{renderStatus(row)}</div>
-          <div className="mt-2">{renderImageStatus(row)}</div>
-          <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-            <label className="space-y-1 sm:col-span-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Nombre</span><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></label>
-            <label className="space-y-1 sm:col-span-2"><span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Categoría {categoryIsNew(row) && <>{categoryIsPrepared(row) ? <span className="font-normal text-emerald-600">· preparada</span> : <span className="font-normal text-amber-600">· pulsa + para agregar</span>}<Button type="button" variant="ghost" size="icon" className={`size-6 rounded-md ${categoryIsPrepared(row) ? 'text-emerald-600' : 'text-amber-600'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-3.5" /> : <Plus className="size-3.5" />}</Button></>}</span><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={inputClass} /></label>
-            <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Unidad</span><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></label>
-            <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo</span><Input type="number" min={0} value={String(valueFor(row, 'costPrice', row.costPrice ?? '') ?? '')} onChange={(event) => onRowUpdate(row, 'costPrice', parseImportNumber(event.target.value))} className={`${inputClass} text-right`} /></label>
-            <label className="space-y-1 sm:col-span-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Ubicación destino</span><select value={selectedLocationValue(row)} onChange={(event) => onRowUpdate(row, 'warehouseSelection', event.target.value)} className={`${inputClass} ${locationIssue(row) ? 'border-destructive/60 text-destructive' : ''}`}><option value="">Seleccionar ubicación activa</option>{currentLocationOptions(row).map((option) => <option key={`${option.value}-${option.type}`} value={option.value}>{option.value}{option.type === 'INVALID' ? ' · no disponible' : ''}</option>)}</select>{locationContext(row) && <p className="text-[10px] leading-4 text-muted-foreground">{locationContext(row)}</p>}{locationIssue(row) && <p className="text-[10px] leading-4 text-destructive">{locationIssue(row)}</p>}</label>
-            <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock inicial</span><Input type="number" min={0} value={String(valueFor(row, 'stock', row.stock) ?? 0)} onChange={(event) => onRowUpdate(row, 'stock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></label>
-            <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock mínimo</span><Input type="number" min={0} value={String(valueFor(row, 'minStock', 0) ?? 0)} onChange={(event) => onRowUpdate(row, 'minStock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></label>
-            <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Registrar catálogo</span><select value={String(valueFor(row, 'registerCatalog', 'SI') || 'SI').toUpperCase()} onChange={(event) => onRowUpdate(row, 'registerCatalog', event.target.value)} className={inputClass}><option value="SI">SI</option><option value="NO">NO</option></select></label>
-            <div className="rounded-lg bg-muted/30 p-2 text-xs"><span className="text-muted-foreground">Actual / resultado</span><p className="mt-1 font-black">{formatNumber(row.currentQty)} / <span className="text-primary">{formatNumber(row.resultingQty)}</span></p></div>
-          </div>
-          <p className={`mt-3 text-xs ${row.issues.length ? 'text-destructive' : 'text-muted-foreground'}`}>{row.issues.join(' · ') || 'Sin observaciones'}</p>
-        </div>;
-      })}
-    </div>
     <datalist id="manager-import-categories">{categoryOptions.map((category) => <option key={category.id} value={category.name} />)}</datalist>
     <div className="min-w-0 max-w-full lg:hidden">
       <VirtualizedImportList count={preview.rows.length} estimateSize={430} className="h-[min(70vh,48rem)] min-w-0 max-w-full space-y-3" renderItem={renderMobileRow} />

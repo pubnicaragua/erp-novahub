@@ -28,7 +28,7 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { CurrencySelector } from '../ui/CurrencySelector';
-import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 
 interface Props {
   data: SupplierInvoice[];
@@ -577,19 +577,19 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.subtotal||0).toLocaleString()}</span>
+                   <span className="font-bold tabular-nums">{formatCurrencyAmount(Number(localDoc.subtotal || 0), localDoc.currency)}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">IVA</span>
-                  <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                   <span className="font-bold tabular-nums text-rose-500">{formatCurrencyAmount(Number(localDoc.taxAmount || 0), localDoc.currency)}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Total bruto</span>
-                  <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {(Number(localDoc.subtotal||0) + Number(localDoc.taxAmount||0)).toLocaleString()}</span>
+                   <span className="font-bold tabular-nums">{formatCurrencyAmount(Number(localDoc.subtotal || 0) + Number(localDoc.taxAmount || 0), localDoc.currency)}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">IR retenido</span>
-                  <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.withholdingTotal||0).toLocaleString()}</span>
+                   <span className="font-bold tabular-nums text-amber-500">-{formatCurrencyAmount(Number(localDoc.withholdingTotal || 0), localDoc.currency)}</span>
                 </div>
                 <div className="border-t pt-3 border-border/50">
                   <p className="text-[10px] text-muted-foreground mb-2 font-bold uppercase tracking-widest">Impuestos por línea</p>
@@ -601,8 +601,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black uppercase text-xs tracking-widest">Neto a pagar</span>
                   <span className="font-black text-xl text-primary tabular-nums text-right">
-                     {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.total||0).toLocaleString()}
-                     {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(localDoc.total||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
+                     {formatCurrencyAmount(Number(localDoc.total || 0), localDoc.currency)}
+                     {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ {formatCurrencyAmount(Number(localDoc.total || 0) / (localDoc.exchangeRate || globalRate), 'USD')}</span>}
                   </span>
                 </div>
                 <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
@@ -692,20 +692,20 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Total</p>
                       <span className="block h-8 leading-8 text-xs font-black text-right tabular-nums">
-                        {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                         {formatCurrencyAmount(Number(item.total || 0), localDoc.currency)}
                       </span>
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-4 pt-1 border-t border-border/30">
                     <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Subtotal</span>
                     <span className="text-sm font-black tabular-nums">
-                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                       {formatCurrencyAmount(Number(item.quantity * item.unitPrice || 0), localDoc.currency)}
                     </span>
                     {(item.taxType && !isTaxExempt(item.taxType) && item.taxType !== '') && (
                       <>
                         <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/60">IVA</span>
                         <span className="text-xs font-black tabular-nums text-rose-500">
-                          {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity||0) * Number(item.unitPrice||0)) * (Number(item.taxRate||15) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                           {formatCurrencyAmount(Number((Number(item.quantity || 0) * Number(item.unitPrice || 0)) * (Number(item.taxRate || 15) / 100)), localDoc.currency)}
                         </span>
                       </>
                     )}
@@ -713,7 +713,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                       <>
                         <span className="text-[9px] font-black uppercase tracking-widest text-amber-500/60">Ret.</span>
                         <span className="text-xs font-black tabular-nums text-amber-500">
-                          -{localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity||0) * Number(item.unitPrice||0)) * (Number(item.withholdingRate||0) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                           -{formatCurrencyAmount(Number((Number(item.quantity || 0) * Number(item.unitPrice || 0)) * (Number(item.withholdingRate || 0) / 100)), localDoc.currency)}
                         </span>
                       </>
                     )}

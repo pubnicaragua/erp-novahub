@@ -178,7 +178,7 @@ export function CustomerImportPreview({
   }, [result, onDone]);
 
   return (
-    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+    <div data-import-preview-shell="true" className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
       <div className="mx-auto flex min-h-0 w-full max-w-[1900px] flex-1 flex-col gap-3 sm:gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
           <div className="min-w-0">
@@ -251,7 +251,7 @@ export function CustomerImportPreview({
           </HorizontalTableScroller>
         </div>
 
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de clientes para revisar">
+        <section data-import-preview-mobile-section="true" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de clientes para revisar">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un cliente por tarjeta</p></div>
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>

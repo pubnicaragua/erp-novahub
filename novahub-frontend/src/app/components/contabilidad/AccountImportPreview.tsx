@@ -141,7 +141,7 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
     </div>;
   };
   return (
-    <div className={`accounting-module fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+    <div data-import-preview-shell="true" className={`accounting-module fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
       <div className="mx-auto flex min-h-0 w-full max-w-[1900px] flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
           <div className="min-w-0">
@@ -166,7 +166,7 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
             {rows.length ? <VirtualizedImportList count={rows.length} estimateSize={58} className="h-[min(62vh,46rem)] flex-none min-w-[2200px]" renderItem={renderDesktopRow} /> : <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div>}
           </div>
         </HorizontalTableScroller>
-        <div className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden sm:hidden">
+        <div data-import-preview-mobile-section="true" className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden sm:hidden">
           {rows.length === 0 ? <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div> : <VirtualizedImportList count={rows.length} estimateSize={260} overscan={2} className="h-[min(62vh,46rem)] space-y-3" renderItem={renderMobileRow} />}
         </div>
 

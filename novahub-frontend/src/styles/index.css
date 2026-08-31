@@ -1334,6 +1334,9 @@ th .column-filter-menu .column-filter-icon,
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, hsl(var(--primary)) 55%, transparent) transparent;
   scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
 }
 
 .scrollbar-overlay::-webkit-scrollbar {
@@ -1345,6 +1348,51 @@ th .column-filter-menu .column-filter-icon,
   background: color-mix(in srgb, hsl(var(--primary)) 55%, transparent);
   border-radius: 999px;
   box-shadow: 0 0 10px color-mix(in srgb, hsl(var(--primary)) 25%, transparent);
+}
+
+/* Import previews use virtualized rows. Keep their scroll owner explicit so
+   touch gestures reach the list/table and the browser can recalculate the
+   visible range after a flex layout or breakpoint change. */
+[data-import-preview-list="true"] {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+
+[data-import-preview-horizontal-scroller="true"] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+}
+
+/* On phones the title, validation summary and actions cannot share the
+   viewport with a useful records pane. Let the workspace itself scroll while
+   reserving a real, independently scrollable records viewport. */
+@media (max-width: 639px) {
+  [data-import-preview-shell="true"] {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-import-preview-shell="true"] > div:first-child {
+    flex: 0 0 auto !important;
+    min-height: max-content !important;
+  }
+
+  [data-import-preview-mobile-section="true"] {
+    flex: 0 0 clamp(16rem, 52dvh, 32rem) !important;
+    height: clamp(16rem, 52dvh, 32rem) !important;
+    min-height: 16rem !important;
+    max-height: 32rem !important;
+  }
+
+  [data-import-preview-mobile-section="true"] > div:last-child {
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+  }
 }
 
 /* Shared data tables become readable record cards in compact layouts. The

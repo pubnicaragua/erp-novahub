@@ -798,10 +798,15 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
 
   const handleSaveExistingEmployee = async () => {
     if (!editingId) return;
-    const saved = await handleSave(editingId);
-    if (saved) {
-      setIsCreateEmployeeModalOpen(false);
-      setNewEmployeeForm(createEmptyEmployeeDraft());
+    setSavingEmployee(true);
+    try {
+      const saved = await handleSave(editingId);
+      if (saved) {
+        setIsCreateEmployeeModalOpen(false);
+        setNewEmployeeForm(createEmptyEmployeeDraft());
+      }
+    } finally {
+      setSavingEmployee(false);
     }
   };
 
@@ -1284,13 +1289,14 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                 setEditingId(null);
                 setEditingPendingId(null);
               }}
+              disabled={savingEmployee}
               className="w-full rounded-xl sm:w-auto"
             >
               Cancelar
             </Button>
               {editingId ? (
-                <Button type="button" onClick={() => void handleSaveExistingEmployee()} className="w-full rounded-xl sm:w-auto">
-                  <Save className="size-4" /> Guardar cambios
+                <Button type="button" onClick={() => void handleSaveExistingEmployee()} disabled={savingEmployee} className="w-full rounded-xl sm:w-auto">
+                  <Save className="size-4" /> {savingEmployee ? 'Guardando...' : 'Guardar cambios'}
                 </Button>
               ) : (
                 <Button type="button" onClick={() => void handleAddEmployeeToList()} disabled={savingEmployee} className="w-full rounded-xl sm:w-auto">
@@ -1309,7 +1315,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de empleados</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readEmployeeImportFile(file); }} />{importFileName && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos laborales.</li><li>Carga el archivo y abre la previsualización.</li><li>Corrige los errores; crea departamentos o puestos faltantes desde la misma fila.</li><li>Confirma escribiendo IMPORTAR. Las filas válidas se guardan aunque otras tengan incidencias.</li></ol></div>
           </div>
-          <DialogFooter className="flex-wrap" data-tour="hr-employee-import-actions"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importRows.length > 0 && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar empleados</Button>}</DialogFooter>
+          <DialogFooter className="flex-wrap" data-tour="hr-employee-import-actions"><Button variant="outline" onClick={() => setImportOpen(false)} disabled={previewLoading}>Cerrar</Button>{importRows.length > 0 && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar empleados</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1396,7 +1402,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             <p className="text-xs text-muted-foreground">Si el empleado está vinculado a un usuario, los roles configurados para todos sus departamentos se sumarán a sus accesos.</p>
           </div>
           <DialogFooter data-tour="hr-employee-departments-actions">
-            <Button variant="outline" onClick={() => setDepartmentEditorEmployee(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setDepartmentEditorEmployee(null)} disabled={savingDepartments}>Cancelar</Button>
             <Button onClick={() => void saveEmployeeDepartments()} disabled={savingDepartments || !selectedDepartmentIds.length}>{savingDepartments ? 'Guardando...' : 'Guardar departamentos'}</Button>
           </DialogFooter>
         </DialogContent>

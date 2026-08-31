@@ -77,12 +77,12 @@ export function PromptDialog({
             onKeyDown={event => { if (event.key === 'Enter' && (!required || value.trim())) void submit(); }}
           />
         </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" className="min-w-0 max-w-full cursor-pointer overflow-hidden" onClick={() => onOpenChange(false)} disabled={loading}>
-            <span className="min-w-0 truncate">{cancelLabel}</span>
+        <DialogFooter className="gap-3">
+          <Button type="button" variant="outline" className="h-auto min-h-9 w-full min-w-0 max-w-full cursor-pointer whitespace-normal leading-tight sm:flex-1" onClick={() => onOpenChange(false)} disabled={loading}>
+            <span className="block min-w-0 max-w-full whitespace-normal break-words text-center">{cancelLabel}</span>
           </Button>
-          <Button type="button" className="min-w-0 max-w-full cursor-pointer overflow-hidden" onClick={() => void submit()} disabled={loading || (required && !value.trim())}>
-            {loading ? <><Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" /><span className="min-w-0 truncate">Procesando…</span></> : <span className="min-w-0 truncate">{confirmLabel}</span>}
+          <Button type="button" className="h-auto min-h-9 w-full min-w-0 max-w-full cursor-pointer whitespace-normal leading-tight sm:flex-1" onClick={() => void submit()} disabled={loading || (required && !value.trim())}>
+            {loading ? <><Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" /><span className="min-w-0 whitespace-nowrap" aria-live="polite">Procesando…</span></> : <span className="block min-w-0 max-w-full whitespace-normal break-words text-center">{confirmLabel}</span>}
           </Button>
         </DialogFooter>
       </DialogContent>

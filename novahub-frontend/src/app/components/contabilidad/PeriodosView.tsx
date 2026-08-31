@@ -263,7 +263,7 @@ export function PeriodosView() {
             </div>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setCloseConfirmId(null)} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
+          <Button variant="outline" onClick={() => setCloseConfirmId(null)} disabled={closeLoading} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
             <Button onClick={handleClose} disabled={closeLoading} className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black uppercase text-[10px] tracking-widest">
               {closeLoading ? 'Cerrando...' : 'Cerrar Período'}
             </Button>
@@ -283,7 +283,7 @@ export function PeriodosView() {
             </div>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setReopenConfirmId(null)} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
+          <Button variant="outline" onClick={() => setReopenConfirmId(null)} disabled={reopenLoading} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
             <Button onClick={handleReopen} disabled={reopenLoading} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest">
               {reopenLoading ? 'Reabriendo...' : 'Reabrir Período'}
             </Button>

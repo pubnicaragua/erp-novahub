@@ -32,8 +32,8 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
-import { requiresPaymentReference } from '../../utils/paymentMethods';
-import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { hasPaymentReferenceField, requiresPaymentReference } from '../../utils/paymentMethods';
+import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
@@ -237,7 +237,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       ['Moneda', 'NIO o USD. Si está vacía se usa la moneda configurada en la empresa.'],
       ['Fuente de pago', 'CASH, CARD, TRANSFER o CHECK. Tarjeta, transferencia y cheque requieren una cuenta bancaria global al pagar. Si está vacía se usa CASH.'],
       ['Pagado a', 'Opcional. Nombre de la persona o proveedor que recibe el pago.'],
-      ['Referencia', 'Opcional. Nº de factura, recibo, transferencia o comprobante.'],
+      ['Referencia', 'Obligatoria para tarjeta, transferencia y cheque. Nº de factura, recibo o comprobante.'],
       ['Estado', 'DRAFT (borrador), PENDING (pendiente) o PAID (pagado). Si está vacío se crea como PENDING.'],
       ['Previsualización', 'Después de cargar el archivo verás cuántos gastos se importarán y cuáles se omitirán antes de confirmar.'],
     ]);
@@ -454,7 +454,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     if (!paymentExpense) return;
     if (!canPerform('PURCHASES_EXPENSES', 'approve')) return;
     if (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) {
-      toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
+      toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
       return;
     }
     if (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId) {
@@ -784,7 +784,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 {displayMode !== 'ORIGINAL' && <div className="flex justify-between items-center text-base pt-2">
                   <span className="font-black uppercase text-xs tracking-widest">Equivalente Estimado</span>
                   <span className="font-black text-muted-foreground tabular-nums text-right">
-                     {localDoc.currency === 'USD' ? `C$ ${(Number(localDoc.amount||0) * (localDoc.exchangeRate || globalRate)).toLocaleString()}` : `$ ${(Number(localDoc.amount||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}`}
+                      {localDoc.currency === 'USD'
+                        ? formatCurrencyAmount(Number(localDoc.amount || 0) * (localDoc.exchangeRate || globalRate), 'NIO')
+                        : formatCurrencyAmount(Number(localDoc.amount || 0) / (localDoc.exchangeRate || globalRate), 'USD')}
                   </span>
                 </div>}
               </div>
@@ -1053,9 +1055,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                     </Select>
                   </div>
                   {isBankPaymentMethod(paymentMethod) && <BankAccountSelect value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Cuenta bancaria que realiza el pago" className="sm:col-span-2" />}
-                  {requiresPaymentReference(paymentMethod) && <div>
+                  {hasPaymentReferenceField(paymentMethod) && <div>
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
-                    <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." className="h-10 text-xs" />
+                    <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." required={requiresPaymentReference(paymentMethod)} className="h-10 text-xs" />
                   </div>}
                 </div>
               </div>
@@ -1121,7 +1123,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                   {importResult.errors.length > 0 && (
                     <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
                       <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-amber-600">Se omitieron {importResult.errors.length} fila(s) con error</p>
-                      <div className="max-h-32 space-y-1 overflow-y-auto text-xs text-amber-600">
+                      <div className="max-h-32 space-y-1 overflow-y-auto text-xs text-amber-600 scrollbar-overlay">
                         {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
                       </div>
                     </div>
@@ -1137,7 +1139,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 </Button>
               ) : (
                 <>
-                  <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
+                  <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cerrar</Button>
                   <Button onClick={handleImportExpenses} disabled={importing || !importFile} className="gap-2">
                     <Upload className="size-4" /> {importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar gastos'}
                   </Button>

@@ -33,7 +33,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
-import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
+import { hasPaymentReferenceField, isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -347,7 +347,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
             currency: line.currency,
             exchangeRate: line.exchangeRate,
             bankAccountId: line.bankAccountId,
-            reference: requiresPaymentReference(line.method) ? line.reference : undefined,
+            reference: hasPaymentReferenceField(line.method) ? line.reference : undefined,
             notes: payload.notes,
           })),
         })
@@ -460,7 +460,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                           <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || saving} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                         </div>
                         {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
-                        {requiresPaymentReference(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} disabled={saving} placeholder="Transferencia, voucher, cheque..." className="h-10 font-mono" /></div>}
+                        {hasPaymentReferenceField(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} disabled={saving} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-10 font-mono" /></div>}
                       </div>
                     ))}
                     <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0, currency: displayCurrency === 'USD' ? 'USD' : 'NIO', exchangeRate: paymentLineRate(displayCurrency === 'USD' ? 'USD' : 'NIO') }])} disabled={saving}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>

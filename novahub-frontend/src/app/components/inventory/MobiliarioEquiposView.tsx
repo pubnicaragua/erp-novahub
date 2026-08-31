@@ -985,7 +985,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                 </div>
               </div>
               {(importResult.fixedAssetSkipped || []).length > 0 && (
-                <div className="max-h-48 overflow-y-auto rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 scrollbar-overlay">
                   <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-amber-700">Revisión contable</p>
                   {(importResult.fixedAssetSkipped as any[]).map((item, i) => (
                     <div key={i} className="border-b border-amber-500/20 py-1.5 text-[11px] last:border-0">
@@ -996,7 +996,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                 </div>
               )}
               {(importResult.skipped || []).length > 0 && (
-                <div className="max-h-48 overflow-y-auto rounded-xl border border-border/50">
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-border/50 scrollbar-overlay">
                   {(importResult.skipped as any[]).map((s, i) => (
                     <div key={i} className="flex items-start justify-between gap-2 border-b border-border/30 px-3 py-1.5 text-[11px] last:border-0">
                       <span className="shrink-0 font-mono text-muted-foreground">Fila {s.row}</span>

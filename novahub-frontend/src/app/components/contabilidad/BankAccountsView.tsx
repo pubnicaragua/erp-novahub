@@ -357,7 +357,7 @@ export function BankAccountsView() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>Cancelar</Button>
             {(editing ? canEditBankAccount : canCreateBankAccount) && <Button onClick={handleSave} disabled={saving}>{saving && <Loader2 className="size-3.5 mr-1 animate-spin" />}Guardar</Button>}
           </DialogFooter>
         </DialogContent>

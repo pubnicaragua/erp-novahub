@@ -982,7 +982,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
             )}
           </div>
           <DialogFooter data-tour="inventory-config-modal-actions">
-            <Button variant="outline" onClick={() => setConfigTarget(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setConfigTarget(null)} disabled={configSaving}>Cancelar</Button>
             <Button
               onClick={runConfigure}
               disabled={configSaving || (configMode === 'existing' && (!existingAccountId || linkableAccounts.length === 0))}

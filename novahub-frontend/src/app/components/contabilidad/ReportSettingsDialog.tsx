@@ -146,7 +146,7 @@ export function ReportSettingsDialog({ open, onOpenChange, title, description, f
           )}
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => handleOpenChange(false)} className="rounded-xl text-[10px] font-black uppercase tracking-widest">
+            <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={saving} className="rounded-xl text-[10px] font-black uppercase tracking-widest">
             Cancelar
           </Button>
           <Button onClick={handleSave} disabled={saving || !loaded} className="rounded-xl font-black uppercase text-[10px] tracking-widest">

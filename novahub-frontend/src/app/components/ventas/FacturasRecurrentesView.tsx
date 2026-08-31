@@ -34,6 +34,7 @@ import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDo
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { SalesVariantSelect } from './SalesVariantSelect';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { normalizeSalesExtraCharges, getSalesExtraChargesPayload, getSalesExtraChargesAmount, getLegacySalesExtraCostFields, type SalesExtraChargeLine } from '../../utils/salesCharges';
 
@@ -736,6 +737,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                           placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                         />
                       </div>
+                      <SalesVariantSelect
+                        product={product}
+                        value={item.variantId}
+                        onChange={(variantId) => setLocalDoc({ ...localDoc, items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx ? { ...line, variantId } : line) } as any)}
+                      />
                       <SalesLinePriceListSelect
                         productId={item.productId}
                         productCode={findProductForItem(item)?.code || item.code}

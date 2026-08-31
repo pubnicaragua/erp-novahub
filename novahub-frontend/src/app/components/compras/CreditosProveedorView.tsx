@@ -1098,7 +1098,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 />
               </label>
               {importErrors.length > 0 && (
-                <div className="max-h-40 overflow-auto rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] text-rose-600 space-y-1">
+                <div className="max-h-40 overflow-auto rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] text-rose-600 space-y-1 scrollbar-overlay">
                   {importErrors.map((err, i) => <p key={i}>{err}</p>)}
                 </div>
               )}
@@ -1245,7 +1245,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             </div>
           )}
           <DialogFooter data-tour="purchases-credit-modal-actions">
-            <Button variant="outline" onClick={() => setApplyTarget(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setApplyTarget(null)} disabled={applyLoading}>Cancelar</Button>
             <Button onClick={handleApplyConfirm} disabled={applyLoading} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
               <CheckCircle2 className="size-4" /> {applyLoading ? 'Aplicando...' : 'Aplicar crédito'}
             </Button>

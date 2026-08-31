@@ -14,7 +14,7 @@ import { Badge } from '../ui/badge';
 import { Card, CardContent } from '../ui/card';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { formatSalesAmount } from '../../utils/salesPriceList';
-import { isBankPaymentMethod, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, requiresPaymentReference } from '../../utils/paymentMethods';
+import { hasPaymentReferenceField, isBankPaymentMethod, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, requiresPaymentReference } from '../../utils/paymentMethods';
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -142,7 +142,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
       return;
     }
     if (payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim())) {
-      toast.error('La transferencia, tarjeta o cheque requiere una referencia');
+      toast.error('La tarjeta, transferencia o el cheque requieren una referencia');
       return;
     }
     if (payments.some((payment) => isBankPaymentMethod(payment.method) && !payment.bankAccountId)) {
@@ -227,6 +227,9 @@ export function EntregasView({ branchId }: EntregasViewProps) {
     const suspended = holds.filter((hold) => hold.status === 'SUSPENDED');
     return { pending, ready, delivered, suspended };
   }, [holds]);
+  const holdPaymentReceived = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const holdPaymentMissing = Math.max(0, Number(holdToPay?.total || 0) - holdPaymentReceived);
+  const holdPaymentChange = Math.max(0, holdPaymentReceived - Number(holdToPay?.total || 0));
 
   return (
     <div className="space-y-4">
@@ -295,14 +298,18 @@ export function EntregasView({ branchId }: EntregasViewProps) {
               <Button type="button" variant="ghost" className="text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar pago de venta suspendida" title="Cerrar" onClick={() => { setShowPayment(false); setHoldToPay(null); }}>✕</Button>
             </div>
 
-            <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-primary/10 p-3">
                 <span className="text-xs text-primary font-bold">Total a cobrar</span>
                 <div className="text-xl font-black text-primary">C$ {formatSalesAmount(Number(holdToPay.total))}</div>
               </div>
               <div className="rounded-xl bg-muted/40 p-3 border border-border/50">
                 <span className="text-xs text-muted-foreground">Total pagado</span>
-                <div className="text-xl font-black">C$ {formatSalesAmount(payments.reduce((sum, item) => sum + Number(item.amount || 0), 0))}</div>
+                <div className="text-xl font-black">C$ {formatSalesAmount(holdPaymentReceived)}</div>
+              </div>
+              <div className={`rounded-xl border p-3 ${holdPaymentChange > 0.005 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : holdPaymentMissing > 0.005 ? 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-border/50 bg-muted/20 text-muted-foreground'}`}>
+                <span className="text-xs font-bold">{holdPaymentChange > 0.005 ? 'Vuelto por dar' : 'Falta por pagar'}</span>
+                <div className="text-xl font-black">C$ {formatSalesAmount(holdPaymentChange > 0.005 ? holdPaymentChange : holdPaymentMissing)}</div>
               </div>
             </div>
 
@@ -330,11 +337,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
                     <Input type="number" min="0" step="0.01" placeholder="Monto" value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} />
                     <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                   </div>
-                  {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                  {payment.method === 'TRANSFER' && (
-                    <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
-                  )}
-                  {payment.method === 'CHECK' && <Input className="mt-2" placeholder="Número de cheque *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
+                  {hasPaymentReferenceField(payment.method) && <Input className="mt-2" placeholder={payment.method === 'CARD' ? 'Voucher / referencia *' : payment.method === 'CHECK' ? 'Número de cheque *' : 'ID de referencia *'} value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} required={requiresPaymentReference(payment.method)} />}
                   {isBankPaymentMethod(payment.method) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
                   {isCardPaymentMethod(payment.method) && payment.bankAccountId && Number(payment.cardCommissionPercent || 0) > 0 && (
                     <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
@@ -351,7 +354,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
             <Button variant="outline" className="mt-3 w-full" onClick={() => setPayments(current => [...current, { method: 'CARD', amount: 0 }])}>+ Agregar pago mixto</Button>
 
             <div className="nh-modal-footer mt-5 flex justify-end gap-2 pt-4">
-              <Button variant="ghost" onClick={() => { setShowPayment(false); setHoldToPay(null); }}>Cancelar</Button>
+              <Button variant="ghost" onClick={() => { setShowPayment(false); setHoldToPay(null); }} disabled={submitting}>Cancelar</Button>
               <Button onClick={() => void submitHoldPayPayment()} disabled={submitting}>
                 {submitting ? <Loader2 className="size-4 animate-spin" /> : 'Cobrar venta'}
               </Button>

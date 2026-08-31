@@ -835,7 +835,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           )}
         </div>
         <DialogFooter data-tour="inventory-cash-access-actions">
-          <Button variant="outline" onClick={() => setIsAccessModalOpen(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => setIsAccessModalOpen(false)} disabled={accessLoading}>Cancelar</Button>
           {canManagePos && <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>}
         </DialogFooter>
       </DialogContent>

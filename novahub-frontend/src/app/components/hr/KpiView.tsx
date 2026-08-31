@@ -711,7 +711,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
           </div>
           <DialogFooter className="gap-2" data-tour="hr-kpi-definition-form-actions">
             <DialogClose asChild>
-              <Button variant="outline" className="rounded-xl">Cancelar</Button>
+              <Button variant="outline" className="rounded-xl" disabled={savingDef}>Cancelar</Button>
             </DialogClose>
             <Button onClick={handleSaveDef} disabled={savingDef} className="gap-2 rounded-xl font-bold">
               {savingDef ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
@@ -810,7 +810,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
           </div>
           <DialogFooter className="gap-2" data-tour="hr-kpi-result-form-actions">
             <DialogClose asChild>
-              <Button variant="outline" className="rounded-xl">Cancelar</Button>
+              <Button variant="outline" className="rounded-xl" disabled={savingResult}>Cancelar</Button>
             </DialogClose>
             <Button onClick={handleSaveResult} disabled={savingResult} className="gap-2 rounded-xl font-bold">
               {savingResult ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}

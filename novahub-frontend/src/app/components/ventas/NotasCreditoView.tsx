@@ -33,7 +33,7 @@ import { hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } f
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
-import { isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
+import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
@@ -214,6 +214,14 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   ));
   const paymentChangeInCreditCurrency = convertBetweenCurrencies(
     paymentChangeBase,
+    baseCurrency,
+    paymentCreditCurrency,
+    1,
+    Number(paymentCredit?.exchangeRate || globalRate || 1),
+  );
+  const paymentRemainingBase = Math.max(0, paymentCreditBalanceBase - paymentTotalBase);
+  const paymentRemainingInCreditCurrency = convertBetweenCurrencies(
+    paymentRemainingBase,
     baseCurrency,
     paymentCreditCurrency,
     1,
@@ -487,7 +495,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     if (!effectiveLines.length) return void toast.error('Agrega al menos un medio de pago con monto mayor que cero');
     if (effectiveLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) return void toast.error('Selecciona la cuenta contable para cada medio de pago');
     if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) return void toast.error('Selecciona el banco global para cada medio de pago bancario');
-    if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) return void toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
+    if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) return void toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
     const creditCurrency = paymentCredit.currency === 'USD' ? 'USD' : 'NIO';
     const creditBalance = Number(paymentCredit.balance ?? Number(paymentCredit.total || 0) - Number(paymentCredit.amountPaid || 0));
     const creditBalanceBase = toBaseAmount(creditBalance, creditCurrency, Number(paymentCredit.exchangeRate || globalRate || 1));
@@ -536,7 +544,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
         paymentMethod: firstLine.method,
         accountId: requiresManualPaymentAccount(firstLine.method) ? firstLine.accountId : undefined,
         bankAccountId: isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
-        reference: requiresPaymentReference(firstLine.method) ? firstLine.reference : undefined,
+        reference: hasPaymentReferenceField(firstLine.method) ? firstLine.reference : undefined,
         payments: submittedLines.map((line) => ({
           method: line.method,
           amount: Number(line.amount),
@@ -544,7 +552,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
           exchangeRate: line.exchangeRate,
           accountId: requiresManualPaymentAccount(line.method) ? line.accountId : undefined,
           bankAccountId: isBankPaymentMethod(line.method, true) ? line.bankAccountId : undefined,
-          reference: requiresPaymentReference(line.method) ? line.reference : undefined,
+          reference: hasPaymentReferenceField(line.method) ? line.reference : undefined,
         })),
       });
       toast.success('Pago registrado y enviado a Pagos Recibidos', { id: paymentToastId });
@@ -1051,7 +1059,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                           <span className="font-mono font-bold text-purple-600">{line.currency === 'USD' ? '$' : 'C$'} {formatConvertedAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(String(line.amount || '').replace(/,/g, '') || 0), Number(line.cardCommissionPercent || 0))), baseCurrency)}</span>
                         </div>
                       )}
-                      {requiresPaymentReference(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." disabled={paymentLoading} className="h-9 text-xs" /></div>}
+                      {hasPaymentReferenceField(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." disabled={paymentLoading} required={requiresPaymentReference(line.method)} className="h-9 text-xs" /></div>}
                     </div>
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH', '', displayCurrency === 'USD' ? 'USD' : 'NIO')])} disabled={paymentLoading}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
@@ -1060,12 +1068,13 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                   <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-3">
                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total a pagar</p><p className="mt-1 font-black text-primary">{formatConvertedAmount(paymentCreditBalance, paymentCreditCurrency, paymentCredit.exchangeRate)}</p></div>
                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pagado</p><p className="mt-1 font-black text-foreground">{formatConvertedAmount(paymentReceivedInCreditCurrency, paymentCreditCurrency, paymentCredit.exchangeRate)}</p></div>
-                    <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambio / vuelto</p><p className={cn('mt-1 font-black', paymentChangeInCreditCurrency > 0.01 ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{formatConvertedAmount(paymentChangeInCreditCurrency, paymentCreditCurrency, paymentCredit.exchangeRate)}</p></div>
+                    <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentRemainingBase > 0.01 ? 'Falta por pagar' : paymentChangeBase > 0.01 ? 'Vuelto por dar' : 'Saldo cubierto'}</p><p className={cn('mt-1 font-black', paymentRemainingBase > 0.01 ? 'text-amber-600 dark:text-amber-300' : paymentChangeInCreditCurrency > 0.01 ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{formatConvertedAmount(paymentRemainingBase > 0.01 ? paymentRemainingInCreditCurrency : paymentChangeInCreditCurrency, paymentCreditCurrency, paymentCredit.exchangeRate)}</p></div>
                   </div>
                 ) : (
-                  <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-2">
-                    <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</p><p className="mt-1 font-black text-primary">{formatConvertedAmount(Math.min(paymentTotalBase, paymentCreditBalanceBase), baseCurrency)}</p></div>
-                    <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambio / vuelto</p><p className={cn('mt-1 font-black', paymentChangeUnsupported ? 'text-rose-600 dark:text-rose-400' : paymentChangeBase > 0.01 ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{formatConvertedAmount(paymentChangeInCreditCurrency, paymentCreditCurrency)}</p></div>
+                  <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-3">
+                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</p><p className="mt-1 font-black text-primary">{formatConvertedAmount(Math.min(paymentTotalBase, paymentCreditBalanceBase), baseCurrency)}</p></div>
+                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Recibido (base)</p><p className="mt-1 font-black text-foreground">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</p></div>
+                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentRemainingBase > 0.01 ? 'Falta por pagar' : paymentChangeBase > 0.01 ? 'Vuelto por dar' : 'Saldo cubierto'}</p><p className={cn('mt-1 font-black', paymentChangeUnsupported ? 'text-rose-600 dark:text-rose-400' : paymentRemainingBase > 0.01 ? 'text-amber-600 dark:text-amber-300' : paymentChangeBase > 0.01 ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{formatConvertedAmount(paymentRemainingBase > 0.01 ? paymentRemainingInCreditCurrency : paymentChangeInCreditCurrency, paymentCreditCurrency)}</p></div>
                   </div>
                 )}
                 {paymentChangeUnsupported && <p className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce esos montos o agrega suficiente efectivo para cubrir el excedente.</p>}

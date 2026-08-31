@@ -511,7 +511,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setAddItemOpen(false)} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
+            <Button variant="outline" onClick={() => setAddItemOpen(false)} disabled={addItemLoading} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
               <Button onClick={handleAddItem} disabled={addItemLoading} className="rounded-xl bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20">
                 <Plus className="size-3 mr-2" /> Agregar Movimiento
               </Button>

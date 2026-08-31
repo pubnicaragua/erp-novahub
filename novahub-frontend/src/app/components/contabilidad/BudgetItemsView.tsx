@@ -309,7 +309,7 @@ export function BudgetItemsView() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} className="rounded-xl text-xs font-bold">Cancelar</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving} className="rounded-xl text-xs font-bold">Cancelar</Button>
             <Button onClick={handleSave} disabled={saving || (editing ? !canEdit : !canCreate)} className="rounded-xl text-xs font-bold gap-2">
               {saving && <Loader2 className="size-3.5 animate-spin" />}
               {editing ? 'Actualizar' : 'Crear'}

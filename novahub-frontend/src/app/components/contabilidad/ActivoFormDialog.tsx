@@ -313,7 +313,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
           </CardContent>
         </Card>
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
           <Button onClick={handleCreate} disabled={submitting}>{submitting ? 'Guardando...' : 'Registrar'}</Button>
         </DialogFooter>
       </DialogContent>

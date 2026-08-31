@@ -18,6 +18,7 @@ import { InventoryDetailPanel } from './InventoryDetailPanel';
 import type { SalesPaginationControls } from '../../types';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
+import { SalesVariantSelect } from '../ventas/SalesVariantSelect';
 
 interface TransferenciasViewProps {
   transfers: any[];
@@ -46,6 +47,7 @@ interface TransferLocation {
 interface TransferItemDraft {
   key: string;
   productId: string;
+  variantId?: string;
   quantity: number;
   serials: string[];
 }
@@ -277,13 +279,13 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
   const nextItemKey = () => `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const addItem = () => {
-    setNewTransfer((prev) => ({ ...prev, items: [...prev.items, { key: nextItemKey(), productId: '', quantity: 1, serials: [] }] }));
+    setNewTransfer((prev) => ({ ...prev, items: [...prev.items, { key: nextItemKey(), productId: '', variantId: '', quantity: 1, serials: [] }] }));
   };
 
   const updateItem = (key: string, patch: Partial<TransferItemDraft>) => {
     if (patch.quantity !== undefined) {
       const item = newTransfer.items.find((current) => current.key === key);
-      const available = item ? getAvailableOriginStock(item.productId) : null;
+      const available = item ? getAvailableOriginStock(item.productId, item.variantId) : null;
       if (available !== null && patch.quantity > available) {
         const product = transferProducts.find((current: any) => current.id === item?.productId);
         toast.error(`Stock insuficiente para "${product?.name || 'este producto'}". Disponible en el origen: ${available}.`);
@@ -299,18 +301,15 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
   };
 
   const handleItemProductChange = (key: string, productId: string) => {
-    const duplicate = newTransfer.items.some((item) => item.key !== key && item.productId === productId);
-    if (duplicate) {
-      toast.error('Ese producto ya está en la transferencia');
-      return;
-    }
-    const available = getAvailableOriginStock(productId);
+    const product = transferProducts.find((item: any) => item.id === productId);
+    const initialVariantId = product?.variants?.length === 1 ? product.variants[0].id : '';
+    const available = getAvailableOriginStock(productId, initialVariantId);
     if (originInventoryReady && available !== null && available <= 0) {
       const product = transferProducts.find((item: any) => item.id === productId);
       toast.error(`No puedes agregar "${product?.name || 'este producto'}": no tiene stock disponible en el origen.`);
       return;
     }
-    updateItem(key, { productId, serials: [] });
+    updateItem(key, { productId, variantId: initialVariantId, serials: [] });
   };
 
   const serialItem = serialPickerItemKey ? newTransfer.items.find((item) => item.key === serialPickerItemKey) : null;
@@ -347,11 +346,12 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
 
   const serialProduct = serialItem ? transferProducts.find((p: any) => p.id === serialItem.productId) : null;
 
-  const getAvailableOriginStock = (productId: string): number | null => {
+  const getAvailableOriginStock = (productId: string, variantId?: string): number | null => {
     if (!newTransfer.fromId || !originInventoryReady) return null;
     const product = transferProducts.find((item: any) => item.id === productId);
     const levels = Array.isArray(product?.stockLevels)
-      ? product.stockLevels.filter((level: any) => String(level?.warehouseId || level?.warehouse?.id || '') === String(newTransfer.fromId))
+      ? product.stockLevels.filter((level: any) => String(level?.warehouseId || level?.warehouse?.id || '') === String(newTransfer.fromId)
+        && (!variantId || String(level?.variantId || level?.variant?.id || '') === String(variantId)))
       : [];
     if (levels.length === 0) return 0;
     return levels.reduce((total: number, level: any) => (
@@ -446,9 +446,9 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     const resolved: { product: any; variantId: string; quantity: number }[] = [];
     for (const item of draftItems) {
       const product = transferProducts.find((p: any) => p.id === item.productId);
-      const variantId = product?.variants?.[0]?.id || product?.id;
+      const variantId = item.variantId || (product?.variants?.length === 1 ? product.variants[0]?.id : '');
       if (!product || !variantId) {
-        toast.error(`El producto "${product?.name || item.productId}" no tiene variantes configuradas`);
+        toast.error(`Selecciona la variante de "${product?.name || item.productId}" antes de transferir`);
         return;
       }
       const serialRequired = isSerialTracked(product);
@@ -465,7 +465,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         toast.error(`La cantidad de "${product.name}" debe coincidir con sus IMEI`);
         return;
       }
-      const available = getAvailableOriginStock(item.productId);
+      const available = getAvailableOriginStock(item.productId, variantId);
       if (available !== null && quantity > available) {
         toast.error(`Stock insuficiente para "${product.name}". Disponible en el origen: ${available}.`);
         return;
@@ -589,7 +589,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           <div className="space-y-3 lg:hidden" data-tour="transfer-table">
             {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-transfer-form-data">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2" data-tour="inventory-transfer-form-title"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nueva transferencia</p><InventoryViewTutorial label="Cómo crear transferencia" targetPrefix="inventory-transfer-form" copy={{ data: { description: 'Selecciona origen, destino, productos, cantidades y fecha.' }, actions: { description: 'Guarda la transferencia para mover existencias entre almacenes.' } }} /></div><div className="flex gap-1" data-tour="inventory-transfer-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateTransfer} disabled={saving} aria-label="Guardar transferencia">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar transferencia"><X className="size-4" /></Button></div></div>
-          <div className="grid gap-3 sm:grid-cols-2"><Select value={newTransfer.fromId} onValueChange={handleFromWarehouseChange}><SelectTrigger><SelectValue placeholder="Almacén origen" /></SelectTrigger><SelectContent>{sourceTransferLocations.map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><Select value={newTransfer.toId} onValueChange={(value) => setNewTransfer({ ...newTransfer, toId: value })}><SelectTrigger><SelectValue placeholder="Almacén destino" /></SelectTrigger><SelectContent>{transferLocations.filter((location) => location.id !== newTransfer.fromId).map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><div className="flex flex-col gap-2 sm:col-span-2">{newTransfer.items.map((item) => { const itemProduct = transferProducts.find((p: any) => p.id === item.productId); const itemSerialRequired = isSerialTracked(itemProduct); return (<div key={item.key} className="flex flex-wrap items-center gap-2"><Combobox options={productOptions} value={item.productId} onChange={(value) => handleItemProductChange(item.key, value)} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={productOptions.length} className="min-w-0 flex-1" disabled={saving} />{itemSerialRequired && <Button type="button" variant="outline" size="sm" className="h-8 text-[10px]" onClick={() => { setSerialPickerItemKey(item.key); setSerialSearch(''); }} disabled={saving}>IMEI ({item.serials.length})</Button>}<Input type="number" min={1} value={itemSerialRequired ? item.serials.length : item.quantity} onChange={(event) => updateItem(item.key, { quantity: Number(event.target.value) || 1 })} disabled={saving || itemSerialRequired} placeholder="Cantidad" className="w-20" /><Button type="button" variant="ghost" size="icon" className="size-8 text-red-600" onClick={() => removeItem(item.key)} disabled={saving} aria-label="Quitar producto"><X className="size-4" /></Button></div>); })}<Button type="button" variant="outline" size="sm" className="h-8 w-fit gap-1 text-[10px] uppercase tracking-wider" onClick={addItem} disabled={saving || !newTransfer.fromId}><Plus className="size-3.5" /> Agregar producto</Button></div><Input className="sm:col-span-2" type="date" value={newTransfer.date} onChange={(event) => setNewTransfer({ ...newTransfer, date: event.target.value })} /><Input className="sm:col-span-2" placeholder="Referencia / motivo (opcional)" value={newTransfer.reference} onChange={(event) => setNewTransfer({ ...newTransfer, reference: event.target.value })} /></div>
+          <div className="grid gap-3 sm:grid-cols-2"><Select value={newTransfer.fromId} onValueChange={handleFromWarehouseChange}><SelectTrigger><SelectValue placeholder="Almacén origen" /></SelectTrigger><SelectContent>{sourceTransferLocations.map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><Select value={newTransfer.toId} onValueChange={(value) => setNewTransfer({ ...newTransfer, toId: value })}><SelectTrigger><SelectValue placeholder="Almacén destino" /></SelectTrigger><SelectContent>{transferLocations.filter((location) => location.id !== newTransfer.fromId).map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><div className="flex flex-col gap-2 sm:col-span-2">{newTransfer.items.map((item) => { const itemProduct = transferProducts.find((p: any) => p.id === item.productId); const itemSerialRequired = isSerialTracked(itemProduct); return (<div key={item.key} className="flex flex-wrap items-center gap-2"><Combobox options={productOptions} value={item.productId} onChange={(value) => handleItemProductChange(item.key, value)} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={productOptions.length} className="min-w-0 flex-1" disabled={saving} /><SalesVariantSelect product={itemProduct} value={item.variantId} onChange={(variantId) => updateItem(item.key, { variantId })} disabled={saving} />{itemSerialRequired && <Button type="button" variant="outline" size="sm" className="h-8 text-[10px]" onClick={() => { setSerialPickerItemKey(item.key); setSerialSearch(''); }} disabled={saving}>IMEI ({item.serials.length})</Button>}<Input type="number" min={1} value={itemSerialRequired ? item.serials.length : item.quantity} onChange={(event) => updateItem(item.key, { quantity: Number(event.target.value) || 1 })} disabled={saving || itemSerialRequired} placeholder="Cantidad" className="w-20" /><Button type="button" variant="ghost" size="icon" className="size-8 text-red-600" onClick={() => removeItem(item.key)} disabled={saving} aria-label="Quitar producto"><X className="size-4" /></Button></div>); })}<Button type="button" variant="outline" size="sm" className="h-8 w-fit gap-1 text-[10px] uppercase tracking-wider" onClick={addItem} disabled={saving || !newTransfer.fromId}><Plus className="size-3.5" /> Agregar producto</Button></div><Input className="sm:col-span-2" type="date" value={newTransfer.date} onChange={(event) => setNewTransfer({ ...newTransfer, date: event.target.value })} /><Input className="sm:col-span-2" placeholder="Referencia / motivo (opcional)" value={newTransfer.reference} onChange={(event) => setNewTransfer({ ...newTransfer, reference: event.target.value })} /></div>
         </Card>}
         {filteredTransfers.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Truck className="mx-auto mb-2 size-9 opacity-20" /><p>No hay transferencias</p></Card> : filteredTransfers.map((transfer: any) => { const status = String(transfer.status || 'COMPLETED').toUpperCase(); const statusLabel = status === 'COMPLETED' ? 'Completada' : status === 'PENDING' ? 'Pendiente' : status === 'CANCELLED' ? 'Cancelada' : status; const isOpening = String(openingId) === String(transfer.id); return <Card key={transfer.id} aria-busy={isOpening || undefined} data-detail-opening={isOpening ? 'true' : undefined} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => openTransfer(transfer)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="truncate font-mono font-bold">{transfer.number}</p>{isOpening && <span role="status" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</div><p className="mt-1 text-xs text-muted-foreground">{new Date(transfer.date).toLocaleDateString()}</p></div><Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600"><Check className="mr-1 size-3" /> {statusLabel}</Badge></div><div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border/40 pt-3 text-xs"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Origen</p><p className="truncate font-medium">{transfer.from?.name || '—'}</p></div><ArrowRight className="size-4" /><div className="min-w-0 text-right"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Destino</p><p className="truncate font-medium">{transfer.to?.name || '—'}</p></div></div><div className="mt-3 flex justify-between border-t border-border/40 pt-3 text-xs text-muted-foreground"><div className="flex flex-wrap items-center gap-1.5">{renderStockDelta(transfer)}</div></div></Card>; })}
       </div>
@@ -647,6 +647,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                             className="w-48 min-w-48"
                             disabled={saving}
                           />
+                          <SalesVariantSelect product={itemProduct} value={item.variantId} onChange={(variantId) => updateItem(item.key, { variantId })} disabled={saving} />
                           <Input
                             type="number"
                             value={itemSerialRequired ? item.serials.length : item.quantity}

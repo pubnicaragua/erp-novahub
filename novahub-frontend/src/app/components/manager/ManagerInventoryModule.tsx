@@ -107,6 +107,28 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
     { enabled: view === 'transfers' && createTransferOpen && Boolean(sourceBranchId) },
   );
   const transferProducts = transferProductsQuery.data?.data || [];
+  const transferProductOptions = useMemo(() => {
+    const grouped = new Map<string, any>();
+    transferProducts.forEach((row: any) => {
+      const identity = row.variantId ? `variant:${row.variantId}` : `product:${row.productId || row.id}`;
+      const current = grouped.get(identity);
+      if (current) {
+        current.available += Number(row.available || 0);
+        current.quantity += Number(row.quantity || 0);
+        return;
+      }
+      grouped.set(identity, {
+        value: row.variantId || `product:${row.productId || row.id}`,
+        label: `${row.code || '—'} · ${row.name || 'Producto'}${row.sku ? ` · ${row.sku}` : ''}${row.variantName ? ` · ${row.variantName}` : ''}`,
+        available: Number(row.available || 0),
+        quantity: Number(row.quantity || 0),
+      });
+    });
+    return Array.from(grouped.values()).map((option) => ({
+      value: option.value,
+      label: `${option.label} · disponible: ${formatNumber(option.available)}`,
+    }));
+  }, [transferProducts]);
   const sourceWarehouses = useMemo(() => warehousesForBranch(warehouses, sourceBranchId), [warehouses, sourceBranchId]);
   const destinationWarehouses = useMemo(() => warehousesForBranch(warehouses, destBranchId), [warehouses, destBranchId]);
   const visibleBranches = useMemo(() => branches.filter((branch) => !businessUnitId || !branch.businessUnitId || branch.businessUnitId === businessUnitId), [branches, businessUnitId]);
@@ -118,7 +140,20 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
   }), [visibleWarehouses, selectedBranchId, effectiveWarehouseType]);
 
   const transferMutation = useMutation({
-    mutationFn: () => enterpriseGroupsService.createInterTenantTransfer(groupId, { sourceBranchId, destBranchId, fromWarehouseId, toWarehouseId, items: [{ productId: transferProductId, quantity: Number(transferQuantity) }] }),
+    mutationFn: () => {
+      const selected = transferProducts.find((row: any) => (row.variantId || `product:${row.productId || row.id}`) === transferProductId);
+      return enterpriseGroupsService.createInterTenantTransfer(groupId, {
+        sourceBranchId,
+        destBranchId,
+        fromWarehouseId,
+        toWarehouseId,
+        items: [{
+          productId: selected?.productId || (transferProductId.startsWith('product:') ? transferProductId.slice('product:'.length) : transferProductId),
+          ...(selected?.variantId ? { variantId: selected.variantId } : {}),
+          quantity: Number(transferQuantity),
+        }],
+      });
+    },
     onSuccess: () => { toast.success('Transferencia creada'); setCreateTransferOpen(false); setTransferProductId(''); setTransferQuantity('1'); void moduleQuery.refetch(); },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -182,7 +217,7 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
     {response?.meta && response.meta.totalPages > 1 && <Pagination page={response.meta.page} totalPages={response.meta.totalPages} onChange={setPage} />}
 
     {view === 'products' ? <ProductDetailSheet key={detail?.id || 'empty'} row={detail} canViewInventoryCost={canViewInventoryCost} groupId={groupId} onEnterBranch={onEnterBranch} canEnterBranch={canEnterBranch} onClose={() => setDetail(null)} /> : <InventoryDetailSheet view={view} row={detail} canViewInventoryCost={canViewInventoryCost} groupId={groupId} onEnterBranch={onEnterBranch} canEnterBranch={canEnterBranch} onClose={() => setDetail(null)} />}
-    {view === 'transfers' && canCreateTransfers && <Dialog open={createTransferOpen} onOpenChange={setCreateTransferOpen}><DialogContent className="max-w-3xl rounded-3xl"><DialogHeader><DialogTitle className="text-xl font-black uppercase italic">Nueva transferencia</DialogTitle><DialogDescription>Transfiere existencias entre una bodega de sucursal y un almacén corporativo, o entre dos ubicaciones autorizadas del mismo rubro.</DialogDescription></DialogHeader><div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2"><SelectField label="Sucursal origen" value={sourceBranchId} onChange={(value) => { setSourceBranchId(value); setFromWarehouseId(''); }} options={branches.map((branch) => ({ value: branch.id, label: branch.name }))} /><SelectField label="Sucursal destino" value={destBranchId} onChange={(value) => { setDestBranchId(value); setToWarehouseId(''); }} options={branches.map((branch) => ({ value: branch.id, label: branch.name }))} /><SelectField label="Origen" value={fromWarehouseId} onChange={setFromWarehouseId} options={sourceWarehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))} /><SelectField label="Destino" value={toWarehouseId} onChange={setToWarehouseId} options={destinationWarehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))} /><SelectField label="Producto" value={transferProductId} onChange={setTransferProductId} options={transferProducts.map((product: any) => ({ value: product.productId || product.id, label: `${product.code} · ${product.name}` }))} /><label className="space-y-1.5 text-xs font-bold text-muted-foreground"><span>Cantidad</span><Input type="number" min="0.01" step="0.01" value={transferQuantity} onChange={(event) => setTransferQuantity(event.target.value)} /></label></div><DialogFooter><Button type="button" variant="outline" className="rounded-xl" onClick={() => setCreateTransferOpen(false)}>Cancelar</Button><Button type="button" className="rounded-xl" disabled={!sourceBranchId || !destBranchId || !fromWarehouseId || !toWarehouseId || !transferProductId || Number(transferQuantity) <= 0 || transferMutation.isPending} onClick={() => transferMutation.mutate()}>{transferMutation.isPending ? 'Creando…' : 'Crear transferencia'}</Button></DialogFooter></DialogContent></Dialog>}
+    {view === 'transfers' && canCreateTransfers && <Dialog open={createTransferOpen} onOpenChange={(open) => { if (!open && transferMutation.isPending) return; setCreateTransferOpen(open); }}><DialogContent className="max-w-3xl rounded-3xl"><DialogHeader><DialogTitle className="text-xl font-black uppercase italic">Nueva transferencia</DialogTitle><DialogDescription>Transfiere existencias entre una bodega de sucursal y un almacén corporativo, o entre dos ubicaciones autorizadas del mismo rubro.</DialogDescription></DialogHeader><div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2"><SelectField label="Sucursal origen" value={sourceBranchId} onChange={(value) => { setSourceBranchId(value); setFromWarehouseId(''); setTransferProductId(''); }} options={branches.map((branch) => ({ value: branch.id, label: branch.name }))} /><SelectField label="Sucursal destino" value={destBranchId} onChange={(value) => { setDestBranchId(value); setToWarehouseId(''); }} options={branches.map((branch) => ({ value: branch.id, label: branch.name }))} /><SelectField label="Origen" value={fromWarehouseId} onChange={setFromWarehouseId} options={sourceWarehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))} /><SelectField label="Destino" value={toWarehouseId} onChange={setToWarehouseId} options={destinationWarehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))} /><SelectField label="Producto / variante" value={transferProductId} onChange={setTransferProductId} options={transferProductOptions} /><label className="space-y-1.5 text-xs font-bold text-muted-foreground"><span>Cantidad</span><Input type="number" min="0.01" step="0.01" value={transferQuantity} onChange={(event) => setTransferQuantity(event.target.value)} /></label></div><DialogFooter><Button type="button" variant="outline" className="rounded-xl" onClick={() => setCreateTransferOpen(false)} disabled={transferMutation.isPending}>Cancelar</Button><Button type="button" className="rounded-xl" disabled={!sourceBranchId || !destBranchId || !fromWarehouseId || !toWarehouseId || !transferProductId || Number(transferQuantity) <= 0 || transferMutation.isPending} onClick={() => transferMutation.mutate()}>{transferMutation.isPending ? 'Creando…' : 'Crear transferencia'}</Button></DialogFooter></DialogContent></Dialog>}
     </>}
   </div>;
 }

@@ -25,7 +25,7 @@ import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { isBankPaymentMethod, paymentMethodLabel, requiresPaymentReference } from '../../utils/paymentMethods';
+import { hasPaymentReferenceField, isBankPaymentMethod, paymentMethodLabel, requiresPaymentReference } from '../../utils/paymentMethods';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
@@ -198,7 +198,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             exchangeRate: paymentLineRate(initialCurrency),
             method: prefilledMethod,
             bankAccountId: prefilled.bankAccountId || '',
-            reference: requiresPaymentReference(prefilledMethod) ? (prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`) : '',
+            reference: hasPaymentReferenceField(prefilledMethod) ? (prefilled.reference || (requiresPaymentReference(prefilledMethod) ? `PAG-${Date.now().toString().slice(-5)}` : '')) : '',
             notes: prefilled.notes || '',
            });
          setPaymentLines([{
@@ -207,7 +207,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
            currency: initialCurrency,
            exchangeRate: paymentLineRate(initialCurrency),
            bankAccountId: prefilled.bankAccountId || undefined,
-           reference: requiresPaymentReference(prefilledMethod) ? (prefilled.reference || '') : '',
+           reference: hasPaymentReferenceField(prefilledMethod) ? (prefilled.reference || '') : '',
          }]);
          if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
        } else {
@@ -223,7 +223,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             currency: String(payment.currency || found?.currency || displayCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO',
             exchangeRate: Number(payment.exchangeRate || globalRate),
             bankAccountId: payment.bankAccountId || undefined,
-            reference: requiresPaymentReference(payment.method) ? (payment.reference || '') : '',
+            reference: hasPaymentReferenceField(payment.method) ? (payment.reference || '') : '',
           })));
        }
     } else {
@@ -415,7 +415,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       .filter((line) => line.amount > 0);
     if (!effectiveLines.length) return toast.error('El monto debe ser mayor a 0');
     if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) {
-      return toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
+      return toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
     }
     if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
       return toast.error('Seleccione el banco de cada pago con tarjeta, transferencia o cheque');
@@ -486,7 +486,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
               exchangeRate: lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
               baseAmount: Number(toBaseAmount(line.amount, lineCurrency(line.currency), lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)).toFixed(2)),
               bankAccountId: line.bankAccountId,
-              reference: requiresPaymentReference(line.method) ? line.reference : undefined,
+              reference: hasPaymentReferenceField(line.method) ? line.reference : undefined,
               notes: payload.notes,
             })),
           })
@@ -712,9 +712,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                             <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                           </div>
                           {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
-                          {requiresPaymentReference(line.method) && <div className="mt-2">
+                          {hasPaymentReferenceField(line.method) && <div className="mt-2">
                             <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
-                            <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." />
+                            <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} />
                           </div>}
                         </div>
                       ))}
@@ -733,7 +733,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                     <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo anterior</span><span className="font-bold">{formatConvertedAmount(selectedInvoiceBalanceBase, baseCurrency)}</span></div>
                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Este pago</span><span className="font-bold text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
-                      <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo restante</span><span className={cn('font-bold', paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentRemainingBase, baseCurrency)}</span></div>
+                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Falta por pagar</span><span className={cn('font-bold', paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentRemainingBase, baseCurrency)}</span></div>
                     </div>
                     {paymentOverInvoiceBalance && <p className="mt-2 text-[10px] font-bold text-rose-600">El monto excede el saldo de la factura.</p>}
                   </div>}
@@ -790,7 +790,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                   </span>
                 </div>
                 <div className="rounded-xl border border-primary/15 bg-primary/[0.03] p-3 text-[10px] text-muted-foreground">
-                  Cada método conserva su banco y referencia dentro del mismo pago. Efectivo no solicita referencia; tarjeta, transferencia y cheque sí.
+                  Cada método conserva su banco y referencia dentro del mismo pago. Efectivo no solicita referencia; tarjeta, transferencia y cheque la requieren.
                 </div>
               </div>
             </CardContent>

@@ -1,4 +1,4 @@
-import { useRef, type RefObject, type ReactNode } from 'react';
+import { useEffect, useRef, type RefObject, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 export type ImportScrollRef = RefObject<HTMLDivElement | null>;
@@ -48,8 +48,20 @@ export function VirtualizedImportList({
   const resolvedRef = scrollRef || internalRef;
   const virtualizer = useVirtualizedImportRows(count, resolvedRef, estimateSize, { overscan });
 
+  // The scroll element is assigned after the first render. Measuring here
+  // makes the initial range deterministic even when the preview was opened
+  // inside a flex container or changed from desktop to mobile.
+  useEffect(() => {
+    virtualizer.measure();
+  }, [count, virtualizer]);
+
   return (
-    <div ref={resolvedRef} className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${className}`}>
+    <div
+      ref={resolvedRef}
+      data-import-preview-list="true"
+      className={`min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-overlay ${className}`}
+      style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
+    >
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((virtualItem) => (
           <div

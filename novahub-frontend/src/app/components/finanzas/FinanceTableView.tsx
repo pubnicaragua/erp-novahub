@@ -594,7 +594,7 @@ export function FinanceTableView({
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0 mt-4">
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="rounded-xl grow sm:grow-0">Cancelar</Button>
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} disabled={editLoading} className="rounded-xl grow sm:grow-0">Cancelar</Button>
             <Button 
               onClick={handleModalSave} 
               disabled={editLoading}

@@ -41,6 +41,7 @@ import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtr
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { SalesVariantSelect } from './SalesVariantSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface EstimacionesViewProps {
@@ -814,7 +815,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   <div className="flex flex-col items-end">
                     <div className="flex items-center gap-2 text-primary font-black">
                       <span className="w-8 shrink-0 text-right text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'}</span>
-                      <Input type="number" value={Number(localDoc?.total||0)} readOnly className="w-28 h-8 text-right font-black tabular-nums text-primary bg-muted/20" />
+                      <Input type="text" value={formatSalesAmount(localDoc?.total)} readOnly className="w-28 h-8 text-right font-black tabular-nums text-primary bg-muted/20" />
                     </div>
                     {localDoc?.currency === 'USD' && (
                       <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">
@@ -912,7 +913,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       }}
                       placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                       disabled={!localDoc?.customerId}
-                    /></div><SalesLinePriceListSelect
+                    /></div><SalesVariantSelect
+                      product={products.find((product) => product.id === item.productId)}
+                      value={item.variantId}
+                      onChange={(variantId) => {
+                        const nextItems = [...(localDoc.items || [])] as any[];
+                        nextItems[idx] = { ...nextItems[idx], variantId };
+                        commitLocalDoc({ ...localDoc, items: nextItems } as Estimate);
+                      }}
+                    /><SalesLinePriceListSelect
                       productId={(products.find((product) => product.id === item.productId) || products.find((product) => String(product.name).trim().toLowerCase() === String(item.description || '').trim().toLowerCase()))?.id || item.productId}
                       productCode={(products.find((product) => product.id === item.productId) || products.find((product) => String(product.name).trim().toLowerCase() === String(item.description || '').trim().toLowerCase()))?.code || item.productCode || item.code}
                       productName={item.description}

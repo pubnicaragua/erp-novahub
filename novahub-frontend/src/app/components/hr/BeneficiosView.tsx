@@ -450,7 +450,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           </div>
           <DialogFooter className="gap-2" data-tour="hr-benefit-form-actions">
             <DialogClose asChild>
-              <Button variant="outline" className="rounded-xl">Cancelar</Button>
+              <Button variant="outline" className="rounded-xl" disabled={isCreating}>Cancelar</Button>
             </DialogClose>
             <Button onClick={handleCreate} disabled={isCreating} className="rounded-xl gap-2 font-bold">
               <Save className="size-4" /> {isCreating ? 'Guardando...' : 'Guardar'}

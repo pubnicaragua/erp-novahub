@@ -291,7 +291,7 @@ export function ActivosFijosImportTab() {
                 <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-red-600">
                   <AlertTriangle className="size-3.5" /> Errores por fila
                 </p>
-                <div className="hidden max-h-56 overflow-y-auto rounded-xl border border-border/40 sm:block">
+                <div className="hidden max-h-56 overflow-y-auto rounded-xl border border-border/40 scrollbar-overlay sm:block">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted/50 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                       <tr>

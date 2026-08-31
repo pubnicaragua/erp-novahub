@@ -282,7 +282,7 @@ export function CategoriasGastosView() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} className="rounded-xl text-xs font-bold">
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving} className="rounded-xl text-xs font-bold">
               Cancelar
             </Button>
             <Button onClick={handleSave} disabled={saving || (editing ? !canEdit : !canCreate)} className="rounded-xl text-xs font-bold gap-2">

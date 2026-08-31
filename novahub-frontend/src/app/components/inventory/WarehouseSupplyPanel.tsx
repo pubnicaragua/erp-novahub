@@ -234,7 +234,7 @@ export function WarehouseSupplyPanel() {
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cerrar</Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cerrar</Button>
             <Button type="button" onClick={handleCreate} disabled={saving || loading || !selectedLevel || !sourceWarehouseId || !destinationWarehouseId}>
               {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} Crear solicitud
             </Button>

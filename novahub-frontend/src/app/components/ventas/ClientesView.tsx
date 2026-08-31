@@ -956,7 +956,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             )}
           </div>
           <DialogFooter className="flex-col gap-2 border-t border-border/40 px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-between sm:px-7" data-tour="sales-form-actions">
-            <Button variant="outline" onClick={() => setCreateOpen(false)} className="w-full rounded-xl sm:w-auto">Cerrar</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating} className="w-full rounded-xl sm:w-auto">Cerrar</Button>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <Button variant="outline" onClick={handleAddPendingCustomer} disabled={creating || !newCustomer.name.trim()} className="w-full rounded-xl sm:w-auto">Agregar a la lista</Button>
               <Button variant="outline" onClick={handleCreateClient} disabled={creating || !newCustomer.name.trim()} className="w-full rounded-xl sm:w-auto">{creating ? 'Guardando...' : 'Guardar'}</Button>
@@ -1020,7 +1020,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de clientes</label><Input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del cliente, sin código.</li><li>Carga el archivo; el sistema lo prepara sin mostrar cambios todavía.</li><li>Presiona “Previsualizar clientes” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; los clientes válidos recibirán su número automático.</li></ol></div>
           </div>
-          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar clientes</Button>}</DialogFooter>
+          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)} disabled={previewLoading}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar clientes</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
       <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando columnas y preparando los clientes para revisión." />

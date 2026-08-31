@@ -40,11 +40,12 @@ import { cajaService, type CashRegister, type CashRegisterSession } from '../../
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
-import { getInvoicePaymentPresentation, isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, paymentMethodLabel } from '../../utils/paymentMethods';
+import { getInvoicePaymentPresentation, hasPaymentReferenceField, isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, paymentMethodLabel } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { SalesVariantSelect } from './SalesVariantSelect';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase } from '../../utils/paymentSettlement';
@@ -740,7 +741,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       return;
     }
     if (paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim())) {
-      toast.error('La referencia es obligatoria para transferencia, tarjeta y cheque');
+      toast.error('La referencia es obligatoria para tarjeta, transferencia y cheque');
       return;
     }
     if (paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
@@ -1134,8 +1135,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const paymentHasRemaining = paymentRemainingInInvoiceCurrency > 0.01;
   const paymentHasChange = !paymentHasRemaining && paymentChangeBase > 0.01;
   const paymentSettlementLabel = paymentHasRemaining
-    ? 'Saldo restante'
-    : paymentHasChange ? 'Vuelto a entregar' : 'Saldo cubierto';
+    ? 'Falta por pagar'
+    : paymentHasChange ? 'Vuelto por dar' : 'Saldo cubierto';
   const paymentSettlementAmount = paymentHasRemaining
     ? paymentRemainingInInvoiceCurrency
     : paymentChangeInInvoiceCurrency;
@@ -1832,7 +1833,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                           disabled={isInvoiceLocked}
                         />
-                      </div>
+                        </div>
+                      <SalesVariantSelect
+                        product={findProductForItem(item)}
+                        value={item.variantId}
+                        disabled={isInvoiceLocked}
+                        onChange={(variantId) => {
+                          const nextItems = [...(localDoc.items || [])] as any[];
+                          nextItems[idx] = { ...nextItems[idx], variantId };
+                          setLocalDoc({ ...localDoc, items: nextItems });
+                          if (!isCreating) void handleUpdate(localDoc!.id, { items: nextItems } as any);
+                        }}
+                      />
                       <SalesLinePriceListSelect
                         productId={findProductForItem(item)?.id || item.productId}
                         productCode={findProductForItem(item)?.code || (item as any).productCode || (item as any).code}
@@ -2425,9 +2437,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         <span className="font-mono font-bold text-purple-600">{line.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(line.amount || 0), Number(line.cardCommissionPercent || 0))))}</span>
                       </div>
                     )}
-                    {requiresPaymentReference(line.method) && <div className="mt-2">
+                    {hasPaymentReferenceField(line.method) && <div className="mt-2">
                       <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
-                      <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." className="h-9 text-xs" />
+                      <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" />
                     </div>}
                     {line.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
                   </div>

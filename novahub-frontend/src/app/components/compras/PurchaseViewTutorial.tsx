@@ -112,13 +112,13 @@ const TUTORIALS: Record<PurchaseTutorialView, PurchaseTutorial> = {
   },
   'recurring-invoices': {
     title: 'Compras Recurrentes', listLabel: 'Cómo programar compras recurrentes',
-    description: 'Administra contratos y servicios que generan facturas de proveedor de forma periódica.',
+    description: 'Programa compras de productos que se convertirán en una orden y una recepción por cada ciclo.',
     kpis: 'Activas y pausadas son filtros por estado; el monto recurrente y la próxima emisión funcionan como indicadores de planificación.',
-    filters: 'Busca por proveedor, concepto o contrato y revisa la frecuencia antes de cambiar de página.',
-    actions: 'Desde cada fila puedes editar la frecuencia, consultar el detalle, revisar auditoría o eliminar la configuración.',
+    filters: 'Busca por proveedor, concepto o programación y revisa la frecuencia antes de cambiar de página.',
+    actions: 'Desde cada fila puedes editar la programación, consultar el detalle, pausar o reanudar la compra.',
     pagination: 'Define el tamaño de página y usa los controles de primera, anterior, siguiente y última para revisar todos los contratos.',
-    tip: 'Revisa la próxima fecha de emisión y la moneda antes de guardar el contrato.',
-    form: { label: 'Cómo programar facturas de proveedor', description: 'Configura un contrato periódico para controlar las próximas facturas que recibirás.', data: 'Define proveedor, concepto, frecuencia, fechas, moneda y referencia del contrato.', items: 'Agrega los productos o servicios incluidos en cada factura recurrente.', summary: 'Revisa importe, impuestos, vencimiento y próxima emisión.', actions: 'Guarda la programación y confirma que quede activa en el listado.', tip: 'Mantén actualizada la próxima emisión para que el control de cuentas por pagar sea confiable.', steps: ['title', 'data', 'items', 'summary', 'actions'] },
+    tip: 'La fecha de entrega conserva el desfase configurado frente a cada emisión programada.',
+    form: { label: 'Cómo programar compras recurrentes', description: 'Configura una compra periódica con los mismos datos operativos de una orden de compra.', data: 'Define proveedor, bodega, próxima emisión, entrega esperada, tipo de compra, dirección y programación.', items: 'Agrega los productos, cantidades, precios, IVA y retenciones que se copiarán en cada ciclo.', summary: 'Revisa subtotal, impuestos, retenciones, total y la próxima emisión.', actions: 'Guarda la programación y confirma que quede activa para generar la orden y recepción del ciclo.', tip: 'La evidencia debe adjuntarse en la orden o recepción concreta, porque puede cambiar en cada ciclo.', steps: ['title', 'data', 'items', 'summary', 'actions'] },
   },
   payments: {
     title: 'Pagos Realizados', listLabel: 'Cómo registrar pagos',

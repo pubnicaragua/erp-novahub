@@ -244,7 +244,7 @@ function FindingDialog({ check, open, onOpenChange, onSaved }: FindingDialogProp
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
           <Button onClick={save} disabled={saving}>{saving ? 'Guardando...' : 'Registrar hallazgo'}</Button>
         </DialogFooter>
       </DialogContent>

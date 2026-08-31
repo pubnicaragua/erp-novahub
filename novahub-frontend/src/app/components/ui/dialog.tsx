@@ -81,7 +81,7 @@ const DialogFooter = ({
     data-slot="dialog-footer"
     data-overlay-section="footer"
     className={cn(
-      "flex min-w-0 flex-wrap flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-2 sm:gap-0",
+      "flex min-w-0 flex-wrap flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-2 sm:gap-0 [&_button]:min-w-0 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:leading-tight",
       className
     )}
     {...props}

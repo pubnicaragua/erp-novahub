@@ -100,27 +100,27 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           {children && <div className="w-full px-2">{children}</div>}
         </div>
 
-        <DialogFooter className="min-w-0 px-6 pb-6 pt-2 flex gap-3 sm:gap-3">
+        <DialogFooter className="min-w-0 gap-3 px-6 pb-6 pt-2">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={loading || disabled}
-            className="min-w-0 max-w-full flex-1 overflow-hidden h-11 rounded-xl font-bold uppercase text-xs tracking-widest"
+            disabled={loading}
+            className="h-auto min-h-11 w-full min-w-0 max-w-full rounded-xl font-bold uppercase leading-tight tracking-[0.08em] whitespace-normal sm:flex-1"
           >
-            <span className="min-w-0 max-w-full truncate">{cancelLabel}</span>
+            <span className="block min-w-0 max-w-full whitespace-normal break-words text-center">{cancelLabel}</span>
           </Button>
           <Button
             onClick={handleConfirm}
             disabled={loading || disabled}
-            className={`min-w-0 max-w-full flex-1 overflow-hidden h-11 rounded-xl font-bold uppercase text-xs tracking-widest ${config.buttonClass}`}
+            className={`h-auto min-h-11 w-full min-w-0 max-w-full rounded-xl font-bold uppercase leading-tight tracking-[0.08em] whitespace-normal sm:flex-1 ${config.buttonClass}`}
           >
             {loading ? (
-              <span className="inline-flex min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden">
+              <>
                 <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
-                <span className="min-w-0 truncate">Procesando…</span>
-              </span>
+                <span className="min-w-0 whitespace-nowrap" aria-live="polite">Procesando…</span>
+              </>
             ) : (
-              <span className="min-w-0 max-w-full truncate">{confirmLabel}</span>
+              <span className="block min-w-0 max-w-full whitespace-normal break-words text-center">{confirmLabel}</span>
             )}
           </Button>
         </DialogFooter>

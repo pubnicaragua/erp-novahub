@@ -63,7 +63,18 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
               originalQuantity: Number(product.stock || 0),
               originalMinStock: Number(product.minStock || 0),
               originalMaxStock: Number(product.maxStock || 0),
-            }];
+              }];
+        const existingLinkedAttributes = (() => {
+          if (Array.isArray(product.linkedAttributes) && product.linkedAttributes.length > 0) return product.linkedAttributes;
+          if (Array.isArray(product.attributes) && product.attributes.length > 0) return product.attributes;
+          if (Array.isArray(product.attributeIds) && product.attributeIds.length > 0) {
+            return product.attributeIds.map((id: string) => ({ attributeId: id, selectedOptions: [] }));
+          }
+          return [];
+        })();
+        const activeVariants = Array.isArray(product.variants)
+          ? product.variants.filter((variant: any) => variant?.isActive !== false)
+          : [];
         setDraft({
           id: product.id,
           code: product.code,
@@ -93,14 +104,13 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           imagePreviewUrl: '',
           removeImage: false,
           attributeIds: Array.isArray(product.attributeIds) ? product.attributeIds : [],
-          linkedAttributes: (() => {
-            if (Array.isArray(product.linkedAttributes) && product.linkedAttributes.length > 0) return product.linkedAttributes;
-            if (Array.isArray(product.attributes) && product.attributes.length > 0) return product.attributes;
-            if (Array.isArray(product.attributeIds) && product.attributeIds.length > 0) {
-              return product.attributeIds.map((id: string) => ({ attributeId: id, selectedOptions: [] }));
-            }
-            return [];
-          })(),
+          linkedAttributes: existingLinkedAttributes,
+          isVariable: Boolean(
+            product.isVariable
+            || activeVariants.length > 1
+            || activeVariants.some((variant: any) => Array.isArray(variant?.attributes) && variant.attributes.length > 0)
+            || existingLinkedAttributes.some((attribute: any) => Array.isArray(attribute?.selectedOptions) && attribute.selectedOptions.length > 0),
+          ),
         });
       } else {
         setDraft(null);
@@ -248,6 +258,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
          ...(canViewInventoryCost ? { costPrice: Number(draft.costPrice || 0) * rate } : {}),
         trackSerialNumbers: Boolean(draft.trackSerialNumbers),
         itemType: draft.itemType || 'PRODUCT',
+        isVariable: Boolean(draft.isVariable),
         isActive: draft.isActive !== false,
         unit: draft.unit,
         minStock: draft.minStock,
@@ -533,6 +544,25 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
 
         {/* Selector de atributos del catálogo */}
         {!isService && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <label className="text-[10px] uppercase font-black tracking-wider text-primary">Producto con variantes</label>
+                <p className="mt-1 text-[10px] text-muted-foreground">Actívalo para manejar color, talla, almacenamiento u otras combinaciones.</p>
+              </div>
+              <Button
+                type="button"
+                variant={draft.isVariable ? 'default' : 'outline'}
+                className="h-8 shrink-0 text-[10px] font-black uppercase"
+                onClick={() => handleUpdate('isVariable', !draft.isVariable)}
+                disabled={isSaving}
+              >
+                <Tag className="mr-1.5 size-3" /> {draft.isVariable ? 'Sí' : 'No'}
+              </Button>
+            </div>
+          </div>
+        )}
+        {!isService && draft.isVariable && (
           <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

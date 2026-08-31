@@ -74,6 +74,14 @@ export function isBankPaymentMethod(method?: string | null, _includeCheck = fals
 }
 
 export function requiresPaymentReference(method?: string | null): boolean {
+  return ['CARD', 'TRANSFER', 'CHECK'].includes(String(method || '').toUpperCase());
+}
+
+/**
+ * Efectivo no solicita referencia; los medios no monetarios muestran el campo
+ * para permitir que se registre el comprobante correspondiente.
+ */
+export function hasPaymentReferenceField(method?: string | null): boolean {
   return ['TRANSFER', 'CARD', 'CHECK'].includes(String(method || '').toUpperCase());
 }
 

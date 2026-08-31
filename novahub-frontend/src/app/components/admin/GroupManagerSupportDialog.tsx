@@ -117,7 +117,7 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
             <label className="space-y-1 text-xs font-bold text-muted-foreground sm:col-span-2">Contraseña inicial<input type="password" value={managerForm.password} onChange={(event) => setManagerForm((current) => ({ ...current, password: event.target.value }))} placeholder="Contraseña segura" className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /></label>
             <PasswordRequirements value={managerForm.password} className="sm:col-span-2" />
           </div>
-          <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>Cancelar</Button><Button className="rounded-xl" disabled={saving || managerEmailStatus !== 'available' || Boolean(getPasswordError(managerForm.password)) || !managerForm.name.trim()} onClick={createMissingManager}>{saving ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : <><ShieldCheck className="mr-2 size-4" />Crear Manager</>}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)} disabled={saving}>Cancelar</Button><Button className="rounded-xl" disabled={saving || managerEmailStatus !== 'available' || Boolean(getPasswordError(managerForm.password)) || !managerForm.name.trim()} onClick={createMissingManager}>{saving ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : <><ShieldCheck className="mr-2 size-4" />Crear Manager</>}</Button></DialogFooter>
         </>}
       </DialogContent>
     </Dialog>
@@ -126,7 +126,7 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
         <DialogHeader><DialogTitle className="font-black uppercase italic tracking-tight">Cambiar contraseña</DialogTitle><DialogDescription>Actualiza la contraseña de {selectedManager?.user?.name}.</DialogDescription></DialogHeader>
         <input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Nueva contraseña" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
         <PasswordRequirements value={password} />
-        <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setSelectedManager(null)}>Cancelar</Button><Button className="rounded-xl" disabled={saving || Boolean(getPasswordError(password))} onClick={savePassword}>{saving ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : 'Guardar contraseña'}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setSelectedManager(null)} disabled={saving}>Cancelar</Button><Button className="rounded-xl" disabled={saving || Boolean(getPasswordError(password))} onClick={savePassword}>{saving ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : 'Guardar contraseña'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </>;

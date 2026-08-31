@@ -6,7 +6,7 @@ import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 import { toast } from 'sonner';
-import { requiresPaymentReference } from '../../../utils/paymentMethods';
+import { hasPaymentReferenceField, requiresPaymentReference } from '../../../utils/paymentMethods';
 
 interface MovimientoManualModalProps {
   open: boolean;
@@ -38,7 +38,7 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
       return;
     }
     if (requiresPaymentReference(paymentMethod) && !reference.trim()) {
-      toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
+      toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
       return;
     }
     const nio = parseFloat(amountNIO) || 0;
@@ -125,9 +125,9 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
             <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Pago de proveedor, Fondo extra..." />
           </div>
 
-          {requiresPaymentReference(paymentMethod) && <div className="space-y-2">
+          {hasPaymentReferenceField(paymentMethod) && <div className="space-y-2">
             <Label>Referencia *</Label>
-            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Transferencia, cheque o voucher..." required />
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Transferencia, cheque o voucher..." required={requiresPaymentReference(paymentMethod)} />
           </div>}
 
         </div>

@@ -334,7 +334,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAccessModalOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setIsAccessModalOpen(false)} disabled={accessLoading}>Cancelar</Button>
             <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>
           </DialogFooter>
         </DialogContent>

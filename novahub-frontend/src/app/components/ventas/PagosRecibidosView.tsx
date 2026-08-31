@@ -28,7 +28,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { SalesKpiCard } from './SalesKpiCard';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
+import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
@@ -325,8 +325,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     || paymentRemainingBase <= paymentCreditAvailableBase + 0.01;
   const paymentPartialActive = partialPaymentEnabled && paymentPartialCreditFits;
   const paymentSettlementLabel = paymentRemainingBase > 0.01
-    ? 'Saldo restante'
-    : paymentChangeBase > 0.01 ? 'Vuelto a entregar' : linkedPaymentDocument ? 'Saldo cubierto' : 'Anticipo';
+    ? 'Falta por pagar'
+    : paymentChangeBase > 0.01 ? 'Vuelto por dar' : linkedPaymentDocument ? 'Saldo cubierto' : 'Anticipo';
   const handlePaymentMethodChange = (index: number, nextMethod: ReceivedPaymentLine['method']) => {
     setPaymentLines((current) => current.map((item, itemIndex) => {
       if (itemIndex !== index) return item;
@@ -470,7 +470,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       ), 0);
     if (customerFavorAppliedBase > paymentCustomerFavorBase + 0.01) { toast.error(`El saldo a favor disponible es de ${formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}`); return; }
     if (customerFavorAppliedBase > 0.01 && !localDoc.invoiceId && !localDoc.creditNoteId) { toast.error('Selecciona una factura o crédito pendiente para aplicar el saldo a favor'); return; }
-    if (submittedLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) { toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque'); return; }
+    if (submittedLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) { toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque'); return; }
     if (submittedLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) { toast.error('Selecciona la cuenta contable que recibirá cada pago'); return; }
     if (submittedLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) { toast.error('Selecciona el banco global donde se recibió cada pago'); return; }
     const saveToastId = toast.loading('Registrando pago...');
@@ -487,7 +487,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         method: firstLine.method,
         accountId: requiresManualPaymentAccount(firstLine.method) ? firstLine.accountId : undefined,
         bankAccountId: isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
-        reference: requiresPaymentReference(firstLine.method) ? firstLine.reference : undefined,
+        reference: hasPaymentReferenceField(firstLine.method) ? firstLine.reference : undefined,
         notes: localDoc.notes || undefined,
         dueDate: remainingToApplyBase > 0.01 ? new Date(`${localDoc.dueDate}T12:00:00`).toISOString() : undefined,
         cashRegisterId: cashRegisterId || undefined,
@@ -506,7 +506,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             exchangeRate: line.exchangeRate,
             accountId: requiresManualPaymentAccount(line.method) ? line.accountId : undefined,
             bankAccountId: isBankPaymentMethod(line.method, true) ? line.bankAccountId : undefined,
-            reference: requiresPaymentReference(line.method) ? line.reference : undefined,
+            reference: hasPaymentReferenceField(line.method) ? line.reference : undefined,
             notes: localDoc.notes || undefined,
             cardCommissionPercent: isCardPaymentMethod(line.method) ? line.cardCommissionPercent || undefined : undefined,
             cardCommissionAmount: isCardPaymentMethod(line.method) ? line.cardCommissionAmount || undefined : undefined,
@@ -802,14 +802,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                           <span className="font-mono font-bold text-purple-600">{line.currency === 'USD' ? '$' : 'C$'} {formatConvertedAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(line.amount || 0), Number(line.cardCommissionPercent || 0))), baseCurrency)}</span>
                         </div>
                       )}
-                      {requiresPaymentReference(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." className="h-9 text-xs" /></div>}
+                      {hasPaymentReferenceField(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" /></div>}
                     </div>
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
                   <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
-                  {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className={cn("font-black uppercase tracking-widest", paymentSettlementLabel === 'Saldo restante' ? 'text-amber-600' : 'text-muted-foreground')}>{paymentSettlementLabel}</span><span className={cn("font-black", paymentSettlementLabel === 'Saldo restante' ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentSettlementLabel === 'Saldo restante' ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</span></div>}
+                   {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className={cn("font-black uppercase tracking-widest", paymentSettlementLabel === 'Falta por pagar' ? 'text-amber-600' : 'text-muted-foreground')}>{paymentSettlementLabel}</span><span className={cn("font-black", paymentSettlementLabel === 'Falta por pagar' ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentSettlementLabel === 'Falta por pagar' ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</span></div>}
                   {!linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Destino</span><span className="font-black text-muted-foreground">Anticipo de cliente</span></div>}
-                  {paymentChangeBase > 0.01 && <p className={cn("rounded-lg px-3 py-2 text-[10px] font-bold", paymentChangeUnsupported ? 'bg-rose-500/10 text-rose-600' : 'bg-emerald-500/10 text-emerald-600')}>{paymentChangeUnsupported ? 'No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe ser efectivo.' : `Vuelto a entregar: ${formatConvertedAmount(paymentChangeBase, baseCurrency)} · efectivo disponible: ${formatConvertedAmount(paymentCashBase, baseCurrency)}`}</p>}
+                   {paymentChangeBase > 0.01 && <p className={cn("rounded-lg px-3 py-2 text-[10px] font-bold", paymentChangeUnsupported ? 'bg-rose-500/10 text-rose-600' : 'bg-emerald-500/10 text-emerald-600')}>{paymentChangeUnsupported ? 'No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe ser efectivo.' : `Vuelto por dar: ${formatConvertedAmount(paymentChangeBase, baseCurrency)} · efectivo disponible: ${formatConvertedAmount(paymentCashBase, baseCurrency)}`}</p>}
                 </div>
                 {linkedPaymentDocument && <div className="space-y-2 rounded-xl border border-border/60 bg-muted/10 p-3">
                   <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Caja (opcional)</p>{cashSession && <span className="text-[10px] font-black text-emerald-600">Abierta</span>}</div>

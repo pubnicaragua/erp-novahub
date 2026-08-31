@@ -452,7 +452,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
             <Button onClick={handleCreateTraining} disabled={isCreating} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               {isCreating ? 'Guardando...' : 'Crear Capacitación'}
             </Button>
-            <Button variant="outline" onClick={() => setShowNewForm(false)}>
+            <Button variant="outline" onClick={() => setShowNewForm(false)} disabled={isCreating}>
               Cancelar
             </Button>
           </div>

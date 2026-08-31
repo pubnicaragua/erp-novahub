@@ -371,7 +371,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
               </div>)}
             </div>
           </div>
-          <DialogFooter className="shrink-0 border-t border-border/50 bg-card px-6 py-4"><Button variant="outline" onClick={() => setRoleDialogOpen(false)}>Cancelar</Button>{(editingRole?.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</DialogFooter>
+        <DialogFooter className="shrink-0 border-t border-border/50 bg-card px-6 py-4"><Button variant="outline" onClick={() => setRoleDialogOpen(false)} disabled={roleSaving}>Cancelar</Button>{(editingRole?.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -293,7 +293,7 @@ export function LabelPrintModal({ open, onClose, products, companyName = 'Nova H
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="rounded-xl text-xs font-bold">Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={printing} className="rounded-xl text-xs font-bold">Cancelar</Button>
           <Button
             onClick={handlePrint}
             disabled={selectedIds.size === 0 || printing}

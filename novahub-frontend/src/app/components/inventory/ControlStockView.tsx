@@ -976,7 +976,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             </div>
           </div>
           <DialogFooter className="border-t border-border/60 px-5 py-4" data-tour="inventory-serial-adjust-actions">
-            <Button variant="outline" onClick={() => setIsSerialAdjustOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setIsSerialAdjustOpen(false)} disabled={saving}>Cancelar</Button>
             <Button
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
               onClick={handleSerialAdjustment}
@@ -1117,7 +1117,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
           </div>
 
           <DialogFooter className="border-t border-border/60 px-5 py-4" data-tour="inventory-stock-reception-actions">
-            <Button variant="outline" onClick={() => { setIsReceptionOpen(false); resetReception(); }}>
+            <Button variant="outline" onClick={() => { setIsReceptionOpen(false); resetReception(); }} disabled={saving}>
               Cancelar
             </Button>
             <Button

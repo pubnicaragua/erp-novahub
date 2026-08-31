@@ -463,7 +463,7 @@ export function ActivosFijosCategoriesTab() {
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={submitting}>Cancelar</Button>
             <Button onClick={handleSave} disabled={submitting}>{submitting ? 'Guardando...' : 'Guardar'}</Button>
           </DialogFooter>
         </DialogContent>

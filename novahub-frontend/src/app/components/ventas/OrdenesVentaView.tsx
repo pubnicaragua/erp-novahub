@@ -41,6 +41,7 @@ import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtr
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { SalesVariantSelect } from './SalesVariantSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getSalesOrderOriginBadge } from '../../utils/document-origin-badges';
 
@@ -1149,6 +1150,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           disabled={!localDoc?.customerId}
                         />
                       </div>
+                      <SalesVariantSelect
+                        product={products.find((product) => product.id === item.productId)}
+                        value={item.variantId}
+                        onChange={(variantId) => setLocalDoc({ ...localDoc, items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx ? { ...line, variantId } : line) } as any)}
+                      />
                       <SalesLinePriceListSelect 
                         productId={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || item.productId} 
                         productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code} 
