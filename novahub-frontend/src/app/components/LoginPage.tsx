@@ -9,7 +9,7 @@ import { Checkbox } from './ui/checkbox';
 import { NovaHubLogo } from './NovaHubLogo';
 
 interface LoginPageProps {
-  onLogin: (email: string, password: string) => void;
+  onLogin: (email: string, password: string) => Promise<void>;
 }
 
 
@@ -131,7 +131,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 </label>
               </div>
 
-              <Button type="submit" className="w-full h-11 gap-2 bg-emerald-700 hover:bg-emerald-800 text-white" disabled={loading}>
+              <Button
+                type="submit"
+                // El guard global protege mutaciones del ERP, pero no debe
+                // deshabilitar el submit antes de que el navegador dispare
+                // este formulario de autenticación.
+                data-action-lock="false"
+                className="w-full h-11 gap-2 bg-emerald-700 hover:bg-emerald-800 text-white"
+                disabled={loading}
+              >
                 {loading ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
                 {loading ? 'Ingresando...' : 'Iniciar Sesión'}
               </Button>
