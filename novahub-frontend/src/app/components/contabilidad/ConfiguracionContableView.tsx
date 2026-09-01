@@ -162,10 +162,13 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'inventoryAdjustment', label: 'Ajustes de Inventario', icon: BarChart3,
-    description: 'Ajuste físico → ajusta inventario y reconoce pérdida/ganancia',
+    description: 'Ajuste físico de sucursal → cuenta detalle de la bodega y resultado por motivo',
     fields: [
-      { key: 'inventory', label: 'Inventario', side: 'debit', description: 'Ajusta el inventario (débito si sobra)', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
-      { key: 'adjustment', label: 'Pérdida/Ganancia', side: 'credit', description: 'Contrapartida del ajuste', defaultCode: '5300', defaultName: 'Perdida/Ganancia por Ajuste', defaultType: 'EXPENSE' },
+      { key: 'surplus', label: 'Sobrantes', side: 'credit', description: 'Resultado por aumento físico de existencias', defaultCode: '4020', defaultName: 'Sobrantes de Inventario', defaultType: 'INCOME' },
+      { key: 'shrinkage', label: 'Mermas', side: 'debit', description: 'Resultado por merma de inventario', defaultCode: '5310', defaultName: 'Merma de Inventario', defaultType: 'EXPENSE' },
+      { key: 'shortage', label: 'Faltantes', side: 'debit', description: 'Resultado por faltante de inventario', defaultCode: '5320', defaultName: 'Faltantes de Inventario', defaultType: 'EXPENSE' },
+      { key: 'loss', label: 'Pérdidas', side: 'debit', description: 'Resultado por pérdida de inventario', defaultCode: '5300', defaultName: 'Pérdida de Inventario', defaultType: 'EXPENSE' },
+      { key: 'deterioration', label: 'Deterioro', side: 'debit', description: 'Resultado por deterioro de inventario', defaultCode: '5330', defaultName: 'Deterioro de Inventario', defaultType: 'EXPENSE' },
     ],
   },
   {

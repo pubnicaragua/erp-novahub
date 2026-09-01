@@ -115,6 +115,25 @@ function auditDifference(item: any): number {
   return Number(item?.countedStock ?? 0) - auditOriginalStock(item);
 }
 
+const AUDIT_REASON_LABELS: Record<string, string> = {
+  SURPLUS: 'Sobrante',
+  SOBRANTE: 'Sobrante',
+  SHRINKAGE: 'Merma',
+  MERMA: 'Merma',
+  SHORTAGE: 'Faltante',
+  FALTANTE: 'Faltante',
+  LOSS: 'Pérdida',
+  PERDIDA: 'Pérdida',
+  'PÉRDIDA': 'Pérdida',
+  DETERIORATION: 'Deterioro',
+  DETERIORO: 'Deterioro',
+};
+
+function auditReasonLabel(item: any, difference: number): string {
+  const reason = String(item?.reason || '').trim().toUpperCase();
+  return AUDIT_REASON_LABELS[reason] || (difference < 0 ? 'Faltante' : difference > 0 ? 'Sobrante' : 'Sin diferencia');
+}
+
 function adjustmentVariantLabel(variant: any): string {
   const attributes = Array.isArray(variant?.attributes) ? variant.attributes : [];
   if (attributes.length > 0) return attributes.map((attribute: any) => attribute?.value).filter(Boolean).join(' / ');
@@ -972,6 +991,9 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       <div className="min-w-0">
                         <p className="truncate text-xs font-semibold">{item.name || 'Producto sin nombre'}</p>
                         <p className="font-mono text-[10px] text-muted-foreground">{item.code || '—'}</p>
+                        <p className={`mt-1 text-[10px] font-semibold ${difference < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                          Motivo: {auditReasonLabel(item, difference)}
+                        </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2 text-right">
                         <span className="font-mono text-[10px] text-muted-foreground">{originalStock} → {countedStock}</span>

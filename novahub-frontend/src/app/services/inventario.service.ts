@@ -146,11 +146,11 @@ export const inventoryService = {
     notes?: string | null;
     actaUri?: string | null;
     actaFileName?: string | null;
-    items?: { productId: string; variantId?: string; variantName?: string | null; variantSku?: string | null; code: string; name: string; systemStock: number; countedStock: number; difference: number }[];
+    items?: { productId: string; variantId?: string; variantName?: string | null; variantSku?: string | null; code: string; name: string; systemStock: number; countedStock: number; difference: number; reason?: string | null }[];
   }) => api.post<any>('/inventory/audits', data),
   deleteAudit: (id: string) => api.delete<any>(`/inventory/audits/${id}`),
-  changeAuditStatus: (id: string, status: string) => api.patch<any>(`/inventory/audits/${id}/status`, { status }),
-  approveAudit: (id: string) => api.post<any>(`/inventory/audits/${id}/approve`),
+  changeAuditStatus: (id: string, status: string, items?: { productId: string; reason?: string | null }[]) => api.patch<any>(`/inventory/audits/${id}/status`, { status, ...(items ? { items } : {}) }),
+  approveAudit: (id: string, items?: { productId: string; reason?: string | null }[]) => api.post<any>(`/inventory/audits/${id}/approve`, items ? { items } : {}),
   getAuditTheoretical: (id: string) => api.get<any[]>(`/inventory/audits/${id}/theoretical`),
 
   // ==================== PÉRDIDAS ====================
