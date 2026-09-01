@@ -500,6 +500,7 @@ function DistributionStatus({ available, quantity }: { available: number; quanti
 }
 function InventoryDetailSheet({ view, row, canViewInventoryCost, groupId, onEnterBranch, canEnterBranch = false, onClose }: { view: ManagerInventoryView; row: any | null; canViewInventoryCost: boolean; groupId: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean; onClose: () => void }) {
   const recordBranchId = resolveRecordBranchId(row);
+  const detailPanelClassName = view === 'adjustments' ? 'erp-detail-panel erp-detail-panel--wide' : 'erp-detail-panel';
   const title = view === 'movements'
     ? row?.product?.name || 'Movimiento de inventario'
     : row?.name || row?.number || row?.code || viewLabels[view];
@@ -510,7 +511,7 @@ function InventoryDetailSheet({ view, row, canViewInventoryCost, groupId, onEnte
     : [row?.code, row?.sku || row?.product?.code, row?.branchName, row?.warehouseName].filter(Boolean).join(' · ');
 
   return <Sheet open={Boolean(row)} onOpenChange={(open) => !open && onClose()}>
-    <SheetContent side="right" className="erp-detail-panel flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
+    <SheetContent side="right" className={`${detailPanelClassName} flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0`}>
       <SheetHeader className="sticky top-0 z-10 space-y-0 border-b border-border/50 bg-background/95 px-6 py-5 backdrop-blur-md">
         <div className="flex items-start gap-4 pr-8">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-inner">{createElement(viewIcon(view), { className: 'size-6' })}</div>
@@ -559,7 +560,7 @@ function InventoryDetailContent({ view, row, canViewInventoryCost }: { view: Man
   if (view === 'adjustments') return <>
     <InfoGrid items={[["Fecha", formatDate(row.date)], ["Rubro", row.businessUnitName || '—'], ["Sucursal", row.branchName || '—'], ["Almacén / bodega", row.warehouseName || '—'], ["Motivo", row.reason ? formatAdjustmentReason(row.reason) : '—'], ["Estado", formatAdjustmentStatus(row.status)], ["Aprobado por", formatApproverName(row.approvedBy || row.approvedByName)], ["Fecha de aprobación", formatDate(row.approvedAt)], ["Variación", formatNumber(row.differenceUnits)], ...(canViewInventoryCost ? [["Impacto", <ManagerMoney value={row.impactAmount} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />] as [string, ReactNode]] : [])]} />
     {row.notes && <Card className="rounded-2xl border-border/60 p-5 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{row.notes}</p></Card>}
-    <div className="min-w-0 overflow-x-auto rounded-2xl border border-border/60"><Table className="min-w-[760px]"><TableHeader><TableRow><TableHead>Producto</TableHead><TableHead>Existencia actual</TableHead><TableHead>Existencia real</TableHead><TableHead>Diferencia</TableHead>{canViewInventoryCost && <><TableHead>Costo unitario</TableHead><TableHead>Impacto</TableHead></>}</TableRow></TableHeader><TableBody>{(Array.isArray(row.items) ? row.items : []).map((item: any) => <TableRow key={item.id}><TableCell><p className="font-semibold">{item.productName || 'Producto'}</p><p className="text-xs text-muted-foreground">{item.productCode || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p></TableCell><TableCell>{formatNumber(item.currentStock)}</TableCell><TableCell>{formatNumber(item.actualStock)}</TableCell><TableCell className={item.difference < 0 ? 'font-bold text-rose-600' : item.difference > 0 ? 'font-bold text-emerald-600' : ''}>{item.difference > 0 ? '+' : ''}{formatNumber(item.difference)}</TableCell>{canViewInventoryCost && <><TableCell><ManagerMoney value={item.unitCost ?? item.baseCost} currency={item.currency || 'NIO'} sourceExchangeRate={item.exchangeRate} /></TableCell><TableCell><ManagerMoney value={item.impactAmount} currency={item.currency || 'NIO'} sourceExchangeRate={item.exchangeRate} /></TableCell></>}</TableRow>)}</TableBody></Table></div>
+    <div className="min-w-0 rounded-2xl border border-border/60"><Table className={canViewInventoryCost ? 'min-w-[980px]' : 'min-w-[680px]'}><TableHeader><TableRow><TableHead>Producto</TableHead><TableHead>Existencia actual</TableHead><TableHead>Existencia real</TableHead><TableHead>Diferencia</TableHead><TableHead>Motivo</TableHead>{canViewInventoryCost && <><TableHead>Costo unitario</TableHead><TableHead>Impacto</TableHead></>}</TableRow></TableHeader><TableBody>{(Array.isArray(row.items) ? row.items : []).map((item: any) => <TableRow key={item.id}><TableCell><p className="break-words font-semibold">{item.productName || 'Producto'}</p><p className="break-words text-xs text-muted-foreground">{item.productCode || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p></TableCell><TableCell>{formatNumber(item.currentStock)}</TableCell><TableCell>{formatNumber(item.actualStock)}</TableCell><TableCell className={item.difference < 0 ? 'font-bold text-rose-600' : item.difference > 0 ? 'font-bold text-emerald-600' : ''}>{item.difference > 0 ? '+' : ''}{formatNumber(item.difference)}</TableCell><TableCell><Badge variant="outline" className="whitespace-normal text-[10px]">{formatAdjustmentReason(item.reason || (item.difference > 0 ? 'SURPLUS' : item.difference < 0 ? 'SHORTAGE' : ''))}</Badge></TableCell>{canViewInventoryCost && <><TableCell><ManagerMoney value={item.unitCost ?? item.baseCost} currency={item.currency || 'NIO'} sourceExchangeRate={item.exchangeRate} /></TableCell><TableCell><ManagerMoney value={item.impactAmount} currency={item.currency || 'NIO'} sourceExchangeRate={item.exchangeRate} /></TableCell></>}</TableRow>)}</TableBody></Table></div>
   </>;
 
   if (view === 'transfers') return <TransferDetailContent row={row} />;
@@ -637,7 +638,7 @@ function formatAdjustmentStatus(value: unknown) {
 }
 
 function formatAdjustmentReason(value: unknown) {
-  return ({ DISCREPANCY: 'Diferencia de inventario', DAMAGE: 'Daño', EXPIRATION: 'Vencimiento', THEFT: 'Pérdida / robo', OTHER: 'Otro' } as Record<string, string>)[String(value || '').toUpperCase()] || String(value || 'Sin motivo');
+  return ({ DISCREPANCY: 'Diferencia de inventario', DAMAGE: 'Daño', EXPIRATION: 'Vencimiento', THEFT: 'Pérdida / robo', OTHER: 'Otro', SURPLUS: 'Sobrante', SHRINKAGE: 'Merma', SHORTAGE: 'Faltante', LOSS: 'Pérdida', DETERIORATION: 'Deterioro', MIXED: 'Ajuste mixto' } as Record<string, string>)[String(value || '').toUpperCase()] || String(value || 'Sin motivo');
 }
 
 function resolveRecordBranchTargets(row: any | null) {

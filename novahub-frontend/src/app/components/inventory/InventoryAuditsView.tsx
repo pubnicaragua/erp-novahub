@@ -44,6 +44,7 @@ interface AuditItemDraft {
   systemStock: number;
   countedStock: number;
   difference: number;
+  reason: string;
 }
 
 interface AuditParticipant {
@@ -109,6 +110,10 @@ function normalizeAuditItems(value: unknown): any[] {
     }
   }
   return Array.isArray(value) ? value : [];
+}
+
+function auditItemKey(item: any, index: number): string {
+  return String(item?.productId || item?.code || `row-${index}`);
 }
 
 function AuditParticipantPicker({
@@ -180,6 +185,27 @@ const ACCEPTED_ACTA = '.pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp';
 const BULK_UNCATEGORIZED = '__uncategorized__';
 const MAX_AUDIT_ITEMS = 5000;
 
+const AUDIT_REASON_OPTIONS = [
+  { value: 'SURPLUS', label: 'Sobrante' },
+  { value: 'SHRINKAGE', label: 'Merma' },
+  { value: 'SHORTAGE', label: 'Faltante' },
+  { value: 'LOSS', label: 'Pérdida' },
+  { value: 'DETERIORATION', label: 'Deterioro' },
+];
+
+function AuditReasonSelect({ value, onChange, disabled = false }: { value: string; onChange: (value: string) => void; disabled?: boolean }) {
+  return (
+    <Select value={value || undefined} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="h-8 min-w-[9rem] text-[10px]">
+        <SelectValue placeholder={disabled ? 'Sin diferencia' : 'Seleccionar motivo'} />
+      </SelectTrigger>
+      <SelectContent>
+        {AUDIT_REASON_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value} className="text-[10px]">{option.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function yieldToBrowser(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
@@ -248,7 +274,10 @@ function productStockForWarehouses(product: any, warehouseIds: Set<string>): num
   // total when warehouse-specific levels are present.
   if (!Array.isArray(product?.stockLevels)) return Number(product?.stock || 0);
   return product.stockLevels
-    .filter((level: any) => warehouseIds.has(String(level.warehouseId || level.warehouse?.id || '')))
+    .filter((level: any) => (
+      levelBelongsToProduct(product, level)
+      && warehouseIds.has(String(level.warehouseId || level.warehouse?.id || ''))
+    ))
     .reduce((total: number, level: any) => total + Number(level.quantity || 0), 0);
 }
 
@@ -258,22 +287,31 @@ function variantDisplayLabel(variant: any): string {
   return String(variant?.name || variant?.sku || 'Estándar');
 }
 
+function levelBelongsToProduct(product: any, level: any): boolean {
+  const levelProductId = String(level?.productId || '').trim();
+  return !levelProductId || levelProductId === String(product?.id || '').trim();
+}
+
 function productVariantRows(product: any, warehouseIds?: Set<string>) {
   const variants = Array.isArray(product?.variants) ? product.variants : [];
-  const levels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
+  const ownVariantIds = new Set<string>(
+    variants.map((variant: any) => String(variant?.id || '').trim()).filter(Boolean),
+  );
+  const levels = (Array.isArray(product?.stockLevels) ? product.stockLevels : []).filter((level: any) => (
+    levelBelongsToProduct(product, level)
+    && (!warehouseIds || warehouseIds.has(String(level?.warehouseId || level?.warehouse?.id || '')))
+  ));
   const variantIds = new Set<string>([
-    ...variants.map((variant: any) => String(variant?.id || '').trim()).filter(Boolean),
-    ...levels.map((level: any) => String(level?.variantId || level?.variant?.id || '').trim()).filter(Boolean),
+    ...ownVariantIds,
+    ...levels.map((level: any) => String(level?.variantId || level?.variant?.id || '').trim())
+      .filter((variantId: string) => variantId && ownVariantIds.has(variantId)),
   ]);
 
   return Array.from(variantIds).map((variantId) => {
     const variant = variants.find((candidate: any) => String(candidate?.id) === variantId)
       || levels.find((level: any) => String(level?.variantId || level?.variant?.id || '') === variantId)?.variant
       || { id: variantId, sku: variantId, name: 'Estándar' };
-    const variantLevels = levels.filter((level: any) => (
-      String(level?.variantId || level?.variant?.id || '') === variantId
-      && (!warehouseIds || warehouseIds.has(String(level?.warehouseId || level?.warehouse?.id || '')))
-    ));
+    const variantLevels = levels.filter((level: any) => String(level?.variantId || level?.variant?.id || '') === variantId);
     return {
       variantId,
       variantLabel: variantDisplayLabel(variant),
@@ -338,6 +376,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const [workflowLoading, setWorkflowLoading] = useState<string | null>(null);
   const [comparisonAudit, setComparisonAudit] = useState<any | null>(null);
   const [comparisonTargetStatus, setComparisonTargetStatus] = useState<'CLOSED' | 'APPROVED'>('CLOSED');
+  const [comparisonReasons, setComparisonReasons] = useState<Record<string, string>>({});
   const [theoreticalItems, setTheoreticalItems] = useState<any[]>([]);
   const [loadingTheoretical, setLoadingTheoretical] = useState(false);
   const [form, setForm] = useState({
@@ -463,7 +502,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       const product = productById.get(String(item.productId));
       const categoryId = String(item.categoryId || product?.categoryId || product?.category?.id || BULK_UNCATEGORIZED);
       const categoryName = item.categoryName || product?.category?.name || 'Sin categoría';
-      const group = groups.get(categoryId) || { id: categoryId, name: categoryName, items: [] };
+      const group = groups.get(categoryId) || { id: categoryId, name: categoryName, items: [] as AuditItemDraft[] };
       group.items.push(item);
       groups.set(categoryId, group);
     });
@@ -475,7 +514,8 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   ]), [groupedItems]);
   const mobileAuditRows = useVirtualAuditRows(auditRenderRows, 150, 620);
   const desktopAuditRows = useVirtualAuditRows(auditRenderRows, 48, 620);
-  const canSave = Boolean(form.auditDate && form.warehouseId) && form.supervisors.length > 0 && itemsWithProduct.length > 0;
+  const missingReasons = itemsWithProduct.some((item) => item.difference !== 0 && !item.reason);
+  const canSave = Boolean(form.auditDate && form.warehouseId) && form.supervisors.length > 0 && itemsWithProduct.length > 0 && !missingReasons;
 
   const updateForm = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -494,7 +534,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       if (!item.productId) return item;
       const product = productById.get(String(item.productId));
       if (!product || !productWarehouseIds(product).some((id) => nextFamilyIds.has(id))) {
-        return { ...item, productId: '', variantId: undefined, variantLabel: '', variantSku: '', code: '', name: '', categoryId: undefined, categoryName: undefined, systemStock: 0, countedStock: 0, difference: 0 };
+        return { ...item, productId: '', variantId: undefined, variantLabel: '', variantSku: '', code: '', name: '', categoryId: undefined, categoryName: undefined, systemStock: 0, countedStock: 0, difference: 0, reason: '' };
       }
       const nextSystemStock = item.variantId
         ? productVariantRows(product, nextFamilyIds).find((variant) => variant.variantId === item.variantId)?.stock || 0
@@ -507,6 +547,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         systemStock: nextSystemStock,
         countedStock: nextCountedStock,
         difference: nextCountedStock - nextSystemStock,
+        reason: nextCountedStock - nextSystemStock === 0 ? '' : item.reason,
       };
     }));
     if (invalidItems > 0) {
@@ -585,6 +626,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       systemStock: 0,
       countedStock: 0,
       difference: 0,
+      reason: '',
     }]);
   };
 
@@ -605,6 +647,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     systemStock: Number(product.stock || 0),
     countedStock: Number(product.stock || 0),
     difference: 0,
+    reason: '',
   });
 
   const addProductsInBulk = async (selectedProducts: typeof productOptions, sourceLabel: string) => {
@@ -661,15 +704,25 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       systemStock: product?.stock || 0,
       countedStock: product?.stock || 0,
       difference: 0,
+      reason: '',
     } : item));
   };
 
   const updateCounted = (key: string, value: number) => {
-    setItems((current) => current.map((item) => item.key === key ? {
-      ...item,
-      countedStock: value,
-      difference: value - item.systemStock,
-    } : item));
+    setItems((current) => current.map((item) => {
+      if (item.key !== key) return item;
+      const difference = value - item.systemStock;
+      return {
+        ...item,
+        countedStock: value,
+        difference,
+        reason: difference > 0 ? 'SURPLUS' : difference === 0 || (difference < 0 && item.reason === 'SURPLUS') ? '' : item.reason,
+      };
+    }));
+  };
+
+  const updateReason = (key: string, value: string) => {
+    setItems((current) => current.map((item) => item.key === key ? { ...item, reason: value } : item));
   };
 
   const openActa = async (uri?: string | null) => {
@@ -731,6 +784,12 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     if ((targetStatus === 'CLOSED' || targetStatus === 'APPROVED') && audit.snapshotAt) {
       setComparisonAudit(audit);
       setComparisonTargetStatus(targetStatus as 'CLOSED' | 'APPROVED');
+      setComparisonReasons(Object.fromEntries(normalizeAuditItems(audit.items).map((item: any, index: number) => {
+        const systemStock = Number(item.originalSystemStock ?? item.systemStock ?? item.snapshotStock ?? item.theoreticalStock ?? 0);
+        const countedStock = Number(item.countedStock ?? 0);
+        const difference = countedStock - systemStock;
+        return [auditItemKey(item, index), String(item.reason || (difference > 0 ? 'SURPLUS' : ''))];
+      })));
       setLoadingTheoretical(true);
       try {
         const items = await inventoryService.getAuditTheoretical(audit.id);
@@ -761,17 +820,23 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const confirmCloseAndApprove = async () => {
     if (!comparisonAudit) return;
+    if (hasMissingComparisonReasons()) {
+      toast.error('Selecciona el motivo de cada diferencia antes de aplicar el ajuste');
+      return;
+    }
+    const adjustmentItems = getComparisonAdjustmentItems();
     try {
       setWorkflowLoading(comparisonAudit.id);
       // When the dialog was opened from IN_PROGRESS, close first. If the act
       // was already CLOSED, approve directly.
       if (comparisonAudit.status !== 'CLOSED') {
-        await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED');
+        await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED', adjustmentItems);
       }
       // Then approve
-      await inventoryService.approveAudit(comparisonAudit.id);
-      toast.success(`Acta ${comparisonAudit.number}: diferencias aprobadas, ajuste generado`);
+      await inventoryService.approveAudit(comparisonAudit.id, adjustmentItems);
+      toast.success(`Acta ${comparisonAudit.number}: ajuste generado como borrador; debe aprobarse desde el panel autorizado`);
       setComparisonAudit(null);
+      setComparisonReasons({});
       setTheoreticalItems([]);
       setComparisonTargetStatus('CLOSED');
       onRefresh();
@@ -784,13 +849,19 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const confirmCloseOnly = async () => {
     if (!comparisonAudit) return;
+    if (hasMissingComparisonReasons()) {
+      toast.error('Selecciona el motivo de cada diferencia antes de cerrar el conteo');
+      return;
+    }
+    const adjustmentItems = getComparisonAdjustmentItems();
     try {
       setWorkflowLoading(comparisonAudit.id);
       if (comparisonAudit.status !== 'CLOSED') {
-        await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED');
+        await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED', adjustmentItems);
       }
       toast.success(`Acta ${comparisonAudit.number}: conteo cerrado`);
       setComparisonAudit(null);
+      setComparisonReasons({});
       setTheoreticalItems([]);
       setComparisonTargetStatus('CLOSED');
       onRefresh();
@@ -815,6 +886,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     });
     setActaFile(null);
     setItems([]);
+    setComparisonReasons({});
     setBulkCategoryIds([]);
     setInventoryProductSearch('');
     setInventoryStockFilter('all');
@@ -849,12 +921,16 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         <div><Label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Contado</Label><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="mt-1 h-8 w-full text-right font-mono text-xs" /></div>
         <div className="text-right"><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Diferencia</p><p className={cn('mt-2 font-mono text-xs font-bold tabular-nums', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</p></div>
       </div>
+      <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-3">
+        <Label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Motivo</Label>
+        <AuditReasonSelect value={item.reason} onChange={(value) => updateReason(item.key, value)} disabled={item.difference === 0} />
+      </div>
     </div>;
   };
 
   const renderAuditDesktopRow = (row: AuditRenderRow) => {
     if (row.kind === 'category') {
-      return <TableRow key={`desktop-category-${row.id}`} className="bg-primary/5 hover:bg-primary/5"><TableCell colSpan={5} className="py-2"><div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-primary">{row.name}</span><Badge variant="outline" className="text-[9px]">{row.count} productos</Badge></div></TableCell></TableRow>;
+      return <TableRow key={`desktop-category-${row.id}`} className="bg-primary/5 hover:bg-primary/5"><TableCell colSpan={6} className="py-2"><div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-primary">{row.name}</span><Badge variant="outline" className="text-[9px]">{row.count} productos</Badge></div></TableCell></TableRow>;
     }
     const item = row.item;
     return <TableRow key={item.key}>
@@ -862,6 +938,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       <TableCell className="text-right"><span className="font-mono text-xs text-muted-foreground">{fmtQty(item.systemStock)}</span></TableCell>
       <TableCell className="text-right"><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="ml-auto h-8 w-28 text-right font-mono text-xs" /></TableCell>
       <TableCell className="text-right"><span className={cn('font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</span></TableCell>
+      <TableCell><AuditReasonSelect value={item.reason} onChange={(value) => updateReason(item.key, value)} disabled={item.difference === 0} /></TableCell>
       <TableCell className="text-right"><Button variant="ghost" size="icon" aria-label="Quitar producto" className="size-7 hover:text-destructive" onClick={() => removeItem(item.key)}><X className="size-3.5" /></Button></TableCell>
     </TableRow>;
   };
@@ -872,6 +949,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     if (!form.warehouseId) { toast.error('Selecciona la bodega de la inspección'); return; }
     if (form.supervisors.length === 0) { toast.error('Indica al menos un encargado del proceso'); return; }
     if (itemsWithProduct.length === 0) { toast.error('Agrega al menos un producto al acta'); return; }
+    if (missingReasons) { toast.error('Selecciona el motivo de cada diferencia antes de guardar el acta'); return; }
     const duplicateLines = new Set<string>();
     const seenLines = new Set<string>();
     itemsWithProduct.forEach((item) => {
@@ -904,15 +982,30 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         notes: form.notes.trim() || null,
         actaUri,
         actaFileName: actaFile?.name || null,
-        items: itemsWithProduct.map((item) => ({
-          productId: item.productId,
-          ...(item.variantId ? { variantId: item.variantId, variantName: item.variantLabel || null, variantSku: item.variantSku || null } : {}),
-          code: item.code,
-          name: item.name,
-          systemStock: item.systemStock,
-          countedStock: item.countedStock,
-          difference: item.countedStock - item.systemStock,
-        })),
+        items: itemsWithProduct.map((item) => {
+          const product = productById.get(String(item.productId));
+          const ownVariants = Array.isArray(product?.variants) ? product.variants : [];
+          const ownVariantIds = new Set(ownVariants.map((variant: any) => String(variant?.id || '').trim()).filter(Boolean));
+          // Los productos normales tienen una única variante técnica
+          // "Estándar". Si un nivel de inventario combinado dejó un id viejo
+          // en la línea, usa la variante propia del producto.
+          const variantId = item.variantId && ownVariantIds.has(String(item.variantId))
+            ? String(item.variantId)
+            : ownVariants.length === 1
+              ? String(ownVariants[0].id)
+              : undefined;
+          const ownedVariant = variantId ? ownVariants.find((variant: any) => String(variant?.id) === variantId) : null;
+          return {
+            productId: item.productId,
+            ...(variantId ? { variantId, variantName: ownedVariant?.name || item.variantLabel || null, variantSku: ownedVariant?.sku || item.variantSku || null } : {}),
+            code: item.code,
+            name: item.name,
+            systemStock: item.systemStock,
+            countedStock: item.countedStock,
+            difference: item.countedStock - item.systemStock,
+            reason: item.difference !== 0 ? item.reason : null,
+          };
+        }),
       });
       toast.success('Acta registrada como pendiente. Genera el ajuste desde el tab Ajustes.');
       setIsCreating(false);
@@ -957,21 +1050,30 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const detailAuditApproved = String(detailAudit?.status || '').toUpperCase() === 'APPROVED';
   const comparisonItems = useMemo(() => {
     const source = theoreticalItems.length > 0 ? theoreticalItems : normalizeAuditItems(comparisonAudit?.items);
-    return source.map((item: any) => {
+    return source.map((item: any, index: number) => {
       const theoreticalStock = Number(item.theoreticalStock ?? item.systemStock ?? item.snapshotStock ?? 0);
       const countedStock = Number(item.countedStock ?? 0);
       const difference = Number.isFinite(Number(item.difference))
         ? Number(item.difference)
         : countedStock - theoreticalStock;
-      return { ...item, theoreticalStock, countedStock, difference };
+      const key = auditItemKey(item, index);
+      const reason = Object.prototype.hasOwnProperty.call(comparisonReasons, key)
+        ? comparisonReasons[key]
+        : String(item.reason || (difference > 0 ? 'SURPLUS' : ''));
+      return { ...item, theoreticalStock, countedStock, difference, reason };
     });
-  }, [comparisonAudit, theoreticalItems]);
+  }, [comparisonAudit, comparisonReasons, theoreticalItems]);
   const comparisonDifferences = comparisonItems.filter((item: any) => item.difference !== 0);
   const comparisonShortages = comparisonDifferences.filter((item: any) => item.difference < 0);
   const comparisonSurpluses = comparisonDifferences.filter((item: any) => item.difference > 0);
+  const getComparisonAdjustmentItems = () => comparisonDifferences
+    .map((item: any) => ({ productId: String(item.productId || ''), reason: item.reason || null }))
+    .filter((item) => item.productId);
+  const hasMissingComparisonReasons = () => comparisonDifferences.some((item: any) => item.difference < 0 && !item.reason);
   const closeComparisonDialog = () => {
     if (workflowLoading) return;
     setComparisonAudit(null);
+    setComparisonReasons({});
     setTheoreticalItems([]);
     setComparisonTargetStatus('CLOSED');
   };
@@ -1274,12 +1376,12 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 ) : (
                   <div className="max-h-[620px] overflow-auto" onScroll={desktopAuditRows.onScroll}>
                     <Table containerClassName="overflow-x-auto" className="min-w-[680px]">
-                      <TableHeader><TableRow><TableHead className="text-[9px] font-black uppercase tracking-widest">Producto</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Stock sistema</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Cantidad contada</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Diferencia</TableHead><TableHead className="w-10" /></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead className="text-[9px] font-black uppercase tracking-widest">Producto</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Stock sistema</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Cantidad contada</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Diferencia</TableHead><TableHead className="text-[9px] font-black uppercase tracking-widest">Motivo</TableHead><TableHead className="w-10" /></TableRow></TableHeader>
                       <TableBody>
-                        <TableRow><TableCell colSpan={5} style={{ height: desktopAuditRows.topSpacer }} aria-hidden="true" /></TableRow>
+                        <TableRow><TableCell colSpan={6} style={{ height: desktopAuditRows.topSpacer }} aria-hidden="true" /></TableRow>
                         {desktopAuditRows.rows.map(renderAuditDesktopRow)}
-                        <TableRow><TableCell colSpan={5} style={{ height: desktopAuditRows.bottomSpacer }} aria-hidden="true" /></TableRow>
-                        {items.length === 0 && <TableRow><TableCell colSpan={5} className="py-6 text-center text-[10px] text-muted-foreground">Agrega productos al acta para registrar el conteo físico.</TableCell></TableRow>}
+                        <TableRow><TableCell colSpan={6} style={{ height: desktopAuditRows.bottomSpacer }} aria-hidden="true" /></TableRow>
+                        {items.length === 0 && <TableRow><TableCell colSpan={6} className="py-6 text-center text-[10px] text-muted-foreground">Agrega productos al acta para registrar el conteo físico.</TableCell></TableRow>}
                       </TableBody>
                     </Table>
                   </div>
@@ -1499,19 +1601,20 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
               </div>
 
               <div className="min-w-0 overflow-x-auto rounded-xl border border-border/50">
-                <Table className="min-w-[680px]">
+                <Table className="min-w-[820px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-[9px] font-black uppercase tracking-widest">Producto</TableHead>
                       <TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Stock teórico</TableHead>
                       <TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Físico</TableHead>
                       <TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Diferencia</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase tracking-widest">Motivo del ajuste</TableHead>
                       <TableHead className="text-[9px] font-black uppercase tracking-widest">Resultado</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {comparisonItems.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="py-8 text-center text-xs text-muted-foreground">No hay productos para comparar.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">No hay productos para comparar.</TableCell></TableRow>
                     ) : comparisonItems.map((item: any, index: number) => (
                       <TableRow key={`${item.productId || item.code || 'item'}-${index}`}>
                         <TableCell>
@@ -1524,6 +1627,13 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                         <TableCell className="text-right font-mono text-xs">{fmtQty(item.countedStock)}</TableCell>
                         <TableCell className={cn('text-right font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>
                           {item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}
+                        </TableCell>
+                        <TableCell>
+                          <AuditReasonSelect
+                            value={item.reason}
+                            onChange={(value) => setComparisonReasons((current) => ({ ...current, [auditItemKey(item, index)]: value }))}
+                            disabled={item.difference === 0}
+                          />
                         </TableCell>
                         <TableCell>
                           {item.difference < 0 ? <Badge variant="outline" className="border-red-200 bg-red-50 text-[9px] font-bold text-red-700">Faltante · restar {fmtQty(Math.abs(item.difference))}</Badge>
