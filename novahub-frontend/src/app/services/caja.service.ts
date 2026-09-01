@@ -268,7 +268,17 @@ export interface CashQueueDocument {
   customerId?: string | null;
   customCustomerName?: string | null;
   customer?: { id: string; name: string; phone?: string | null } | null;
-  items?: Array<{ id: string; description: string; quantity: number; unitPrice: number; total: number }>;
+  items?: Array<{
+    id: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+    commercialNoteSnapshot?: string | null;
+    variantId?: string | null;
+    variant?: { id: string; sku: string; name: string; attributes?: Array<{ attributeName?: string; value?: string }> | null } | null;
+    warehouseId?: string | null;
+  }>;
   invoice?: { id: string; number: string; status: string } | null;
 }
 

@@ -1094,7 +1094,10 @@ th .column-filter-menu .column-filter-icon,
   }
 
   .sales-line-product-fields:not(:has(> .sales-line-variant)) > .sales-line-price-list {
-    grid-column: 3;
+    /* A product without variants only has picker + price list. Keep the
+       price-list control next to the picker and let it use the remaining
+       columns instead of leaving the former variant slot empty. */
+    grid-column: 2 / -1;
   }
 
   .sales-line-product-fields .sales-line-variant > span,

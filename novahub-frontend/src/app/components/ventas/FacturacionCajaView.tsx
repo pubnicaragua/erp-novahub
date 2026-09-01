@@ -73,6 +73,7 @@ interface CartItem extends PosInvoiceItem {
   irTaxId?: string | null;
   priceListId?: string;
   priceMissing?: boolean;
+  variant?: { sku?: string | null } | null;
 }
 
 type PricingMode = 'global' | 'individual';
@@ -217,8 +218,10 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   }).join('');
   const itemRows = cart.map(item => {
     const commercialNote = item.commercialNoteSnapshot || (item as any).commercialNote || (item as any).product?.commercialNote || '';
-     const noteHtml = commercialNote ? `<div style="font-size:9px">Nota: ${escapeTicketHtml(commercialNote)}</div>` : '';
-    return `<div class="item"><div>${escapeTicketHtml(item.description)}</div>${noteHtml}<div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`;
+    const variantSku = item.variant?.sku || item.variantId || '';
+    const variantHtml = variantSku ? `<div style="font-size:9px">SKU variante: ${escapeTicketHtml(variantSku)}</div>` : '';
+    const noteHtml = commercialNote ? `<div style="font-size:9px">Nota: ${escapeTicketHtml(commercialNote)}</div>` : '';
+    return `<div class="item"><div>${escapeTicketHtml(item.description)}</div>${variantHtml}${noteHtml}<div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`;
   }).join('');
   const discount = Number(invoice.discountAmount || 0);
   const delivery = Number(invoice.deliveryAmount || 0);
@@ -830,6 +833,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       } as PosInvoice;
       const receiptCart: CartItem[] = (document.items || []).map((item) => ({
         productId: item.id,
+        variantId: item.variantId || undefined,
+        variant: item.variant ? { sku: item.variant.sku } : null,
         description: item.description,
         quantity: Number(item.quantity || 0),
         unitPrice: Number(item.unitPrice || 0),
@@ -1353,6 +1358,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           productId: product.id,
           itemType: product.itemType,
           variantId: isService ? undefined : variant.id,
+          variant: isService ? null : { sku: variant.sku },
           warehouseId,
           description: variantDescription,
           commercialNoteSnapshot: product.commercialNote || null,
@@ -2892,7 +2898,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               </div>
               {createdTicketCart.map((item) => (
                 <div key={item.productId} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-border/30 px-4 py-3 text-sm last:border-0">
-                  <span className="min-w-0"><span className="block font-bold">{item.description}</span>{item.commercialNoteSnapshot && <span className="block truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}</span>
+                  <span className="min-w-0"><span className="block font-bold">{item.description}</span>{item.variantId && <span className="block truncate text-[10px] font-mono font-semibold text-primary">SKU variante: {item.variant?.sku || item.variantId}</span>}{item.commercialNoteSnapshot && <span className="block truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}</span>
                   <span className="font-mono text-muted-foreground">{item.quantity}</span>
                   <span className="font-mono font-bold">{formatCurrency(item.lineTotal)}</span>
                 </div>
