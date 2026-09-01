@@ -758,11 +758,16 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
 
   const createList = async () => {
     if (!canCreatePriceList || creatingListRef.current) return;
-    if (!newListName.trim()) return;
+    const name = newListName.trim();
+    if (!name) return;
+    if (lists.some((list) => normalize(list.name) === normalize(name))) {
+      toast.error('Ya existe una lista de precios con ese nombre en esta sucursal.');
+      return;
+    }
     creatingListRef.current = true;
     setCreatingList(true);
     try {
-      await priceListsService.create({ name: newListName });
+      await priceListsService.create({ name });
       setNewListOpen(false); setNewListName(''); await refreshMatrix(); toast.success('Lista de precios creada');
     } catch (error: any) { toast.error(error.message || 'No se pudo crear la lista'); }
     finally { creatingListRef.current = false; setCreatingList(false); }
@@ -779,6 +784,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     const name = editingListName.trim();
     if (!name) {
       toast.error('El nombre de la lista es requerido');
+      return;
+    }
+    if (lists.some((list) => list.id !== editingListId && normalize(list.name) === normalize(name))) {
+      toast.error('Ya existe una lista de precios con ese nombre en esta sucursal.');
       return;
     }
 
@@ -1126,7 +1135,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)} disabled={previewLoading}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar actualización</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
-    <Dialog open={newListOpen} onOpenChange={(open) => { if (!creatingList) setNewListOpen(open); }}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[34rem]"><DialogHeader data-tour="sales-form-title"><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El sistema asignará automáticamente su identificador.</DialogDescription><SalesViewTutorial view="price-lists" context="form" /></DialogHeader><div data-tour="sales-form-data"><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus disabled={creatingList} /></div><DialogFooter data-tour="sales-form-actions"><Button variant="outline" onClick={() => setNewListOpen(false)} disabled={creatingList}>Cancelar</Button><Button onClick={() => void createList()} disabled={creatingList || !newListName.trim()}>{creatingList ? 'Creando…' : 'Crear lista'}</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={newListOpen} onOpenChange={(open) => { if (!creatingList) setNewListOpen(open); }}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[34rem]"><DialogHeader data-tour="sales-form-title"><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El nombre se usa en las plantillas de importación y debe ser único en esta sucursal.</DialogDescription><SalesViewTutorial view="price-lists" context="form" /></DialogHeader><div data-tour="sales-form-data"><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus disabled={creatingList} /></div><DialogFooter data-tour="sales-form-actions"><Button variant="outline" onClick={() => setNewListOpen(false)} disabled={creatingList}>Cancelar</Button><Button onClick={() => void createList()} disabled={creatingList || !newListName.trim()}>{creatingList ? 'Creando…' : 'Crear lista'}</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={editingListId !== null} onOpenChange={(open) => { if (!open && !savingListName) { setEditingListId(null); setEditingListName(''); } }}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[36rem]"><DialogHeader><DialogTitle>Editar nombre de lista</DialogTitle><DialogDescription>El cambio se aplicará a la lista existente. Los clientes asignados seguirán vinculados a la misma lista y mostrarán el nuevo nombre automáticamente.</DialogDescription></DialogHeader><Input placeholder="Nombre de la lista" value={editingListName} onChange={(event) => setEditingListName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveListName(); }} autoFocus disabled={savingListName} /><DialogFooter><Button variant="outline" onClick={() => { setEditingListId(null); setEditingListName(''); }} disabled={savingListName}>Cancelar</Button><Button onClick={() => void saveListName()} disabled={savingListName || !editingListName.trim()}>{savingListName ? 'Guardando…' : 'Guardar nombre'}</Button></DialogFooter></DialogContent></Dialog>
     <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, identificando los SKU y validando los precios de las listas seleccionadas." />
     <Dialog open={variantDetailOpen} onOpenChange={(open) => { if (!open && savingVariant) return; setVariantDetailOpen(open); }}>

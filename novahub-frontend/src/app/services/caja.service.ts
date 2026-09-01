@@ -183,6 +183,7 @@ export interface PosCustomer {
 
 export interface PosInvoiceItem {
   productId?: string;
+  itemType?: 'PRODUCT' | 'SERVICE';
   variantId?: string;
   warehouseId?: string;
   description: string;

@@ -1061,6 +1061,65 @@ th .column-filter-menu .column-filter-icon,
   }
 }
 
+/* Sales line editors keep the product, variant and price-list controls in a
+   shared sub-grid. The numeric columns continue to use the parent 12-column
+   grid, so totals and actions finish exactly at the row edge. */
+@media (min-width: 1280px) {
+  .sales-line-product-header,
+  .sales-line-product-fields {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(7rem, 0.9fr);
+    align-items: end;
+    gap: 0.5rem;
+  }
+
+  .sales-line-product-header > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sales-line-product-header > span:nth-child(2),
+  .sales-line-product-header > span:nth-child(3) {
+    color: hsl(var(--muted-foreground) / 0.82);
+  }
+
+  .sales-line-product-fields > .sales-line-product-picker,
+  .sales-line-product-fields > .sales-line-variant,
+  .sales-line-product-fields > .sales-line-price-list {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .sales-line-product-fields:not(:has(> .sales-line-variant)) > .sales-line-price-list {
+    grid-column: 3;
+  }
+
+  .sales-line-product-fields .sales-line-variant > span,
+  .sales-line-product-fields .sales-line-price-list > span {
+    display: none;
+  }
+
+  .sales-item-row > [data-item-role="product-area"] {
+    min-width: 0;
+    align-self: start;
+  }
+
+  .sales-item-row > [data-item-role="total-actions"] {
+    min-width: 0;
+    width: 100%;
+    align-self: start;
+    justify-self: stretch;
+  }
+
+  .sales-item-row > [data-item-role="total-actions"] > span {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+
 /* Compact sales editors use card rows instead of squeezed legacy grids. */
 @media (max-width: 1279px) {
   .sales-item-row > div {
@@ -1079,6 +1138,29 @@ th .column-filter-menu .column-filter-icon,
     line-height: 1rem;
     text-transform: uppercase;
     letter-spacing: 0.12em;
+  }
+
+  .sales-line-product-fields {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+    gap: 0.5rem;
+  }
+
+  .sales-line-product-fields > .sales-line-product-picker {
+    grid-column: 1 / -1;
+  }
+
+  .sales-line-product-fields > .sales-line-product-picker,
+  .sales-line-product-fields > .sales-line-variant,
+  .sales-line-product-fields > .sales-line-price-list {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .sales-line-product-fields:not(:has(> .sales-line-variant)) > .sales-line-price-list {
+    grid-column: 1 / -1;
   }
 
   /* Quantity/stock and unit price fit comfortably side by side in cards. */
@@ -1252,7 +1334,7 @@ th .column-filter-menu .column-filter-icon,
 @media (max-width: 1279px) {
   /* En las filas compactas, el total y eliminar permanecen juntos en una
      única línea y no se convierten en un botón/registro desbordado. */
-  .sales-document-editor .sales-item-row > [data-item-role="total-actions"] {
+  .sales-item-row > [data-item-role="total-actions"] {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
@@ -1260,7 +1342,7 @@ th .column-filter-menu .column-filter-icon,
     white-space: nowrap;
   }
 
-  .sales-document-editor .sales-item-row > [data-item-role="total-actions"]::before {
+  .sales-item-row > [data-item-role="total-actions"]::before {
     content: "Total y acciones";
     flex: 1 1 auto;
   }

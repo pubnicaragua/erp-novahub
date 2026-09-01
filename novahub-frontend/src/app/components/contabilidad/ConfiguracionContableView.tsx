@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion } from 'motion/react'
 import {
   Settings2, Save, Building2, Upload, FileDown, RefreshCw,
@@ -240,7 +240,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'inventory', label: 'Inventario de Mercancías', icon: Package,
-    description: 'Cuenta control de inventario y cuentas separadas para el costo contable de los servicios',
+    description: 'Cuenta control de inventario para organizar las cuentas operativas de las bodegas',
     fields: [
       { key: 'control', label: 'Cuenta Control de Inventario', side: 'debit', description: 'Se debita al recibir mercancía y se acredita al salir; nunca se postea directamente (solo consolida)', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
       { key: 'serviceCostDebit', label: 'Costo de Servicios (Debe)', side: 'debit', description: 'Se debita al reconocer el costo de cada servicio vendido, incluso en ventas mixtas o cobros parciales', defaultCode: '5800', defaultName: 'Costos directos de operación', defaultType: 'EXPENSE' },
@@ -1002,10 +1002,10 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     return groups
   }, [otherModuleDefs])
 
-  const modConfigStatus = (mod: (typeof allModuleDefs)[number]) => {
+  const modConfigStatus = (mod: (typeof allModuleDefs)[number], fields: ModuleField[] = mod.fields) => {
     const mapping = accountMappings[mod.id] || {}
-    const total = mod.fields.length
-    const defined = mod.fields.filter(f => {
+    const total = fields.length
+    const defined = fields.filter(f => {
       const account = accountsByCode.get(mapping[f.key])
       return Boolean(mapping[f.key] && account)
         && (f.key !== 'ivaPayable' || isSalesVatPayableAccount(account!))
@@ -1035,73 +1035,109 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     const Icon = mod.icon
     const isPayroll = mod.id === 'payroll'
 
-    return (
-      <div key={mod.id} className={cn(
-        'min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4',
-        isPayroll && 'xl:col-span-2',
-      )}>
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-2.5">
-            <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
-            <div className="min-w-0">
-              <p className="truncate text-xs font-black uppercase tracking-tight">{mod.label}</p>
-              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
-            </div>
-          </div>
-          <ModuleStatusBadge status={modConfigStatus(mod)} />
-        </div>
-        <div className={cn(
-          'mt-4 grid grid-cols-1 gap-3 md:grid-cols-2',
-          isPayroll && 'xl:grid-cols-4',
+    const renderCard = (
+      fields: ModuleField[],
+      title: string,
+      description: string,
+      cardKey: string,
+      CardIcon = Icon,
+    ) => {
+      const fieldKeys = new Set(fields.map(field => field.key))
+      const cardListFields = listMod?.fields.filter((field: any) => fieldKeys.has(field.key)) || []
+
+      return (
+        <div key={cardKey} className={cn(
+          'min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4',
+          isPayroll && 'xl:col-span-2',
         )}>
-          {mod.fields.map(field => (
-            <AccountCodeInput
-              key={field.key}
-              code={modMapping[field.key] || field.defaultCode}
-              field={field}
-              moduleId={mod.id}
-              account={accountsByCode.get(modMapping[field.key] || field.defaultCode)}
-              accountOptions={accountOptionsByType[field.defaultType] || []}
-              onChange={value => updateMapping(mod.id, field.key, value)}
-            />
-          ))}
-        </div>
-        {listMod && (
-          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/10 pt-2">
-            {listMod.fields.map((field: any) => (
-              <span key={field.key} className="text-[9px] text-muted-foreground">
-                <span className={`mr-1 inline-block size-1.5 rounded-full ${field.status === 'ok' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                {field.label}: <span className="font-mono font-bold">{field.code}</span>
-                {field.reason && <span className="ml-1 text-red-500">({field.reason})</span>}
-              </span>
-            ))}
-          </div>
-        )}
-        {!mod.isBuiltin && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/10 pt-2">
-            <Button variant="ghost" size="sm" onClick={() => addCustomField(mod.id)}>
-              <Plus className="mr-1 size-3" /> Agregar Campo
-            </Button>
-            {mod.fields.map(field => (
-              <div key={field.key} className="flex items-center gap-1 rounded-lg bg-muted/10 px-2 py-1 text-[9px] text-muted-foreground">
-                <span className="font-medium">{field.label}</span>
-                <button
-                  type="button"
-                  aria-label={`Eliminar campo ${field.label}`}
-                  onClick={() => removeCustomField(mod.id, field.key)}
-                  className="hover:text-red-500"
-                >
-                  <X className="size-2.5" />
-                </button>
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-2.5">
+              <CardIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <p className="truncate text-xs font-black uppercase tracking-tight">{title}</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{description}</p>
               </div>
-            ))}
-            <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeCustomModule(mod.id)}>
-              <Trash2 className="mr-1 size-3" /> Eliminar conexión
-            </Button>
+            </div>
+            <ModuleStatusBadge status={modConfigStatus(mod, fields)} />
           </div>
-        )}
-      </div>
-    )
+          <div className={cn(
+            'mt-4 grid grid-cols-1 gap-3 md:grid-cols-2',
+            isPayroll && 'xl:grid-cols-4',
+          )}>
+            {fields.map(field => (
+              <AccountCodeInput
+                key={field.key}
+                code={modMapping[field.key] || field.defaultCode}
+                field={field}
+                moduleId={mod.id}
+                account={accountsByCode.get(modMapping[field.key] || field.defaultCode)}
+                accountOptions={accountOptionsByType[field.defaultType] || []}
+                onChange={value => updateMapping(mod.id, field.key, value)}
+              />
+            ))}
+          </div>
+          {cardListFields.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/10 pt-2">
+              {cardListFields.map((field: any) => (
+                <span key={field.key} className="text-[9px] text-muted-foreground">
+                  <span className={`mr-1 inline-block size-1.5 rounded-full ${field.status === 'ok' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  {field.label}: <span className="font-mono font-bold">{field.code}</span>
+                  {field.reason && <span className="ml-1 text-red-500">({field.reason})</span>}
+                </span>
+              ))}
+            </div>
+          )}
+          {!mod.isBuiltin && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/10 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => addCustomField(mod.id)}>
+                <Plus className="mr-1 size-3" /> Agregar Campo
+              </Button>
+              {fields.map(field => (
+                <div key={field.key} className="flex items-center gap-1 rounded-lg bg-muted/10 px-2 py-1 text-[9px] text-muted-foreground">
+                  <span className="font-medium">{field.label}</span>
+                  <button
+                    type="button"
+                    aria-label={`Eliminar campo ${field.label}`}
+                    onClick={() => removeCustomField(mod.id, field.key)}
+                    className="hover:text-red-500"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </div>
+              ))}
+              <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeCustomModule(mod.id)}>
+                <Trash2 className="mr-1 size-3" /> Eliminar conexión
+              </Button>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (mod.id === 'inventory') {
+      const inventoryFields = mod.fields.filter(field => field.key === 'control')
+      const serviceFields = mod.fields.filter(field => field.key === 'serviceCostDebit' || field.key === 'serviceCostCredit')
+      return (
+        <Fragment key={mod.id}>
+          {renderCard(
+            inventoryFields,
+            'Inventario de Mercancías',
+            'Cuenta control de inventario para organizar las cuentas operativas de las bodegas.',
+            'inventory-control',
+            Package,
+          )}
+          {renderCard(
+            serviceFields,
+            'Servicios',
+            'Cuentas para reconocer el costo de los servicios vendidos; no representan stock ni una bodega.',
+            'inventory-services',
+            Sparkles,
+          )}
+        </Fragment>
+      )
+    }
+
+    return renderCard(mod.fields, mod.label, mod.description, mod.id)
   }
 
   const renderInvoiceSalesCard = (

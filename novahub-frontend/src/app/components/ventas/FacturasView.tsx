@@ -217,8 +217,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [draftHydrated, setDraftHydrated] = useState(false);
 
   const commitLocalDoc = (nextDoc: any) => {
-    localDocRef.current = nextDoc;
-    setLocalDoc(nextDoc);
+    const normalizedDoc = nextDoc && Array.isArray(nextDoc.items)
+      ? {
+        ...nextDoc,
+        items: nextDoc.items.map((item: any) => resolveItemType(item) === 'SERVICE'
+          ? { ...item, itemType: 'SERVICE', taxRate: 0, priceListId: null, variantId: null, warehouseId: undefined }
+          : item),
+      }
+      : nextDoc;
+    localDocRef.current = normalizedDoc;
+    setLocalDoc(normalizedDoc);
   };
 
   useEffect(() => {
@@ -987,17 +995,17 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           priceListId: localDoc.priceListId || undefined,
           items: localDoc.items.map((item: any) => ({
             productId: item.productId || undefined,
-            variantId: item.variantId || undefined,
-            warehouseId: item.warehouseId || undefined,
+            itemType: resolveItemType(item),
+            variantId: resolveItemType(item) === 'SERVICE' ? undefined : item.variantId || undefined,
+            warehouseId: resolveItemType(item) === 'SERVICE' ? undefined : item.warehouseId || undefined,
             description: item.description || '',
             commercialNoteSnapshot: item.commercialNoteSnapshot || findProductForItem(item)?.commercialNote || null,
-            itemType: item.itemType || findProductForItem(item)?.itemType || findProductForItem(item)?.type || undefined,
             quantity: Number(item.quantity || 1),
             unitPrice: Number(item.unitPrice || 0),
             productCode: item.productCode || item.code || findProductForItem(item)?.code || undefined,
-            taxRate: Number(item.taxRate || 0),
+            taxRate: resolveItemType(item) === 'SERVICE' ? 0 : Number(item.taxRate || 0),
             discount: Number(item.discount || 0),
-            priceListId: item.priceListId || localDoc.priceListId || undefined,
+            priceListId: resolveItemType(item) === 'SERVICE' ? undefined : item.priceListId || localDoc.priceListId || undefined,
             total: Number(item.total || 0),
           })),
           subtotal: Number(localDoc.subtotal || 0),
@@ -1185,10 +1193,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const recalcTotals = (items: any[], dRate: number, tRate: number) => {
     if (pricingMode === 'individual') return recalcIndividualTotals(items);
-    const subtotal = items.reduce((acc: number, it: any) => acc + Number(it.total || 0), 0);
+    const subtotal = items.reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
     const discountAmount = subtotal * (dRate / 100);
-    const base = subtotal - discountAmount;
-    const taxAmount = base * (tRate / 100);
+    const productSubtotal = items.filter((it: any) => resolveItemType(it) !== 'SERVICE')
+      .reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
+    const taxAmount = Math.max(0, productSubtotal - productSubtotal * (dRate / 100)) * (tRate / 100);
     const total = base + taxAmount + additionalChargesTotal();
     // Mantener las líneas en ambos modos. El selector de lista de precios
     // también recalcula los totales cuando su matriz termina de cargar; si
@@ -1202,14 +1211,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
       const discount = gross * (Number(line.discount || 0) / 100);
       const taxable = gross - discount;
-      const tax = taxable * (Number(line.taxRate || 0) / 100);
+      const tax = resolveItemType(line) === 'SERVICE' ? 0 : taxable * (Number(line.taxRate || 0) / 100);
       return { ...line, total: taxable + tax };
     });
     const subtotal = pricedItems.reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const discountAmount = pricedItems.reduce((sum: number, line: any) => sum + (Number(line.quantity || 0) * Number(line.unitPrice || 0) * Number(line.discount || 0) / 100), 0);
     const taxAmount = pricedItems.reduce((sum: number, line: any) => {
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
-      return sum + ((gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
+      return sum + (resolveItemType(line) === 'SERVICE' ? 0 : (gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
     }, 0);
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
@@ -1731,7 +1740,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                      }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" disabled={isInvoiceLocked} /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
                     <span className="min-w-[7.5rem] text-right tabular-nums">-{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.discountAmount)}</span>
                   </div></div>
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">IVA</span>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">IVA de productos</span>
                   <div className="flex min-w-[9rem] flex-wrap items-center justify-end gap-2">
                     {pricingMode === 'global' && <label className="flex h-8 items-center gap-1.5 rounded-md bg-muted/30 px-2 text-xs font-black">
                       <input type="checkbox" checked={Number(localRates.tRate || 0) > 0} onChange={(e) => {
@@ -1774,7 +1783,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                  {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => {
-                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: localDoc?.warehouseId || getDefaultWarehouseId(), serialNumbers: [] }];
+                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: itemType === 'SERVICE' ? undefined : localDoc?.warehouseId || getDefaultWarehouseId(), taxRate: itemType === 'SERVICE' ? 0 : 0, priceListId: itemType === 'SERVICE' ? null : localDoc?.priceListId || undefined, serialNumbers: [] }];
                    setLocalDoc({ ...localDoc, items: newItems });
                  }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
                  <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => updateExtraCharges([...normalizeExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
@@ -1787,7 +1796,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn("xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>Descripción</div>
+                <div className={cn("sales-line-product-header xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
+                  <span>Descripción</span>
+                  <span>Variante</span>
+                  <span>Tipo de precio</span>
+                </div>
                 {pricingMode === 'individual' && <div className="col-span-2 grid grid-cols-2 gap-1.5">
                   <div>Aplicar</div>
                   <div className="text-right">Desc.</div>
@@ -1799,9 +1812,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                  <div className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
-                    <div className="flex min-w-0 flex-wrap items-center gap-1">
-                      <div className="min-w-0 flex-1">
+                  <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
+                    <div className="sales-line-product-fields">
+                      <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                         <Combobox
                           options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}`, value: p.id, description: p.commercialNote ? `Nota: ${p.commercialNote}` : undefined }))}
                           value={item.productId || ''}
@@ -1823,7 +1836,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           priceListId: selectedItemType === 'SERVICE'
                             ? null
                             : (newItems[idx].priceListId || localDoc.priceListId || getCustomerPriceListId(localDoc.customerId)),
-                          warehouseId: newItems[idx].warehouseId || localDoc?.warehouseId || getDefaultWarehouseId(),
+                          warehouseId: selectedItemType === 'SERVICE' ? undefined : newItems[idx].warehouseId || localDoc?.warehouseId || getDefaultWarehouseId(),
+                          taxRate: selectedItemType === 'SERVICE' ? 0 : Number(newItems[idx].taxRate || 0),
                           serialNumbers: [],
                         };
                         if (selectedProd) {
@@ -1844,6 +1858,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         />
                         </div>
                       <SalesVariantSelect
+                        className="sales-line-variant"
                         product={findProductForItem(item)}
                         value={item.variantId}
                         disabled={isInvoiceLocked}
@@ -1855,6 +1870,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         }}
                       />
                       <SalesLinePriceListSelect
+                        className="sales-line-price-list"
+                        labelLayout="stacked"
                         productId={findProductForItem(item)?.id || item.productId}
                         variantId={item.variantId}
                         productCode={findProductForItem(item)?.code || (item as any).productCode || (item as any).code}
@@ -1979,7 +1996,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   </div>
                   {pricingMode === 'individual' && (
                     <div className="col-span-2 mt-0 grid min-w-0 grid-cols-2 items-start gap-1.5 self-start text-[10px]">
-                      <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
+                      {resolveItemType(item) === 'SERVICE' ? <span className="flex h-8 items-center rounded-md bg-muted/30 px-2 text-xs font-bold text-muted-foreground">Exento</span> : <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
                           <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                             const nextItems = [...(localDoc.items || [])];
@@ -1990,7 +2007,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                        }} disabled={isInvoiceLocked} />
                           <span className="text-xs">IVA</span>
                         </span>
-                      </label>
+                      </label>}
                       <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
                           const nextItems = [...(localDoc.items || [])];

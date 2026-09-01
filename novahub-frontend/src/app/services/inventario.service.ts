@@ -14,8 +14,10 @@ export const inventoryService = {
   },
   createProduct: (data: Partial<Product> & {
     initialStock?: number;
-    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null }>;
+    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; warehouseId?: string }>;
   }) => api.post<Product>('/inventory/products', data),
+  previewProductStockAccounting: (warehouseIds: string[]) =>
+    api.post<{ ready: boolean; errors: string[]; warnings?: string[]; autoGenerationEnabled: boolean; warehouses: any[] }>('/inventory/products/accounting-preflight', { warehouseIds }),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   updateProductStatus: (id: string, isActive: boolean) => api.patch<Product>(`/inventory/products/${id}/status`, { isActive }),
   duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`),

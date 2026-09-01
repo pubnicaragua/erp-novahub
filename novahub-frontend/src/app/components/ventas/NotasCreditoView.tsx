@@ -752,7 +752,11 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
             </div>
             <div className="space-y-2">
               <div className="hidden px-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground xl:grid xl:grid-cols-12 xl:gap-2">
-                <div className="col-span-5">Descripción</div>
+                <div className="sales-line-product-header col-span-5">
+                  <span>Descripción</span>
+                  <span>Variante</span>
+                  <span>Tipo de precio</span>
+                </div>
                 <div className="col-span-2 grid grid-cols-2 gap-1.5"><div>Aplicar</div><div className="text-right">Desc.</div></div>
                 <div className="text-right">Cant.</div>
                 <div className="text-right">Precio U.</div>
@@ -764,10 +768,10 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                 const catalog = getItemCatalog(item);
                 const product = findProductForItem(item);
                 return (
-                  <div key={item.id || index} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 items-start gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                    <div className="min-w-0 xl:col-span-5">
-                      <div className="flex min-w-0 flex-wrap items-center gap-1">
-                        <div className="min-w-0 flex-1">
+                  <div key={item.id || index} data-item-layout="standard" data-pricing-mode="individual" className="sales-item-row grid min-w-0 grid-cols-1 items-start gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                    <div data-item-role="product-area" className="min-w-0 xl:col-span-5">
+                      <div className="sales-line-product-fields">
+                        <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                           <Combobox
                             options={catalog.map((entry) => ({ label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${entry.code || ''} - ${entry.name}`, value: entry.id, description: entry.commercialNote ? `Nota: ${entry.commercialNote}` : undefined }))}
                             value={item.productId || ''}
@@ -791,11 +795,14 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                           />
                         </div>
                         <SalesVariantSelect
+                          className="sales-line-variant"
                           product={product}
                           value={item.variantId}
                           onChange={(variantId) => updateItem(index, { variantId })}
                         />
                         <SalesLinePriceListSelect
+                          className="sales-line-price-list"
+                          labelLayout="stacked"
                           productId={item.productId}
                           variantId={item.variantId}
                           productCode={product?.code || item.code || item.productCode}
@@ -863,7 +870,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                     <div className="col-span-2 flex items-center justify-end xl:col-span-1">
                       <Input type="text" readOnly value={formatConvertedAmount(((Number(item.quantity || 0) * Number(item.unitPrice || 0)) - (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.discount || 0) / 100)) * Number(item.taxRate || 0) / 100, localDoc.currency, localDoc.exchangeRate)} className="h-8 w-16 border-none bg-transparent px-0 text-right text-xs font-black shadow-none focus-visible:border-transparent focus-visible:ring-0" />
                     </div>
-                    <div className="flex min-w-0 items-center justify-end gap-2 text-right xl:col-span-2">
+                    <div data-item-role="total-actions" className="flex min-w-0 items-center justify-end gap-2 text-right xl:col-span-2">
                       <span className="text-sm font-black text-primary">{formatConvertedAmount(Number(item.total || 0), localDoc.currency, localDoc.exchangeRate)}</span>
                       <Button type="button" variant="ghost" size="icon" title="Quitar línea" aria-label="Quitar línea" className="size-6 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { const items = [...localDoc.items]; items.splice(index, 1); setLocalDoc({ ...localDoc, ...recalculateItems(items) }); }}><Trash2 className="size-3" /></Button>
                     </div>

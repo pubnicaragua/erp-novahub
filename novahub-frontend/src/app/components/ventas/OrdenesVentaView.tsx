@@ -1099,7 +1099,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>Descripción</div>
+                <div className={cn('sales-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
+                  <span>Descripción</span>
+                  <span>Variante</span>
+                  <span>Tipo de precio</span>
+                </div>
                 {pricingMode === 'individual' && <div className="col-span-2 grid grid-cols-2 gap-1.5">
                   <div>Aplicar</div>
                   <div className="text-right">Desc.</div>
@@ -1111,9 +1115,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className={cn('sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0', pricingMode === 'individual' && 'pricing-individual')}>
-                  <div className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
-                    <div className="flex min-w-0 flex-wrap items-center gap-1">
-                      <div className="min-w-0 flex-1">
+                  <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
+                    <div className="sales-line-product-fields">
+                      <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                         <Combobox 
                           options={getLineProductOptions(item)}
                           value={item.productId || ''}
@@ -1152,11 +1156,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         />
                       </div>
                       <SalesVariantSelect
+                        className="sales-line-variant"
                         product={products.find((product) => product.id === item.productId)}
                         value={item.variantId}
                         onChange={(variantId) => setLocalDoc({ ...localDoc, items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx ? { ...line, variantId } : line) } as any)}
                       />
-                      <SalesLinePriceListSelect 
+                      <SalesLinePriceListSelect
+                        className="sales-line-price-list"
+                        labelLayout="stacked"
                         productId={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || item.productId} 
                         variantId={item.variantId}
                         productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code} 

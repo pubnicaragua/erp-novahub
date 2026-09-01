@@ -21,6 +21,8 @@ interface SalesLinePriceListSelectProps {
   currency?: string;
   exchangeRate?: number;
   disabled?: boolean;
+  className?: string;
+  labelLayout?: 'inline' | 'stacked';
   /** Líneas del documento para impedir repetir producto+lista desde cualquier orden de selección. */
   lineItems?: Array<{ productId?: string | null; variantId?: string | null; priceListId?: string | null }>;
   lineIndex?: number;
@@ -28,7 +30,7 @@ interface SalesLinePriceListSelectProps {
 }
 
 /** Selector compacto para elegir la tarifa comercial de una línea y devolver su precio bloqueado. */
-export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, fallbackPrice, currency = 'NIO', exchangeRate = 1, disabled, lineItems = [], lineIndex = -1, onChange }: SalesLinePriceListSelectProps) {
+export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, fallbackPrice, currency = 'NIO', exchangeRate = 1, disabled, lineItems = [], lineIndex = -1, className, labelLayout = 'inline', onChange }: SalesLinePriceListSelectProps) {
   const { user, canPerform } = useAuth();
   const query = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
@@ -146,10 +148,12 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
     latestOnChange.current(priceListId, result, 'user');
   };
 
+  const isStacked = labelLayout === 'stacked';
   return (
-    <div className="flex w-[7rem] min-w-0 shrink-0 items-center gap-1">
+    <div className={cn(isStacked ? 'w-full min-w-0 space-y-1' : 'flex w-[7rem] min-w-0 shrink-0 items-center gap-1', className)}>
+      {isStacked && <span className="block truncate text-[9px] font-black uppercase tracking-[0.14em] text-muted-foreground">Tipo de precio</span>}
       <Select value={resolvedListId || ''} onValueChange={handleUserSelect} disabled={disabled || query.isLoading || !lists.length}>
-        <SelectTrigger className="h-7 w-[7rem] min-w-0 truncate px-2 text-[9px]" aria-label="Tipo de precio">
+        <SelectTrigger className={cn('min-w-0 truncate px-2 text-[9px]', isStacked ? 'h-8 w-full' : 'h-7 w-[7rem]')} aria-label="Tipo de precio">
           <SelectValue placeholder="Tipo de precio" />
         </SelectTrigger>
         <SelectContent>

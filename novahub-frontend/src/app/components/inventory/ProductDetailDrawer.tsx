@@ -484,9 +484,15 @@ export function ProductDetailDrawer({
         attributes,
         sku: variant?.sku || '',
         quantity: variantLevels.length > 0 ? levelQuantity : fallbackQuantity,
+        // El costo propio de la variante reemplaza al costo base. Cuando no
+        // existe, se muestra el costo heredado más el modificador legado.
+        costPrice: variant?.costPrice === null || variant?.costPrice === undefined
+          ? Math.max(0, costPrice + Number(variant?.costModifier || 0))
+          : Number(variant.costPrice),
+        inheritsCost: variant?.costPrice === null || variant?.costPrice === undefined,
       };
     });
-  }, [product]);
+  }, [product, costPrice]);
 
   const totalVariantStock = useMemo(
     () => variantStockDistribution.reduce((total, variant) => total + variant.quantity, 0),
@@ -859,6 +865,20 @@ export function ProductDetailDrawer({
                                         {variant.quantity} u.
                                       </Badge>
                                     </div>
+                                    {canViewInventoryCost && (
+                                      <div className="mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-border/30 pt-2 text-[10px]">
+                                        <span className="shrink-0 text-muted-foreground">
+                                          Costo{variant.inheritsCost ? ' · base' : ' · propio'}
+                                        </span>
+                                        <CurrencyValuationAmount
+                                          amount={variant.costPrice}
+                                          sourceCurrency={baseCurrency}
+                                          sourceExchangeRate={1}
+                                          className="min-w-0 text-right text-xs font-semibold"
+                                          showDifference={false}
+                                        />
+                                      </div>
+                                    )}
                                     <div className="mt-2 flex items-center gap-2">
                                       <Progress value={percentage} className="h-1.5" />
                                       <span className="w-8 text-right text-[9px] font-bold tabular-nums text-muted-foreground">{percentage}%</span>

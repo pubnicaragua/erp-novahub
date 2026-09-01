@@ -1,4 +1,4 @@
-import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
 import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode, SlidersHorizontal, Tag } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
@@ -43,6 +43,7 @@ import { buildVariantImportPreviewRows, parseVariantImportWorkbook, type Variant
 import { normalizePurchasePriority, PURCHASE_PRIORITY_OPTIONS } from '../../utils/purchasePriority';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { formatExchangeRate } from '../../utils/currency';
+import { priceListsService, type PriceList } from '../../services/price-lists.service';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -69,12 +70,42 @@ const TAX_OPTIONS = [
   { value: '0', label: 'Exento 0%' },
 ];
 
+const DEFAULT_IMPORT_PRICE_LISTS: Array<Pick<PriceList, 'code' | 'name'>> = [
+  { code: 'RETAIL', name: 'Minorista' },
+  { code: 'WHOLESALE', name: 'Mayorista' },
+  { code: 'DISTRIBUTOR', name: 'Distribuidor' },
+];
+
+const normalizePriceListImportKey = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .toLowerCase();
+
+const getImportCurrencySymbol = (currency: string) => String(currency || '').toUpperCase() === 'USD' ? '$' : 'C$';
+
+const formatImportAmount = (value: unknown) => {
+  const amount = Number(value);
+  return Number.isFinite(amount)
+    ? amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—';
+};
+
+type ImportMoneyInputProps = ComponentProps<typeof Input> & { currencySymbol: string };
+
+const ImportMoneyInput = ({ currencySymbol, className = '', ...props }: ImportMoneyInputProps) => (
+  <div className="relative min-w-0">
+    <span className="pointer-events-none absolute inset-y-0 left-2 z-10 flex items-center text-[10px] font-semibold text-muted-foreground">{currencySymbol}</span>
+    <Input {...props} className={`${className} pl-7`} />
+  </div>
+);
+
 const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por bodega. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-kpis"]', title: 'Indicadores y filtros rápidos', description: 'Cada tarjeta identifica si es un Filtro o un Indicador. En Productos, las tarjetas de existencias filtran la lista; en Servicios, los valores de referencia solo informan.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-filter-toggle"]', title: 'Filtros del catálogo', description: 'Los filtros permanecen ocultos para dejar la vista despejada. Pulsa este botón para desplegar la búsqueda, bodegas, estado, unidad, impuesto y stock; si hay filtros activos, verás el contador aquí.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Estas acciones permanecen disponibles en todo momento: crear productos, importar el catálogo, actualizar imágenes, solicitar una compra, imprimir etiquetas y abrir la ayuda de Inventario.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-actions"]', title: 'Imágenes e importación inicial', description: 'El botón para importar productos permanece disponible en esta vista. La carga masiva de imágenes también puede utilizarse en cualquier momento y en ambos casos usa ZIP o RAR con archivos llamados como el SKU.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-actions"]', title: 'Imágenes e importación', description: 'El botón para importar productos permanece disponible en esta vista y puede utilizarse varias veces. La carga masiva de imágenes también puede utilizarse en cualquier momento y en ambos casos usa ZIP o RAR con archivos llamados como el SKU.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-table"]', title: 'Registros y edición', description: 'Consulta los productos, edita únicamente los campos permitidos y abre el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
   { target: '[data-tour="inventory-products-pagination"]', title: 'Paginación', description: 'Selecciona 50, 100 o 200 registros, revisa el rango mostrado y utiliza los controles para ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
@@ -194,6 +225,7 @@ interface ImportPreviewPageProps {
   onBack: () => void;
   onReady?: () => void;
   isService?: boolean;
+  priceLists?: Array<Pick<PriceList, 'code' | 'name'>>;
 }
 
 interface ProductImportPreviewRowProps {
@@ -213,6 +245,8 @@ interface ProductImportPreviewRowProps {
   onCreateCategory: (index: number, value: string) => void;
   onCreateWarehouse: (index: number, value: string) => void;
   isService?: boolean;
+  priceLists: Array<Pick<PriceList, 'code' | 'name'>>;
+  currencySymbol: string;
 }
 
 const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
@@ -232,9 +266,13 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
   onCreateCategory,
   onCreateWarehouse,
   isService = false,
+  priceLists,
+  currencySymbol,
 }: ProductImportPreviewRowProps) {
   const categoryExists = categoryNames.has(String(row.category || '').trim().toLowerCase());
   const warehouseExists = !row.warehouse || warehouseNames.has(String(row.warehouse || '').trim().toLowerCase());
+  const isAdvanced = Boolean(row._advanced);
+  const hasVariants = isAdvanced && (row._hasVariants === true || Number(row._variantCount || 0) > 0);
 
   return (
     <TableRow
@@ -269,32 +307,34 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
       </TableCell>
       <TableCell className="p-1"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
       {isService && <TableCell className="p-1"><Input type="number" min={0} step="1" value={row.estimatedDuration ?? ''} onChange={(event) => onRowUpdate(index, 'estimatedDuration', event.target.value === '' ? undefined : Number(event.target.value))} aria-label="Duración estimada en minutos" className="h-8 text-right text-xs" /></TableCell>}
-      <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-      <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-      <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-      {canViewInventoryCost && <TableCell className="p-1"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} aria-label={isService ? 'Costo del servicio' : 'Costo'} className="h-8 text-right text-xs" /></TableCell>}
+      {isService ? <TableCell className="p-1"><ImportMoneyInput type="number" min={0} value={row.salePrice ?? ''} onChange={(event) => onRowUpdate(index, 'servicePrice', event.target.value)} aria-label="Precio del servicio" className="h-8 text-right text-xs" currencySymbol={currencySymbol} /></TableCell> : priceLists.map((list) => <TableCell key={list.code} className="p-1"><ImportMoneyInput type="number" min={0} value={row.prices?.[list.code] ?? ''} onChange={(event) => onRowUpdate(index, `price.${list.code}`, event.target.value)} aria-label={`Precio ${list.name}`} className="h-8 text-right text-xs" currencySymbol={currencySymbol} /></TableCell>)}
+      {canViewInventoryCost && <TableCell className="p-1"><ImportMoneyInput type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} aria-label={isService ? 'Costo del servicio' : 'Costo'} className="h-8 text-right text-xs" currencySymbol={currencySymbol} /></TableCell>}
       {isService ? <>
-        <TableCell className="p-1"><Input type="number" min={0} max={100} step="any" value={row.taxRate === undefined ? '' : Number(row.taxRate) * 100} onChange={(event) => onRowUpdate(index, 'taxRate', event.target.value === '' ? undefined : Number(event.target.value) / 100)} aria-label="Tasa IVA en porcentaje" className="h-8 text-right text-xs" /></TableCell>
         <TableCell className="p-1"><Select value={row.isActive === false ? 'false' : 'true'} onValueChange={(value) => onRowUpdate(index, 'isActive', value === 'true')}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="true">Disponible</SelectItem><SelectItem value="false">No disponible</SelectItem></SelectContent></Select></TableCell>
+      </> : hasVariants ? <>
+        <TableCell className="p-1 text-center"><span className="text-[10px] font-semibold text-muted-foreground">Por variante</span></TableCell>
+        <TableCell className="p-1 text-center"><span className="text-[10px] text-muted-foreground">—</span></TableCell>
+        <TableCell className="p-1 text-center"><span className="text-[10px] font-semibold text-muted-foreground">Hoja Inventario</span></TableCell>
       </> : <>
-      <TableCell className="p-1"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} aria-label="Stock inicial" title="Edita el stock inicial antes de confirmar la importación" className="h-8 text-right text-xs" /></TableCell>
-      <TableCell className="p-1"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className="h-8 text-right text-xs" /></TableCell>
-      <TableCell className="p-1">
-        {warehouseExists ? (
-          <Select value={row.warehouse || '__none__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
-            <SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
-          </Select>
-        ) : (
-          <div className="flex items-center gap-1">
-            <Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
-              <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
+        <TableCell className="p-1"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} aria-label="Stock inicial" title="Edita el stock inicial antes de confirmar la importación" className="h-8 text-right text-xs" /></TableCell>
+        <TableCell className="p-1"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className="h-8 text-right text-xs" /></TableCell>
+        <TableCell className="p-1">
+          {warehouseExists ? (
+            <Select value={row.warehouse || '__none__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
+              <SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
             </Select>
-            {canCreateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => onCreateWarehouse(index, row.warehouse || '')}><Plus className="size-3.5" /></Button>}
-          </div>
-        )}
-      </TableCell></>}
+          ) : (
+            <div className="flex items-center gap-1">
+              <Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
+                <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
+              </Select>
+              {canCreateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => onCreateWarehouse(index, row.warehouse || '')}><Plus className="size-3.5" /></Button>}
+            </div>
+          )}
+        </TableCell>
+      </>}
       <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span></TableCell>
     </TableRow>
   );
@@ -319,20 +359,49 @@ function ImportPreviewPage({
   onBack,
   onReady,
   isService = false,
+  priceLists = DEFAULT_IMPORT_PRICE_LISTS,
 }: ImportPreviewPageProps) {
   useImportPreviewLayout();
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
+  const visiblePriceLists = isService ? [] : priceLists;
+  const currencySymbol = getImportCurrencySymbol(importCurrency);
+  const summaryPriceLists = useMemo(() => {
+    const configuredCodes = new Set(visiblePriceLists.map((list) => String(list.code).toUpperCase()));
+    const extraCodes = (advancedCatalog?.prices || [])
+      .map((price) => String(price.priceListCode || '').trim().toUpperCase())
+      .filter((code) => code && !configuredCodes.has(code));
+    return [
+      ...visiblePriceLists,
+      ...[...new Set(extraCodes)].map((code) => ({ code, name: code })),
+    ];
+  }, [advancedCatalog?.prices, visiblePriceLists]);
+  const advancedPrices = useMemo(() => {
+    const productPrices = new Map<string, Record<string, number>>();
+    const variantPrices = new Map<string, Record<string, number>>();
+    for (const price of advancedCatalog?.prices || []) {
+      const isVariantPrice = String(price.scope).toUpperCase() === 'VARIANT';
+      const key = (isVariantPrice ? price.variantSku : price.productCode)?.trim().toUpperCase();
+      if (!key) continue;
+      const target = isVariantPrice ? variantPrices : productPrices;
+      const listCode = String(price.priceListCode || '').trim().toUpperCase();
+      target.set(key, { ...(target.get(key) || {}), [listCode]: Number(price.price) });
+    }
+    return { productPrices, variantPrices };
+  }, [advancedCatalog?.prices]);
+  const summaryGridTemplate = useMemo(() => [
+    '150px', '160px', 'minmax(220px,1fr)', ...summaryPriceLists.map(() => '140px'), '130px', '100px',
+  ].join(' '), [summaryPriceLists]);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const [rowsReady, setRowsReady] = useState(false);
-  const gridTemplate = isService
-    ? canViewInventoryCost
-      ? '32px 128px minmax(220px, 1fr) 180px 80px 128px 112px 112px 112px 112px 112px 112px 100px 130px 160px'
-      : '32px 128px minmax(220px, 1fr) 180px 80px 128px 112px 112px 112px 112px 112px 100px 130px 160px'
-    : canViewInventoryCost
-      ? '32px 128px minmax(220px, 1fr) 180px 80px 128px 112px 112px 112px 112px 112px 96px 96px 160px 160px'
-      : '32px 128px minmax(220px, 1fr) 180px 80px 128px 112px 112px 112px 112px 96px 96px 160px 160px';
+  const gridTemplate = [
+    '32px', '128px', 'minmax(220px, 1fr)', '180px', '80px', '128px', '112px',
+    ...(isService ? ['112px'] : visiblePriceLists.map(() => '112px')),
+    ...(canViewInventoryCost ? ['112px'] : []),
+    ...(isService ? ['130px'] : ['96px', '96px', '160px']),
+    '160px',
+  ].join(' ');
   const tableVirtualizer = useVirtualizedImportRows(rowsReady ? importData.length : 0, tableScrollRef, isService ? 84 : 58, { overscan: 2 });
   const categoryNames = useMemo(() => new Set(categoryOptions.map((category: any) => String(category.name || '').trim().toLowerCase()).filter(Boolean)), [categoryOptions]);
   const warehouseNames = useMemo(() => new Set(warehouseOptions.map((warehouse: any) => String(warehouse.name || '').trim().toLowerCase()).filter(Boolean)), [warehouseOptions]);
@@ -368,6 +437,8 @@ function ImportPreviewPage({
   const renderMobileCard = (row: any, index: number) => {
     const categoryExists = categoryNames.has(String(row.category || '').trim().toLowerCase());
     const warehouseExists = !row.warehouse || warehouseNames.has(String(row.warehouse || '').trim().toLowerCase());
+    const isAdvanced = Boolean(row._advanced);
+    const hasVariants = isAdvanced && (row._hasVariants === true || Number(row._variantCount || 0) > 0);
     return (
       <ImportPreviewMobileCard index={index} title={row.name || row.code} error={row._hasError ? row._errorMessage || 'Fila con errores' : undefined} warning={row._hasWarning ? row._warningMessage || 'Revisar fila' : undefined}>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
@@ -380,19 +451,21 @@ function ImportPreviewPage({
           <ImportPreviewField label="Categoría" className="sm:col-span-2">
             {categoryExists ? <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className={importPreviewFieldClass} disabled={importing} /> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => { const category = categoryOptions.find((item: any) => item.id === value); if (category) onRowUpdate(index, 'category', category.name); }} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-amber-500/60 text-amber-600`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>{categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}{categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}</SelectContent></Select>{canCreateCategory && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
           </ImportPreviewField>
-          <ImportPreviewField label="Minorista"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label="Mayorista"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label="Distribuidor"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          {canViewInventoryCost && <ImportPreviewField label={isService ? 'Costo del servicio' : 'Costo'}><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>}
+          {isService ? <ImportPreviewField label="Precio"><ImportMoneyInput type="number" min={0} value={row.salePrice ?? ''} onChange={(event) => onRowUpdate(index, 'servicePrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField> : visiblePriceLists.map((list) => <ImportPreviewField key={list.code} label={list.name}><ImportMoneyInput type="number" min={0} value={row.prices?.[list.code] ?? ''} onChange={(event) => onRowUpdate(index, `price.${list.code}`, event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField>)}
+          {canViewInventoryCost && <ImportPreviewField label={isService ? 'Costo del servicio' : 'Costo'}><ImportMoneyInput type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField>}
           {isService ? <>
-            <ImportPreviewField label="Tasa IVA"><Input type="number" min={0} max={100} step="any" value={row.taxRate === undefined ? '' : Number(row.taxRate) * 100} onChange={(event) => onRowUpdate(index, 'taxRate', event.target.value === '' ? undefined : Number(event.target.value) / 100)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
             <ImportPreviewField label="Disponibilidad"><Select value={row.isActive === false ? 'false' : 'true'} onValueChange={(value) => onRowUpdate(index, 'isActive', value === 'true')} disabled={importing}><SelectTrigger className={importPreviewFieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="true">Disponible</SelectItem><SelectItem value="false">No disponible</SelectItem></SelectContent></Select></ImportPreviewField>
+          </> : hasVariants ? <>
+            <ImportPreviewField label="Stock total del padre"><div className={`${importPreviewFieldClass} flex items-center text-muted-foreground`}>Se calcula por variante</div></ImportPreviewField>
+            <ImportPreviewField label="Stock mínimo"><div className={`${importPreviewFieldClass} flex items-center text-muted-foreground`}>Por SKU variante</div></ImportPreviewField>
+            <ImportPreviewField label="Bodega" className="sm:col-span-2"><div className={`${importPreviewFieldClass} flex items-center text-muted-foreground`}>Se captura en la hoja Inventario</div></ImportPreviewField>
           </> : <>
-          <ImportPreviewField label="Stock inicial"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label="Stock mínimo"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label="Bodega" className="sm:col-span-2">
-            {warehouseExists ? <Select value={row.warehouse || '__none__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)} disabled={importing}><SelectTrigger className={importPreviewFieldClass}><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger><SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-amber-500/60 text-amber-600`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select>{canCreateWarehouse && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => onCreateWarehouse(index, row.warehouse || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
-          </ImportPreviewField></>}
+            <ImportPreviewField label="Stock inicial"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+            <ImportPreviewField label="Stock mínimo"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+            <ImportPreviewField label="Bodega" className="sm:col-span-2">
+              {warehouseExists ? <Select value={row.warehouse || '__none__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)} disabled={importing}><SelectTrigger className={importPreviewFieldClass}><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger><SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-amber-500/60 text-amber-600`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select>{canCreateWarehouse && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => onCreateWarehouse(index, row.warehouse || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
+            </ImportPreviewField>
+          </>}
           <ImportPreviewField label="Imagen" className="sm:col-span-2"><div className="flex min-h-9 items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 text-xs"><span className="shrink-0">{row._imageStatus === 'matched' ? <ImageIcon className="size-4 text-emerald-500" /> : <ImageOff className="size-4 text-muted-foreground" />}</span><span className="min-w-0 break-words text-muted-foreground">{row._imageStatus === 'matched' ? 'Imagen vinculada' : row._imageStatus === 'missing' ? 'No se encontró imagen para este SKU' : 'Sin archivo de imágenes'}</span></div></ImportPreviewField>
         </div>
       </ImportPreviewMobileCard>
@@ -400,7 +473,7 @@ function ImportPreviewPage({
   };
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden sm:gap-5">
+    <div className="flex min-h-full min-w-0 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 scrollbar-overlay sm:gap-5">
       <div className="flex flex-col gap-3 border-b border-border/50 pb-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">{isService ? 'Importación de servicios' : 'Importación inicial'}</p>
@@ -408,7 +481,7 @@ function ImportPreviewPage({
           <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los registros antes de formalizar la carga.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="border-primary/40 text-primary">Moneda: {importCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)'}</Badge>
+          <Badge variant="outline" className="border-primary/40 text-primary">Moneda: {currencySymbol} · {importCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)'}</Badge>
         </div>
       </div>
 
@@ -429,7 +502,7 @@ function ImportPreviewPage({
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Plantilla avanzada detectada</p>
-              <p className="mt-1 text-sm font-semibold">Los precios y existencias se cargarán por producto padre y por SKU de variante.</p>
+              <p className="mt-1 text-sm font-semibold">Los precios base se cargarán por producto padre y las existencias únicamente por SKU de variante.</p>
               <p className="mt-1 text-xs text-muted-foreground">El precio PRODUCTO queda como base heredable. Un precio VARIANTE solo reemplaza esa lista para la variante indicada.</p>
             </div>
             <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
@@ -442,16 +515,18 @@ function ImportPreviewPage({
             </div>
           </div>
           <div className="max-h-44 overflow-auto rounded-xl border border-border/50 bg-background/70">
-            <div className="grid min-w-[620px] grid-cols-[150px_160px_1fr_130px_100px] gap-2 border-b border-border/50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-              <span>Producto padre</span><span>SKU variante</span><span>Atributos</span><span>Costo propio</span><span>Stock filas</span>
+            <div className="grid min-w-[620px] gap-2 border-b border-border/50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground" style={{ gridTemplateColumns: summaryGridTemplate }}>
+              <span>Producto padre</span><span>SKU variante</span><span>Atributos</span>{summaryPriceLists.map((list) => <span key={list.code}>{list.name}</span>)}<span>Costo propio</span><span>Stock filas</span>
             </div>
             {advancedCatalog.variants.slice(0, 80).map((variant) => {
               const stockCount = advancedCatalog.stock.filter((stock) => String(stock.variantSku).toLowerCase() === String(variant.sku).toLowerCase()).length;
-              return <div key={`${variant.productCode}-${variant.sku}`} className="grid min-w-[620px] grid-cols-[150px_160px_1fr_130px_100px] gap-2 border-b border-border/30 px-3 py-2 text-xs last:border-b-0"><span className="font-mono">{variant.productCode}</span><span className="font-mono font-semibold">{variant.sku}</span><span className="flex flex-wrap gap-1">{variant.attributes.length ? variant.attributes.map((attribute) => <Badge key={`${attribute.attributeName}-${attribute.value}`} variant="secondary" className="text-[9px]">{attribute.attributeName}: {attribute.value}</Badge>) : <span className="text-muted-foreground">Sin atributos</span>}</span><span>{variant.costPrice === undefined ? 'Hereda base' : variant.costPrice}</span><span className="tabular-nums">{stockCount}</span></div>;
+              const parentPrices = advancedPrices.productPrices.get(String(variant.productCode).trim().toUpperCase()) || {};
+              const ownPrices = advancedPrices.variantPrices.get(String(variant.sku).trim().toUpperCase()) || {};
+              return <div key={`${variant.productCode}-${variant.sku}`} className="grid min-w-[620px] gap-2 border-b border-border/30 px-3 py-2 text-xs last:border-b-0" style={{ gridTemplateColumns: summaryGridTemplate }}><span className="font-mono">{variant.productCode}</span><span className="font-mono font-semibold">{variant.sku}</span><span className="flex flex-wrap gap-1">{variant.attributes.length ? variant.attributes.map((attribute) => <Badge key={`${attribute.attributeName}-${attribute.value}`} variant="secondary" className="text-[9px]">{attribute.attributeName}: {attribute.value}</Badge>) : <span className="text-muted-foreground">Sin atributos</span>}</span>{summaryPriceLists.map((list) => { const ownPrice = ownPrices[String(list.code).toUpperCase()]; const effectivePrice = ownPrice ?? parentPrices[String(list.code).toUpperCase()]; return <span key={list.code} className="tabular-nums">{effectivePrice === undefined ? '—' : <>{currencySymbol} {formatImportAmount(effectivePrice)}{ownPrice !== undefined && <span className="ml-1 text-[9px] text-primary" title="Precio específico de esta variante">*</span>}</>}</span>; })}<span>{variant.costPrice === undefined ? 'Hereda base' : `${currencySymbol} ${formatImportAmount(variant.costPrice)}`}</span><span className="tabular-nums">{stockCount}</span></div>;
             })}
           </div>
           {advancedCatalog.variants.length > 80 && <p className="text-[11px] text-muted-foreground">Se muestran 80 variantes en el resumen; la carga conserva todas las filas del archivo.</p>}
-          <p className="text-xs text-muted-foreground">Los atributos y valores inexistentes se crearán o reutilizarán después de confirmar la importación. Los productos sin fila en Variantes recibirán automáticamente la variante Estándar.</p>
+          <p className="text-xs text-muted-foreground">Los precios muestran el importe efectivo para cada lista en {currencySymbol}. Un asterisco (*) indica un precio específico de la variante; sin asterisco hereda el precio base del producto. Los atributos y valores inexistentes se crearán o reutilizarán después de confirmar la importación. Los productos sin fila en Variantes recibirán automáticamente la variante Estándar.</p>
         </section>
       )}
 
@@ -464,7 +539,7 @@ function ImportPreviewPage({
           </div>
         </div>
       ) : <>
-      <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
+      <div className="hidden min-h-[clamp(26rem,44dvh,38rem)] min-w-0 max-w-full flex-[1_1_auto] sm:flex">
       <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className={`block ${isService ? 'min-w-[1420px]' : 'min-w-[1500px]'}`}>
             <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
@@ -477,11 +552,9 @@ function ImportPreviewPage({
                 <TableHead className="w-32 text-[10px] uppercase">Categoría</TableHead>
                 <TableHead className="w-28 text-right text-[10px] uppercase">Unidad</TableHead>
                 {isService && <TableHead className="w-28 text-right text-[10px] uppercase">Duración (min)</TableHead>}
-                <TableHead className="w-28 text-right text-[10px] uppercase">Minorista</TableHead>
-                <TableHead className="w-28 text-right text-[10px] uppercase">Mayorista</TableHead>
-                <TableHead className="w-28 text-right text-[10px] uppercase">Distribuidor</TableHead>
+                {isService ? <TableHead className="w-28 text-right text-[10px] uppercase">Precio</TableHead> : visiblePriceLists.map((list) => <TableHead key={list.code} className="w-28 text-right text-[10px] uppercase">{list.name}</TableHead>)}
                   {canViewInventoryCost && <TableHead className="w-28 text-right text-[10px] uppercase">Costo</TableHead>}
-                {isService ? <><TableHead className="w-24 text-right text-[10px] uppercase">IVA %</TableHead><TableHead className="w-32 text-[10px] uppercase">Disponibilidad</TableHead></> : <><TableHead className="w-24 text-right text-[10px] uppercase">Stock</TableHead><TableHead className="w-24 text-right text-[10px] uppercase">Min</TableHead><TableHead className="w-40 text-[10px] uppercase">Bodega</TableHead></>}
+                {isService ? <TableHead className="w-32 text-[10px] uppercase">Disponibilidad</TableHead> : <><TableHead className="w-24 text-right text-[10px] uppercase">Stock</TableHead><TableHead className="w-24 text-right text-[10px] uppercase">Min</TableHead><TableHead className="w-40 text-[10px] uppercase">Bodega</TableHead></>}
                 <TableHead className="w-40 text-[10px] uppercase">Validación</TableHead>
               </TableRow>
             </TableHeader>
@@ -504,6 +577,8 @@ function ImportPreviewPage({
                   onRowUpdate={onRowUpdate}
                   onCreateCategory={onCreateCategory}
                   onCreateWarehouse={onCreateWarehouse}
+                  priceLists={visiblePriceLists}
+                  currencySymbol={currencySymbol}
                   isService={isService}
                 />
               ))}
@@ -512,7 +587,7 @@ function ImportPreviewPage({
       </HorizontalTableScroller>
       </div>
 
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de productos para revisar">
+      <section data-import-preview-mobile-section="true" className="flex min-h-[clamp(18rem,52dvh,32rem)] min-w-0 flex-[1_1_auto] flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de productos para revisar">
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un {isService ? 'servicio' : 'producto'} por tarjeta</p></div>
           <Badge variant="secondary" className="shrink-0 text-[10px]">{importData.length} registros</Badge>
@@ -538,6 +613,34 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const { user, canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const canCreatePurchaseRequest = canPerform('PURCHASES', 'create');
+  const catalogItemType = itemType || 'PRODUCT';
+  const isServiceView = catalogItemType === 'SERVICE';
+  const [configuredPriceLists, setConfiguredPriceLists] = useState<PriceList[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    priceListsService.getAll(controller.signal)
+      .then((lists) => setConfiguredPriceLists(Array.isArray(lists) ? lists : []))
+      .catch((error) => {
+        if (error?.name !== 'AbortError') console.error('No se pudieron cargar las listas de precios para la plantilla:', error);
+      });
+    return () => controller.abort();
+  }, []);
+  const importPriceLists = useMemo(() => {
+    const unique = new Map<string, Pick<PriceList, 'code' | 'name'>>();
+    const source = configuredPriceLists.filter((list) => list.isActive !== false);
+    for (const list of source) {
+      const code = String(list.code || '').trim().toUpperCase();
+      const name = String(list.name || '').trim();
+      const key = normalizePriceListImportKey(name || code);
+      if (key && code && name && !unique.has(key)) unique.set(key, { code, name });
+    }
+    return unique.size > 0 ? Array.from(unique.values()) : DEFAULT_IMPORT_PRICE_LISTS;
+  }, [configuredPriceLists]);
+  const importPriceListsForView = isServiceView ? [] : importPriceLists;
+  const getPrimaryImportPrice = useCallback((prices: Record<string, any> = {}) => {
+    const first = importPriceListsForView.find((list) => prices[list.code] !== undefined && prices[list.code] !== null && prices[list.code] !== '');
+    return Number(first ? prices[first.code] : 0);
+  }, [importPriceListsForView]);
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
   const stockWarehouseIdSet = useMemo(
     () => new Set(stockWarehouseIds.length > 0 ? stockWarehouseIds : warehouses.map((warehouse: any) => warehouse.id).filter(Boolean)),
@@ -564,8 +667,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   useEffect(() => {
     void refreshStockMap();
   }, [products, refreshStockMap]);
-  const catalogItemType = itemType || 'PRODUCT';
-  const isServiceView = catalogItemType === 'SERVICE';
   const entityLabel = isServiceView ? 'servicio' : 'producto';
   const entityLabelCap = isServiceView ? 'Servicio' : 'Producto';
   const getServicePricePresentation = (product: any) => {
@@ -585,9 +686,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   }, [categories, importAddedCategories]);
   const importWarehouseOptions = useMemo(() => {
     const unique = new Map<string, any>();
-    [...warehouses, ...importAddedWarehouses].forEach((warehouse: any) => unique.set(warehouse.id || warehouse.name, warehouse));
+    // La carga de inventario solo acepta bodegas de sucursal activas. En
+    // algunos momentos el listado general todavía puede estar vacío mientras
+    // llega la consulta; usamos las opciones ya resueltas para productos como
+    // respaldo, pero no inventamos nombres que el backend no pueda resolver.
+    const source = warehouses.length > 0 ? warehouses : productWarehouseOptions;
+    [...source, ...importAddedWarehouses]
+      .filter((warehouse: any) => warehouse?.isActive !== false && (!warehouse?.scopeType || warehouse.scopeType === 'BRANCH'))
+      .forEach((warehouse: any) => unique.set(warehouse.id || warehouse.name, warehouse));
     return Array.from(unique.values());
-  }, [warehouses, importAddedWarehouses]);
+  }, [warehouses, productWarehouseOptions, importAddedWarehouses]);
   const displayWarehouseOptions = productWarehouseOptions.length > 0 ? productWarehouseOptions : warehouses;
   const warehouseNamesForProduct = useCallback((product: any) => {
     const names = new Set<string>();
@@ -2270,8 +2378,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const handleDownloadTemplate = useCallback(() => {
     const wb = XLSX.utils.book_new();
     if (isServiceView) {
-      const headers = ['Código / SKU', 'Nombre', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Duración estimada (min)', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', ...(canViewInventoryCost ? ['Costo del servicio'] : []), 'Tasa IVA', 'Disponible'];
-      const sampleRow: any[] = ['SRV-001', 'Ejemplo de servicio', 'Descripción que aparecerá en ventas y documentos', 'Detalle comercial opcional', categories[0]?.name || 'Categoría de servicios', 'servicio', 60, 150, 140, 130, ...(canViewInventoryCost ? [80] : []), 15, 'SI'];
+      const headers = ['Código / SKU', 'Nombre', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Duración estimada (min)', 'Precio', ...(canViewInventoryCost ? ['Costo del servicio'] : []), 'Disponible', 'Imagen URL'];
+      const sampleRow: any[] = ['SRV-001', 'Ejemplo de servicio', 'Descripción que aparecerá en ventas y documentos', 'Detalle comercial opcional', categories[0]?.name || 'Categoría de servicios', 'servicio', 60, 150, ...(canViewInventoryCost ? [80] : []), 'SI', ''];
       const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
       ws['!cols'] = headers.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 2)) }));
       XLSX.utils.book_append_sheet(wb, ws, 'Servicios');
@@ -2284,8 +2392,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         ['Descripción', 'Opcional. Texto descriptivo del servicio.'],
         ['Nota comercial', 'Opcional; máximo 100 caracteres. Se muestra en ventas y documentos.'],
         ['Categoría', 'Debe existir y ser de tipo servicio.'],
-        ['Precios', 'Incluye al menos una lista de precios. Las listas faltantes quedan pendientes.'],
-        ['Importante', 'Los servicios no se vinculan a bodegas, no manejan stock y no tienen variantes.'],
+        ['Precio', 'Obligatorio. Es el único precio de venta del servicio; no usa listas de precios ni precios alternos.'],
+        ['Importante', 'Los servicios no llevan IVA, no se vinculan a bodegas, no manejan stock y no tienen variantes.'],
+        ['Imágenes', 'Imagen URL es opcional. También puedes cargar un ZIP/RAR y el sistema vinculará cada archivo por coincidencia exacta del SKU.'],
+        ['Contabilidad', 'La importación de servicios no crea asiento de apertura porque no crea existencias físicas. El costo se conserva en el servicio y se contabiliza cuando corresponda en una venta.'],
       ]);
       guide['!cols'] = [{ wch: 36 }, { wch: 110 }];
       XLSX.utils.book_append_sheet(wb, guide, 'Guía de llenado');
@@ -2295,71 +2405,145 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
 
     const categoryName = categories[0]?.name || 'Categoría';
-    const warehouseName = warehouses[0]?.name || 'Bodega principal';
-    const productHeaders = ['Código producto', 'Nombre', 'Categoría', 'Descripción', 'Nota comercial', 'Unidad', ...(canViewInventoryCost ? ['Costo base'] : []), 'Tasa IVA', 'Control inventario', 'Código de barras', 'Marca', 'Modelo', 'Color', 'Peso', 'Unidad peso', 'Dimensiones', 'Ancho', 'Alto', 'Profundidad', 'Unidad dimensión', 'Garantía', 'Lotes', 'Series', 'Último costo', 'Imagen URL', 'Activo'];
-    const productSample = ['CAM-001', 'Camisa', categoryName, 'Camisa de ejemplo', 'Tela de algodón', 'unidad', ...(canViewInventoryCost ? [100] : []), 15, 'SI', '', 'Nova', '', '', '', '', '', '', '', '', '', '', 'NO', 'NO', '', '', 'SI'];
+    // La plantilla debe contener una bodega real de la sucursal. El valor
+    // vacío es intencional cuando las bodegas aún no han cargado: así la
+    // revisión obliga a seleccionar una bodega válida en vez de enviar un
+    // nombre de ejemplo que luego se omite silenciosamente.
+    const warehouseName = importWarehouseOptions[0]?.name || '';
+    const samplePricesByCode: Record<string, number> = { RETAIL: 150, WHOLESALE: 140, DISTRIBUTOR: 130 };
+    const samplePrice = (list: Pick<PriceList, 'code' | 'name'>, index: number) => samplePricesByCode[list.code] ?? [150, 140, 130][index] ?? 150;
+    const productHeaders = ['Código / SKU', 'Nombre', 'Nota comercial', 'Categoría', 'Unidad', ...importPriceLists.map((list) => `Precio ${list.name}`), ...(canViewInventoryCost ? ['Costo'] : [])];
+    const productSamples = [
+      { code: 'CAM-001', name: 'Camisa', commercialNote: 'Disponible para venta por unidad', cost: 100 },
+      { code: 'PAN-001', name: 'Pantalón', commercialNote: 'Consultar colores disponibles', cost: 180 },
+      { code: 'ZAP-001', name: 'Zapatos', commercialNote: 'Incluye cambio por talla', cost: 220 },
+      { code: 'BOL-001', name: 'Bolso sin variantes', commercialNote: 'Producto simple con stock propio', cost: 150 },
+    ];
+    const productRows = productSamples.map((product) => [product.code, product.name, product.commercialNote, categoryName, 'unidad', ...importPriceLists.map((list, index) => {
+      const prices: Record<string, number[]> = {
+        'CAM-001': [150, 140, 130],
+        'PAN-001': [260, 240, 220],
+        'ZAP-001': [380, 350, 320],
+        'BOL-001': [300, 280, 260],
+      };
+      return prices[product.code]?.[index] ?? samplePrice(list, index);
+    }), ...(canViewInventoryCost ? [product.cost] : [])]);
     const variantHeaders = ['Código producto', 'SKU variante', 'Nombre variante', 'Código de barras', ...(canViewInventoryCost ? ['Costo variante'] : [])];
-    const variantSample = ['CAM-001', 'CAM-001-AZ-S', 'Azul / S', '', ...(canViewInventoryCost ? [105] : [])];
+    const variantRows = [
+      ['CAM-001', 'CAM-001-AZ-S', 'Azul / S', '', ...(canViewInventoryCost ? [105] : []), 'Azul', 'S'],
+      ['CAM-001', 'CAM-001-AZ-M', 'Azul / M', '', ...(canViewInventoryCost ? [''] : []), 'Azul', 'M'],
+      ['CAM-001', 'CAM-001-RO-S', 'Rojo / S', '', ...(canViewInventoryCost ? [110] : []), 'Rojo', 'S'],
+      ['PAN-001', 'PAN-001-AZ-32', 'Azul / 32', '', ...(canViewInventoryCost ? [190] : []), 'Azul', '32'],
+      ['PAN-001', 'PAN-001-AZ-34', 'Azul / 34', '', ...(canViewInventoryCost ? [''] : []), 'Azul', '34'],
+      ['PAN-001', 'PAN-001-NE-32', 'Negro / 32', '', ...(canViewInventoryCost ? [195] : []), 'Negro', '32'],
+      ['ZAP-001', 'ZAP-001-NE-40', 'Negro / 40', '', ...(canViewInventoryCost ? [230] : []), 'Negro', '40'],
+      ['ZAP-001', 'ZAP-001-NE-41', 'Negro / 41', '', ...(canViewInventoryCost ? [''] : []), 'Negro', '41'],
+      ['ZAP-001', 'ZAP-001-CA-40', 'Café / 40', '', ...(canViewInventoryCost ? [240] : []), 'Café', '40'],
+    ];
     const attributeHeaders = ['SKU variante', 'Atributo', 'Valor'];
-    const attributeRows = [['CAM-001-AZ-S', 'Color', 'Azul'], ['CAM-001-AZ-S', 'Talla', 'S']];
+    const attributeRows = [
+      ['CAM-001-AZ-S', 'Color', 'Azul'], ['CAM-001-AZ-S', 'Talla', 'S'],
+      ['CAM-001-AZ-M', 'Color', 'Azul'], ['CAM-001-AZ-M', 'Talla', 'M'],
+      ['CAM-001-RO-S', 'Color', 'Rojo'], ['CAM-001-RO-S', 'Talla', 'S'],
+      ['PAN-001-AZ-32', 'Color', 'Azul'], ['PAN-001-AZ-32', 'Talla', '32'],
+      ['PAN-001-AZ-34', 'Color', 'Azul'], ['PAN-001-AZ-34', 'Talla', '34'],
+      ['PAN-001-NE-32', 'Color', 'Negro'], ['PAN-001-NE-32', 'Talla', '32'],
+      ['ZAP-001-NE-40', 'Color', 'Negro'], ['ZAP-001-NE-40', 'Talla', '40'],
+      ['ZAP-001-NE-41', 'Color', 'Negro'], ['ZAP-001-NE-41', 'Talla', '41'],
+      ['ZAP-001-CA-40', 'Color', 'Café'], ['ZAP-001-CA-40', 'Talla', '40'],
+    ];
     const priceHeaders = ['Alcance', 'Código producto', 'SKU variante', 'Lista', 'Precio'];
-    const priceRows = [['PRODUCTO', 'CAM-001', '', 'RETAIL', 150], ['PRODUCTO', 'CAM-001', '', 'WHOLESALE', 140], ['PRODUCTO', 'CAM-001', '', 'DISTRIBUTOR', 130], ['VARIANTE', 'CAM-001', 'CAM-001-AZ-S', 'RETAIL', 155]];
+    const priceRows = [
+      ...productSamples.flatMap((product) => importPriceLists.map((list, index) => {
+        const prices: Record<string, number[]> = { 'CAM-001': [150, 140, 130], 'PAN-001': [260, 240, 220], 'ZAP-001': [380, 350, 320], 'BOL-001': [300, 280, 260] };
+        return ['PRODUCTO', product.code, '', list.name, prices[product.code]?.[index] ?? samplePrice(list, index)];
+      })),
+      ['VARIANTE', 'CAM-001', 'CAM-001-AZ-S', importPriceLists[0]?.name || 'Minorista', 155],
+      ['VARIANTE', 'PAN-001', 'PAN-001-NE-32', importPriceLists[1]?.name || 'Mayorista', 275],
+      ['VARIANTE', 'ZAP-001', 'ZAP-001-CA-40', importPriceLists[2]?.name || 'Distribuidor', 340],
+    ];
     const stockHeaders = ['Código producto', 'SKU variante', 'Bodega', 'Stock inicial', 'Stock mínimo', 'Stock máximo', 'Costo entrada', 'Moneda costo', 'Tasa costo'];
-    const stockRows = [['CAM-001', 'CAM-001-AZ-S', warehouseName, 12, 2, 30, 105, importCurrency, importCurrency === 'USD' ? importExchangeRate : 1]];
+    const stockRows = [
+      ['CAM-001', 'CAM-001-AZ-S', warehouseName, 12, 2, 30, 105, importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['CAM-001', 'CAM-001-AZ-M', warehouseName, 8, 2, 30, '', importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['CAM-001', 'CAM-001-RO-S', warehouseName, 5, 1, 20, 110, importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['PAN-001', 'PAN-001-AZ-32', warehouseName, 7, 2, 20, 190, importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['PAN-001', 'PAN-001-AZ-34', warehouseName, 6, 2, 20, '', importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['PAN-001', 'PAN-001-NE-32', warehouseName, 5, 1, 18, 195, importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['ZAP-001', 'ZAP-001-NE-40', warehouseName, 5, 1, 12, 230, importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['ZAP-001', 'ZAP-001-NE-41', warehouseName, 4, 1, 12, '', importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['ZAP-001', 'ZAP-001-CA-40', warehouseName, 6, 1, 14, 240, importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+      ['BOL-001', 'BOL-001', warehouseName, 10, 2, 20, 150, importCurrency, importCurrency === 'USD' ? importExchangeRate : 1],
+    ];
     const appendSheet = (name: string, rows: any[][]) => {
       const sheet = XLSX.utils.aoa_to_sheet(rows);
       sheet['!cols'] = rows[0].map((header) => ({ wch: Math.max(12, Math.min(28, String(header).length + 2)) }));
       XLSX.utils.book_append_sheet(wb, sheet, name);
     };
-    appendSheet('Productos', [productHeaders, productSample]);
-    appendSheet('Variantes', [variantHeaders, variantSample]);
+    appendSheet('Productos', [productHeaders, ...productRows]);
+    appendSheet('Variantes', [variantHeaders, ...variantRows]);
     appendSheet('Atributos', [attributeHeaders, ...attributeRows]);
     appendSheet('Precios', [priceHeaders, ...priceRows]);
     appendSheet('Inventario', [stockHeaders, ...stockRows]);
     const guide = XLSX.utils.aoa_to_sheet([
       ['GUÍA COMPLETA · IMPORTACIÓN INICIAL DE PRODUCTOS CON VARIANTES'],
-      ['La carga inicial crea productos, variantes, atributos, valores de atributos, precios y existencias en una sola operación transaccional. Se ejecuta una sola vez por empresa/sucursal.'],
+      ['Cada carga crea productos, variantes, atributos, valores de atributos, precios y existencias en una sola operación transaccional. Puedes importar varias veces; los SKU que ya existen se reportan como incidencias y no se duplican.'],
       ['1. Orden de trabajo', 'Completa primero Productos; después Variantes; luego Atributos, Precios e Inventario. No cambies los nombres de las hojas.'],
-      ['2. Productos', 'Una fila por producto padre. El Código producto es único y no debe repetirse. El Costo base es el costo de respaldo que heredarán las variantes sin costo propio.'],
+      ['2. Productos', `Una fila por producto padre. La primera hoja contiene SKU, nombre, nota comercial opcional, categoría, unidad, precios base y costo base. Incluye ${importPriceLists.map((list) => `Precio ${list.name}`).join(', ')}. El SKU es único y no debe repetirse.`],
       ['3. Variantes', 'Una fila por SKU vendible. El SKU variante debe ser único en todo el archivo. Si un producto no tiene filas aquí, el sistema crea automáticamente la variante Estándar con el mismo código del producto.'],
       ['4. Atributos', 'Una fila por combinación SKU variante + Atributo + Valor. Los nombres son dinámicos: puedes usar Color, Talla, Material, Capacidad o cualquier otro.'],
       ['5. Creación dinámica', 'Si el atributo o el valor no existe, NovaHub lo detecta y lo crea/reutiliza después de confirmar IMPORTAR. Si existe, conserva sus valores anteriores y agrega únicamente los nuevos.'],
       ['6. Precios', 'PRODUCTO define el precio base que heredarán nuevas variantes. VARIANTE solo sobrescribe una lista para un SKU concreto. No se toma el precio más alto de las variantes para sustituir el precio padre.'],
-      ['7. Inventario', 'Registra el stock por SKU variante y bodega. El stock no se distribuye automáticamente entre variantes. Para productos simples usa como SKU variante el código del producto.'],
-      ['8. Costos', 'Costo variante vacío = hereda Costo base. Costo variante informado = costo propio. Costo entrada vacío usa el costo de la variante y, como respaldo, el del producto.'],
+      ['7. Inventario', 'Registra el stock por SKU variante y bodega. Nunca registres una fila con el SKU padre cuando el producto tiene variantes: el stock total del padre se calcula sumando sus variantes. Para productos simples usa como SKU variante el código del producto.'],
+      ['8. Costos', 'Costo variante vacío = hereda el Costo del producto. Costo variante informado = costo propio. Costo entrada vacío usa el costo de la variante y, como respaldo, el del producto.'],
       ['9. Moneda', 'Los precios y costos usan la moneda elegida en la pantalla. Si es USD, la tasa debe ser mayor que cero. Usa números sin símbolo de moneda ni separador de miles.'],
       ['10. Categorías y bodegas', 'Deben existir, estar activas y pertenecer a la sucursal. Se envían por nombre en el Excel y se validan por su registro real antes de guardar.'],
       ['11. Errores', 'SKU, nombre, categoría, costos, precios, bodegas y cantidades inválidas se muestran en la revisión. Las filas con error se omiten; las advertencias no bloquean.'],
       ['12. Transacción', 'Si falla la creación de productos, variantes, precios, stock, atributos o el asiento de apertura, se revierte toda la operación; no queda una carga incompleta.'],
-      ['13. Columnas de Productos', 'Código producto y Nombre son obligatorios. Categoría debe existir. Costo base es el respaldo heredable; no se calcula desde el precio más alto de las variantes. Los demás datos son descriptivos u opcionales.'],
+      ['13. Columnas de Productos', `La primera hoja usa Código / SKU, Nombre, Categoría, Unidad, ${importPriceLists.map((list) => `Precio ${list.name}`).join(', ')}${canViewInventoryCost ? ', Costo' : ''}. No contiene Tasa IVA, Control inventario, Imagen URL, Estado, Stock inicial, Stock mínimo ni Almacén.`],
       ['14. Columnas de Variantes', 'Código producto y SKU variante son obligatorios. Cada fila es una presentación vendible. Costo variante vacío hereda el costo base; informado crea un costo propio en moneda funcional.'],
       ['15. Columnas de Atributos', 'Usa una fila por SKU variante + Atributo + Valor. También puedes agregar columnas dinámicas en Variantes; cualquier columna no reservada se reconoce como atributo.'],
-      ['16. Columnas de Precios', 'Alcance PRODUCTO crea el precio padre heredable. Alcance VARIANTE crea una excepción para un SKU y una lista. Las listas personalizadas deben existir y estar activas.'],
-      ['17. Columnas de Inventario', 'El stock se captura por SKU variante + Bodega. No se distribuye entre variantes. Para un producto simple usa el mismo código del producto como SKU variante.'],
+      ['16. Columnas de Precios', `Alcance PRODUCTO crea el precio padre heredable. Alcance VARIANTE crea una excepción para un SKU y una lista. En Lista escribe exactamente el nombre visible de una lista activa (${importPriceLists.map((list) => list.name).join(', ')}).`],
+      ['17. Columnas de Inventario', 'El stock se captura por SKU variante + Bodega. En productos con variantes, no existe stock capturable para el padre; su total es la suma de las cantidades de sus variantes. Stock mínimo y máximo también se controlan por SKU variante y bodega.'],
       ['18. Costos de entrada', 'Costo entrada vacío usa costo propio de la variante o costo base del padre. Si se informa, ese importe se usa en el movimiento inicial; Moneda costo y Tasa costo permiten registrar otra moneda.'],
       ['19. Números y moneda', 'Escribe números sin C$, $, %, símbolos ni separadores de miles. La tasa USD debe ser mayor que cero. Los valores se convierten a moneda funcional y el movimiento conserva su moneda original.'],
       ['20. Productos sin variantes', 'Si no existe una fila válida en Variantes, NovaHub crea automáticamente la variante Estándar con el código del producto para que también tenga stock separado y selección en ventas.'],
-      ['21. Revisión y contabilidad', 'Antes de IMPORTAR puedes editar el padre y descargar incidencias. El stock positivo crea movimientos IN y un asiento de apertura agrupado por bodega; una falla revierte toda la operación.'],
-      ['22. Imágenes', 'Imagen URL y ZIP/RAR nombrado por SKU aplican al producto padre. Las imágenes se vinculan después de crear el catálogo y no cambian precios, variantes ni existencias.'],
-      ['Ejemplo mínimo', 'CAM-001 en Productos; CAM-001-AZ-S en Variantes; Color/Azul y Talla/S en Atributos; PRODUCTO + RETAIL en Precios; CAM-001-AZ-S + bodega en Inventario.'],
+      ['21. Stock padre derivado', 'El campo stock del producto que se muestra en el catálogo es una lectura derivada de InventoryLevel. No se crea InventoryLevel ni InventoryMovement sin variantId cuando el producto tiene variantes.'],
+      ['22. Revisión y contabilidad', 'Antes de IMPORTAR puedes editar el padre y descargar incidencias. El stock positivo crea movimientos IN por variante y un asiento de apertura agrupado por bodega; una falla revierte toda la operación.'],
+      ['23. Imágenes', 'Las imágenes no se capturan en Excel. Carga un ZIP o RAR con JPG, JPEG o PNG nombrados exactamente como el SKU del producto padre (por ejemplo CAM-001.png, PAN-001.png y ZAP-001.png). Las imágenes se vinculan por SKU después de revisar la importación.'],
+      ['24. Ejemplo incluido', 'La plantilla contiene CAM-001 (Camisa), PAN-001 (Pantalón) y ZAP-001 (Zapatos), cada uno con tres variantes Color/Talla, y BOL-001 (Bolso sin variantes). Sus totales derivados son 25, 18, 15 y 10 unidades respectivamente.'],
     ]);
     guide['!cols'] = [{ wch: 34 }, { wch: 120 }];
     XLSX.utils.book_append_sheet(wb, guide, 'Guía de llenado');
     XLSX.writeFile(wb, 'plantilla_importacion_productos_con_variantes.xlsx');
     toast.success('Plantilla descargada');
-  }, [categories, warehouses, canViewInventoryCost, isServiceView, importCurrency, importExchangeRate]);
+  }, [categories, importWarehouseOptions, canViewInventoryCost, isServiceView, importCurrency, importExchangeRate, importPriceLists]);
 
   const handleDownloadImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
-      'Código / SKU': row.code || '', Nombre: row.name || '', ...(isServiceView ? { Descripción: row.description || '' } : {}), 'Nota comercial': row.commercialNote || '', Categoría: row.category || '', ...(isServiceView ? { 'Duración (min)': row.estimatedDuration ?? '', 'Tasa IVA': row.taxRate ?? '', Disponible: row.isActive === false ? 'NO' : 'SI' } : { Bodega: row.warehouse || '' }),
-      ...(canViewInventoryCost ? { Costo: row.costPrice ?? '' } : {}),
-      Minorista: row.prices?.RETAIL ?? '', Mayorista: row.prices?.WHOLESALE ?? '', Distribuidor: row.prices?.DISTRIBUTOR ?? '',
+      'Código / SKU': row.code || '', Nombre: row.name || '', ...(isServiceView ? {
+        Descripción: row.description || '',
+        'Nota comercial': row.commercialNote || '',
+        Categoría: row.category || '',
+        Unidad: row.unit || '',
+        'Duración estimada (min)': row.estimatedDuration ?? '',
+        Precio: row.salePrice ?? '',
+        ...(canViewInventoryCost ? { 'Costo del servicio': row.costPrice ?? '' } : {}),
+        Disponible: row.isActive === false ? 'NO' : 'SI',
+        'Imagen URL': row.imageUrl || '',
+      } : {
+        'Nota comercial': row.commercialNote || '',
+        Categoría: row.category || '',
+        Bodega: row.warehouse || '',
+        ...(canViewInventoryCost ? { Costo: row.costPrice ?? '' } : {}),
+      }),
+      ...(!isServiceView ? Object.fromEntries(importPriceListsForView.map((list) => [`Precio ${list.name}`, row.prices?.[list.code] ?? ''])) : {}),
       Clasificación: row._hasError ? 'Error' : 'Advertencia', Detalle: row._errorMessage || row._warningMessage || 'Revisar fila',
     }));
     if (!errors.length) return;
     const ws = XLSX.utils.json_to_sheet(errors); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Incidencias'); XLSX.writeFile(wb, 'incidencias_importacion_inicial.xlsx');
     toast.success('Reporte de incidencias descargado');
-  }, [importData, canViewInventoryCost, isServiceView]);
+  }, [importData, canViewInventoryCost, isServiceView, importPriceListsForView]);
 
   const validateImportRows = useCallback((rows: any[], entries = imageArchiveEntries, archiveName = imageArchiveFileName, categoryOptions = importCategoryOptions, warehouseOptions = importWarehouseOptions) => {
     const codeCounts = new Map<string, number>();
@@ -2374,18 +2558,29 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const commercialNote = String(row.commercialNote || '').trim();
       const categoryOk = categoryNames.has(String(row.category || '').trim().toLowerCase());
       const cost = row.costPrice === '' || row.costPrice === undefined || row.costPrice === null ? undefined : Number(row.costPrice);
-      const rawTaxRate = row.taxRate === '' || row.taxRate === undefined || row.taxRate === null ? 0.15 : Number(row.taxRate);
+      const rawTaxRate = isServiceView ? 0 : (row.taxRate === '' || row.taxRate === undefined || row.taxRate === null ? 0.15 : Number(row.taxRate));
       const taxRate = rawTaxRate > 1 ? rawTaxRate / 100 : rawTaxRate;
       const prices = row.prices || {};
-      const priceEntries = [
-        ['Minorista', prices.RETAIL],
-        ['Mayorista', prices.WHOLESALE],
-        ['Distribuidor', prices.DISTRIBUTOR],
-      ] as const;
+      const servicePrice = row.salePrice === '' || row.salePrice === undefined || row.salePrice === null ? undefined : Number(row.salePrice);
+      const priceEntries = isServiceView ? [['Precio', servicePrice] as const] : importPriceListsForView.map((list) => [`Precio ${list.name}`, prices[list.code]] as const);
       const suppliedPrices = priceEntries.filter(([, value]) => value !== undefined && value !== '' && value !== null);
       const invalidPrice = suppliedPrices.find(([, value]) => !Number.isFinite(Number(value)) || Number(value) < 0);
       const hasAtLeastOnePrice = suppliedPrices.some(([, value]) => Number.isFinite(Number(value)) && Number(value) >= 0);
       const missingPrices = priceEntries.filter(([, value]) => value === undefined || value === '' || value === null).map(([label]) => label);
+      const advancedStockRows = !isServiceView && row._advanced && Array.isArray(row._stockRows) ? row._stockRows : [];
+      const advancedStockIssue = advancedStockRows.find((stockRow: any) => {
+        const stockSku = String(stockRow?.variantSku || stockRow?.productCode || '').trim();
+        const stockQuantity = Number(stockRow?.quantity ?? 0);
+        const stockWarehouse = String(stockRow?.warehouse || '').trim();
+        return !stockSku
+          || !Number.isFinite(stockQuantity)
+          || stockQuantity < 0
+          || !stockWarehouse
+          || !warehouseNames.has(stockWarehouse.toLowerCase());
+      });
+      const advancedStockError = advancedStockIssue
+        ? `Inventario ${String(advancedStockIssue.variantSku || advancedStockIssue.productCode || '').trim() || 'sin SKU'}: ${!String(advancedStockIssue.warehouse || '').trim() ? 'bodega requerida' : !warehouseNames.has(String(advancedStockIssue.warehouse || '').trim().toLowerCase()) ? 'bodega no encontrada' : !Number.isFinite(Number(advancedStockIssue.quantity ?? 0)) || Number(advancedStockIssue.quantity ?? 0) < 0 ? 'stock inicial inválido' : 'fila inválida'}`
+        : '';
        const stock = Number(row.initialStock || 0);
        const warehouseName = String(row.warehouse || '').trim();
        const warehouseExists = !warehouseName || warehouseNames.has(warehouseName.toLowerCase());
@@ -2398,23 +2593,24 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
          !isServiceView && canViewInventoryCost && (cost === undefined || !Number.isFinite(cost) || cost < 0) ? 'Costo requerido y debe ser válido' : '',
          isServiceView && cost !== undefined && (!Number.isFinite(cost) || cost < 0) ? 'Costo del servicio inválido' : '',
          isServiceView && row.estimatedDuration !== undefined && row.estimatedDuration !== '' && (!Number.isInteger(Number(row.estimatedDuration)) || Number(row.estimatedDuration) < 0) ? 'Duración estimada inválida' : '',
-         isServiceView && (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 1) ? 'Tasa IVA inválida' : '',
+         isServiceView && (!Number.isFinite(servicePrice) || servicePrice < 0) ? 'Precio del servicio inválido' : '',
          invalidPrice ? `Precio ${invalidPrice[0]} inválido` : !hasAtLeastOnePrice ? 'Debe incluir al menos un precio de venta' : '',
          !isServiceView && (!Number.isFinite(stock) || stock < 0 ? 'Stock inicial inválido' : !warehouseExists ? 'Bodega no encontrada' : !warehouseOk ? 'Selecciona una bodega para el stock inicial' : ''),
+         advancedStockError,
        ].filter(Boolean);
        const imageStatus = archiveName ? (code && entries.has(productImageKey(code)) ? 'matched' : 'missing') : 'none';
-      const warningParts = missingPrices.length > 0 ? [`Sin precio: ${missingPrices.join(', ')}`] : [];
+      const warningParts = !isServiceView && missingPrices.length > 0 ? [`Sin precio: ${missingPrices.join(', ')}`] : [];
       return {
         ...row,
         code,
          name: String(row.name || '').trim(),
          description: String(row.description || '').trim(),
         commercialNote,
-        taxRate,
+        taxRate: isServiceView ? 0 : taxRate,
         ...(isServiceView ? { estimatedDuration: row.estimatedDuration === undefined || row.estimatedDuration === '' ? undefined : Number(row.estimatedDuration) } : {}),
          ...(isServiceView ? { initialStock: 0, minStock: 0, warehouse: '', warehouseId: undefined } : {}),
          ...(canViewInventoryCost ? { costPrice: cost } : {}),
-        salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
+        salePrice: isServiceView ? servicePrice : getPrimaryImportPrice(prices),
         _hasError: errors.length > 0,
         _errorMessage: errors[0],
         _hasWarning: warningParts.length > 0,
@@ -2422,7 +2618,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         _imageStatus: imageStatus,
       };
     });
-  }, [importCategoryOptions, importWarehouseOptions, imageArchiveEntries, imageArchiveFileName, canViewInventoryCost, isServiceView]);
+  }, [importCategoryOptions, importWarehouseOptions, imageArchiveEntries, imageArchiveFileName, canViewInventoryCost, isServiceView, importPriceListsForView, getPrimaryImportPrice]);
 
   const handleFileSelected = useCallback(async (file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
@@ -2442,7 +2638,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           && normalizedSheetNames.includes('productos')
           && normalizedSheetNames.some((name) => ['variantes', 'atributos', 'precios', 'inventario'].includes(name));
         if (hasAdvancedSheets && sheets) {
-          const catalog = parseVariantImportWorkbook(sheets);
+          const catalog = parseVariantImportWorkbook(sheets, importPriceLists);
           const previewRows = buildVariantImportPreviewRows(catalog);
           const validated = validateImportRows(previewRows);
           setAdvancedImportCatalog(catalog);
@@ -2461,7 +2657,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         const headers = raw[0].map((h: any) => normalizeImportHeader(h));
         const colMap: Record<string, number> = {};
         const aliases: Record<string, string[]> = {
-          code: ['código / sku', 'código', 'codigo', 'code', 'sku'], name: ['nombre', 'name', 'producto'], description: ['descripción', 'descripcion', 'description'], category: ['categoría', 'categoria', 'category', 'cat'], taxRate: ['tasa iva', 'iva', 'tax rate'], imageUrl: ['imagen url', 'imagen', 'image url'], barcode: ['código de barras', 'barcode'], brand: ['marca', 'brand'], model: ['modelo', 'model'], color: ['color'], weight: ['peso', 'weight'], weightUnit: ['unidad peso', 'weight unit'], dimensions: ['dimensiones', 'dimensions'], width: ['ancho', 'width'], height: ['alto', 'height'], depth: ['profundidad', 'depth'], dimensionUnit: ['unidad dimensión', 'dimension unit'], warranty: ['garantía', 'garantia', 'warranty'], estimatedDuration: ['duración estimada', 'duracion estimada'], unit: ['unidad', 'unit', 'medida'], trackInventory: ['control de inventario', 'track inventory'], minStock: ['stock mínimo', 'stock minimo', 'min stock'], costPrice: ['costo', 'precio costo', 'cost price'], lastPurchasePrice: ['último costo', 'ultimo costo', 'last purchase price'], initialStock: ['stock inicial', 'initial stock', 'cantidad', 'qty'], warehouse: ['bodega', 'almacén', 'almacen', 'warehouse'], trackBatch: ['control de lotes', 'track batch'], trackSeries: ['control de series', 'track series'], attributes: ['atributos json', 'atributos', 'attributes'], retailPrice: ['precio minorista', 'minorista', 'retail price'], wholesalePrice: ['precio mayorista', 'mayorista', 'wholesale price'], distributorPrice: ['precio distribuidor', 'distribuidor', 'distributor price'],
+          code: ['código / sku', 'código', 'codigo', 'code', 'sku'], name: ['nombre', 'name', 'producto'], description: ['descripción', 'descripcion', 'description'], category: ['categoría', 'categoria', 'category', 'cat'], taxRate: ['tasa iva', 'iva', 'tax rate'], imageUrl: ['imagen url', 'imagen', 'image url'], barcode: ['código de barras', 'barcode'], brand: ['marca', 'brand'], model: ['modelo', 'model'], color: ['color'], weight: ['peso', 'weight'], weightUnit: ['unidad peso', 'weight unit'], dimensions: ['dimensiones', 'dimensions'], width: ['ancho', 'width'], height: ['alto', 'height'], depth: ['profundidad', 'depth'], dimensionUnit: ['unidad dimensión', 'dimension unit'], warranty: ['garantía', 'garantia', 'warranty'], estimatedDuration: ['duración estimada', 'duracion estimada'], servicePrice: ['precio', 'precio servicio', 'service price'], unit: ['unidad', 'unit', 'medida'], trackInventory: ['control de inventario', 'track inventory'], minStock: ['stock mínimo', 'stock minimo', 'min stock'], costPrice: ['costo', 'precio costo', 'cost price'], lastPurchasePrice: ['último costo', 'ultimo costo', 'last purchase price'], initialStock: ['stock inicial', 'initial stock', 'cantidad', 'qty'], warehouse: ['bodega', 'almacén', 'almacen', 'warehouse'], trackBatch: ['control de lotes', 'track batch'], trackSeries: ['control de series', 'track series'], attributes: ['atributos json', 'atributos', 'attributes'], retailPrice: ['precio minorista', 'minorista', 'retail price'], wholesalePrice: ['precio mayorista', 'mayorista', 'wholesale price'], distributorPrice: ['precio distribuidor', 'distribuidor', 'distributor price'],
         };
           aliases.commercialNote = ['nota comercial', 'nota', 'commercial note', 'commercialnote'];
           aliases.isActive = ['disponible', 'estado', 'activo', 'active', 'is active'];
@@ -2470,25 +2666,49 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           const idx = headers.findIndex((header: string) => normalizedAliases.some((alias) => header === alias || header.startsWith(`${alias} `)));
           if (idx >= 0) colMap[key] = idx;
         }
+        const dynamicPriceColumns = new Map<number, string>();
+        for (let index = 0; index < headers.length; index += 1) {
+          const header = headers[index];
+          const list = !isServiceView && importPriceListsForView.find((candidate) => [
+            normalizeImportHeader(`Precio ${candidate.name}`),
+            normalizeImportHeader(candidate.name),
+            normalizeImportHeader(candidate.code),
+          ].includes(header));
+          if (list) dynamicPriceColumns.set(index, list.code);
+        }
         const parsed = raw.slice(1).filter((row: any[]) => row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== '')).map((row: any[]) => {
           const get = (key: string) => colMap[key] !== undefined ? row[colMap[key]] : undefined;
           const toNumber = (key: string) => get(key) === '' || get(key) === undefined ? undefined : Number(get(key));
-          const prices = { RETAIL: toNumber('retailPrice'), WHOLESALE: toNumber('wholesalePrice'), DISTRIBUTOR: toNumber('distributorPrice') };
+          const prices: Record<string, number | undefined> = {};
+          dynamicPriceColumns.forEach((priceCode, index) => {
+            const value = row[index];
+            prices[priceCode] = value === '' || value === undefined || value === null ? undefined : Number(value);
+          });
+          if (!isServiceView && dynamicPriceColumns.size === 0) {
+            prices.RETAIL = toNumber('retailPrice');
+            prices.WHOLESALE = toNumber('wholesalePrice');
+            prices.DISTRIBUTOR = toNumber('distributorPrice');
+          }
           let attributes: any = undefined;
           if (get('attributes')) { try { attributes = JSON.parse(String(get('attributes'))); } catch { attributes = String(get('attributes')); } }
+          const servicePrice = get('servicePrice') === '' || get('servicePrice') === undefined || get('servicePrice') === null
+            ? undefined
+            : Number(get('servicePrice'));
           return {
             code: String(get('code') || '').trim(),
             name: String(get('name') || '').trim(),
             category: String(get('category') || '').trim(),
             itemType: catalogItemType,
             commercialNote: String(get('commercialNote') || '').trim(),
-            description: String(get('description') || '').trim(), taxRate: toNumber('taxRate') ?? 0.15, isActive: !['NO', 'N', '0', 'FALSE', 'INACTIVO', 'NO DISPONIBLE'].includes(String(get('isActive') ?? 'SI').trim().toUpperCase()), imageUrl: String(get('imageUrl') || '').trim() || undefined, barcode: String(get('barcode') || '').trim() || undefined, brand: String(get('brand') || '').trim() || undefined, model: String(get('model') || '').trim() || undefined, color: String(get('color') || '').trim() || undefined, weight: toNumber('weight'), weightUnit: String(get('weightUnit') || '').trim() || undefined, dimensions: String(get('dimensions') || '').trim() || undefined, width: toNumber('width'), height: toNumber('height'), depth: toNumber('depth'), dimensionUnit: String(get('dimensionUnit') || '').trim() || undefined, warranty: String(get('warranty') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', lastPurchasePrice: toNumber('lastPurchasePrice'), trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
+            description: String(get('description') || '').trim(), taxRate: catalogItemType === 'SERVICE' ? 0 : (toNumber('taxRate') ?? 0.15), isActive: !['NO', 'N', '0', 'FALSE', 'INACTIVO', 'NO DISPONIBLE'].includes(String(get('isActive') ?? 'SI').trim().toUpperCase()), imageUrl: String(get('imageUrl') || '').trim() || undefined, barcode: String(get('barcode') || '').trim() || undefined, brand: String(get('brand') || '').trim() || undefined, model: String(get('model') || '').trim() || undefined, color: String(get('color') || '').trim() || undefined, weight: toNumber('weight'), weightUnit: String(get('weightUnit') || '').trim() || undefined, dimensions: String(get('dimensions') || '').trim() || undefined, width: toNumber('width'), height: toNumber('height'), depth: toNumber('depth'), dimensionUnit: String(get('dimensionUnit') || '').trim() || undefined, warranty: String(get('warranty') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', lastPurchasePrice: toNumber('lastPurchasePrice'), trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
             unit: String(get('unit') ?? '').trim().toLowerCase(),
-            salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
+            salePrice: catalogItemType === 'SERVICE'
+              ? servicePrice
+              : Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
             costPrice: get('costPrice') === '' || get('costPrice') === undefined ? undefined : Number(get('costPrice')),
              initialStock: catalogItemType === 'SERVICE' ? 0 : Number(get('initialStock') || 0),
              minStock: catalogItemType === 'SERVICE' ? 0 : Number(get('minStock') || 0),
-             warehouse: catalogItemType === 'SERVICE' ? '' : String(get('warehouse') || '').trim(), prices,
+             warehouse: catalogItemType === 'SERVICE' ? '' : String(get('warehouse') || '').trim(), prices: catalogItemType === 'SERVICE' ? {} : prices,
           };
         });
         setPreviewProgress(94);
@@ -2505,7 +2725,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setPreviewLoading(false);
       setPreviewProgress(0);
     }
-  }, [validateImportRows, catalogItemType, isServiceView]);
+  }, [validateImportRows, catalogItemType, isServiceView, importPriceLists, importPriceListsForView]);
 
   const handleImageArchiveSelected = useCallback(async (file: File) => {
     if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
@@ -2550,15 +2770,57 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   }, []);
 
   const handleImportRowUpdate = (index: number, field: string, value: any) => {
+    const currentRow = importData[index];
+    const isAdvancedProduct = Boolean(advancedImportCatalog && !isServiceView && currentRow?._advanced);
+    const isSimpleAdvancedProduct = Boolean(
+      isAdvancedProduct
+      && !(currentRow._hasVariants === true || Number(currentRow._variantCount || 0) > 0),
+    );
+    if (isAdvancedProduct && field === 'warehouse') {
+      const sourceCode = String(currentRow._sourceCode || currentRow.code || '').trim().toLowerCase();
+      setAdvancedImportCatalog((previous) => {
+        if (!previous) return previous;
+        return {
+          ...previous,
+          stock: previous.stock.map((stockRow) => String(stockRow.productCode || '').trim().toLowerCase() === sourceCode
+            ? { ...stockRow, warehouse: String(value || '').trim() }
+            : stockRow),
+        };
+      });
+    }
+    if (isSimpleAdvancedProduct && ['initialStock', 'minStock', 'warehouse'].includes(field)) {
+      const sourceCode = String(currentRow._sourceCode || currentRow.code || '').trim().toLowerCase();
+      setAdvancedImportCatalog((previous) => {
+        if (!previous) return previous;
+        const stock = previous.stock.map((stockRow) => {
+          const productCode = String(stockRow.productCode || '').trim().toLowerCase();
+          const variantSku = String(stockRow.variantSku || '').trim().toLowerCase();
+          if (productCode !== sourceCode || variantSku !== sourceCode) return stockRow;
+          return {
+            ...stockRow,
+            ...(field === 'initialStock' ? { quantity: value === '' ? 0 : Number(value) || 0 } : {}),
+            ...(field === 'minStock' ? { minStock: value === '' ? 0 : Number(value) || 0 } : {}),
+            ...(field === 'warehouse' ? { warehouse: String(value || '').trim() } : {}),
+          };
+        });
+        return { ...previous, stock };
+      });
+    }
     setImportData((prev) => {
       const next = [...prev];
       const row = { ...next[index], prices: { ...(next[index].prices || {}) } };
-      if (field.startsWith('price.')) {
+      if (field === 'servicePrice') {
+        row.salePrice = value === '' ? undefined : Number(value);
+        row.taxRate = 0;
+      } else if (field.startsWith('price.')) {
         const priceCode = field.split('.')[1];
         row.prices[priceCode] = value === '' ? undefined : Number(value);
-        row.salePrice = Number(row.prices.RETAIL ?? row.prices.WHOLESALE ?? row.prices.DISTRIBUTOR ?? 0);
+        row.salePrice = getPrimaryImportPrice(row.prices);
       } else {
         row[field] = value;
+      }
+      if (isAdvancedProduct && field === 'warehouse') {
+        row._stockRows = (row._stockRows || []).map((stockRow: any) => ({ ...stockRow, warehouse: String(value || '').trim() }));
       }
       if (field === 'category') {
         const category = importCategoryOptions.find((c: any) => c.name?.toLowerCase() === String(value).trim().toLowerCase());
@@ -2644,12 +2906,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           name: row.name,
           categoryId: cat?.id,
           commercialNote: row.commercialNote,
-          description: row.description, taxRate: row.taxRate, imageUrl: row.imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
+          description: row.description, taxRate: isServiceView ? 0 : row.taxRate, imageUrl: row.imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
           unit: String(row.unit ?? '').trim(),
           ...(canViewInventoryCost ? { costPrice: row.costPrice } : {}),
           ...(canViewInventoryCost ? { lastPurchasePrice: row.lastPurchasePrice } : {}),
            ...(isServiceView ? {} : { initialStock: row.initialStock, minStock: row.minStock || 0, warehouseId: warehouse?.id }),
-           prices: row.prices,
+           prices: isServiceView ? undefined : row.prices,
            price: row.salePrice,
            trackSeries: Boolean(row.trackSeries),
            isActive: row.isActive !== false,
@@ -2682,14 +2944,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                    ...price,
                    productCode: finalCodeBySource.get(String(price.productCode || '').trim().toLowerCase()) || price.productCode,
                  })),
-               ...advancedImportCatalog.prices
-                 .filter((price) => String(price.scope).toUpperCase() !== 'VARIANT' && !['RETAIL', 'WHOLESALE', 'DISTRIBUTOR'].includes(String(price.priceListCode || '').toUpperCase()) && finalCodeBySource.has(String(price.productCode || '').trim().toLowerCase()))
-                 .map((price) => ({
-                   ...price,
-                   productCode: finalCodeBySource.get(String(price.productCode || '').trim().toLowerCase()) || price.productCode,
-                 })),
                ...valid.flatMap((row) => Object.entries(row.prices || {})
-                 .filter(([priceListCode]) => ['RETAIL', 'WHOLESALE', 'DISTRIBUTOR'].includes(String(priceListCode).toUpperCase()))
                  .filter(([, value]) => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0)
                  .map(([priceListCode, value]) => ({ scope: 'PRODUCT' as const, productCode: row.code, priceListCode, price: Number(value) }))),
              ],
@@ -2705,7 +2960,27 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                }),
            }
            : null;
-       setImportProgress(25);
+        if (!isServiceView) {
+          const stockWarehouseIds = [...new Set((advancedCatalogPayload
+            ? advancedCatalogPayload.stock
+              .filter((stock: any) => Number(stock.quantity ?? 0) > 0)
+              .map((stock: any) => String(stock.warehouseId || '').trim())
+            : items
+              .filter((item: any) => Number(item.initialStock ?? 0) > 0)
+              .map((item: any) => String(item.warehouseId || '').trim()))
+            .filter(Boolean))];
+          if (stockWarehouseIds.length > 0) {
+            const accountingResponse = await inventoryService.previewProductStockAccounting(stockWarehouseIds);
+            const accountingPreview = (accountingResponse as any)?.data || accountingResponse;
+            if (!accountingPreview?.ready) {
+              const message = Array.isArray(accountingPreview?.errors) && accountingPreview.errors.length > 0
+                ? accountingPreview.errors.join(' ')
+                : 'Completa la configuración contable de Inventario y de las bodegas antes de importar stock.';
+              throw new Error(message);
+            }
+          }
+        }
+        setImportProgress(25);
        const results = isServiceView
          ? await inventoryService.importServices({ items, currency: importCurrency, exchangeRate: importExchangeRate, confirmText: 'IMPORTAR' })
          : advancedCatalogPayload
@@ -2821,7 +3096,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   return (
     <>
-      <Card className={importPreviewOpen ? `fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 w-auto max-w-none flex-col overflow-hidden rounded-none border-0 bg-background p-3 shadow-none sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}` : 'rounded-xl border bg-card p-4'}>
+      <Card data-import-preview-shell={importPreviewOpen ? 'true' : undefined} className={importPreviewOpen ? `fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 w-auto max-w-none flex-col overflow-hidden rounded-none border-0 bg-background p-3 shadow-none sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}` : 'rounded-xl border bg-card p-4'}>
       {importPreviewOpen ? (
         <ImportPreviewPage
           importData={importData}
@@ -2862,6 +3137,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           }}
           onReady={handleImportPreviewReady}
           isService={isServiceView}
+          priceLists={importPriceListsForView}
         />
       ) : (
         <>
@@ -3715,13 +3991,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <DialogHeader data-tour="inventory-initial-import-title">
              <DialogTitle>{isServiceView ? 'Importación de servicios' : 'Importación inicial de inventario'}</DialogTitle>
              <DialogDescription>
-               {isServiceView ? 'Puedes importar servicios en cualquier momento. Descarga la plantilla, completa los datos y revisa la previsualización antes de confirmar. Las imágenes opcionales pueden cargarse en ZIP o RAR.' : 'Esta carga se realiza una sola vez por sucursal. La plantilla avanzada usa Productos, Variantes, Atributos, Precios e Inventario; permite crear o reutilizar atributos y valores faltantes después de confirmarla.'}
+               {isServiceView ? 'Puedes importar servicios en cualquier momento. Descarga la plantilla, completa los datos y revisa la previsualización antes de confirmar. Las imágenes opcionales pueden cargarse en ZIP o RAR.' : 'Puedes importar productos varias veces por sucursal. La plantilla avanzada usa Productos, Variantes, Atributos, Precios e Inventario; permite crear o reutilizar atributos y valores faltantes después de confirmarla. Los SKU existentes se omiten para evitar duplicados.'}
              </DialogDescription>
-             <InventoryViewTutorial label={isServiceView ? 'Cómo importar servicios' : 'Cómo importar inventario'} targetPrefix="inventory-initial-import" copy={{ data: { description: isServiceView ? 'Descarga la plantilla, prepara servicios, precios, costos e imágenes y revisa las reglas. Los servicios no manejan stock ni bodegas.' : 'Descarga la plantilla, prepara productos, precios, costos, stock e imágenes y revisa las reglas.' }, actions: { description: 'Descarga la plantilla o continúa con la carga para iniciar la importación.' } }} />
+             <InventoryViewTutorial label={isServiceView ? 'Cómo importar servicios' : 'Cómo importar inventario'} targetPrefix="inventory-initial-import" copy={{ data: { description: isServiceView ? 'Descarga la plantilla, prepara servicios, su único precio, costos e imágenes y revisa las reglas. Los servicios no llevan IVA ni manejan stock o bodegas.' : 'Descarga la plantilla, prepara productos, precios, costos, stock e imágenes y revisa las reglas.' }, actions: { description: 'Descarga la plantilla o continúa con la carga para iniciar la importación.' } }} />
           </DialogHeader>
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm" data-tour="inventory-initial-import-data">
-             <p><b>La plantilla siempre incluye:</b> {canViewInventoryCost ? (isServiceView ? 'costo del servicio, ' : 'costo base y costo por variante, ') : ''}{isServiceView ? 'Minorista, Mayorista, Distribuidor y disponibilidad.' : 'una fila por producto, una fila por variante, atributos dinámicos, precios por alcance y stock por SKU/bodega.'}</p>
-             <p>Cada {isServiceView ? 'servicio' : 'producto'} debe tener SKU único, nombre, categoría y {canViewInventoryCost ? 'costo base y ' : ''}al menos un precio base. Los precios de variante son opcionales y solo sobrescriben el precio padre para ese SKU.</p>
+             <p><b>La plantilla siempre incluye:</b> {canViewInventoryCost ? (isServiceView ? 'costo del servicio, ' : 'costo base y costo por variante, ') : ''}{isServiceView ? 'un único precio, disponibilidad e imagen opcional.' : 'una fila por producto, una fila por variante, atributos dinámicos, precios por alcance y stock por SKU/bodega; el stock del padre siempre se calcula, nunca se captura.'}</p>
+             <p>Cada {isServiceView ? 'servicio' : 'producto'} debe tener SKU único, nombre, categoría y {canViewInventoryCost ? 'costo base y ' : ''}al menos un precio base. {isServiceView ? 'El servicio no lleva IVA ni precios alternos.' : 'Los precios de variante son opcionales y solo sobrescriben el precio padre para ese SKU.'}</p>
              {!isServiceView && <p>Si un atributo o valor no existe, se detectará en la revisión y se creará/reutilizará dentro de la misma transacción. Un producto sin filas en Variantes recibirá la variante Estándar.</p>}
              {isServiceView && <p>Los servicios no se vinculan a bodegas, no manejan stock inicial y no tienen variantes.</p>}
             <p>Opcionalmente puedes cargar un ZIP o RAR con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
@@ -3748,12 +4024,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <DialogHeader data-tour="inventory-import-title">
              <DialogTitle>Importar {isServiceView ? 'Servicios' : 'Productos'}</DialogTitle>
              <DialogDescription>
-               {isServiceView ? 'Sube servicios con descripción, categoría, precios, costo y disponibilidad. La carga se confirma en dos pasos.' : 'Sube el catálogo inicial de la sucursal. Esta carga es única por sucursal y se confirma en dos pasos.'}
+               {isServiceView ? 'Sube servicios con descripción, categoría, un único precio, costo y disponibilidad. La carga se confirma en dos pasos.' : 'Sube productos nuevos o pendientes de importar de la sucursal. Puedes repetir la carga; los SKU existentes se omiten y se confirma en dos pasos.'}
              </DialogDescription>
              <InventoryViewTutorial label={`Cómo importar ${isServiceView ? 'servicios' : 'productos'}`} targetPrefix="inventory-import" copy={{ data: { description: isServiceView ? 'Configura moneda, tasa, archivo e imágenes; luego normaliza y revisa la previsualización. Los servicios no usan bodegas ni stock.' : 'Configura moneda, tasa, archivo, imágenes y bodega de destino; luego revisa la previsualización del catálogo.' }, actions: { description: 'Carga el archivo y abre la previsualización antes de confirmar.' } }} />
           </DialogHeader>
           <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-3" data-tour="inventory-import-data">
-            <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Listas incluidas</p><p className="h-9 flex items-center text-xs font-semibold">Minorista · Mayorista · Distribuidor</p></div>
+            <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">{isServiceView ? 'Precio incluido' : 'Listas incluidas'}</p><p className="h-9 flex items-center text-xs font-semibold">{isServiceView ? 'Precio único del servicio' : importPriceLists.map((list) => list.name).join(' · ')}</p></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Moneda del archivo</p><Select value={importCurrency} onValueChange={setImportCurrency}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Tasa USD / moneda base</p><Input className="h-9 text-xs" type="number" min="0.0001" step="any" value={importExchangeRate} onChange={(event) => setImportExchangeRate(Number(event.target.value) || 1)} disabled={importCurrency === 'NIO'} /></div>
           </div>
@@ -3822,16 +4098,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                           <TableHead className="text-[10px] uppercase w-8"></TableHead>
                           <TableHead className="text-[10px] uppercase w-32">Código</TableHead>
                           <TableHead className="text-[10px] uppercase">Nombre</TableHead>
+                          {isServiceView && <TableHead className="text-[10px] uppercase w-52">Descripción</TableHead>}
                           <TableHead className="text-[10px] uppercase w-44">Nota comercial</TableHead>
                             <TableHead className="text-[10px] uppercase w-32">Categoría</TableHead>
                           <TableHead className="text-[10px] uppercase w-28 text-right">Unidad</TableHead>
-                          <TableHead className="text-[10px] uppercase w-28 text-right">Minorista</TableHead>
-                          <TableHead className="text-[10px] uppercase w-28 text-right">Mayorista</TableHead>
-                          <TableHead className="text-[10px] uppercase w-28 text-right">Distribuidor</TableHead>
+                          {isServiceView ? <><TableHead className="text-[10px] uppercase w-28 text-right">Duración (min)</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Precio</TableHead></> : <><TableHead className="text-[10px] uppercase w-28 text-right">Minorista</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Mayorista</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Distribuidor</TableHead></>}
                           {canViewInventoryCost && <TableHead className="text-[10px] uppercase w-28 text-right">Costo</TableHead>}
-                          <TableHead className="text-[10px] uppercase w-24 text-right">Stock</TableHead>
-                          <TableHead className="text-[10px] uppercase w-24 text-right">Min</TableHead>
-                          <TableHead className="text-[10px] uppercase w-32">Bodega</TableHead>
+                          {!isServiceView && <><TableHead className="text-[10px] uppercase w-24 text-right">Stock</TableHead><TableHead className="text-[10px] uppercase w-24 text-right">Min</TableHead><TableHead className="text-[10px] uppercase w-32">Bodega</TableHead></>}
                           <TableHead className="text-[10px] uppercase w-36">Validación</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -3861,6 +4134,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                 className={`h-8 text-xs ${!row.name ? 'border-red-500' : ''}`}
                               />
                             </TableCell>
+                            {isServiceView && <TableCell className="p-1"><Input value={row.description || ''} title={row.description || ''} onChange={(e) => handleImportRowUpdate(i, 'description', e.target.value)} className="h-8 text-xs" /></TableCell>}
                             <TableCell className="p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(e) => handleImportRowUpdate(i, 'commercialNote', e.target.value)} className="h-8 text-xs" /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></TableCell>
                             <TableCell className="p-1">
                               {importCategoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase()) ? (
@@ -3897,62 +4171,67 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                 className="h-8 text-xs"
                               />
                             </TableCell>
-                            <TableCell className="p-1">
-                              <Input
-                                type="number"
-                                min={0}
-                                value={row.prices?.RETAIL ?? ''}
-                                onChange={(e) => handleImportRowUpdate(i, 'price.RETAIL', e.target.value)}
-                                className="h-8 text-xs text-right"
-                              />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.WHOLESALE', e.target.value)} className="h-8 text-xs text-right" />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.DISTRIBUTOR', e.target.value)} className="h-8 text-xs text-right" />
-                            </TableCell>
+                            {isServiceView ? <><TableCell className="p-1"><Input type="number" min={0} value={row.estimatedDuration ?? ''} onChange={(e) => handleImportRowUpdate(i, 'estimatedDuration', e.target.value === '' ? undefined : Number(e.target.value))} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.salePrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'servicePrice', e.target.value)} className="h-8 text-xs text-right" /></TableCell></> : <><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.RETAIL', e.target.value)} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.WHOLESALE', e.target.value)} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.DISTRIBUTOR', e.target.value)} className="h-8 text-xs text-right" /></TableCell></>}
                             {canViewInventoryCost && <TableCell className="p-1">
                               <Input type="number" min={0} value={row.costPrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'costPrice', e.target.value)} className="h-8 text-xs text-right" />
                             </TableCell>}
-                            <TableCell className="p-1">
-                              <Input
-                                type="number"
-                                min={0}
-                                value={row.initialStock ?? ''}
-                                onChange={(e) => handleImportRowUpdate(i, 'initialStock', Number(e.target.value) || 0)}
-                                aria-label="Stock inicial"
-                                title="Edita el stock inicial antes de confirmar la importación"
-                                className="h-8 text-xs text-right"
-                              />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <Input type="number" min={0} value={row.minStock} onChange={(e) => handleImportRowUpdate(i, 'minStock', Number(e.target.value) || 0)} className="h-8 text-xs text-right" />
-                            </TableCell>
-                            <TableCell className="p-1 text-center">
-                              {!row.warehouse || importWarehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase()) ? (
-                                <Select value={row.warehouse || '__none__'} onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' ? '' : value)}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger><SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{importWarehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{importWarehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select>
-                              ) : (
-                                <div className="flex items-center gap-1">
-                                  <Select value="__none__" onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' ? '' : value)}>
-                                    <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+                            {isServiceView ? <TableCell className="p-1"><Select value={row.isActive === false ? 'false' : 'true'} onValueChange={(value) => handleImportRowUpdate(i, 'isActive', value === 'true')}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="true">Disponible</SelectItem><SelectItem value="false">No disponible</SelectItem></SelectContent></Select></TableCell> : row._advanced && (row._hasVariants === true || Number(row._variantCount || 0) > 0) ? <>
+                              <TableCell className="p-1 text-center"><span className="text-[10px] font-semibold text-muted-foreground">Por variante</span></TableCell>
+                              <TableCell className="p-1 text-center"><span className="text-[10px] text-muted-foreground">—</span></TableCell>
+                              <TableCell className="p-1 text-center">
+                                {Array.isArray(row._stockRows) && row._stockRows.length > 0 && row.warehouse !== 'Varias bodegas' ? (() => {
+                                  const warehouseExists = importWarehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase());
+                                  const selectValue = warehouseExists ? row.warehouse : '__invalid__';
+                                  return <Select value={selectValue || '__none__'} onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' || value === '__invalid__' ? '' : value)}>
+                                    <SelectTrigger className={`h-8 text-xs ${!warehouseExists ? 'border-amber-500/60 text-amber-600' : ''}`} title="Aplica la bodega seleccionada a las filas de inventario de este producto"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>
+                                      {!warehouseExists && row.warehouse && <SelectItem value="__invalid__">{`No existe: ${row.warehouse}`}</SelectItem>}
+                                      <SelectItem value="__none__">Sin bodega</SelectItem>
                                       {importWarehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}
                                     </SelectContent>
-                                  </Select>
-                                  {canPerform('INVENTORY', 'edit') && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => {
-                                    setPendingWarehouseRowIndex(i);
-                                    setNewWarehouseName(row.warehouse || '');
-                                    setNewWarehouseLocation('');
-                                    setNewWarehouseType('STORE');
-                                    setNewWarehouseParentId('none');
-                                    setNewWarehouseInventoryAccountId('none');
-                                    setWarehouseModalOpen(true);
-                                  }}><Plus className="size-3.5" /></Button>}
-                                </div>
-                              )}
-                            </TableCell>
+                                  </Select>;
+                                })() : <span className="text-[10px] font-semibold text-muted-foreground">{row._stockRows?.length ? 'Varias bodegas' : 'Hoja Inventario'}</span>}
+                              </TableCell>
+                            </> : <>
+                              <TableCell className="p-1">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={row.initialStock ?? ''}
+                                  onChange={(e) => handleImportRowUpdate(i, 'initialStock', Number(e.target.value) || 0)}
+                                  aria-label="Stock inicial"
+                                  title="Edita el stock inicial antes de confirmar la importación"
+                                  className="h-8 text-xs text-right"
+                                />
+                              </TableCell>
+                              <TableCell className="p-1">
+                                <Input type="number" min={0} value={row.minStock} onChange={(e) => handleImportRowUpdate(i, 'minStock', Number(e.target.value) || 0)} className="h-8 text-xs text-right" />
+                              </TableCell>
+                              <TableCell className="p-1 text-center">
+                                {!row.warehouse || importWarehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase()) ? (
+                                  <Select value={row.warehouse || '__none__'} onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' ? '' : value)}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger><SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{importWarehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{importWarehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <Select value="__none__" onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' ? '' : value)}>
+                                      <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>
+                                        {importWarehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                    {canPerform('INVENTORY', 'edit') && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => {
+                                      setPendingWarehouseRowIndex(i);
+                                      setNewWarehouseName(row.warehouse || '');
+                                      setNewWarehouseLocation('');
+                                      setNewWarehouseType('STORE');
+                                      setNewWarehouseParentId('none');
+                                      setNewWarehouseInventoryAccountId('none');
+                                      setWarehouseModalOpen(true);
+                                    }}><Plus className="size-3.5" /></Button>}
+                                  </div>
+                                )}
+                              </TableCell>
+                            </>}
                             <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span>
                             </TableCell>
                           </TableRow>
@@ -3979,9 +4258,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 {isServiceView && <p>• <b>Descripción</b></p>}
                 <p>• <b>Nota comercial</b> (máximo 100 caracteres)</p>
                 <p>• <b>Categoría</b></p>
-                <p>• <b>Precios por lista</b></p>
+                <p>• <b>{isServiceView ? 'Precio único' : 'Precios por lista'}</b></p>
                 {canViewInventoryCost && <p>• <b>{isServiceView ? 'Costo del servicio' : 'Costo'}</b></p>}
-                {isServiceView ? <><p>• <b>Tasa IVA</b></p><p>• <b>Disponible</b> (SI/NO)</p><p>• Sin bodega, stock ni variantes</p></> : <><p>• <b>Productos</b> y <b>Variantes</b></p><p>• <b>Atributos</b> dinámicos por fila</p><p>• <b>Precios</b>: PRODUCTO / VARIANTE</p><p>• <b>Inventario</b> por SKU y bodega</p><p>• Sin stock automático para variantes</p></>}
+                {isServiceView ? <><p>• <b>Disponible</b> (SI/NO)</p><p>• Sin IVA, bodega, stock ni variantes</p></> : <><p>• <b>Productos</b> y <b>Variantes</b></p><p>• <b>Atributos</b> dinámicos por fila</p><p>• <b>Precios</b>: PRODUCTO / VARIANTE</p><p>• <b>Inventario</b> por SKU y bodega</p><p>• Sin stock automático para variantes</p></>}
               </div>
               <Button variant="outline" size="sm" className="mt-4 w-full text-xs font-bold" onClick={handleDownloadTemplate}>
                 <Download className="mr-2 size-3" />
@@ -4009,9 +4288,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       <Dialog open={initialImportConfirmOpen && !importing} onOpenChange={setInitialImportConfirmOpen}>
         <DialogContent>
           <DialogHeader data-tour="inventory-initial-confirm-title">
-            <DialogTitle>Formalizar importación inicial</DialogTitle>
-          <DialogDescription>Esta acción creará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'productos'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios se guardarán sin bodega, stock ni variantes.' : 'No podrá repetirse para esta empresa.'} Los precios Minorista, Mayorista y Distribuidor se guardarán en {importCurrency}; las listas sin precio quedarán pendientes. Escribe IMPORTAR para confirmar.</DialogDescription>
-             <InventoryViewTutorial label="Cómo confirmar importación" targetPrefix="inventory-initial-confirm" copy={{ data: { description: 'Escribe IMPORTAR únicamente después de revisar las filas válidas, errores y advertencias.' }, actions: { description: `Confirma la importación para crear ${isServiceView ? 'los servicios' : 'el catálogo inicial'}.` } }} />
+             <DialogTitle>Formalizar importación</DialogTitle>
+          <DialogDescription>Esta acción creará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'productos'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios se guardarán con un único precio, sin IVA, bodega, stock ni variantes.' : 'Puedes repetir la importación cuando lo necesites; los SKU que ya existen se omitirán para evitar duplicados.'} {isServiceView ? `El precio se guardará en ${importCurrency}.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
+          <InventoryViewTutorial label="Cómo confirmar importación" targetPrefix="inventory-initial-confirm" copy={{ data: { description: 'Escribe IMPORTAR únicamente después de revisar las filas válidas, errores y advertencias.' }, actions: { description: `Confirma la importación para crear ${isServiceView ? 'los servicios' : 'los productos nuevos'}.` } }} />
           </DialogHeader>
           <div data-tour="inventory-initial-confirm-data"><Input value={initialImportConfirmText} onChange={(event) => setInitialImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus /></div>
           <DialogFooter data-tour="inventory-initial-confirm-actions"><Button variant="outline" onClick={() => setInitialImportConfirmOpen(false)}>Cancelar</Button><Button onClick={handleFinalInitialImport} disabled={initialImportConfirmText !== 'IMPORTAR' || importing}>Confirmar importación</Button></DialogFooter>

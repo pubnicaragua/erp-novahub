@@ -68,6 +68,12 @@ const buildVariantCombinations = (linkedAttributes: any[] = []): VariantCombinat
 const variantCombinationKey = (combination: VariantCombination) =>
   combination.map((attribute) => `${attribute.attributeId}::${attribute.value}`).join('|');
 
+const getVariantStockTotal = (product: any) =>
+  buildVariantCombinations(product?.linkedAttributes).reduce(
+    (total, combination) => total + Number(product?.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
+    0,
+  );
+
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
@@ -98,6 +104,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
   const [productsList, setProductsList] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingAccounting, setIsCheckingAccounting] = useState(false);
 
   const defaultDraft = makeDefaultDraft(effectiveCategories[0]?.id || '', catalogItemType);
 
@@ -160,10 +167,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     [draftProduct.linkedAttributes],
   );
 
-  const allocatedVariantStock = variantCombinations.reduce(
-    (total, combination) => total + Number(draftProduct.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
-    0,
-  );
+  const allocatedVariantStock = getVariantStockTotal(draftProduct);
 
   const updateVariantInitialStock = (combination: VariantCombination, value: string) => {
     const key = variantCombinationKey(combination);
@@ -190,18 +194,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
   const validateVariableStockDistribution = (product: any) => {
     if (!product.isVariable) return true;
-    const total = Number(product.initialStock || 0);
-    if (!Number.isFinite(total) || total < 0) {
-      toast.error('El stock total del producto padre no es válido');
+    const combinations = buildVariantCombinations(product.linkedAttributes);
+    if (combinations.length === 0) {
+      toast.error('Selecciona al menos una combinación válida para las variantes');
       return false;
     }
-    const combinations = buildVariantCombinations(product.linkedAttributes);
-    const allocated = combinations.reduce(
-      (sum, combination) => sum + Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
-      0,
-    );
-    if (Math.abs(allocated - total) > 0.000001) {
-      toast.error(`Distribuye exactamente ${total} unidades entre las variantes. Actualmente distribuiste ${allocated}.`);
+    const invalid = combinations.find((combination) => {
+      const quantity = Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0);
+      return !Number.isFinite(quantity) || quantity < 0;
+    });
+    if (invalid) {
+      toast.error('El stock inicial de cada variante debe ser un número mayor o igual que cero');
       return false;
     }
     return true;
@@ -290,7 +293,41 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     }
   };
 
-  const handleAddToList = () => {
+  const validateProductsStockAccounting = async (products: any[]) => {
+    const stockProducts = products.filter((product) => {
+      const isProduct = String(product.itemType || 'PRODUCT').toUpperCase() === 'PRODUCT';
+      const stock = product.isVariable ? getVariantStockTotal(product) : Number(product.initialStock || 0);
+      return isProduct && Number.isFinite(stock) && stock > 0;
+    });
+    if (stockProducts.length === 0) return true;
+
+    const warehouseIds = [...new Set(stockProducts.map((product) => String(product.initialWarehouseId || '').trim()).filter(Boolean))];
+    if (stockProducts.some((product) => !String(product.initialWarehouseId || '').trim())) {
+      toast.error('Cada producto con stock inicial debe tener una bodega destino seleccionada.');
+      return false;
+    }
+
+    setIsCheckingAccounting(true);
+    try {
+      const response = await inventoryService.previewProductStockAccounting(warehouseIds);
+      const preview = (response as any)?.data || response;
+      if (!preview?.ready) {
+        const message = Array.isArray(preview?.errors) && preview.errors.length > 0
+          ? preview.errors.join(' ')
+          : 'Completa la configuración contable de Inventario y de las bodegas antes de agregar stock.';
+        toast.error(message);
+        return false;
+      }
+      return true;
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo validar la configuración contable del inventario.');
+      return false;
+    } finally {
+      setIsCheckingAccounting(false);
+    }
+  };
+
+  const handleAddToList = async () => {
     if (!draftProduct.code.trim() || !draftProduct.name.trim() || !draftProduct.categoryId) {
       toast.error('Código, Nombre y Categoría son obligatorios');
       return;
@@ -315,7 +352,14 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       toast.error('Debes seleccionar una Bodega para el producto');
       return;
     }
-    setProductsList((prev) => [...prev, { ...draftProduct }]);
+    if (!(await validateProductsStockAccounting([draftProduct]))) return;
+    setProductsList((prev) => [
+      ...prev,
+      {
+        ...draftProduct,
+        initialStock: draftProduct.isVariable ? getVariantStockTotal(draftProduct) : draftProduct.initialStock,
+      },
+    ]);
     
     // Reset draft
     setDraftProduct({
@@ -331,7 +375,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   };
 
   const handleSave = async () => {
-    const listToSave = [...productsList];
+    const listToSave = productsList.map((product) => ({
+      ...product,
+      initialStock: product.isVariable ? getVariantStockTotal(product) : product.initialStock,
+    }));
     
     if (productsList.length === 0) {
       if (!draftProduct.code.trim() || !draftProduct.name.trim() || !draftProduct.categoryId) {
@@ -362,13 +409,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         toast.error('Debes seleccionar una Bodega para el producto');
         return;
       }
-      listToSave.push(draftProduct);
+      listToSave.push({
+        ...draftProduct,
+        initialStock: draftProduct.isVariable ? getVariantStockTotal(draftProduct) : draftProduct.initialStock,
+      });
     }
 
     if (listToSave.length === 0) return;
     for (const product of listToSave) {
       if (!validateVariableStockDistribution(product)) return;
     }
+    if (!(await validateProductsStockAccounting(listToSave))) return;
     
     setIsSaving(true);
     let successCount = 0;
@@ -405,11 +456,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           description: product.description || '',
           commercialNote: product.commercialNote || '',
           itemType: product.itemType || 'PRODUCT',
-          initialStock: product.isVariable ? Number(product.initialStock || 0) : 0,
+          // El padre no captura stock cuando tiene variantes. El backend
+          // también recalcula este total para evitar que un payload alterado
+          // pueda crear existencias fuera de los SKU de variante.
+          initialStock: product.isVariable ? getVariantStockTotal(product) : Number(product.initialStock || 0),
           variantInitialStocks: product.isVariable
             ? buildVariantCombinations(product.linkedAttributes).map((combination) => ({
               attributes: combination,
               quantity: Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
+              warehouseId: product.initialWarehouseId || undefined,
               costPrice: (() => {
                 const rawCost = product.variantCostPrices?.[variantCombinationKey(combination)];
                 return rawCost === undefined || rawCost === '' ? null : Number(rawCost) * rate;
@@ -448,8 +503,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       setSkuError('');
       onOpenChange(false);
       onRefresh();
-    } catch {
-            toast.error(`Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
+    } catch (error: any) {
+            toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
     } finally {
       setIsSaving(false);
     }
@@ -469,7 +524,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             label={catalogItemType === 'SERVICE' ? 'Cómo crear servicio' : 'Cómo crear producto'}
             targetPrefix="inventory-product-add"
             stepKeys={['title', 'data', 'items', 'actions']}
-            copy={{ data: { description: 'Completa código, nombre, categoría, moneda, costos, Bodegas y stock inicial.' }, items: { description: 'Revisa la lista de productos o servicios que agregarás en una sola operación.' }, actions: { description: 'Guarda uno o varios registros para incorporarlos al catálogo.' } }}
+            copy={{ data: { description: 'Completa código, nombre, categoría, moneda, costos, bodega y el stock de cada variante cuando corresponda.' }, items: { description: 'Revisa la lista de productos o servicios que agregarás en una sola operación.' }, actions: { description: 'Guarda uno o varios registros para incorporarlos al catálogo.' } }}
           />
         </DialogHeader>
 
@@ -697,16 +752,19 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                     </Select>
                   </div>
                   <div className="col-span-1 sm:col-span-2 md:col-span-2">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock total del padre</label>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock total de variantes</label>
                     <Input
                       type="number"
                       min={0}
                       step="1"
-                      value={draftProduct.initialStock}
-                      onChange={(e) => handleUpdateDraft('initialStock', e.target.value)}
-                      className="h-8 text-xs text-right mt-1 tabular-nums"
-                      placeholder="0"
+                      value={allocatedVariantStock}
+                      readOnly
+                      disabled
+                      aria-label="Stock total calculado de las variantes"
+                      title="Se calcula sumando el stock de cada variante"
+                      className="h-8 text-xs text-right mt-1 tabular-nums bg-muted/50 text-muted-foreground cursor-not-allowed"
                     />
+                    <p className="mt-1 text-[10px] text-muted-foreground">Se calcula sumando el stock de cada variante.</p>
                   </div>
                 </>
                 )
@@ -726,9 +784,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
               )}
               
               <div className={`sm:col-span-2 md:col-span-5 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>
-                <Button onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={!!skuError}>
+                <Button onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={!!skuError || isCheckingAccounting || isSaving}>
                   <Plus className="size-3 mr-2" />
-                  Agregar a la lista
+                  {isCheckingAccounting ? 'Validando contabilidad...' : 'Agregar a la lista'}
                 </Button>
               </div>
 
@@ -836,10 +894,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h5 className="text-[10px] font-black uppercase tracking-wider text-foreground">Distribución del stock por variante</h5>
-                      <p className="mt-1 text-[10px] text-muted-foreground">El total distribuido debe coincidir con el stock del producto padre.</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">El stock total del producto se calcula sumando estas variantes.</p>
                     </div>
-                    <Badge variant={allocatedVariantStock === Number(draftProduct.initialStock || 0) ? 'secondary' : 'destructive'} className="text-[9px] tabular-nums">
-                      {allocatedVariantStock} / {Number(draftProduct.initialStock || 0)} unidades
+                    <Badge variant="secondary" className="text-[9px] tabular-nums">
+                      {allocatedVariantStock} unidades derivadas
                     </Badge>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -945,12 +1003,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         </div>
 
         <DialogFooter className="mt-2 pt-4 border-t" data-tour="inventory-product-add-actions">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving || isCheckingAccounting}>
             Cancelar
           </Button>
           <Button 
             onClick={handleSave} 
-            disabled={isSaving || (productsList.length === 0 && (!!skuError || !draftProduct.code.trim() || !draftProduct.name.trim()))}
+            disabled={isSaving || isCheckingAccounting || (productsList.length === 0 && (!!skuError || !draftProduct.code.trim() || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"
           >
             {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'}` : `Guardar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`)}

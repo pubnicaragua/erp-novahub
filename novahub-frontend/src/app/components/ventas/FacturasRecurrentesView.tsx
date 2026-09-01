@@ -718,16 +718,20 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('col-span-4', pricingMode === 'individual' && 'col-span-3')}>Producto / Servicio</div>{pricingMode === 'individual' && <div className="col-span-2 flex gap-1.5"><span className="flex-1">Aplicar</span><span className="flex-1 text-right">Desc.</span></div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>{pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Total</div><div className="col-span-1"></div>
+                <div className={cn('sales-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
+                  <span>Producto / Servicio</span>
+                  <span>Variante</span>
+                  <span>Tipo de precio</span>
+                </div>{pricingMode === 'individual' && <div className="col-span-2 flex gap-1.5"><span className="flex-1">Aplicar</span><span className="flex-1 text-right">Desc.</span></div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>{pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}<div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => {
                 const product = findProductForItem(item);
                 const itemType = resolveItemType(item);
                 return (
-                <div key={item.id || idx} data-item-layout="recurrent" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                  <div className={cn('min-w-0 xl:col-span-4', pricingMode === 'individual' && 'xl:col-span-3')}>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <div className="min-w-0 flex-1">
+                <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                  <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
+                    <div className="sales-line-product-fields">
+                      <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                         <Combobox
                           options={getItemCatalog(item).map((product: any) => ({
                             label: `${String(product.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${product.code || ''} - ${product.name}`,
@@ -740,11 +744,14 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                         />
                       </div>
                       <SalesVariantSelect
+                        className="sales-line-variant"
                         product={product}
                         value={item.variantId}
                         onChange={(variantId) => setLocalDoc({ ...localDoc, items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx ? { ...line, variantId } : line) } as any)}
                       />
                       <SalesLinePriceListSelect
+                        className="sales-line-price-list"
+                        labelLayout="stacked"
                         productId={item.productId}
                         variantId={item.variantId}
                         productCode={findProductForItem(item)?.code || item.code}
@@ -805,8 +812,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                       />
                     </div>
                   )}
-                  <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}><span className="text-sm font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
-                  <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
+                  <div data-item-role="total-actions" className="flex min-w-0 items-center justify-end gap-2 text-right xl:col-span-2"><span className="text-sm font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                     onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }}><Trash2 className="size-3" /></Button></div>
                 </div>
                 );

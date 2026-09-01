@@ -49,6 +49,11 @@ export type VariantImportPrice = {
   price: number;
 };
 
+export type VariantImportPriceList = {
+  code: string;
+  name: string;
+};
+
 export type VariantImportStock = {
   productCode?: string;
   variantSku: string;
@@ -83,6 +88,12 @@ const normalize = (value: unknown) => String(value ?? '')
   .replace(/\s+/g, ' ')
   .toLowerCase();
 
+const resolvePriceListCode = (value: unknown, priceLists: VariantImportPriceList[] = []) => {
+  const normalized = normalize(value);
+  const match = priceLists.find((list) => normalize(list.code) === normalized || normalize(list.name) === normalized);
+  return match?.code || String(value ?? '').trim().toUpperCase();
+};
+
 const sheetKey = (value: unknown) => normalize(value).replace(/ /g, '');
 
 const aliases: Record<string, string[]> = {
@@ -90,7 +101,7 @@ const aliases: Record<string, string[]> = {
   name: ['nombre', 'nombre producto', 'producto'],
   category: ['categoria', 'category'],
   description: ['descripcion'],
-  commercialNote: ['nota comercial', 'nota'],
+  commercialNote: ['nota comercial', 'nota', 'commercial note', 'commercialnote'],
   unit: ['unidad', 'unidad medida'],
   costPrice: ['costo base', 'costo producto', 'costo variante', 'costo', 'precio costo', 'cost price', 'variant cost'],
   taxRate: ['tasa iva', 'iva', 'tax rate'],
@@ -186,7 +197,7 @@ const mapByKey = (rows: any[][], key: string) => {
   return result;
 };
 
-export function parseVariantImportWorkbook(sheets: Record<string, any[][]>): VariantImportCatalog {
+export function parseVariantImportWorkbook(sheets: Record<string, any[][]>, priceLists: VariantImportPriceList[] = []): VariantImportCatalog {
   const productRows = objectRows(getSheet(sheets, ['Productos', 'Products']) || []);
   if (!productRows.length) throw new Error('La plantilla avanzada necesita una hoja Productos con al menos una fila.');
 
@@ -289,10 +300,42 @@ export function parseVariantImportWorkbook(sheets: Record<string, any[][]>): Var
       scope,
       productCode: textValue(row, 'productCode'),
       variantSku,
-      priceListCode: textValue(row, 'priceListCode').toUpperCase(),
+      priceListCode: resolvePriceListCode(textValue(row, 'priceListCode'), priceLists),
       price: numberValue(row, 'price') as number,
     };
   }).filter((price) => price.productCode || price.variantSku || price.priceListCode);
+
+  // La primera hoja también contiene los precios padre. La hoja Precios
+  // conserva prioridad (permite excepciones por variante), pero los valores
+  // de Productos sirven como respaldo cuando el usuario trabaja únicamente
+  // con las columnas resumidas de esa hoja.
+  const productSheetPrices = productRows.flatMap((row) => {
+    const productCode = textValue(row, 'productCode');
+    if (!productCode) return [];
+    return priceLists.map((list) => {
+      const headers = [normalize(`Precio ${list.name}`), normalize(list.name), normalize(list.code)];
+      const entry = Object.entries(row).find(([header]) => headers.includes(header));
+      if (!entry || String(entry[1] ?? '').trim() === '') return null;
+      return {
+        scope: 'PRODUCT' as const,
+        productCode,
+        priceListCode: list.code,
+        price: Number(entry[1]),
+      };
+    }).filter((price): price is VariantImportPrice => Boolean(price));
+  });
+  const existingProductPriceKeys = new Set(
+    prices
+      .filter((price) => price.scope === 'PRODUCT')
+      .map((price) => `${normalize(price.productCode)}|${normalize(price.priceListCode)}`),
+  );
+  for (const price of productSheetPrices) {
+    const priceKey = `${normalize(price.productCode)}|${normalize(price.priceListCode)}`;
+    if (!existingProductPriceKeys.has(priceKey)) {
+      prices.push(price);
+      existingProductPriceKeys.add(priceKey);
+    }
+  }
 
   const stock: VariantImportStock[] = objectRows(rawStockRows).map((row) => ({
     productCode: textValue(row, 'productCode') || undefined,
@@ -331,20 +374,42 @@ export function buildVariantImportPreviewRows(catalog: VariantImportCatalog) {
       const variant = variants.find((candidate) => candidate.sku.toLowerCase() === row.variantSku.toLowerCase());
       return Boolean(variant) || row.variantSku.toLowerCase() === product.code.toLowerCase();
     });
+    const hasVariants = variants.length > 0;
+    const simpleStockRows = hasVariants
+      ? []
+      : stockRows.filter((row) => row.variantSku.toLowerCase() === product.code.toLowerCase());
+    const simpleStock = simpleStockRows.reduce((total, row) => total + Number(row.quantity || 0), 0);
+    const simpleMinStock = simpleStockRows.reduce((maximum, row) => Math.max(maximum, Number(row.minStock || 0)), 0);
+    const simpleWarehouse = simpleStockRows.length === 1
+      ? simpleStockRows[0].warehouse
+      : simpleStockRows.length > 1
+        ? 'Varias bodegas'
+        : '';
+    const variantWarehouses = [...new Set(stockRows.map((row) => String(row.warehouse || '').trim()).filter(Boolean))];
+    const variantWarehouse = variantWarehouses.length === 1
+      ? variantWarehouses[0]
+      : variantWarehouses.length > 1
+        ? 'Varias bodegas'
+        : '';
     const prices = pricesByProduct.get(product.code.toLowerCase()) || {};
     return {
       ...product,
       itemType: 'PRODUCT',
       salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
       prices,
-      initialStock: 0,
-      minStock: 0,
-      warehouse: '',
+      initialStock: hasVariants ? 0 : simpleStock,
+      minStock: hasVariants ? 0 : simpleMinStock,
+      warehouse: hasVariants ? variantWarehouse : simpleWarehouse,
       _advanced: true,
+      _hasVariants: hasVariants,
       _sourceCode: product.code,
-      _variantCount: variants.length,
-      _variantRows: variants,
-      _stockRowCount: stockRows.length,
+    _variantCount: variants.length,
+    _variantRows: variants,
+      // Se conserva el detalle para validar las bodegas y cantidades de cada
+      // SKU antes de enviar la carga al backend. El padre no tiene stock
+      // propio cuando usa variantes.
+      _stockRows: stockRows,
+    _stockRowCount: stockRows.length,
       _priceOverrideCount: catalog.prices.filter((price) => price.scope === 'VARIANT' && variants.some((variant) => variant.sku.toLowerCase() === String(price.variantSku || '').toLowerCase())).length,
     };
   });
