@@ -61,17 +61,17 @@ export const inventoryService = {
   approveAdjustment: (id: string) => api.patch<any>(`/inventory/adjustments/${id}/approve`, {}),
 
   // ==================== TRANSFERS ====================
-  getTransfers: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/transfers', { params: filters as any, signal }),
+  getTransfers: (filters?: ApiFilters & { branchId?: string }, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/transfers', { params: filters as any, signal }),
   getTransferLocations: (signal?: AbortSignal) => api.get<any[]>('/inventory/transfers/locations', { signal }),
   getTransferAccountingPreflight: (
     fromId: string,
     toId: string,
-    options?: { items?: Array<{ variantId: string; quantity: number }>; date?: string },
+    options?: { items?: Array<{ variantId: string; quantity: number }>; date?: string; activeBranchId?: string },
   ) => options?.items
     ? api.post<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { fromId, toId, ...options })
-    : api.get<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { params: { fromId, toId } }),
-  getTransfer: (id: string) => api.get<any>(`/inventory/transfers/${id}`),
-  createTransfer: (data: { fromId: string; toId: string; carrier?: string; items: { variantId: string; quantity: number }[] }) => 
+    : api.get<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { params: { fromId, toId, activeBranchId: options?.activeBranchId } }),
+  getTransfer: (id: string, activeBranchId?: string) => api.get<any>(`/inventory/transfers/${id}`, { params: { activeBranchId } }),
+  createTransfer: (data: { fromId: string; toId: string; carrier?: string; activeBranchId?: string; destinationClientTenantId?: string; businessUnitId?: string; reference?: string; items: { variantId: string; quantity: number }[] }) =>
     api.post<any>('/inventory/transfers', data),
   updateTransferStatus: (id: string, status: 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED') => 
     api.patch<any>(`/inventory/transfers/${id}/status`, { status }),
@@ -143,7 +143,7 @@ export const inventoryService = {
     notes?: string | null;
     actaUri?: string | null;
     actaFileName?: string | null;
-    items?: { productId: string; code: string; name: string; systemStock: number; countedStock: number; difference: number }[];
+    items?: { productId: string; variantId?: string; variantName?: string | null; variantSku?: string | null; code: string; name: string; systemStock: number; countedStock: number; difference: number }[];
   }) => api.post<any>('/inventory/audits', data),
   deleteAudit: (id: string) => api.delete<any>(`/inventory/audits/${id}`),
   changeAuditStatus: (id: string, status: string) => api.patch<any>(`/inventory/audits/${id}/status`, { status }),

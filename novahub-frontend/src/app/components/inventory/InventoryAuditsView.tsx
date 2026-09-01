@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
 import {
   ClipboardCheck, Plus, Trash2, Eye, Paperclip, Upload, UserCheck, Warehouse as WarehouseIcon, X, ChevronLeft,
   PauseCircle, CheckCircle2, RotateCcw, XCircle, ListPlus, AlertTriangle, Loader2, Search, SlidersHorizontal,
@@ -34,6 +34,9 @@ interface InventoryAuditsViewProps {
 interface AuditItemDraft {
   key: string;
   productId: string;
+  variantId?: string;
+  variantLabel?: string;
+  variantSku?: string;
   code: string;
   name: string;
   categoryId?: string;
@@ -175,7 +178,36 @@ function toLocalDateTime(value: Date): string {
 
 const ACCEPTED_ACTA = '.pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp';
 const BULK_UNCATEGORIZED = '__uncategorized__';
-const MAX_AUDIT_ITEMS = 500;
+const MAX_AUDIT_ITEMS = 5000;
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve());
+    } else {
+      globalThis.setTimeout(resolve, 0);
+    }
+  });
+}
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(() => (
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(max-width: 767px)').matches
+      : false
+  ));
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const handleChange = () => setIsMobile(mediaQuery.matches);
+    handleChange();
+    mediaQuery.addEventListener?.('change', handleChange);
+    return () => mediaQuery.removeEventListener?.('change', handleChange);
+  }, []);
+
+  return isMobile;
+}
 
 function warehouseParentId(warehouse: any): string | null {
   return warehouse?.parentId || warehouse?.parent?.id || null;
@@ -220,8 +252,81 @@ function productStockForWarehouses(product: any, warehouseIds: Set<string>): num
     .reduce((total: number, level: any) => total + Number(level.quantity || 0), 0);
 }
 
+function variantDisplayLabel(variant: any): string {
+  const attributes = Array.isArray(variant?.attributes) ? variant.attributes : [];
+  if (attributes.length > 0) return attributes.map((attribute: any) => attribute?.value).filter(Boolean).join(' / ');
+  return String(variant?.name || variant?.sku || 'Estándar');
+}
+
+function productVariantRows(product: any, warehouseIds?: Set<string>) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const levels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
+  const variantIds = new Set<string>([
+    ...variants.map((variant: any) => String(variant?.id || '').trim()).filter(Boolean),
+    ...levels.map((level: any) => String(level?.variantId || level?.variant?.id || '').trim()).filter(Boolean),
+  ]);
+
+  return Array.from(variantIds).map((variantId) => {
+    const variant = variants.find((candidate: any) => String(candidate?.id) === variantId)
+      || levels.find((level: any) => String(level?.variantId || level?.variant?.id || '') === variantId)?.variant
+      || { id: variantId, sku: variantId, name: 'Estándar' };
+    const variantLevels = levels.filter((level: any) => (
+      String(level?.variantId || level?.variant?.id || '') === variantId
+      && (!warehouseIds || warehouseIds.has(String(level?.warehouseId || level?.warehouse?.id || '')))
+    ));
+    return {
+      variantId,
+      variantLabel: variantDisplayLabel(variant),
+      variantSku: String(variant?.sku || ''),
+      stock: variantLevels.reduce((total: number, level: any) => total + Number(level?.quantity || 0), 0),
+    };
+  });
+}
+
+function auditItemSelectionValue(item: Pick<AuditItemDraft, 'productId' | 'variantId'>): string {
+  return item.variantId ? `${item.productId}::${item.variantId}` : item.productId;
+}
+
+type AuditRenderRow =
+  | { kind: 'category'; id: string; name: string; count: number }
+  | { kind: 'item'; id: string; item: AuditItemDraft };
+
+function useVirtualAuditRows(rows: AuditRenderRow[], estimatedRowHeight: number, viewportHeight = 620, overscan = 8) {
+  const [scrollTop, setScrollTop] = useState(0);
+  const scrollTopRef = useRef(0);
+  const frameRef = useRef<number | null>(null);
+  const totalSize = rows.length * estimatedRowHeight;
+  useEffect(() => () => {
+    if (frameRef.current !== null && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(frameRef.current);
+    }
+  }, []);
+  const safeScrollTop = Math.min(scrollTop, Math.max(0, totalSize - viewportHeight));
+  const startIndex = Math.max(0, Math.floor(safeScrollTop / estimatedRowHeight) - overscan);
+  const endIndex = Math.min(rows.length, Math.ceil((safeScrollTop + viewportHeight) / estimatedRowHeight) + overscan);
+  const onScroll = useCallback((event: UIEvent<HTMLElement>) => {
+    scrollTopRef.current = event.currentTarget.scrollTop;
+    if (frameRef.current !== null || typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') setScrollTop(scrollTopRef.current);
+      return;
+    }
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = null;
+      setScrollTop(scrollTopRef.current);
+    });
+  }, []);
+
+  return {
+    rows: rows.slice(startIndex, endIndex),
+    topSpacer: startIndex * estimatedRowHeight,
+    bottomSpacer: Math.max(0, totalSize - endIndex * estimatedRowHeight),
+    onScroll,
+  };
+}
+
 export function InventoryAuditsView({ audits, warehouses, products, onRefresh, onRefreshWarehouses, pagination }: InventoryAuditsViewProps) {
   const { canPerform } = useAuth();
+  const isMobile = useIsMobile();
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
   const canCreateAudits = canPerform('INVENTORY_AUDITS', 'create');
   const canApproveAudits = canPerform('INVENTORY_AUDITS', 'approve');
@@ -248,6 +353,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   });
   const [actaFile, setActaFile] = useState<File | null>(null);
   const [items, setItems] = useState<AuditItemDraft[]>([]);
+  const [bulkAdding, setBulkAdding] = useState(false);
   const [bulkCategoryIds, setBulkCategoryIds] = useState<string[]>([]);
   const [inventoryProductSearch, setInventoryProductSearch] = useState('');
   const [inventoryStockFilter, setInventoryStockFilter] = useState<'all' | 'available' | 'out'>('all');
@@ -295,14 +401,22 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     return products
       .filter((p: any) => String(p.itemType || p.type || 'PRODUCT').toUpperCase() !== 'SERVICE')
       .filter((p: any) => productWarehouseIds(p).some((warehouseId) => selectedWarehouseFamilySet.has(warehouseId)))
-      .map((p: any) => ({
-        id: p.id,
-        code: p.code,
-        name: p.name,
-        stock: productStockForWarehouses(p, selectedWarehouseFamilySet),
-        categoryId: p.categoryId || p.category?.id || BULK_UNCATEGORIZED,
-        categoryName: p.category?.name || 'Sin categoría',
-      }));
+      .flatMap((p: any) => {
+        const variants = productVariantRows(p, selectedWarehouseFamilySet);
+        const rows = variants.length > 0 ? variants : [{ variantId: '', variantLabel: '', variantSku: '', stock: productStockForWarehouses(p, selectedWarehouseFamilySet) }];
+        return rows.map((variant) => ({
+          id: p.id,
+          value: variant.variantId ? `${p.id}::${variant.variantId}` : p.id,
+          variantId: variant.variantId || undefined,
+          variantLabel: variant.variantLabel,
+          variantSku: variant.variantSku,
+          code: p.code,
+          name: p.name,
+          stock: variant.stock,
+          categoryId: p.categoryId || p.category?.id || BULK_UNCATEGORIZED,
+          categoryName: p.category?.name || 'Sin categoría',
+        }));
+      });
   }, [form.warehouseId, products, selectedWarehouseFamilySet]);
 
   const productCategoryOptions = useMemo(() => {
@@ -320,7 +434,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     return productOptions.filter((product) => {
       const matchesSearch = !search
         || String(product.code || '').toLocaleLowerCase().includes(search)
-        || String(product.name || '').toLocaleLowerCase().includes(search);
+        || String(product.name || '').toLocaleLowerCase().includes(search)
+        || String(product.variantLabel || '').toLocaleLowerCase().includes(search)
+        || String(product.variantSku || '').toLocaleLowerCase().includes(search);
       const matchesCategory = bulkCategoryIds.length === 0 || bulkCategoryIds.includes(product.categoryId);
       const matchesStock = inventoryStockFilter === 'all'
         || (inventoryStockFilter === 'available' && Number(product.stock || 0) > 0)
@@ -328,14 +444,23 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       return matchesSearch && matchesCategory && matchesStock;
     });
   }, [bulkCategoryIds, inventoryProductSearch, inventoryStockFilter, productOptions]);
+  const productOptionItems = useMemo(
+    () => filteredProductOptions.map((product) => (
+      <SelectItem key={product.value} value={product.value} className="max-w-full truncate text-[10px]">
+        {product.code} · {product.name}{product.variantLabel ? ` · ${product.variantLabel}` : ''}
+      </SelectItem>
+    )),
+    [filteredProductOptions],
+  );
 
   const totalContado = items.reduce((acc, item) => acc + (Number.isFinite(item.countedStock) ? item.countedStock : 0), 0);
   const totalDiferencia = items.reduce((acc, item) => acc + (Number.isFinite(item.difference) ? item.difference : 0), 0);
   const itemsWithProduct = items.filter((item) => item.productId);
+  const productById = useMemo(() => new Map(products.map((product: any) => [String(product.id), product])), [products]);
   const groupedItems = useMemo(() => {
     const groups = new Map<string, { id: string; name: string; items: AuditItemDraft[] }>();
     items.forEach((item) => {
-      const product = products.find((candidate: any) => candidate.id === item.productId);
+      const product = productById.get(String(item.productId));
       const categoryId = String(item.categoryId || product?.categoryId || product?.category?.id || BULK_UNCATEGORIZED);
       const categoryName = item.categoryName || product?.category?.name || 'Sin categoría';
       const group = groups.get(categoryId) || { id: categoryId, name: categoryName, items: [] };
@@ -343,7 +468,13 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       groups.set(categoryId, group);
     });
     return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
-  }, [items, products]);
+  }, [items, productById]);
+  const auditRenderRows = useMemo<AuditRenderRow[]>(() => groupedItems.flatMap((group) => [
+    { kind: 'category' as const, id: group.id, name: group.name, count: group.items.length },
+    ...group.items.map((item) => ({ kind: 'item' as const, id: item.key, item })),
+  ]), [groupedItems]);
+  const mobileAuditRows = useVirtualAuditRows(auditRenderRows, 150, 620);
+  const desktopAuditRows = useVirtualAuditRows(auditRenderRows, 48, 620);
   const canSave = Boolean(form.auditDate && form.warehouseId) && form.supervisors.length > 0 && itemsWithProduct.length > 0;
 
   const updateForm = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
@@ -351,7 +482,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const handleWarehouseChange = (warehouseId: string) => {
     const nextFamilyIds = new Set(warehouseFamilyIds(warehouseId, warehouses, warehouseById));
     const invalidItems = items.filter((item) => {
-      const product = products.find((candidate: any) => candidate.id === item.productId);
+      const product = productById.get(String(item.productId));
       return product?.id && !productWarehouseIds(product).some((id) => nextFamilyIds.has(id));
     }).length;
 
@@ -361,11 +492,13 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     setInventoryStockFilter('all');
     setItems((current) => current.map((item) => {
       if (!item.productId) return item;
-      const product = products.find((candidate: any) => candidate.id === item.productId);
+      const product = productById.get(String(item.productId));
       if (!product || !productWarehouseIds(product).some((id) => nextFamilyIds.has(id))) {
-        return { ...item, productId: '', code: '', name: '', categoryId: undefined, categoryName: undefined, systemStock: 0, countedStock: 0, difference: 0 };
+        return { ...item, productId: '', variantId: undefined, variantLabel: '', variantSku: '', code: '', name: '', categoryId: undefined, categoryName: undefined, systemStock: 0, countedStock: 0, difference: 0 };
       }
-      const nextSystemStock = productStockForWarehouses(product, nextFamilyIds);
+      const nextSystemStock = item.variantId
+        ? productVariantRows(product, nextFamilyIds).find((variant) => variant.variantId === item.variantId)?.stock || 0
+        : productStockForWarehouses(product, nextFamilyIds);
       const nextCountedStock = item.countedStock === item.systemStock ? nextSystemStock : item.countedStock;
       return {
         ...item,
@@ -444,6 +577,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     setItems((current) => [...current, {
       key: `item-${Date.now()}-${current.length}`,
       productId: '',
+      variantId: undefined,
+      variantLabel: '',
+      variantSku: '',
       code: '',
       name: '',
       systemStock: 0,
@@ -456,9 +592,12 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     setItems((current) => current.filter((item) => item.key !== key));
   };
 
-  const makeAuditItem = (product: { id: string; code?: string; name?: string; stock?: number; categoryId?: string; categoryName?: string }, index: number): AuditItemDraft => ({
-    key: `item-${Date.now()}-${index}-${product.id}`,
+  const makeAuditItem = (product: { id: string; value?: string; variantId?: string; variantLabel?: string; variantSku?: string; code?: string; name?: string; stock?: number; categoryId?: string; categoryName?: string }, index: number): AuditItemDraft => ({
+    key: `item-${Date.now()}-${index}-${product.value || product.id}`,
     productId: product.id,
+    variantId: product.variantId,
+    variantLabel: product.variantLabel,
+    variantSku: product.variantSku,
     code: product.code || '',
     name: product.name || '',
     categoryId: product.categoryId || BULK_UNCATEGORIZED,
@@ -468,13 +607,14 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     difference: 0,
   });
 
-  const addProductsInBulk = (selectedProducts: typeof productOptions, sourceLabel: string) => {
+  const addProductsInBulk = async (selectedProducts: typeof productOptions, sourceLabel: string) => {
+    if (bulkAdding) return;
     if (!form.warehouseId) {
       toast.info('Selecciona una bodega antes de cargar productos');
       return;
     }
-    const existingIds = new Set(items.map((item) => item.productId).filter(Boolean));
-    const newProducts = selectedProducts.filter((product) => !existingIds.has(product.id));
+    const existingIds = new Set(items.map((item) => `${item.productId}:${item.variantId || ''}`).filter(Boolean));
+    const newProducts = selectedProducts.filter((product) => !existingIds.has(`${product.id}:${product.variantId || ''}`));
     if (newProducts.length === 0) {
       toast.info('Los productos seleccionados ya están en el acta');
       return;
@@ -485,20 +625,35 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       toast.error(`Máximo ${MAX_AUDIT_ITEMS} productos por acta`);
       return;
     }
-    setItems((current) => [...current, ...productsToAdd.map((product, index) => makeAuditItem(product, current.length + index))]);
+    setBulkAdding(true);
+    const batchSize = 80;
+    let added = 0;
+    try {
+      for (let offset = 0; offset < productsToAdd.length; offset += batchSize) {
+        const batch = productsToAdd.slice(offset, offset + batchSize);
+        setItems((current) => [...current, ...batch.map((product, index) => makeAuditItem(product, current.length + index))]);
+        added += batch.length;
+        if (offset + batchSize < productsToAdd.length) await yieldToBrowser();
+      }
+    } finally {
+      setBulkAdding(false);
+    }
     const skipped = newProducts.length - productsToAdd.length;
-    toast.success(`${productsToAdd.length} productos agregados ${sourceLabel}${skipped > 0 ? `. Se omitieron ${skipped} por el límite del acta` : ''}`);
+    toast.success(`${added} productos agregados ${sourceLabel}${skipped > 0 ? `. Se omitieron ${skipped} por el límite del acta` : ''}`);
   };
 
-  const addAllProducts = () => addProductsInBulk(productOptions, 'al acta');
+  const addAllProducts = () => { void addProductsInBulk(productOptions, 'al acta'); };
 
-  const addFilteredProducts = () => addProductsInBulk(filteredProductOptions, 'según los filtros de Inventario');
+  const addFilteredProducts = () => { void addProductsInBulk(filteredProductOptions, 'según los filtros de Inventario'); };
 
-  const selectProduct = (key: string, productId: string) => {
-    const product = productOptions.find((p) => p.id === productId);
+  const selectProduct = (key: string, selection: string) => {
+    const product = productOptions.find((p) => p.value === selection || (!p.variantId && p.id === selection));
     setItems((current) => current.map((item) => item.key === key ? {
       ...item,
-      productId,
+      productId: product?.id || '',
+      variantId: product?.variantId,
+      variantLabel: product?.variantLabel || '',
+      variantSku: product?.variantSku || '',
       code: product?.code || '',
       name: product?.name || '',
       categoryId: product?.categoryId || BULK_UNCATEGORIZED,
@@ -670,12 +825,61 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     resetForm();
   };
 
+  const renderAuditMobileRow = (row: AuditRenderRow) => {
+    if (row.kind === 'category') {
+      return <div key={`mobile-category-${row.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2">
+        <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-primary">Categoría</p><p className="truncate text-xs font-bold">{row.name}</p></div>
+        <Badge variant="outline" className="shrink-0 text-[9px]">{row.count} productos</Badge>
+      </div>;
+    }
+    const item = row.item;
+    return <div key={item.key} className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3">
+      <div className="flex min-w-0 items-start gap-2">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Producto / variante</Label>
+          <Select value={auditItemSelectionValue(item)} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}>
+            <SelectTrigger className="h-9 w-full min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Selecciona un producto' : 'Selecciona una bodega'} /></SelectTrigger>
+            <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">{productOptionItems.length > 0 ? productOptionItems : <SelectItem value="__empty_mobile__" disabled className="text-[10px]">No hay coincidencias con estos filtros</SelectItem>}</SelectContent>
+          </Select>
+        </div>
+        <Button variant="ghost" size="icon" aria-label="Quitar producto" className="mt-5 size-8 shrink-0 hover:text-destructive" onClick={() => removeItem(item.key)}><X className="size-3.5" /></Button>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/40 pt-3">
+        <div><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Stock sistema</p><p className="mt-1 font-mono text-xs tabular-nums">{fmtQty(item.systemStock)}</p></div>
+        <div><Label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Contado</Label><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="mt-1 h-8 w-full text-right font-mono text-xs" /></div>
+        <div className="text-right"><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Diferencia</p><p className={cn('mt-2 font-mono text-xs font-bold tabular-nums', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</p></div>
+      </div>
+    </div>;
+  };
+
+  const renderAuditDesktopRow = (row: AuditRenderRow) => {
+    if (row.kind === 'category') {
+      return <TableRow key={`desktop-category-${row.id}`} className="bg-primary/5 hover:bg-primary/5"><TableCell colSpan={5} className="py-2"><div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-primary">{row.name}</span><Badge variant="outline" className="text-[9px]">{row.count} productos</Badge></div></TableCell></TableRow>;
+    }
+    const item = row.item;
+    return <TableRow key={item.key}>
+      <TableCell className="min-w-[260px]"><Select value={auditItemSelectionValue(item)} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}><SelectTrigger className="h-8 min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Selecciona un producto o variante' : 'Selecciona una bodega'} /></SelectTrigger><SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">{productOptionItems.length > 0 ? productOptionItems : <SelectItem value="__empty_desktop__" disabled className="text-[10px]">No hay coincidencias con estos filtros</SelectItem>}</SelectContent></Select></TableCell>
+      <TableCell className="text-right"><span className="font-mono text-xs text-muted-foreground">{fmtQty(item.systemStock)}</span></TableCell>
+      <TableCell className="text-right"><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="ml-auto h-8 w-28 text-right font-mono text-xs" /></TableCell>
+      <TableCell className="text-right"><span className={cn('font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</span></TableCell>
+      <TableCell className="text-right"><Button variant="ghost" size="icon" aria-label="Quitar producto" className="size-7 hover:text-destructive" onClick={() => removeItem(item.key)}><X className="size-3.5" /></Button></TableCell>
+    </TableRow>;
+  };
+
   const handleSave = async () => {
     if (!canCreateAudits) return;
     if (!form.auditDate) { toast.error('Indica la fecha y hora de la inspección'); return; }
     if (!form.warehouseId) { toast.error('Selecciona la bodega de la inspección'); return; }
     if (form.supervisors.length === 0) { toast.error('Indica al menos un encargado del proceso'); return; }
     if (itemsWithProduct.length === 0) { toast.error('Agrega al menos un producto al acta'); return; }
+    const duplicateLines = new Set<string>();
+    const seenLines = new Set<string>();
+    itemsWithProduct.forEach((item) => {
+      const lineKey = `${item.productId}:${item.variantId || ''}`;
+      if (seenLines.has(lineKey)) duplicateLines.add(lineKey);
+      seenLines.add(lineKey);
+    });
+    if (duplicateLines.size > 0) { toast.error('No repitas el mismo producto y variante dentro del acta'); return; }
     if (actaFile && !new RegExp(`\\.(pdf|xlsx|xls|png|jpe?g|webp)$`, 'i').test(actaFile.name)) {
       toast.error('El acta debe ser pdf, xlsx o una imagen'); return;
     }
@@ -702,6 +906,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         actaFileName: actaFile?.name || null,
         items: itemsWithProduct.map((item) => ({
           productId: item.productId,
+          ...(item.variantId ? { variantId: item.variantId, variantName: item.variantLabel || null, variantSku: item.variantSku || null } : {}),
           code: item.code,
           name: item.name,
           systemStock: item.systemStock,
@@ -871,7 +1076,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
               }}
             />
             <Button variant="outline" onClick={closeCreateView} className="w-full rounded-xl text-xs font-bold sm:w-auto">Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving || !canSave} className="w-full gap-2 rounded-xl bg-primary text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
+            <Button onClick={handleSave} disabled={saving || bulkAdding || !canSave} className="w-full gap-2 rounded-xl bg-primary text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
               {saving ? 'Registrando...' : 'Registrar acta'}
             </Button>
           </div>
@@ -969,11 +1174,11 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                   <p className="text-[10px] font-black uppercase tracking-widest">Productos inspeccionados</p>
                   <Badge variant="outline" className="text-[9px]">{itemsWithProduct.length}</Badge>
                 </div>
-                <Button variant="outline" size="sm" disabled={!form.warehouseId} className="h-8 gap-1 text-[10px]" onClick={addItem}>
+                <Button variant="outline" size="sm" disabled={!form.warehouseId || bulkAdding} className="h-8 gap-1 text-[10px]" onClick={addItem}>
                   <Plus className="size-3.5" /> Agregar producto
                 </Button>
               </div>
-              <div className="min-w-0 space-y-3 p-3">
+            <div className="min-w-0 space-y-3 p-3">
                 <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
                   <div className="flex min-w-0 flex-col gap-3">
                     <div className="flex min-w-0 items-start gap-2.5">
@@ -1047,81 +1252,38 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                           : 'Selecciona una bodega arriba para cargar sus productos.'}
                       </div>
                       <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-                        <Button type="button" variant="outline" size="sm" disabled={!form.warehouseId || filteredProductOptions.length === 0} className="h-8 gap-1.5 text-[10px]" onClick={addFilteredProducts}>
-                          <ListPlus className="size-3.5" /> Agregar filtrados ({filteredProductOptions.length})
+                        <Button type="button" variant="outline" size="sm" disabled={!form.warehouseId || bulkAdding || filteredProductOptions.length === 0} className="h-8 gap-1.5 text-[10px]" onClick={addFilteredProducts}>
+                          <ListPlus className="size-3.5" /> {bulkAdding ? 'Agregando...' : `Agregar filtrados (${filteredProductOptions.length})`}
                         </Button>
-                        <Button type="button" variant="secondary" size="sm" disabled={!form.warehouseId || productOptions.length === 0} className="h-8 gap-1.5 text-[10px]" onClick={addAllProducts}>
-                          <ListPlus className="size-3.5" /> Agregar todos ({productOptions.length})
+                        <Button type="button" variant="secondary" size="sm" disabled={!form.warehouseId || bulkAdding || productOptions.length === 0} className="h-8 gap-1.5 text-[10px]" onClick={addAllProducts}>
+                          <ListPlus className="size-3.5" /> {bulkAdding ? 'Agregando...' : `Agregar todos (${productOptions.length})`}
                         </Button>
                       </div>
                     </div>
                   </div>
                 </div>
-                <div className="space-y-3 md:hidden">
-                  {groupedItems.map((group) => (
-                    <div key={`mobile-category-${group.id}`} className="space-y-2">
-                      <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-primary">Categoría</p>
-                          <p className="truncate text-xs font-bold">{group.name}</p>
-                        </div>
-                        <Badge variant="outline" className="shrink-0 text-[9px]">{group.items.length} productos</Badge>
-                      </div>
-                      {group.items.map((item) => (
-                        <div key={item.key} className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <div className="flex min-w-0 items-start gap-2">
-                        <div className="min-w-0 flex-1 space-y-1.5">
-                          <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Producto</Label>
-                          <Select value={item.productId} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}>
-                            <SelectTrigger className="h-9 w-full min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Selecciona un producto' : 'Selecciona una bodega'} /></SelectTrigger>
-                            <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
-                              {filteredProductOptions.length > 0 ? filteredProductOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_mobile__" disabled className="text-[10px]">No hay coincidencias con estos filtros</SelectItem>}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button variant="ghost" size="icon" aria-label="Quitar producto" className="mt-5 size-8 shrink-0 hover:text-destructive" onClick={() => removeItem(item.key)}><X className="size-3.5" /></Button>
-                      </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/40 pt-3">
-                        <div><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Stock sistema</p><p className="mt-1 font-mono text-xs tabular-nums">{fmtQty(item.systemStock)}</p></div>
-                        <div><Label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Contado</Label><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="mt-1 h-8 w-full text-right font-mono text-xs" /></div>
-                        <div className="text-right"><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Diferencia</p><p className={cn('mt-2 font-mono text-xs font-bold tabular-nums', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</p></div>
-                      </div>
-                        </div>
-                      ))}
+                {isMobile ? (
+                  <div className="max-h-[620px] overflow-auto" onScroll={mobileAuditRows.onScroll}>
+                    <div style={{ height: mobileAuditRows.topSpacer }} aria-hidden="true" />
+                    <div className="space-y-3">
+                      {mobileAuditRows.rows.map(renderAuditMobileRow)}
                     </div>
-                  ))}
-                  {items.length === 0 && <p className="py-6 text-center text-[10px] text-muted-foreground">Agrega productos al acta para registrar el conteo físico.</p>}
-                </div>
-
-                <div className="hidden md:block">
-                  <Table containerClassName="overflow-x-auto" className="min-w-[680px]">
-                    <TableHeader><TableRow><TableHead className="text-[9px] font-black uppercase tracking-widest">Producto</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Stock sistema</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Cantidad contada</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Diferencia</TableHead><TableHead className="w-10" /></TableRow></TableHeader>
-                    <TableBody>
-                      {groupedItems.map((group) => (
-                        <Fragment key={`desktop-category-${group.id}`}>
-                          <TableRow className="bg-primary/5 hover:bg-primary/5">
-                            <TableCell colSpan={5} className="py-2">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-primary">{group.name}</span>
-                                <Badge variant="outline" className="text-[9px]">{group.items.length} productos</Badge>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                          {group.items.map((item) => (
-                            <TableRow key={item.key}>
-                              <TableCell className="min-w-[220px]"><Select value={item.productId} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}><SelectTrigger className="h-8 min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Selecciona un producto' : 'Selecciona una bodega'} /></SelectTrigger><SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">{filteredProductOptions.length > 0 ? filteredProductOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_desktop__" disabled className="text-[10px]">No hay coincidencias con estos filtros</SelectItem>}</SelectContent></Select></TableCell>
-                              <TableCell className="text-right"><span className="font-mono text-xs text-muted-foreground">{fmtQty(item.systemStock)}</span></TableCell>
-                              <TableCell className="text-right"><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="ml-auto h-8 w-28 text-right font-mono text-xs" /></TableCell>
-                              <TableCell className="text-right"><span className={cn('font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</span></TableCell>
-                              <TableCell className="text-right"><Button variant="ghost" size="icon" aria-label="Quitar producto" className="size-7 hover:text-destructive" onClick={() => removeItem(item.key)}><X className="size-3.5" /></Button></TableCell>
-                            </TableRow>
-                          ))}
-                        </Fragment>
-                      ))}
-                      {items.length === 0 && <TableRow><TableCell colSpan={5} className="py-6 text-center text-[10px] text-muted-foreground">Agrega productos al acta para registrar el conteo físico.</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-                </div>
+                    <div style={{ height: mobileAuditRows.bottomSpacer }} aria-hidden="true" />
+                    {items.length === 0 && <p className="py-6 text-center text-[10px] text-muted-foreground">Agrega productos al acta para registrar el conteo físico.</p>}
+                  </div>
+                ) : (
+                  <div className="max-h-[620px] overflow-auto" onScroll={desktopAuditRows.onScroll}>
+                    <Table containerClassName="overflow-x-auto" className="min-w-[680px]">
+                      <TableHeader><TableRow><TableHead className="text-[9px] font-black uppercase tracking-widest">Producto</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Stock sistema</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Cantidad contada</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Diferencia</TableHead><TableHead className="w-10" /></TableRow></TableHeader>
+                      <TableBody>
+                        <TableRow><TableCell colSpan={5} style={{ height: desktopAuditRows.topSpacer }} aria-hidden="true" /></TableRow>
+                        {desktopAuditRows.rows.map(renderAuditDesktopRow)}
+                        <TableRow><TableCell colSpan={5} style={{ height: desktopAuditRows.bottomSpacer }} aria-hidden="true" /></TableRow>
+                        {items.length === 0 && <TableRow><TableCell colSpan={5} className="py-6 text-center text-[10px] text-muted-foreground">Agrega productos al acta para registrar el conteo físico.</TableCell></TableRow>}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
                 {itemsWithProduct.length > 0 && <div className="mt-2 flex flex-wrap items-center justify-end gap-4 border-t border-border/40 pt-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground"><span>Total contado: <span className="text-foreground tabular-nums">{fmtQty(totalContado)}</span></span><span>Diferencia neta: <span className={cn('tabular-nums', totalDiferencia < 0 ? 'text-red-600' : totalDiferencia > 0 ? 'text-emerald-600' : '')}>{totalDiferencia > 0 ? '+' : ''}{fmtQty(totalDiferencia)}</span></span></div>}
               </div>
             </div>
@@ -1354,8 +1516,8 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                       <TableRow key={`${item.productId || item.code || 'item'}-${index}`}>
                         <TableCell>
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold">{item.name || 'Producto sin nombre'}</p>
-                            <p className="font-mono text-[10px] text-muted-foreground">{item.code || '—'}</p>
+                            <p className="truncate text-xs font-semibold">{item.name || 'Producto sin nombre'}{(item.variantName || item.variantLabel) ? ` · ${item.variantName || item.variantLabel}` : ''}</p>
+                            <p className="font-mono text-[10px] text-muted-foreground">{item.variantSku || item.code || '—'}</p>
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">{fmtQty(item.theoreticalStock)}</TableCell>
@@ -1453,7 +1615,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                     {detailAuditItems.map((item: any, index: number) => (
                       <TableRow key={index}>
                         <TableCell className="font-mono text-[10px]">{item.code}</TableCell>
-                        <TableCell className="text-xs">{item.name}</TableCell>
+                        <TableCell className="text-xs">{item.name}{(item.variantName || item.variantLabel) ? <span className="block text-[10px] text-muted-foreground">{item.variantName || item.variantLabel}</span> : null}</TableCell>
                         <TableCell className="text-right font-mono text-[10px]">{fmtQty(item.systemStock)}</TableCell>
                         <TableCell className="text-right font-mono text-[10px]">{fmtQty(item.countedStock)}</TableCell>
                         <TableCell className={cn('text-right font-mono text-[10px] font-bold', Number(item.difference) < 0 ? 'text-red-600' : Number(item.difference) > 0 ? 'text-emerald-600' : '')}>
