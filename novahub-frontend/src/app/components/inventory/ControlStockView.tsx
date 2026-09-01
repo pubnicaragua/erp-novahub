@@ -115,6 +115,35 @@ function auditDifference(item: any): number {
   return Number(item?.countedStock ?? 0) - auditOriginalStock(item);
 }
 
+function adjustmentVariantLabel(variant: any): string {
+  const attributes = Array.isArray(variant?.attributes) ? variant.attributes : [];
+  if (attributes.length > 0) return attributes.map((attribute: any) => attribute?.value).filter(Boolean).join(' / ');
+  return String(variant?.name || variant?.sku || 'Estándar');
+}
+
+function adjustmentVariantRows(product: any, warehouseId: string) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const levels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
+  const variantIds = new Set<string>([
+    ...variants.map((variant: any) => String(variant?.id || '').trim()).filter(Boolean),
+    ...levels.map((level: any) => String(level?.variantId || level?.variant?.id || '').trim()).filter(Boolean),
+  ]);
+  return Array.from(variantIds).map((variantId) => {
+    const variant = variants.find((candidate: any) => String(candidate?.id) === variantId)
+      || levels.find((level: any) => String(level?.variantId || level?.variant?.id || '') === variantId)?.variant
+      || { id: variantId, sku: variantId, name: 'Estándar' };
+    const stock = levels
+      .filter((level: any) => (!warehouseId || String(level?.warehouseId || level?.warehouse?.id || '') === String(warehouseId))
+        && String(level?.variantId || level?.variant?.id || '') === variantId)
+      .reduce((total: number, level: any) => total + Number(level?.quantity || 0), 0);
+    return { variantId, variantLabel: adjustmentVariantLabel(variant), variantSku: String(variant?.sku || ''), stock };
+  });
+}
+
+function adjustmentSelectionValue(productId: string, variantId?: string): string {
+  return variantId ? `${productId}::${variantId}` : productId;
+}
+
 function isAuditGeneratedAdjustment(adjustment: any): boolean {
   return Boolean(adjustment?.auditGenerated || adjustment?.auditId || adjustment?.auditNumber);
 }
@@ -128,9 +157,10 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   const [isCreating, setIsCreating] = useState(false);
   const [isReceptionOpen, setIsReceptionOpen] = useState(false);
   const [isSerialAdjustOpen, setIsSerialAdjustOpen] = useState(false);
-  const [newAdjustment, setNewAdjustment] = useState({ warehouseId: '', reason: 'DISCREPANCY', productId: '', currentStock: 0, actualStock: 0, unitCost: 0, currency: baseCurrency });
+  const [newAdjustment, setNewAdjustment] = useState({ warehouseId: '', reason: 'DISCREPANCY', productId: '', variantId: '', currentStock: 0, actualStock: 0, unitCost: 0, currency: baseCurrency });
   const [newReception, setNewReception] = useState({
     productId: '',
+    variantId: '',
     totalQuantity: 0,
     notes: '',
     imeiText: '',
@@ -150,6 +180,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   const [serialAdjustment, setSerialAdjustment] = useState({
     action: 'ADD',
     productId: '',
+    variantId: '',
     warehouseId: '',
     serialNumber: '',
     notes: '',
@@ -160,7 +191,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     number: (a: any) => a.number || '',
     warehouse: (a: any) => a.warehouse?.name || 'Sin almacén',
     reason: (a: any) => String(a.reason || ''),
-    product: (a: any) => a.items?.[0]?.product?.name || a.items?.[0]?.name || a.product?.name || '—',
+    product: (a: any) => `${a.items?.[0]?.product?.name || a.items?.[0]?.name || a.product?.name || '—'}${a.items?.[0]?.variant?.name ? ` · ${a.items[0].variant.name}` : ''}`,
     status: (a: any) => String(a.status || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(adjustments, filterGetters);
@@ -223,15 +254,49 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     return products
       .filter((p: any) => warehouseId && productWarehouseIds(p).has(warehouseId))
       .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }))
-      .map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id }));
+      .flatMap((p: any) => {
+        const variants = adjustmentVariantRows(p, warehouseId);
+        const rows = variants.length > 0 ? variants : [{ variantId: '', variantLabel: '', variantSku: '', stock: 0 }];
+        return rows.map((variant) => ({
+          label: `${p.code} — ${p.name}${variant.variantLabel ? ` · ${variant.variantLabel}` : ''}`,
+          value: variant.variantId ? `${p.id}::${variant.variantId}` : p.id,
+          productId: p.id,
+          variantId: variant.variantId,
+          variantLabel: variant.variantLabel,
+          stock: variant.stock,
+        }));
+      });
   }, [products, newAdjustment.warehouseId]);
+
+  const receptionProductOptions = useMemo(() => products
+    .filter((product: any) => String(product?.itemType || product?.type || 'PRODUCT').toUpperCase() !== 'SERVICE')
+    .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }))
+    .flatMap((product: any) => {
+      const variants = adjustmentVariantRows(product, '');
+      const rows = variants.length > 0 ? variants : [{ variantId: '', variantLabel: '', variantSku: '', stock: 0 }];
+      return rows.map((variant) => ({
+        label: `${product.code} — ${product.name}${variant.variantLabel ? ` · ${variant.variantLabel}` : ''}`,
+        value: variant.variantId ? `${product.id}::${variant.variantId}` : product.id,
+        productId: product.id,
+        variantId: variant.variantId,
+      }));
+    }), [products]);
 
   const serialProductOptions = useMemo(() => {
     const warehouseId = serialAdjustment.warehouseId;
     return products
       .filter((p: any) => warehouseId && productWarehouseIds(p).has(warehouseId))
       .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }))
-      .map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id }));
+      .flatMap((p: any) => {
+        const variants = adjustmentVariantRows(p, warehouseId);
+        const rows = variants.length > 0 ? variants : [{ variantId: '', variantLabel: '', variantSku: '', stock: 0 }];
+        return rows.map((variant) => ({
+          label: `${p.code} — ${p.name}${variant.variantLabel ? ` · ${variant.variantLabel}` : ''}`,
+          value: variant.variantId ? `${p.id}::${variant.variantId}` : p.id,
+          productId: p.id,
+          variantId: variant.variantId,
+        }));
+      });
   }, [products, serialAdjustment.warehouseId]);
 
   const handleAdjustmentWarehouseChange = (value: string) => {
@@ -239,7 +304,29 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       ...prev,
       warehouseId: value,
       productId: prev.productId && isProductInWarehouse(prev.productId, value) ? prev.productId : '',
+      variantId: prev.productId && isProductInWarehouse(prev.productId, value) ? prev.variantId : '',
     }));
+  };
+
+  const handleAdjustmentProductChange = (value: string) => {
+    const option = adjustmentProductOptions.find((candidate: any) => candidate.value === value);
+    setNewAdjustment((prev) => ({
+      ...prev,
+      productId: option?.productId || value,
+      variantId: option?.variantId || '',
+      currentStock: Number(option?.stock || 0),
+      actualStock: Number(option?.stock || 0),
+    }));
+  };
+
+  const handleReceptionProductChange = (value: string) => {
+    const option = receptionProductOptions.find((candidate: any) => candidate.value === value);
+    setNewReception((prev) => ({ ...prev, productId: option?.productId || value, variantId: option?.variantId || '' }));
+  };
+
+  const handleSerialProductChange = (value: string) => {
+    const option = serialProductOptions.find((candidate: any) => candidate.value === value);
+    setSerialAdjustment((prev) => ({ ...prev, productId: option?.productId || value, variantId: option?.variantId || '' }));
   };
 
   const handleSerialWarehouseChange = (value: string) => {
@@ -268,6 +355,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         reason: newAdjustment.reason,
         items: [{
           productId: newAdjustment.productId,
+          ...(newAdjustment.variantId ? { variantId: newAdjustment.variantId } : {}),
           currentStock: newAdjustment.currentStock,
           actualStock: newAdjustment.actualStock,
           unitCost: newAdjustment.unitCost,
@@ -276,7 +364,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       });
       toast.success('Ajuste creado exitosamente');
       setIsCreating(false);
-      setNewAdjustment({ warehouseId: '', reason: 'DISCREPANCY', productId: '', currentStock: 0, actualStock: 0, unitCost: 0, currency: baseCurrency });
+      setNewAdjustment({ warehouseId: '', reason: 'DISCREPANCY', productId: '', variantId: '', currentStock: 0, actualStock: 0, unitCost: 0, currency: baseCurrency });
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al crear ajuste');
@@ -342,7 +430,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   };
 
   const resetReception = () => {
-    setNewReception({ productId: '', totalQuantity: 0, notes: '', imeiText: '', unitCost: 0, currency: baseCurrency });
+    setNewReception({ productId: '', variantId: '', totalQuantity: 0, notes: '', imeiText: '', unitCost: 0, currency: baseCurrency });
     setAllocations([{ id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 }]);
   };
 
@@ -395,6 +483,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         validAllocations.map((item) =>
           inventoryService.createMovement({
             productId: newReception.productId,
+            ...(newReception.variantId ? { variantId: newReception.variantId } : {}),
             warehouseId: item.warehouseId,
             type: 'IN',
             quantity: Number(item.quantity || 0),
@@ -459,6 +548,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         });
         await inventoryService.createMovement({
           productId: serialAdjustment.productId,
+          ...(serialAdjustment.variantId ? { variantId: serialAdjustment.variantId } : {}),
           warehouseId: serialAdjustment.warehouseId,
           type: 'IN',
           quantity: 1,
@@ -470,6 +560,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         }
         await inventoryService.createMovement({
           productId: serialAdjustment.productId,
+          ...(serialAdjustment.variantId ? { variantId: serialAdjustment.variantId } : {}),
           warehouseId: serialAdjustment.warehouseId,
           type: 'OUT',
           quantity: 1,
@@ -479,7 +570,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
       toast.success(serialAdjustment.action === 'ADD' ? 'IMEI/serie agregado' : 'IMEI/serie ajustado');
       setIsSerialAdjustOpen(false);
-      setSerialAdjustment({ action: 'ADD', productId: '', warehouseId: '', serialNumber: '', notes: '' });
+      setSerialAdjustment({ action: 'ADD', productId: '', variantId: '', warehouseId: '', serialNumber: '', notes: '' });
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al ajustar IMEI/serie');
@@ -565,7 +656,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       <div className={`grid min-w-0 grid-cols-1 gap-6 ${selectedAdjustment ? 'xl:grid-cols-[13fr_7fr]' : 'xl:grid-cols-1'}`}>
         <div className="min-w-0">
           <div className="space-y-3 lg:hidden" data-tour="stock-table">
-         {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-adjustment-form-data"><div className="mb-3 flex items-center justify-between" data-tour="inventory-adjustment-form-title"><div><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><InventoryViewTutorial label="Cómo crear ajuste" targetPrefix="inventory-adjustment-form" copy={{ data: { description: 'Selecciona almacén, razón, producto, cantidad real, costo y moneda.' }, actions: { description: 'Guarda el ajuste como borrador para revisarlo y aprobarlo.' } }} /></div><div className="flex gap-1" data-tour="inventory-adjustment-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => handleAdjustmentWarehouseChange(value)}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Combobox options={adjustmentProductOptions} value={newAdjustment.productId} onChange={(value) => setNewAdjustment({ ...newAdjustment, productId: value })} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={adjustmentProductOptions.length} className="w-full sm:col-span-2" /><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" />{canViewInventoryCost && <div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: Number(event.target.value) || 0 })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>}</div></Card>}
+         {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-adjustment-form-data"><div className="mb-3 flex items-center justify-between" data-tour="inventory-adjustment-form-title"><div><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><InventoryViewTutorial label="Cómo crear ajuste" targetPrefix="inventory-adjustment-form" copy={{ data: { description: 'Selecciona almacén, razón, producto, variante, cantidad real, costo y moneda.' }, actions: { description: 'Guarda el ajuste como borrador para revisarlo y aprobarlo.' } }} /></div><div className="flex gap-1" data-tour="inventory-adjustment-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => handleAdjustmentWarehouseChange(value)}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Combobox options={adjustmentProductOptions} value={adjustmentSelectionValue(newAdjustment.productId, newAdjustment.variantId)} onChange={handleAdjustmentProductChange} placeholder="Buscar producto o variante..." searchPlaceholder="Buscar por código, nombre o variante..." emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={adjustmentProductOptions.length} className="w-full sm:col-span-2" /><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" />{canViewInventoryCost && <div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: Number(event.target.value) || 0 })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>}</div></Card>}
         {filteredData.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : filteredData.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; const auditGenerated = isAuditGeneratedAdjustment(adjustment); const isOpening = String(openingId) === String(adjustment.id); return <Card key={adjustment.id} aria-busy={isOpening || undefined} data-detail-opening={isOpening ? 'true' : undefined} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => openAdjustment(adjustment)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="truncate font-mono font-bold">{adjustment.number}</p>{isOpening && <span role="status" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</div><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div>{auditGenerated && <Badge variant="outline" className="mt-3 w-fit border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {adjustment.auditNumber || 'vinculada'} · aprobar en Manager global</Badge>}<div className={`mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs ${canViewInventoryCost ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div>{canViewInventoryCost && <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${adjustment.items[0].unitCost || 0}` : '—'}</p></div>}</div>{adjustment.status === 'DRAFT' && auditGenerated && <p className="mt-3 border-t border-border/40 pt-3 text-[10px] font-semibold leading-relaxed text-amber-700">Este borrador solo puede aprobarse desde el panel del Manager global.</p>}{adjustment.status === 'DRAFT' && !auditGenerated && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adjustment.id); }} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
         </div>
 
@@ -615,10 +706,10 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 <TableCell>
                   <Combobox
                     options={adjustmentProductOptions}
-                    value={newAdjustment.productId}
-                    onChange={(v) => setNewAdjustment({ ...newAdjustment, productId: v })}
-                    placeholder="Buscar producto..."
-                    searchPlaceholder="Buscar por código o nombre..."
+                    value={adjustmentSelectionValue(newAdjustment.productId, newAdjustment.variantId)}
+                    onChange={handleAdjustmentProductChange}
+                    placeholder="Buscar producto o variante..."
+                    searchPlaceholder="Buscar por código, nombre o variante..."
                     emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'}
                     maxVisibleOptions={adjustmentProductOptions.length}
                     className="w-60 min-w-60"
@@ -687,7 +778,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                     <TableCell className="text-xs">
                       {adj.items?.[0]?.product ? (
                         <span className="flex items-center gap-1.5" title={`${adj.items[0].product.code} - ${adj.items[0].product.name}`}>
-                          <span className="truncate max-w-40">{adj.items[0].product.name}</span>
+                          <span className="truncate max-w-52">{adj.items[0].product.name}{adj.items[0].variant ? ` · ${adjustmentVariantLabel(adj.items[0].variant)}` : ''}</span>
                           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{adj.items[0].product.code}</span>
                         </span>
                       ) : '—'}
@@ -934,10 +1025,10 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 <p className="text-[10px] text-muted-foreground mb-1">Producto</p>
                 <Combobox
                   options={serialProductOptions}
-                  value={serialAdjustment.productId}
-                  onChange={(v) => setSerialAdjustment({ ...serialAdjustment, productId: v })}
-                  placeholder="Buscar producto..."
-                  searchPlaceholder="Buscar por código o nombre..."
+                  value={adjustmentSelectionValue(serialAdjustment.productId, serialAdjustment.variantId)}
+                  onChange={handleSerialProductChange}
+                  placeholder="Buscar producto o variante..."
+                  searchPlaceholder="Buscar por código, nombre o variante..."
                   emptyMessage={serialAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'}
                   maxVisibleOptions={serialProductOptions.length}
                   className="h-9 w-full"
@@ -1006,10 +1097,10 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <p className="text-[10px] text-muted-foreground mb-1">Producto</p>
-                <Select value={newReception.productId} onValueChange={(v) => setNewReception({ ...newReception, productId: v })}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
+                <Select value={adjustmentSelectionValue(newReception.productId, newReception.variantId)} onValueChange={handleReceptionProductChange}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar producto o variante" /></SelectTrigger>
                   <SelectContent>
-                    {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>)}
+                    {receptionProductOptions.map((p: any) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

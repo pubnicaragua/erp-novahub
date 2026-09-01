@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
+import { cn } from '../ui/utils';
 import { buildVariantDescription } from '../../types/variants';
 
 interface SalesVariantSelectProps {
@@ -7,18 +8,21 @@ interface SalesVariantSelectProps {
   value?: string | null;
   onChange: (variantId: string) => void;
   disabled?: boolean;
+  className?: string;
+  labelLayout?: 'inline' | 'stacked';
 }
 
 /** Selector común para todos los editores comerciales. Los precios no se
  * consultan aquí: la variante solo identifica el SKU y su stock. */
-export function SalesVariantSelect({ product, value, onChange, disabled }: SalesVariantSelectProps) {
+export function SalesVariantSelect({ product, value, onChange, disabled, className, labelLayout = 'inline' }: SalesVariantSelectProps) {
   const variants = (product?.variants || []).filter((variant: any) => variant.isActive !== false);
   if (variants.length <= 1) return null;
+  const isStacked = labelLayout === 'stacked';
   return (
-    <div className="mt-1 flex min-w-0 items-center gap-2">
-      <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase tracking-wider text-primary">Variante</Badge>
+    <div className={cn(isStacked ? 'min-w-0 space-y-1' : 'mt-1 flex min-w-0 items-center gap-2', className)}>
+      <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-wider text-primary', isStacked ? 'w-fit' : 'shrink-0')}>Variante</Badge>
       <Select value={value || ''} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger className="h-8 min-w-0 flex-1 text-xs" aria-label="Seleccionar variante del producto">
+        <SelectTrigger className={cn('h-8 min-w-0 text-xs', isStacked ? 'w-full' : 'flex-1')} aria-label="Seleccionar variante del producto">
           <SelectValue placeholder="Seleccionar variante / SKU" />
         </SelectTrigger>
         <SelectContent>

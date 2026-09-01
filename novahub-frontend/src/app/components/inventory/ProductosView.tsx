@@ -974,7 +974,30 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const openSelectedSolicitud = () => {
     if (selectedIds.size === 0) { toast.error('Selecciona al menos un producto'); return; }
     loadSolicitudEmployees();
-    const selected = products.filter((p: any) => selectedIds.has(p.id));
+    // La selección puede contener productos de distintas páginas. El listado
+    // `products` solo representa la página actual, por lo que reconstruimos
+    // la selección desde el catálogo completo y priorizamos el registro que
+    // conserve sus variantes.
+    const catalogById = new Map<string, any>();
+    [...products, ...(summaryProducts || []), ...solicitudCatalogProducts].forEach((product: any) => {
+      const productId = String(product?.id || '').trim();
+      if (!productId) return;
+      const current = catalogById.get(productId);
+      catalogById.set(productId, {
+        ...current,
+        ...product,
+        variants: Array.isArray(product?.variants) && product.variants.length > 0
+          ? product.variants
+          : current?.variants,
+      });
+    });
+    const selected = Array.from(selectedIds)
+      .map((productId) => catalogById.get(String(productId)))
+      .filter(Boolean);
+    if (selected.length !== selectedIds.size) {
+      toast.error('No se pudieron cargar todos los productos seleccionados. Actualiza el inventario e inténtalo nuevamente.');
+      return;
+    }
     setSolicitudWarehouseId('');
     setSolicitudOnlySelected(true);
     setSolicitudWarehouseFilter('ALL');

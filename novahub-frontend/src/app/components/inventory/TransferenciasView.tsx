@@ -52,6 +52,77 @@ interface TransferItemDraft {
   serials: string[];
 }
 
+interface TransferItemEditorProps {
+  item: TransferItemDraft;
+  itemProduct: any;
+  itemSerialRequired: boolean;
+  productOptions: { label: string; value: string }[];
+  saving: boolean;
+  emptyMessage: string;
+  onProductChange: (value: string) => void;
+  onVariantChange: (variantId: string) => void;
+  onQuantityChange: (value: number) => void;
+  onOpenSerials: () => void;
+  onRemove: () => void;
+}
+
+function TransferItemEditor({
+  item,
+  itemProduct,
+  itemSerialRequired,
+  productOptions,
+  saving,
+  emptyMessage,
+  onProductChange,
+  onVariantChange,
+  onQuantityChange,
+  onOpenSerials,
+  onRemove,
+}: TransferItemEditorProps) {
+  return (
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-border/40 bg-background/50 p-2">
+      <Combobox
+        options={productOptions}
+        value={item.productId}
+        onChange={onProductChange}
+        placeholder="Buscar producto..."
+        searchPlaceholder="Buscar por código o nombre..."
+        emptyMessage={emptyMessage}
+        maxVisibleOptions={productOptions.length}
+        className="col-span-2 w-full min-w-0"
+        disabled={saving}
+      />
+      <SalesVariantSelect
+        product={itemProduct}
+        value={item.variantId}
+        onChange={onVariantChange}
+        disabled={saving}
+        className="col-span-2 w-full"
+        labelLayout="stacked"
+      />
+      <div className="col-span-2 flex min-w-0 items-center gap-2">
+        <Input
+          type="number"
+          min={1}
+          value={itemSerialRequired ? item.serials.length : item.quantity}
+          onChange={(event) => onQuantityChange(Number(event.target.value) || 1)}
+          disabled={saving || itemSerialRequired}
+          placeholder="Cantidad"
+          className="h-8 w-20 shrink-0 text-xs"
+        />
+        {itemSerialRequired && (
+          <Button type="button" variant="outline" size="sm" className="h-8 min-w-0 text-[10px] uppercase tracking-wider" onClick={onOpenSerials} disabled={saving}>
+            IMEI ({item.serials.length})
+          </Button>
+        )}
+        <Button type="button" variant="ghost" size="icon" className="ml-auto size-8 shrink-0 text-red-600 hover:bg-red-500/10" onClick={onRemove} disabled={saving} aria-label="Quitar producto">
+          <X className="size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="transfer-title"]',
@@ -88,6 +159,7 @@ const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
 
 export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh, pagination, onSearchChange, branches = [], selectedBranchId, onGoToConfig }: TransferenciasViewProps) {
   const { canPerform, user } = useAuth();
+  const activeTransferBranchId = String(selectedBranchId || user?.clientTenantId || user?.tenantId || '');
   const canCreateTransfer = canPerform('INVENTORY_TRANSFERS', 'create');
   const canEditTransferConfig = canPerform('INVENTORY_CONFIG', 'edit');
   const { openingId, startOpening } = useDetailOpeningFeedback();
@@ -105,7 +177,14 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
   });
   const [saving, setSaving] = useState(false);
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
-  const openTransfer = (transfer: any) => startOpening(transfer.id, () => setSelectedTransfer(transfer));
+  const openTransfer = (transfer: any) => startOpening(transfer.id, async () => {
+    try {
+      const detail = await inventoryService.getTransfer(transfer.id, activeTransferBranchId || undefined);
+      setSelectedTransfer(detail);
+    } catch {
+      setSelectedTransfer(transfer);
+    }
+  });
   const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; errors: string[]; accountingMode?: 'OPERATIONAL_ONLY' | 'BRANCH_TO_BRANCH'; warehouses: any[] } | null>(null);
   const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
   const [corporateWarehouses, setCorporateWarehouses] = useState<any[]>([]);
@@ -135,7 +214,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     }
     let cancelled = false;
     setAccountingPreflightLoading(true);
-    inventoryService.getTransferAccountingPreflight(newTransfer.fromId, newTransfer.toId)
+    inventoryService.getTransferAccountingPreflight(newTransfer.fromId, newTransfer.toId, { activeBranchId: activeTransferBranchId || undefined })
       .then((result) => { if (!cancelled) setAccountingPreflight(result); })
       .catch((error: any) => {
         if (!cancelled) {
@@ -144,7 +223,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       })
       .finally(() => { if (!cancelled) setAccountingPreflightLoading(false); });
     return () => { cancelled = true; };
-  }, [newTransfer.fromId, newTransfer.toId]);
+  }, [newTransfer.fromId, newTransfer.toId, activeTransferBranchId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,8 +271,14 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     }
     for (const warehouse of warehouses) {
       if (!warehouse?.id || warehouse.isActive === false || seen.has(warehouse.id)) continue;
+      const warehouseBranchId = warehouse.clientTenantId || selectedBranchId;
+      // getWarehouses pertenece a la sucursal de la sesión y puede quedar
+      // desfasado cuando el filtro del ERP apunta a otra sucursal. Nunca lo
+      // etiquetamos como parte de la sucursal seleccionada si la base indica
+      // que pertenece a otra.
+      if (selectedBranchId && warehouseBranchId && String(warehouseBranchId) !== String(selectedBranchId)) continue;
       seen.add(warehouse.id);
-      branchLocations.push({ id: warehouse.id, name: warehouse.name, kind: 'BODEGA', branchId: selectedBranchId, branchName: 'Sucursal actual', clientTenantId: warehouse.clientTenantId || selectedBranchId });
+      branchLocations.push({ id: warehouse.id, name: warehouse.name, kind: 'BODEGA', branchId: warehouseBranchId, branchName: 'Sucursal actual', clientTenantId: warehouseBranchId });
     }
     const corporateLocations = [...backendCorporateLocations, ...corporateWarehouses
       .filter((warehouse) => warehouse?.id && warehouse.isActive !== false)
@@ -497,6 +582,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         newTransfer.toId,
         {
           date: newTransfer.date,
+          activeBranchId: activeTransferBranchId || undefined,
           items: checks.map((check) => ({ variantId: check.variantId, quantity: check.quantity })),
         },
       );
@@ -510,6 +596,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       await inventoryService.createTransfer({
         fromId: newTransfer.fromId,
         toId: newTransfer.toId,
+        activeBranchId: activeTransferBranchId || undefined,
         destinationClientTenantId: locationById.get(newTransfer.toId)?.clientTenantId || undefined,
         businessUnitId: selectedFromLocation?.businessUnitId || locationById.get(newTransfer.toId)?.businessUnitId || undefined,
         reference: newTransfer.reference?.trim() || undefined,
@@ -589,13 +676,13 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           <div className="space-y-3 lg:hidden" data-tour="transfer-table">
             {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-transfer-form-data">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2" data-tour="inventory-transfer-form-title"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nueva transferencia</p><InventoryViewTutorial label="Cómo crear transferencia" targetPrefix="inventory-transfer-form" copy={{ data: { description: 'Selecciona origen, destino, productos, cantidades y fecha.' }, actions: { description: 'Guarda la transferencia para mover existencias entre almacenes.' } }} /></div><div className="flex gap-1" data-tour="inventory-transfer-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateTransfer} disabled={saving} aria-label="Guardar transferencia">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar transferencia"><X className="size-4" /></Button></div></div>
-          <div className="grid gap-3 sm:grid-cols-2"><Select value={newTransfer.fromId} onValueChange={handleFromWarehouseChange}><SelectTrigger><SelectValue placeholder="Almacén origen" /></SelectTrigger><SelectContent>{sourceTransferLocations.map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><Select value={newTransfer.toId} onValueChange={(value) => setNewTransfer({ ...newTransfer, toId: value })}><SelectTrigger><SelectValue placeholder="Almacén destino" /></SelectTrigger><SelectContent>{transferLocations.filter((location) => location.id !== newTransfer.fromId).map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><div className="flex flex-col gap-2 sm:col-span-2">{newTransfer.items.map((item) => { const itemProduct = transferProducts.find((p: any) => p.id === item.productId); const itemSerialRequired = isSerialTracked(itemProduct); return (<div key={item.key} className="flex flex-wrap items-center gap-2"><Combobox options={productOptions} value={item.productId} onChange={(value) => handleItemProductChange(item.key, value)} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={productOptions.length} className="min-w-0 flex-1" disabled={saving} /><SalesVariantSelect product={itemProduct} value={item.variantId} onChange={(variantId) => updateItem(item.key, { variantId })} disabled={saving} />{itemSerialRequired && <Button type="button" variant="outline" size="sm" className="h-8 text-[10px]" onClick={() => { setSerialPickerItemKey(item.key); setSerialSearch(''); }} disabled={saving}>IMEI ({item.serials.length})</Button>}<Input type="number" min={1} value={itemSerialRequired ? item.serials.length : item.quantity} onChange={(event) => updateItem(item.key, { quantity: Number(event.target.value) || 1 })} disabled={saving || itemSerialRequired} placeholder="Cantidad" className="w-20" /><Button type="button" variant="ghost" size="icon" className="size-8 text-red-600" onClick={() => removeItem(item.key)} disabled={saving} aria-label="Quitar producto"><X className="size-4" /></Button></div>); })}<Button type="button" variant="outline" size="sm" className="h-8 w-fit gap-1 text-[10px] uppercase tracking-wider" onClick={addItem} disabled={saving || !newTransfer.fromId}><Plus className="size-3.5" /> Agregar producto</Button></div><Input className="sm:col-span-2" type="date" value={newTransfer.date} onChange={(event) => setNewTransfer({ ...newTransfer, date: event.target.value })} /><Input className="sm:col-span-2" placeholder="Referencia / motivo (opcional)" value={newTransfer.reference} onChange={(event) => setNewTransfer({ ...newTransfer, reference: event.target.value })} /></div>
+          <div className="grid gap-3 sm:grid-cols-2"><Select value={newTransfer.fromId} onValueChange={handleFromWarehouseChange}><SelectTrigger><SelectValue placeholder="Almacén origen" /></SelectTrigger><SelectContent>{sourceTransferLocations.map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><Select value={newTransfer.toId} onValueChange={(value) => setNewTransfer({ ...newTransfer, toId: value })}><SelectTrigger><SelectValue placeholder="Almacén destino" /></SelectTrigger><SelectContent>{transferLocations.filter((location) => location.id !== newTransfer.fromId).map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><div className="flex flex-col gap-2 sm:col-span-2">{newTransfer.items.map((item) => <TransferItemEditor key={item.key} item={item} itemProduct={transferProducts.find((p: any) => p.id === item.productId)} itemSerialRequired={isSerialTracked(transferProducts.find((p: any) => p.id === item.productId))} productOptions={productOptions} saving={saving} emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} onProductChange={(value) => handleItemProductChange(item.key, value)} onVariantChange={(variantId) => updateItem(item.key, { variantId })} onQuantityChange={(quantity) => updateItem(item.key, { quantity })} onOpenSerials={() => { setSerialPickerItemKey(item.key); setSerialSearch(''); }} onRemove={() => removeItem(item.key)} />)}<Button type="button" variant="outline" size="sm" className="h-8 w-fit gap-1 text-[10px] uppercase tracking-wider" onClick={addItem} disabled={saving || !newTransfer.fromId}><Plus className="size-3.5" /> Agregar producto</Button></div><Input className="sm:col-span-2" type="date" value={newTransfer.date} onChange={(event) => setNewTransfer({ ...newTransfer, date: event.target.value })} /><Input className="sm:col-span-2" placeholder="Referencia / motivo (opcional)" value={newTransfer.reference} onChange={(event) => setNewTransfer({ ...newTransfer, reference: event.target.value })} /></div>
         </Card>}
         {filteredTransfers.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Truck className="mx-auto mb-2 size-9 opacity-20" /><p>No hay transferencias</p></Card> : filteredTransfers.map((transfer: any) => { const status = String(transfer.status || 'COMPLETED').toUpperCase(); const statusLabel = status === 'COMPLETED' ? 'Completada' : status === 'PENDING' ? 'Pendiente' : status === 'CANCELLED' ? 'Cancelada' : status; const isOpening = String(openingId) === String(transfer.id); return <Card key={transfer.id} aria-busy={isOpening || undefined} data-detail-opening={isOpening ? 'true' : undefined} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => openTransfer(transfer)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="truncate font-mono font-bold">{transfer.number}</p>{isOpening && <span role="status" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</div><p className="mt-1 text-xs text-muted-foreground">{new Date(transfer.date).toLocaleDateString()}</p></div><Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600"><Check className="mr-1 size-3" /> {statusLabel}</Badge></div><div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border/40 pt-3 text-xs"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Origen</p><p className="truncate font-medium">{transfer.from?.name || '—'}</p></div><ArrowRight className="size-4" /><div className="min-w-0 text-right"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Destino</p><p className="truncate font-medium">{transfer.to?.name || '—'}</p></div></div><div className="mt-3 flex justify-between border-t border-border/40 pt-3 text-xs text-muted-foreground"><div className="flex flex-wrap items-center gap-1.5">{renderStockDelta(transfer)}</div></div></Card>; })}
       </div>
 
       <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="transfer-table">
-        <Table>
+        <Table responsiveCards={false}>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Guía</TableHead>
@@ -633,44 +720,21 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                   <div className="flex min-w-72 flex-col gap-2">
                     {newTransfer.items.map((item) => {
                       const itemProduct = transferProducts.find((p: any) => p.id === item.productId);
-                      const itemSerialRequired = isSerialTracked(itemProduct);
                       return (
-                        <div key={item.key} className="flex flex-wrap items-center gap-2">
-                          <Combobox
-                            options={productOptions}
-                            value={item.productId}
-                            onChange={(v) => handleItemProductChange(item.key, v)}
-                            placeholder="Buscar producto..."
-                            searchPlaceholder="Buscar por código o nombre..."
-                            emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'}
-                            maxVisibleOptions={productOptions.length}
-                            className="w-48 min-w-48"
-                            disabled={saving}
-                          />
-                          <SalesVariantSelect product={itemProduct} value={item.variantId} onChange={(variantId) => updateItem(item.key, { variantId })} disabled={saving} />
-                          <Input
-                            type="number"
-                            value={itemSerialRequired ? item.serials.length : item.quantity}
-                            onChange={(e) => updateItem(item.key, { quantity: parseInt(e.target.value) || 1 })}
-                            className="h-8 text-xs w-20"
-                            min={1}
-                            disabled={saving || itemSerialRequired}
-                          />
-                          {itemSerialRequired && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 text-[10px] uppercase tracking-wider"
-                              onClick={() => { setSerialPickerItemKey(item.key); setSerialSearch(''); }}
-                              disabled={saving}
-                            >
-                              IMEI ({item.serials.length})
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="icon" className="size-7 text-red-600 hover:bg-red-500/10" onClick={() => removeItem(item.key)} disabled={saving} aria-label="Quitar producto">
-                            <X className="size-3.5" />
-                          </Button>
-                        </div>
+                        <TransferItemEditor
+                          key={item.key}
+                          item={item}
+                          itemProduct={itemProduct}
+                          itemSerialRequired={isSerialTracked(itemProduct)}
+                          productOptions={productOptions}
+                          saving={saving}
+                          emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'}
+                          onProductChange={(value) => handleItemProductChange(item.key, value)}
+                          onVariantChange={(variantId) => updateItem(item.key, { variantId })}
+                          onQuantityChange={(quantity) => updateItem(item.key, { quantity })}
+                          onOpenSerials={() => { setSerialPickerItemKey(item.key); setSerialSearch(''); }}
+                          onRemove={() => removeItem(item.key)}
+                        />
                       );
                     })}
                     <Button

@@ -321,7 +321,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const transfersQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'transfers', tenantKey, pageFor('transferencias').page, pageFor('transferencias').pageSize, searchFor('transferencias'), statusFor('transferencias'), selectedBranchId],
-    queryFn: ({ signal }) => inventoryService.getTransfers({ page: pageFor('transferencias').page, pageSize: pageFor('transferencias').pageSize, search: searchFor('transferencias'), status: statusFor('transferencias'), warehouseId: scopeWarehouseParam }, signal),
+    queryFn: ({ signal }) => inventoryService.getTransfers({ page: pageFor('transferencias').page, pageSize: pageFor('transferencias').pageSize, search: searchFor('transferencias'), status: statusFor('transferencias'), warehouseId: scopeWarehouseParam, branchId: selectedBranchId || undefined }, signal),
     enabled: Boolean(user) && canViewInventorySection('transferencias') && activeTab === 'transferencias',
   });
   const adjustmentsQuery = useQuery({
