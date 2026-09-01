@@ -669,6 +669,13 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           ],
           lines: (receipt.items || []).map((item) => ({
             description: item.description || item.name || item.code || 'Artículo sin descripción',
+            code: item.code,
+            productCode: (item as any).productCode,
+            variantId: (item as any).variantId,
+            variantSku: (item as any).variantSku,
+            variantName: (item as any).variantName,
+            variantAttributes: (item as any).variantAttributes,
+            variant: (item as any).variant,
             quantity: Number(item.quantityReceived || 0),
             unitPrice: formatReceiptAmount(Number(item.unitPrice || 0), receipt.currency),
             total: formatReceiptAmount(Number(item.quantityReceived || 0) * Number(item.unitPrice || 0), receipt.currency),

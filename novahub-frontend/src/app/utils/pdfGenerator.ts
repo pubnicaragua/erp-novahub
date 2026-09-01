@@ -13,6 +13,7 @@ import { getPurchasePriorityOption } from './purchasePriority';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
 import { createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
+import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 
 type PdfRgb = [number, number, number];
 
@@ -207,13 +208,6 @@ async function toGrayscaleImageSource(source?: string | null): Promise<string | 
 
 function escapeHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
-}
-
-function commercialItemDescription(item: any, fallback = 'Producto', includeCommercialNote = true) {
-  const description = String(item?.description || item?.name || item?.product?.name || fallback);
-  const code = String(item?.code || item?.sku || item?.product?.code || '').trim();
-  const note = String(item?.commercialNoteSnapshot || item?.commercialNote || item?.product?.commercialNoteSnapshot || item?.product?.commercialNote || '').trim();
-  return [description, code ? `Código: ${code}` : '', includeCommercialNote && note ? `Nota: ${note}` : ''].filter(Boolean).join('\n');
 }
 
 function htmlFieldStyle(field: any) {
@@ -732,6 +726,38 @@ function getPaymentVoucherRows(transaction: any) {
   return rows.filter((row: any) => row && typeof row === 'object');
 }
 
+function paymentVariantDetails(transaction: any) {
+  const linkedItemSets = [
+    transaction?.creditNote?.items,
+    transaction?.invoice?.items,
+    transaction?.creditNote?.invoice?.items,
+  ].filter((items) => Array.isArray(items) && items.length) as any[][];
+  const linkedItems = linkedItemSets.find((items) => items.some((item: any) => Boolean(
+    item?.variantId
+    || item?.variantSku
+    || item?.variantName
+    || item?.variantAttributes
+    || item?.variant?.id
+    || item?.variant?.sku
+    || item?.variant?.name
+    || item?.variant?.attributes,
+  ))) || [];
+  const lines = linkedItems
+    .filter((item: any) => Boolean(
+      item?.variantId
+      || item?.variantSku
+      || item?.variantName
+      || item?.variantAttributes
+      || item?.variant?.id
+      || item?.variant?.sku
+      || item?.variant?.name
+      || item?.variant?.attributes,
+    ))
+    .map((item: any) => formatPdfItemDescription(item, item?.description || 'Producto', false))
+    .filter(Boolean);
+  return lines.length ? `Detalle de variantes del documento aplicado:\n${lines.join('\n')}` : '';
+}
+
 function getPaymentVoucherContext(transaction: any) {
   const isCreditLink = Boolean(transaction?.creditNote || transaction?.creditNoteId);
   const linkedDocument = isCreditLink
@@ -897,7 +923,7 @@ async function generateSalesPaymentVoucherPDF({
     };
     const logoSize = logo ? fitPdfImage(probe, logo, width === 58 ? 30 : 38, 16) : { width: 0, height: 0 };
     const customerName = transaction?.customer?.name || transaction?.customerName || 'Cliente general';
-    const notes = String(transaction?.notes || '').trim();
+    const notes = [String(transaction?.notes || '').trim(), paymentVariantDetails(transaction)].filter(Boolean).join('\n');
     const headerHeight = logoSize.height + countLines(companyName, width === 58 ? 9 : 10) * 4 + (settings.slogan ? 4 : 0) + (settings.fiscalInfo ? 4 : 0) + 16;
     const metaHeight = 5 * 4.2 + countLines(customerName, 7.2) * 3.5 + 12;
     const detailHeight = 10 + methodRows.reduce((total: number, row: any) => total + 10 + countLines(`${row.method} · ${row.reference}${row.bank ? ` · ${row.bank}` : ''}`, 6.5) * 3.2, 0);
@@ -1184,14 +1210,15 @@ async function generateSalesPaymentVoucherPDF({
     margin: { left: rightEdge - Math.min(95, pageWidth - margin * 2) },
   });
   currentY = ((doc as any).lastAutoTable?.finalY || currentY + 25) + 7;
-  if (transaction?.notes) {
+  const paymentNotes = [String(transaction?.notes || '').trim(), paymentVariantDetails(transaction)].filter(Boolean).join('\n');
+  if (paymentNotes) {
     doc.setFont(fontName, 'bold');
     doc.setFontSize(8);
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
     doc.text('Notas', margin, currentY);
     doc.setFont(fontName, 'normal');
     doc.setFontSize(8);
-    doc.text(doc.splitTextToSize(String(transaction.notes), pageWidth - margin * 2), margin, currentY + 5);
+    doc.text(doc.splitTextToSize(paymentNotes, pageWidth - margin * 2), margin, currentY + 5);
   }
   doc.setFont(fontName, 'italic');
   doc.setFontSize(8);
@@ -1464,7 +1491,7 @@ export async function generateSalesTransactionPDF({
         fileName: buildSalesPdfFileName(documentType, transaction?.number, format),
         data: {
           company: { name: tenantName, logo: tenantLogo },
-          document: { title: SALES_TRANSACTION_TITLES[documentType], number: transaction?.number || transaction?.id || 'N/A', date: transaction?.date || new Date().toLocaleDateString('es-NI'), status: paymentContext.statusLabel, notes: transaction?.notes || paymentContext.settlementLabel },
+          document: { title: SALES_TRANSACTION_TITLES[documentType], number: transaction?.number || transaction?.id || 'N/A', date: transaction?.date || new Date().toLocaleDateString('es-NI'), status: paymentContext.statusLabel, notes: [transaction?.notes || paymentContext.settlementLabel, paymentVariantDetails(transaction)].filter(Boolean).join('\n') },
           party: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general' },
           customer: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general', taxId: transaction?.customer?.taxId || transaction?.customer?.ruc || '', address: transaction?.customer?.address || '', phone: transaction?.customer?.phone || '' },
           rows: paymentRows,
@@ -1486,7 +1513,10 @@ export async function generateSalesTransactionPDF({
     });
   }
   if (format === 'roll-58' || format === 'roll-80') {
-    return generateSalesTicketPDF({ document: transaction, tenantName, formatAmount, tenantLogo, documentType, format, settings: design?.settings || {}, save });
+    const ticketDocument = documentType === 'payment'
+      ? { ...transaction, notes: [transaction?.notes, paymentVariantDetails(transaction)].filter(Boolean).join('\n') }
+      : transaction;
+    return generateSalesTicketPDF({ document: ticketDocument, tenantName, formatAmount, tenantLogo, documentType, format, settings: design?.settings || {}, save });
   }
   return generateEstimatePDF({
     estimate: transaction,

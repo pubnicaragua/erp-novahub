@@ -7,6 +7,7 @@ import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pd
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildPdfFileName } from './exportFileNames';
 import { pdfStatusLabel } from './pdfStatus';
+import { formatPdfItemDescription } from './pdf-line-details';
 
 type PdfRgb = [number, number, number];
 
@@ -21,6 +22,13 @@ export interface PurchasePdfLine {
   unitPrice?: string;
   total?: string;
   secondary?: string;
+  code?: string | null;
+  productCode?: string | null;
+  variantId?: string | null;
+  variantSku?: string | null;
+  variantName?: string | null;
+  variantAttributes?: unknown;
+  variant?: Record<string, unknown> | null;
 }
 
 export interface PurchasePdfDocument {
@@ -56,7 +64,10 @@ const withPaperFormat = (settings: Record<string, any>, format: PdfDownloadForma
   : { ...settings, paperSize: standardPaper(format), orientation: 'portrait' };
 
 const valueText = (value: unknown) => String(value ?? '—');
-const purchaseLineDescription = (line: PurchasePdfLine) => line.secondary ? `${line.description}\n${line.secondary}` : line.description;
+const purchaseLineDescription = (line: PurchasePdfLine) => {
+  const description = formatPdfItemDescription(line, line.description || 'Producto', false);
+  return line.secondary ? `${description}\n${line.secondary}` : description;
+};
 const isRoll = (format: PdfDownloadFormat) => format === 'roll-58' || format === 'roll-80';
 const isStatusColumn = (column: PurchasePdfListColumn) => /estado|status/i.test(column.label);
 const purchaseListValue = (column: PurchasePdfListColumn, row: any) => {
@@ -137,9 +148,10 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
   return doc;
 }
 
-export async function generatePurchaseRecordPDF({ document, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.purchase-record' }: { document: PurchasePdfDocument; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string }) {
-  const configuredDesign = await getPdfDesign(targetKey);
-  const settings = await getPdfDesignSettings(targetKey);
+export async function generatePurchaseRecordPDF({ document, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.purchase-record', designOverride }: { document: PurchasePdfDocument; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; designOverride?: any }) {
+  const configuredDesign = designOverride || await getPdfDesign(targetKey);
+  const overrideSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object' ? configuredDesign.settings : null;
+  const settings = overrideSettings || await getPdfDesignSettings(targetKey);
   const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : undefined;
   const resolvedLogo = configuredLogo || tenantLogo || (typeof document.supplierData?.logo === 'string' ? document.supplierData.logo : undefined);
   if (!isRoll(format) && configuredDesign?.layoutZones?.definition) {

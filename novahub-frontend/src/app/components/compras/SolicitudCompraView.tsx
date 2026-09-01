@@ -363,7 +363,10 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           Number(globalRate || 1),
         ).toFixed(6))
         : undefined;
-      const priceCandidates = [item.unitPrice, product?.lastPurchasePrice, product?.costPrice, product?.cost, product?.price]
+      const variantCost = variant?.costPrice !== null && variant?.costPrice !== undefined
+        ? Number(variant.costPrice)
+        : (variant ? Number(product?.costPrice || product?.cost || 0) + Number(variant.costModifier || 0) : undefined);
+      const priceCandidates = [variantCost, item.unitPrice, product?.lastPurchasePrice, product?.costPrice, product?.cost, product?.price]
         .map((value) => Number(value))
         .filter((value) => Number.isFinite(value) && value > 0);
       // Las solicitudes nuevas traen un snapshot del costo funcional. Se
@@ -383,7 +386,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       return {
         productId: item.productId || null,
         variantId: item.variantId || variant?.id || null,
-        code: item.code || product?.code || product?.sku || '',
+        code: item.code || variant?.sku || product?.code || product?.sku || '',
         name: item.name || product?.name || item.description || '',
         description: item.description || (variant?.name ? `${product?.name || ''} · ${variant.name}` : product?.name) || '',
         category: item.category || (product as any)?.category?.name || (product as any)?.category || '',
@@ -478,8 +481,8 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
             ...(management ? [{ label: 'Cotización', value: management.quotationNumber || '—' }, { label: 'Proveedor cotizado', value: management.supplier?.name || '—' }] : []),
           ],
           lines: management?.items?.length
-            ? management.items.map((item: any) => ({ description: item.description || 'Artículo sin descripción', quantity: item.quantityProposed || item.quantityRequested || 0, unitPrice: formatRequestAmount(item.unitPrice, management.currency, management.exchangeRate), total: formatRequestAmount(item.total, management.currency, management.exchangeRate) }))
-            : (request.items || []).map((item: any) => ({ description: item.description || item.name || 'Artículo sin descripción', quantity: item.quantity || 0, secondary: `Stock actual: ${item.currentStock ?? '—'} · Stock mínimo: ${item.minStock ?? '—'}` })),
+            ? management.items.map((item: any) => ({ description: item.description || 'Artículo sin descripción', code: item.code, productCode: item.productCode, variantId: item.variantId, variantSku: item.variantSku, variantName: item.variantName, variantAttributes: item.variantAttributes, variant: item.variant, quantity: item.quantityProposed || item.quantityRequested || 0, unitPrice: formatRequestAmount(item.unitPrice, management.currency, management.exchangeRate), total: formatRequestAmount(item.total, management.currency, management.exchangeRate) }))
+            : (request.items || []).map((item: any) => ({ description: item.description || item.name || 'Artículo sin descripción', code: item.code, productCode: item.productCode, variantId: item.variantId, variantSku: item.variantSku, variantName: item.variantName, variantAttributes: item.variantAttributes, variant: item.variant, quantity: item.quantity || 0, secondary: `Stock actual: ${item.currentStock ?? '—'} · Stock mínimo: ${item.minStock ?? '—'}` })),
           total: management ? formatRequestAmount(management.total, management.currency, management.exchangeRate) : undefined,
           totalLabel: 'Total cotizado',
           notes: request.notes || request.justification,

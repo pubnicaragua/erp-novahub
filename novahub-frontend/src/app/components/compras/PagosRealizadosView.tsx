@@ -29,6 +29,7 @@ import { hasPaymentReferenceField, isBankPaymentMethod, paymentMethodLabel, requ
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { formatPdfItemDescription } from '../../utils/pdf-line-details';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { cn } from '../ui/utils';
@@ -70,6 +71,21 @@ function paymentReferenceLabel(payment: PaymentMade): string {
   const method = String(payment.method || '').toUpperCase();
   if (method === 'CASH') return `No aplica · ${payment.number || payment.id}`;
   return payment.number || payment.id || 'Sin referencia';
+}
+
+function paymentVariantDetails(payment: PaymentMade): string {
+  const invoice = payment.supplierInvoice as any;
+  const receiptItems = Array.isArray(invoice?.purchaseReceipt?.items) ? invoice.purchaseReceipt.items : [];
+  const invoiceItems = Array.isArray(invoice?.items) ? invoice.items : [];
+  const items = receiptItems.length ? receiptItems : invoiceItems;
+  const lines = items
+    .filter((item: any) => Boolean(
+      item?.variantId || item?.variantSku || item?.variantName || item?.variantAttributes
+      || item?.variant?.id || item?.variant?.sku || item?.variant?.name || item?.variant?.attributes,
+    ))
+    .map((item: any) => formatPdfItemDescription(item, item?.description || 'Producto', false))
+    .filter(Boolean);
+  return lines.length ? `Detalle de variantes de la factura aplicada:\n${lines.join('\n')}` : '';
 }
 
 function groupedPaymentReferenceLabel(payments: PaymentMade[]): string {
@@ -546,7 +562,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           lines: paymentRows.map((row) => ({ description: getMethodLabel(row.method), quantity: 1, unitPrice: formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency), total: formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency), secondary: `Referencia: ${paymentReferenceLabel(row)}${row.bankAccountId ? ` · Banco: ${row.bankAccountId}` : ''}` })),
           total: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency),
           totalLabel: 'Total pagado',
-          notes: payment.notes,
+          notes: [payment.notes, paymentVariantDetails(payment)].filter(Boolean).join('\n'),
         },
       });
       toast.success('Comprobante generado', { id: exportToastId });
@@ -733,7 +749,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                     <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo anterior</span><span className="font-bold">{formatConvertedAmount(selectedInvoiceBalanceBase, baseCurrency)}</span></div>
                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Este pago</span><span className="font-bold text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
-                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Falta por pagar</span><span className={cn('font-bold', paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentRemainingBase, baseCurrency)}</span></div>
+                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className={cn('font-bold', paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentRemainingBase, baseCurrency)}</span></div>
                     </div>
                     {paymentOverInvoiceBalance && <p className="mt-2 text-[10px] font-bold text-rose-600">El monto excede el saldo de la factura.</p>}
                   </div>}

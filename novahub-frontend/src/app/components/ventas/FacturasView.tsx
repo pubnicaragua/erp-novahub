@@ -1151,7 +1151,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const paymentHasRemaining = paymentRemainingInInvoiceCurrency > 0.01;
   const paymentHasChange = !paymentHasRemaining && paymentChangeBase > 0.01;
   const paymentSettlementLabel = paymentHasRemaining
-    ? 'Falta por pagar'
+    ? 'Pendiente'
     : paymentHasChange ? 'Vuelto por dar' : 'Saldo cubierto';
   const paymentSettlementAmount = paymentHasRemaining
     ? paymentRemainingInInvoiceCurrency
@@ -1831,6 +1831,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           ...newItems[idx],
                           productId: val,
                           variantId: null,
+                          variantSku: null,
+                          variantName: null,
+                          variantAttributes: null,
                           productCode: selectedProd?.code || newItems[idx].productCode,
                           itemType: selectedItemType,
                           priceListId: selectedItemType === 'SERVICE'
@@ -1862,9 +1865,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         product={findProductForItem(item)}
                         value={item.variantId}
                         disabled={isInvoiceLocked}
-                        onChange={(variantId) => {
+                        onChange={(variantId, variant) => {
                           const nextItems = [...(localDoc.items || [])] as any[];
-                          nextItems[idx] = { ...nextItems[idx], variantId };
+                          nextItems[idx] = {
+                            ...nextItems[idx],
+                            variantId,
+                            variantSku: variant?.sku || null,
+                            variantName: variant?.name || null,
+                            variantAttributes: variant?.attributes || null,
+                          };
                           setLocalDoc({ ...localDoc, items: nextItems });
                           if (!isCreating) void handleUpdate(localDoc!.id, { items: nextItems } as any);
                         }}

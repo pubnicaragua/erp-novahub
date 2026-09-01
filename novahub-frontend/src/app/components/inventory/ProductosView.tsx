@@ -963,6 +963,24 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     return { currentStock, minStock };
   };
 
+  const getSolicitudVariantSnapshot = (product: any, variant: any, warehouseIdOverride?: string) => {
+    const selectedWarehouseId = warehouseIdOverride || (solicitudWarehouseFilter !== 'ALL'
+      ? solicitudWarehouseFilter
+      : solicitudWarehouseId);
+    const levels = (Array.isArray(product?.stockLevels) ? product.stockLevels : [])
+      .filter((level: any) => String(level?.variantId || '') === String(variant?.id || ''));
+    const matchingLevels = selectedWarehouseId
+      ? levels.filter((level: any) => String(level?.warehouseId || level?.warehouse?.id || '') === selectedWarehouseId)
+      : levels;
+    if (!selectedWarehouseId) return { currentStock: null, minStock: null };
+    return {
+      currentStock: matchingLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0),
+      minStock: matchingLevels.length > 0
+        ? Math.max(...matchingLevels.map((level: any) => Number(level?.minStock || 0)))
+        : 0,
+    };
+  };
+
   const filteredSolicitudProducts = useMemo(() => {
     const search = normalizeImportHeader(solicitudProductSearch);
     const selectedProductIds = new Set(solicitudProducts.map((item) => String(item.productId)));
@@ -985,7 +1003,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const matchesSearch = !search
         || normalizeImportHeader(product?.name).includes(search)
         || normalizeImportHeader(product?.code).includes(search)
-        || normalizeImportHeader(categoryName).includes(search);
+        || normalizeImportHeader(categoryName).includes(search)
+        || (Array.isArray(product?.variants) && product.variants.some((variant: any) => normalizeImportHeader(variant?.sku).includes(search)));
       const matchesCategory = solicitudCategoryFilter === 'ALL' || categoryId === solicitudCategoryFilter;
       const matchesWarehouse = solicitudWarehouseFilter === 'ALL'
         || productWarehouseIds.length === 0
@@ -1035,7 +1054,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       code: p.code ?? '',
       currentStock: Number(currentStock ?? 0),
       minStock: Number(minStock ?? 0),
-      quantity: 1,
+      quantity: isVariable ? 0 : 1,
       isVariable,
       variants,
       variantQuantities: isVariable
@@ -1123,7 +1142,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const updateSolicitudQuantity = (productId: string, quantity: number) => {
     setSolicitudProducts(prev => prev.map(item => item.productId === productId
-      ? { ...item, quantity: Math.max(1, Number.isFinite(quantity) ? quantity : 1) }
+      ? item.isVariable
+        ? item
+        : { ...item, quantity: Math.max(1, Number.isFinite(quantity) ? quantity : 1) }
       : item));
   };
 
@@ -1135,11 +1156,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         (sum, variant) => sum + (variant.id === variantId ? nextQuantity : Number(item.variantQuantities?.[variant.id] || 0)),
         0,
       );
-      if (nextAllocated > Number(item.quantity || 0)) {
-        toast.error(`${item.productName}: las variantes no pueden superar ${item.quantity} unidades.`);
-      }
       return {
         ...item,
+        // En productos variables la cantidad del padre es solo el total
+        // derivado de las cantidades capturadas por SKU variante.
+        quantity: nextAllocated,
         variantQuantities: { ...(item.variantQuantities || {}), [variantId]: nextQuantity },
       };
     }));
@@ -1155,8 +1176,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     ) || 0;
     return {
       allocated,
-      exceeds: Boolean(item.isVariable && allocated > Number(item.quantity || 0)),
-      complete: !item.isVariable || Math.abs(allocated - Number(item.quantity || 0)) <= 0.000001,
+      exceeds: false,
+      complete: !item.isVariable || allocated > 0,
     };
   };
 
@@ -1177,9 +1198,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const invalidAllocation = solicitudProducts.find((item) => !getSolicitudVariantAllocation(item).complete);
       if (invalidAllocation) {
         const allocation = getSolicitudVariantAllocation(invalidAllocation);
-        toast.error(allocation.exceeds
-          ? `${invalidAllocation.productName}: las variantes suman ${allocation.allocated}, pero el total permitido es ${invalidAllocation.quantity}.`
-          : `${invalidAllocation.productName}: distribuye exactamente ${invalidAllocation.quantity} unidades entre sus variantes.`);
+        toast.error(`${invalidAllocation.productName}: solicita al menos una unidad indicando el SKU de la variante.`);
         setSolicitudCreating(false);
         return;
       }
@@ -1194,21 +1213,22 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             variant,
             quantity: Number(item.variantQuantities?.[variant.id] || 0),
           }));
-          const allocatedTotal = allocated.reduce((sum, entry) => sum + entry.quantity, 0);
-          if (Math.abs(allocatedTotal - Number(item.quantity || 0)) > 0.000001) {
-            throw new Error(`Distribuye ${item.quantity} unidades de ${item.productName}. Actualmente distribuiste ${allocatedTotal}.`);
-          }
           return allocated
             .filter((entry) => entry.quantity > 0)
-            .map(({ variant, quantity }) => ({
+            .map(({ variant, quantity }) => {
+              const variantSnapshot = product
+                ? getSolicitudVariantSnapshot(product, variant, solicitudWarehouseId)
+                : { currentStock: 0, minStock: 0 };
+              return {
               productId: item.productId,
               variantId: variant.id,
-              description: `${item.productName} · ${variantLabel(variant)}`,
+              description: `${item.productName} · ${variantLabel(variant)}${variant.sku ? ` · ${variant.sku}` : ''}`,
               quantity,
               warehouseId: solicitudWarehouseId,
-              currentStock: Number(snapshot.currentStock ?? 0),
-              minStock: Number(snapshot.minStock ?? 0),
-            }));
+              currentStock: Number(variantSnapshot.currentStock ?? 0),
+              minStock: Number(variantSnapshot.minStock ?? 0),
+              };
+            });
         }
         return [{
           productId: item.productId,
@@ -1315,10 +1335,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   };
 
   const filteredProducts = products.filter((p: any) => {
-    const matchesSearch = !searchTerm || 
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.category?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const matchesVariantSku = Array.isArray(p.variants) && p.variants.some((variant: any) =>
+      String(variant?.sku || '').toLowerCase().includes(normalizedSearch),
+    );
+    const matchesSearch = !normalizedSearch ||
+      p.name?.toLowerCase().includes(normalizedSearch) ||
+      p.code?.toLowerCase().includes(normalizedSearch) ||
+      p.category?.name?.toLowerCase().includes(normalizedSearch) ||
+      matchesVariantSku;
     const matchesCategory = true;
     const productWarehouseIds = [
       ...(Array.isArray(p.warehouseCatalogs) ? p.warehouseCatalogs.map((catalog: any) => catalog.warehouseId || catalog.warehouse?.id) : []),
@@ -2375,6 +2400,123 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   };
 
   // ==================== EXCEL IMPORT ====================
+  const handleDownloadSelectedTemplate = useCallback(async () => {
+    if (selectedIds.size === 0) {
+      toast.error('Selecciona al menos un producto');
+      return;
+    }
+    try {
+      const selectedProducts = await Promise.all(Array.from(selectedIds).map(async (id) => {
+        const localProduct = products.find((product: any) => String(product.id) === String(id));
+        try {
+          return await inventoryService.getProduct(String(id));
+        } catch {
+          return localProduct;
+        }
+      }));
+      const catalogProducts = selectedProducts.filter(Boolean) as any[];
+      if (catalogProducts.length === 0) {
+        toast.error('No se pudieron cargar los productos seleccionados');
+        return;
+      }
+
+      const priceListsByKey = new Map(importPriceLists.map((list) => [normalizePriceListImportKey(list.code), list]));
+      importPriceLists.forEach((list) => priceListsByKey.set(normalizePriceListImportKey(list.name), list));
+      const convertBaseAmount = (value: unknown) => {
+        const amount = Number(value || 0);
+        if (!Number.isFinite(amount)) return 0;
+        const targetCurrency = String(importCurrency || baseCurrency).toUpperCase();
+        const sourceCurrency = String(baseCurrency || 'NIO').toUpperCase();
+        if (targetCurrency === sourceCurrency) return amount;
+        const rate = Number(importExchangeRate || exchangeRate || 1);
+        return sourceCurrency === 'NIO' && targetCurrency === 'USD' ? amount / rate : amount * rate;
+      };
+      const getProductPrice = (product: any, list: Pick<PriceList, 'code' | 'name'>, variantId?: string) => {
+        const item = (product.priceListItems || []).find((candidate: any) => {
+          const candidateList = candidate.priceList || {};
+          const listMatches = normalizePriceListImportKey(candidateList.code) === normalizePriceListImportKey(list.code)
+            || normalizePriceListImportKey(candidateList.name) === normalizePriceListImportKey(list.name);
+          return listMatches && (variantId ? String(candidate.variantId || '') === String(variantId) : !candidate.variantId);
+        });
+        if (!item) return '';
+        return convertBaseAmount(item.basePrice ?? item.price);
+      };
+      const getVariantCost = (product: any, variant: any) => {
+        const cost = variant?.costPrice !== null && variant?.costPrice !== undefined
+          ? variant.costPrice
+          : product.costPrice;
+        return canViewInventoryCost && cost !== undefined && cost !== null ? convertBaseAmount(cost) : '';
+      };
+      const isCustomVariant = (product: any, variant: any) => {
+        const productCode = String(product.code || '').trim().toLowerCase();
+        return product.variants?.length > 1 || String(variant?.sku || '').trim().toLowerCase() !== productCode || String(variant?.name || '').trim().toLowerCase() !== 'estándar';
+      };
+      const customVariants = catalogProducts.flatMap((product) => (product.variants || []).filter((variant: any) => isCustomVariant(product, variant)).map((variant: any) => ({ product, variant })));
+      const productHeaders = ['Código / SKU', 'Nombre', 'Nota comercial', 'Categoría', 'Unidad', ...importPriceLists.map((list) => `Precio ${list.name}`), ...(canViewInventoryCost ? ['Costo'] : [])];
+      const productRows = catalogProducts.map((product) => [
+        product.code || '',
+        product.name || '',
+        product.commercialNote || '',
+        product.category?.name || product.category || '',
+        product.unit || 'unidad',
+        ...importPriceLists.map((list) => getProductPrice(product, list)),
+        ...(canViewInventoryCost ? [convertBaseAmount(product.costPrice)] : []),
+      ]);
+      const variantHeaders = ['Código producto', 'SKU variante', 'Nombre variante', 'Código de barras', ...(canViewInventoryCost ? ['Costo variante'] : [])];
+      const variantRows = customVariants.map(({ product, variant }) => [
+        product.code || '',
+        variant.sku || '',
+        variant.name || '',
+        variant.barcode || '',
+        ...(canViewInventoryCost ? [getVariantCost(product, variant)] : []),
+      ]);
+      const attributeRows = customVariants.flatMap(({ variant }) => (Array.isArray(variant.attributes) ? variant.attributes : []).map((attribute: any) => [
+        variant.sku || '',
+        attribute.attributeName || attribute.name || '',
+        attribute.value || '',
+      ]));
+      const priceRows = catalogProducts.flatMap((product) => (product.priceListItems || []).flatMap((item: any) => {
+        const list = priceListsByKey.get(normalizePriceListImportKey(item.priceList?.code || item.priceList?.name));
+        if (!list) return [];
+        const variant = (product.variants || []).find((candidate: any) => String(candidate.id) === String(item.variantId || ''));
+        const variantIsCustom = variant && isCustomVariant(product, variant);
+        return [[variantIsCustom ? 'VARIANTE' : 'PRODUCTO', product.code || '', variantIsCustom ? variant.sku || '' : '', list.name, convertBaseAmount(item.basePrice ?? item.price)]];
+      }));
+      const stockRows = catalogProducts.flatMap((product) => (product.stockLevels || []).map((level: any) => {
+        const variant = (product.variants || []).find((candidate: any) => String(candidate.id) === String(level.variantId || ''));
+        const variantIsCustom = variant && isCustomVariant(product, variant);
+        const warehouse = level.warehouse?.name || importWarehouseOptions.find((candidate: any) => String(candidate.id) === String(level.warehouseId))?.name || '';
+        return [product.code || '', variantIsCustom ? variant.sku : product.code || '', warehouse, Number(level.quantity || 0), Number(level.minStock || 0), level.maxStock ?? '', getVariantCost(product, variant), importCurrency, importCurrency === 'USD' ? Number(importExchangeRate || exchangeRate || 1) : 1];
+      }));
+      const appendSheet = (workbook: XLSX.WorkBook, name: string, rows: any[][]) => {
+        const sheet = XLSX.utils.aoa_to_sheet(rows);
+        sheet['!cols'] = rows[0].map((header) => ({ wch: Math.max(12, Math.min(30, String(header).length + 2)) }));
+        XLSX.utils.book_append_sheet(workbook, sheet, name);
+      };
+      const workbook = XLSX.utils.book_new();
+      appendSheet(workbook, 'Productos', [productHeaders, ...productRows]);
+      appendSheet(workbook, 'Variantes', [variantHeaders, ...variantRows]);
+      appendSheet(workbook, 'Atributos', [['SKU variante', 'Atributo', 'Valor'], ...attributeRows]);
+      appendSheet(workbook, 'Precios', [['Alcance', 'Código producto', 'SKU variante', 'Lista', 'Precio'], ...priceRows]);
+      appendSheet(workbook, 'Inventario', [['Código producto', 'SKU variante', 'Bodega', 'Stock inicial', 'Stock mínimo', 'Stock máximo', 'Costo entrada', 'Moneda costo', 'Tasa costo'], ...stockRows]);
+      const guide = XLSX.utils.aoa_to_sheet([
+        ['GUÍA · PLANTILLA DE PRODUCTOS SELECCIONADOS'],
+        [`Se exportaron ${catalogProducts.length} producto(s) seleccionado(s). Puedes editar las filas y volver a importarlas desde Inventario.`],
+        ['Listas de precios', importPriceLists.map((list) => list.name).join(' · ') || 'Sin listas configuradas'],
+        ['Variantes', 'Los productos con variantes se exportan como una fila por SKU en Variantes, Atributos, Precios e Inventario. Los productos simples conservan su SKU padre y su stock.'],
+        ['Stock', 'Stock inicial se exporta como referencia editable. En una reimportación no se duplica una existencia ya registrada para la misma bodega y variante.'],
+        ['Costo', canViewInventoryCost ? `Los costos se exportan en ${importCurrency}.` : 'El costo no se exporta porque tu rol no tiene permiso para verlo.'],
+        ['Moneda', `Los valores numéricos se exportan en ${importCurrency}; no llevan símbolo dentro de la celda.`],
+      ]);
+      guide['!cols'] = [{ wch: 28 }, { wch: 120 }];
+      XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
+      XLSX.writeFile(workbook, 'plantilla_importacion_productos_seleccionados.xlsx');
+      toast.success(`Plantilla descargada con ${catalogProducts.length} producto(s)`);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar la plantilla seleccionada');
+    }
+  }, [baseCurrency, canViewInventoryCost, exchangeRate, importCurrency, importExchangeRate, importPriceLists, importWarehouseOptions, products, selectedIds]);
+
   const handleDownloadTemplate = useCallback(() => {
     const wb = XLSX.utils.book_new();
     if (isServiceView) {
@@ -3335,6 +3477,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           {!isServiceView && canCreatePurchaseRequest && (
             <Button type="button" size="sm" variant="outline" aria-label="Solicitar compra" title="Crear una solicitud de compra desde inventario" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
               <PackageSearch className="mr-2 size-4" />{selectedIds.size > 0 ? `Solicitar compra (${selectedIds.size})` : 'Solicitar compra'}
+            </Button>
+          )}
+          {!isServiceView && selectedIds.size > 0 && canPerform('INVENTORY_PRODUCTS', 'export') && (
+            <Button type="button" size="sm" variant="outline" aria-label="Descargar plantilla de productos seleccionados" title="Descargar una plantilla avanzada con los productos seleccionados y sus variantes" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleDownloadSelectedTemplate()}>
+              <Download className="mr-2 size-4" /> Plantilla ({selectedIds.size})
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
@@ -4494,13 +4641,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                       <div className="mt-2 space-y-1.5 rounded-lg border border-primary/20 bg-primary/5 p-2 text-left">
                                         <div className="flex items-center justify-between gap-2 text-[9px] font-black uppercase tracking-wide text-primary">
                                           <span>Distribución por variante</span>
-                                          <span className={`tabular-nums ${getSolicitudVariantAllocation(selectedItem).exceeds ? 'text-destructive' : ''}`}>
-                                            {getSolicitudVariantAllocation(selectedItem).allocated} / {selectedItem.quantity}
-                                          </span>
+                                          <span className="tabular-nums">Total: {getSolicitudVariantAllocation(selectedItem).allocated} uds.</span>
                                         </div>
                                         {selectedItem.variants.map((variant) => (
                                           <div key={variant.id} className="flex items-center justify-between gap-2">
-                                            <span className="min-w-0 truncate text-[10px] font-medium">{variantLabel(variant)}</span>
+                                            <span className="min-w-0 truncate text-[10px] font-medium">{variantLabel(variant)}{variant.sku ? <span className="ml-1 font-mono text-[9px] text-muted-foreground">· {variant.sku}</span> : null}</span>
                                             <Input
                                               type="number"
                                               min={0}
@@ -4512,13 +4657,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                             />
                                           </div>
                                         ))}
-                                        {!getSolicitudVariantAllocation(selectedItem).complete && (
-                                          <p className="text-[9px] font-semibold text-destructive">
-                                            {getSolicitudVariantAllocation(selectedItem).exceeds
-                                              ? 'La suma supera el total permitido.'
-                                              : 'Completa la distribución antes de enviar.'}
-                                          </p>
-                                        )}
+                                        {!getSolicitudVariantAllocation(selectedItem).complete && <p className="text-[9px] font-semibold text-destructive">Captura al menos una unidad en una variante.</p>}
                                       </div>
                                     ) : null}
                                   </div>
@@ -4527,7 +4666,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                 <TableCell className={`align-middle text-right text-xs tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'font-bold text-orange-500' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</TableCell>
                                 <TableCell className="align-middle text-right text-xs tabular-nums">{snapshot.minStock === null ? '—' : snapshot.minStock}</TableCell>
                                 <TableCell className="align-middle text-right">
-                                  <Input type="number" min={1} className="ml-auto h-8 w-full max-w-[6rem] text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad total a solicitar de ${product.name}`} />
+                                  {isSelected && selectedItem.isVariable ? (
+                                    <span className="ml-auto block w-full max-w-[6rem] rounded-md border border-primary/20 bg-primary/5 px-2 py-1.5 text-right text-xs font-black tabular-nums text-primary" aria-label={`Total por variantes de ${product.name}`}>
+                                      {selectedItem.quantity} uds.
+                                    </span>
+                                  ) : (
+                                    <Input type="number" min={1} className="ml-auto h-8 w-full max-w-[6rem] text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad total a solicitar de ${product.name}`} />
+                                  )}
                                 </TableCell>
                               </TableRow>
                             );
@@ -4560,21 +4705,21 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                 <span className="mt-1 block font-bold tabular-nums">{snapshot.minStock === null ? '—' : snapshot.minStock}</span>
                               </div>
                             </div>
-                            <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-3">
-                              <label htmlFor={`solicitud-quantity-${product.id}`} className="min-w-0 text-xs font-bold">Cantidad total a solicitar</label>
-                              <Input id={`solicitud-quantity-${product.id}`} type="number" min={1} className="h-9 w-24 shrink-0 text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad total a solicitar de ${product.name}`} />
-                            </div>
+                            {!isSelected || !selectedItem.isVariable ? (
+                              <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-3">
+                                <label htmlFor={`solicitud-quantity-${product.id}`} className="min-w-0 text-xs font-bold">Cantidad total a solicitar</label>
+                                <Input id={`solicitud-quantity-${product.id}`} type="number" min={1} className="h-9 w-24 shrink-0 text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad total a solicitar de ${product.name}`} />
+                              </div>
+                            ) : null}
                             {isSelected && selectedItem?.isVariable && selectedItem.variants?.length ? (
                               <div className="mt-3 space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-2.5">
                                 <div className="flex items-center justify-between gap-2 text-[9px] font-black uppercase tracking-wide text-primary">
                                   <span>Distribución por variante</span>
-                                  <span className={`tabular-nums ${getSolicitudVariantAllocation(selectedItem).exceeds ? 'text-destructive' : ''}`}>
-                                    {getSolicitudVariantAllocation(selectedItem).allocated} / {selectedItem.quantity}
-                                  </span>
+                                  <span className="tabular-nums">Total: {getSolicitudVariantAllocation(selectedItem).allocated} uds.</span>
                                 </div>
                                 {selectedItem.variants.map((variant) => (
                                   <div key={variant.id} className="flex items-center justify-between gap-2">
-                                    <span className="min-w-0 truncate text-[10px] font-medium">{variantLabel(variant)}</span>
+                                    <span className="min-w-0 truncate text-[10px] font-medium">{variantLabel(variant)}{variant.sku ? <span className="ml-1 font-mono text-[9px] text-muted-foreground">· {variant.sku}</span> : null}</span>
                                     <Input
                                       type="number"
                                       min={0}
@@ -4586,13 +4731,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                     />
                                   </div>
                                 ))}
-                                {!getSolicitudVariantAllocation(selectedItem).complete && (
-                                  <p className="text-[9px] font-semibold text-destructive">
-                                    {getSolicitudVariantAllocation(selectedItem).exceeds
-                                      ? 'La suma supera el total permitido.'
-                                      : 'Completa la distribución antes de enviar.'}
-                                  </p>
-                                )}
+                                {!getSolicitudVariantAllocation(selectedItem).complete && <p className="text-[9px] font-semibold text-destructive">Captura al menos una unidad en una variante.</p>}
                               </div>
                             ) : null}
                           </article>

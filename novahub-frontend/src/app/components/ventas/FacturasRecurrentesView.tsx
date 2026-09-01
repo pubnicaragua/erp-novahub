@@ -30,7 +30,7 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS } from '../../utils/salesStatus';
-import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
+import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
@@ -166,6 +166,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       itemType,
       productId: value,
       variantId: null,
+      variantSku: null,
+      variantName: null,
+      variantAttributes: null,
       serviceName: itemType === 'SERVICE' ? (selectedProduct?.name || newItems[idx].serviceName || '') : '',
       description: selectedProduct?.name || newItems[idx].description || '',
       commercialNoteSnapshot: selectedProduct?.commercialNote || null,
@@ -301,6 +304,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     lines: (row.items || []).map((item) => ({
       id: item.id,
       description: item.description || item.serviceName || 'Artículo sin descripción',
+      ...getSalesLineIdentifiers(item, products),
       secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), row.currency, row.exchangeRate),
@@ -747,7 +751,12 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                         className="sales-line-variant"
                         product={product}
                         value={item.variantId}
-                        onChange={(variantId) => setLocalDoc({ ...localDoc, items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx ? { ...line, variantId } : line) } as any)}
+                        onChange={(variantId, variant) => setLocalDoc({
+                          ...localDoc,
+                          items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx
+                            ? { ...line, variantId, variantSku: variant?.sku || null, variantName: variant?.name || null, variantAttributes: variant?.attributes || null }
+                            : line),
+                        } as any)}
                       />
                       <SalesLinePriceListSelect
                         className="sales-line-price-list"

@@ -308,7 +308,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
                 <div className="text-xl font-black">C$ {formatSalesAmount(holdPaymentReceived)}</div>
               </div>
               <div className={`rounded-xl border p-3 ${holdPaymentChange > 0.005 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : holdPaymentMissing > 0.005 ? 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-border/50 bg-muted/20 text-muted-foreground'}`}>
-                <span className="text-xs font-bold">{holdPaymentChange > 0.005 ? 'Vuelto por dar' : 'Falta por pagar'}</span>
+                <span className="text-xs font-bold">{holdPaymentChange > 0.005 ? 'Vuelto por dar' : 'Pendiente'}</span>
                 <div className="text-xl font-black">C$ {formatSalesAmount(holdPaymentChange > 0.005 ? holdPaymentChange : holdPaymentMissing)}</div>
               </div>
             </div>

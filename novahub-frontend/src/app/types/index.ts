@@ -171,6 +171,8 @@ export interface EstimateItem {
   estimateId: string;
   productId?: string;
   variantId?: string | null;
+  productCode?: string | null;
+  variantSku?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -240,6 +242,8 @@ export interface SalesOrderItem {
   salesOrderId: string;
   productId?: string;
   variantId?: string | null;
+  productCode?: string | null;
+  variantSku?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -331,6 +335,8 @@ export interface InvoiceItem {
   invoiceId: string;
   productId?: string;
   variantId?: string | null;
+  productCode?: string | null;
+  variantSku?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -389,6 +395,8 @@ export interface RecurringInvoiceItem {
   itemType?: 'product' | 'service' | 'PRODUCT' | 'SERVICE';
   productId?: string;
   variantId?: string | null;
+  productCode?: string | null;
+  variantSku?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   serviceName?: string;
@@ -478,6 +486,8 @@ export interface SalesReturnItem {
   invoiceItemId?: string;
   productId?: string;
   variantId?: string | null;
+  productCode?: string | null;
+  variantSku?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -548,6 +558,8 @@ export interface CreditNoteItem {
   creditNoteId: string;
   productId?: string;
   variantId?: string | null;
+  productCode?: string | null;
+  variantSku?: string | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;
@@ -895,12 +907,41 @@ export interface PaymentMade {
     currency?: Currency;
     exchangeRate?: number;
     status?: PaymentStatus;
+    items?: Array<{
+      id?: string;
+      productId?: string | null;
+      description?: string;
+      commercialNoteSnapshot?: string | null;
+      quantity?: number;
+      unitPrice?: number;
+      total?: number;
+      product?: { id?: string; code?: string; name?: string } | null;
+      variantId?: string | null;
+      variantSku?: string | null;
+      variantName?: string | null;
+      variantAttributes?: unknown;
+      variant?: { id?: string; sku?: string; name?: string; attributes?: unknown } | null;
+    }>;
     purchaseReceipt?: {
+      id?: string;
       status?: string;
       total?: number;
       currency?: Currency;
       exchangeRate?: number;
       purchaseOrder?: { total?: number; currency?: Currency; exchangeRate?: number };
+      items?: Array<{
+        id?: string;
+        productId?: string | null;
+        variantId?: string | null;
+        code?: string | null;
+        name?: string | null;
+        description?: string;
+        commercialNoteSnapshot?: string | null;
+        quantityReceived?: number;
+        unitPrice?: number;
+        product?: { id?: string; code?: string; name?: string } | null;
+        variant?: { id?: string; sku?: string; name?: string; attributes?: unknown } | null;
+      }>;
     } | null;
   } | null;
   payments?: PaymentMade[];
@@ -1508,6 +1549,7 @@ export interface PurchaseRequestItem {
   variantId?: string;
   description: string;
   quantity: number;
+  unitCost?: number;
   currentStock: number;
   minStock: number;
   warehouseId: string;

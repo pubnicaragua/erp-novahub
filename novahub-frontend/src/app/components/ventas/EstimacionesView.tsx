@@ -34,7 +34,7 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/Purch
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
-import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
+import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { EstimacionesKanban } from './EstimacionesKanban';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
@@ -421,6 +421,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     lines: (estimate.items || []).map((item) => ({
       id: item.id,
       description: item.description,
+      ...getSalesLineIdentifiers(item, products),
       secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate),
@@ -889,6 +890,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         }
                         newItems[idx].productId = val;
                         newItems[idx].variantId = null;
+                        newItems[idx].variantSku = null;
+                        newItems[idx].variantName = null;
+                        newItems[idx].variantAttributes = null;
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
                           newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
@@ -923,9 +927,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                        className="sales-line-variant"
                       product={products.find((product) => product.id === item.productId)}
                       value={item.variantId}
-                      onChange={(variantId) => {
+                      onChange={(variantId, variant) => {
                         const nextItems = [...(localDoc.items || [])] as any[];
-                        nextItems[idx] = { ...nextItems[idx], variantId };
+                        nextItems[idx] = {
+                          ...nextItems[idx],
+                          variantId,
+                          variantSku: variant?.sku || null,
+                          variantName: variant?.name || null,
+                          variantAttributes: variant?.attributes || null,
+                        };
                         commitLocalDoc({ ...localDoc, items: nextItems } as Estimate);
                       }}
                      /><SalesLinePriceListSelect

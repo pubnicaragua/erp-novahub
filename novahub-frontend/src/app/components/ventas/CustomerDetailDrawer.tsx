@@ -79,6 +79,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
+import { formatPdfVariantDetails } from '../../utils/pdf-line-details';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/paymentMethods';
@@ -186,6 +187,13 @@ const getTypeBadge = (type?: string) => {
     default:
       return { label: 'Particular', className: 'bg-primary/10 text-primary border-primary/20', icon: User };
   }
+};
+
+const customerHistoryVariantDetails = (document: any) => formatPdfVariantDetails(document?.items, 'Detalle de variantes');
+
+const customerHistoryDescription = (document: any, fallback?: string) => {
+  const variants = customerHistoryVariantDetails(document);
+  return [fallback, variants].filter(Boolean).join('\n') || undefined;
 };
 
 export function CustomerDetailDrawer({
@@ -301,13 +309,13 @@ export function CustomerDetailDrawer({
         result.status === 'fulfilled' ? unwrapList(result.value) : [],
       );
       const transactions: RelatedTransaction[] = [
-        ...estimates.map((item: any) => ({ id: item.id, kind: 'Cotización', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, document: item })),
-        ...orders.map((item: any) => ({ id: item.id, kind: 'Orden de venta', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, document: item })),
-        ...invoiceRecords.map((item: any) => ({ id: item.id, kind: 'Factura', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, document: item })),
-        ...payments.map((item: any) => ({ id: item.id, kind: 'Pago recibido', number: item.number, date: item.date, status: item.isActive === false ? 'CANCELLED' : 'PAID', amount: Number(item.amount || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: item.invoice?.number ? `Aplicado a ${item.invoice.number}` : item.reference, document: item })),
-        ...recurring.map((item: any) => ({ id: item.id, kind: 'Factura recurrente', number: item.number || item.id.slice(0, 8), date: item.nextInvoiceDate || item.createdAt, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: 'Programación de facturación', document: item })),
-        ...returns.map((item: any) => ({ id: item.id, kind: 'Nota de crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: item.reason, document: item })),
-        ...creditNotes.map((item: any) => ({ id: item.id, kind: 'Crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: item.reason, document: item })),
+        ...estimates.map((item: any) => ({ id: item.id, kind: 'Cotización', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item), document: item })),
+        ...orders.map((item: any) => ({ id: item.id, kind: 'Orden de venta', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item), document: item })),
+        ...invoiceRecords.map((item: any) => ({ id: item.id, kind: 'Factura', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item), document: item })),
+        ...payments.map((item: any) => ({ id: item.id, kind: 'Pago recibido', number: item.number, date: item.date, status: item.isActive === false ? 'CANCELLED' : 'PAID', amount: Number(item.amount || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item.invoice || item.creditNote, item.invoice?.number ? `Aplicado a ${item.invoice.number}` : item.reference), document: item })),
+        ...recurring.map((item: any) => ({ id: item.id, kind: 'Factura recurrente', number: item.number || item.id.slice(0, 8), date: item.nextInvoiceDate || item.createdAt, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item, 'Programación de facturación'), document: item })),
+        ...returns.map((item: any) => ({ id: item.id, kind: 'Nota de crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item, item.reason), document: item })),
+        ...creditNotes.map((item: any) => ({ id: item.id, kind: 'Crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: customerHistoryDescription(item, item.reason), document: item })),
       ].sort((a, b) => {
         const aDate = a.date ? new Date(a.date).getTime() : 0;
         const bDate = b.date ? new Date(b.date).getTime() : 0;
@@ -997,7 +1005,11 @@ function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName, ten
           <TableBody>
             {(estimate.items || []).map((item) => (
               <TableRow key={item.id}>
-                <TableCell className="max-w-[16rem] text-xs font-bold">{item.description || 'Producto o servicio'}</TableCell>
+                <TableCell className="max-w-[16rem] text-xs font-bold">
+                  <span className="block">{item.description || 'Producto o servicio'}</span>
+                  {item.productCode && <span className="mt-1 block font-mono text-[10px] font-semibold text-primary">Código: {item.productCode}</span>}
+                  {item.variantSku && <span className="mt-1 block font-mono text-[10px] font-normal text-muted-foreground">SKU variante: {item.variantSku}</span>}
+                </TableCell>
                 <TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell>
                 <TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate)}</TableCell>
                 <TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate)}</TableCell>
@@ -1056,7 +1068,7 @@ function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, 
         <InfoField label="Total" value={formatAmount(Number(transaction.amount || document.total || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)} icon={DollarSign} mono />
         <InfoField label="Líneas" value={String(items.length || '—')} icon={FileText} />
       </div>
-      {items.length > 0 ? <div className="mt-5 overflow-x-auto rounded-xl border border-border/50 bg-background/40"><Table><TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-black uppercase tracking-widest">Concepto</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Cantidad</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Precio</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead></TableRow></TableHeader><TableBody>{items.map((item: any, index: number) => <TableRow key={item.id || `${transaction.id}-${index}`}><TableCell className="max-w-[16rem] text-xs font-bold">{item.description || 'Producto o servicio'}</TableCell><TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell><TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</TableCell><TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</TableCell></TableRow>)}</TableBody></Table></div> : <p className="mt-5 rounded-xl border border-dashed border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground">{transaction.description || 'Este movimiento no tiene líneas de detalle disponibles.'}</p>}
+      {items.length > 0 ? <div className="mt-5 overflow-x-auto rounded-xl border border-border/50 bg-background/40"><Table><TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-black uppercase tracking-widest">Concepto</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Cantidad</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Precio</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead></TableRow></TableHeader><TableBody>{items.map((item: any, index: number) => <TableRow key={item.id || `${transaction.id}-${index}`}><TableCell className="max-w-[16rem] text-xs font-bold"><span className="block">{item.description || 'Producto o servicio'}</span>{item.productCode && <span className="mt-1 block font-mono text-[10px] font-semibold text-primary">Código: {item.productCode}</span>}{item.variantSku && <span className="mt-1 block font-mono text-[10px] font-normal text-muted-foreground">SKU variante: {item.variantSku}</span>}</TableCell><TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell><TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</TableCell><TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</TableCell></TableRow>)}</TableBody></Table></div> : <p className="mt-5 rounded-xl border border-dashed border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground">{transaction.description || 'Este movimiento no tiene líneas de detalle disponibles.'}</p>}
       {(additionalCharges.length > 0 || deliveryAmount > 0) && <div className="mt-4 flex flex-col items-end gap-1 text-xs">
         {additionalCharges.map((charge, index) => <p key={charge.id} className="text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}: <span className="font-bold text-foreground">{formatAmount(charge.amount, transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</span></p>)}
         {deliveryAmount > 0 && <p className="text-muted-foreground">{document.deliveryDescription || 'Delivery'}: <span className="font-bold text-foreground">{formatAmount(deliveryAmount, transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</span></p>}
@@ -1170,7 +1182,11 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName, tenan
           <TableBody>
             {(invoice.items || []).map((item) => (
               <TableRow key={item.id}>
-                <TableCell className="max-w-[16rem] text-xs font-bold">{item.description || 'Producto o servicio'}</TableCell>
+                <TableCell className="max-w-[16rem] text-xs font-bold">
+                  <span className="block">{item.description || 'Producto o servicio'}</span>
+                  {item.productCode && <span className="mt-1 block font-mono text-[10px] font-semibold text-primary">Código: {item.productCode}</span>}
+                  {item.variantSku && <span className="mt-1 block font-mono text-[10px] font-normal text-muted-foreground">SKU variante: {item.variantSku}</span>}
+                </TableCell>
                 <TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell>
                 <TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), invoice.currency, invoice.exchangeRate)}</TableCell>
                 <TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), invoice.currency, invoice.exchangeRate)}</TableCell>

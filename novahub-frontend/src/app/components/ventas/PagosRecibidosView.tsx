@@ -325,7 +325,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     || paymentRemainingBase <= paymentCreditAvailableBase + 0.01;
   const paymentPartialActive = partialPaymentEnabled && paymentPartialCreditFits;
   const paymentSettlementLabel = paymentRemainingBase > 0.01
-    ? 'Falta por pagar'
+    ? 'Pendiente'
     : paymentChangeBase > 0.01 ? 'Vuelto por dar' : linkedPaymentDocument ? 'Saldo cubierto' : 'Anticipo';
   const handlePaymentMethodChange = (index: number, nextMethod: ReceivedPaymentLine['method']) => {
     setPaymentLines((current) => current.map((item, itemIndex) => {
@@ -807,7 +807,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
                   <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
-                   {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className={cn("font-black uppercase tracking-widest", paymentSettlementLabel === 'Falta por pagar' ? 'text-amber-600' : 'text-muted-foreground')}>{paymentSettlementLabel}</span><span className={cn("font-black", paymentSettlementLabel === 'Falta por pagar' ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentSettlementLabel === 'Falta por pagar' ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</span></div>}
+                   {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className={cn("font-black uppercase tracking-widest", paymentSettlementLabel === 'Pendiente' ? 'text-amber-600' : 'text-muted-foreground')}>{paymentSettlementLabel}</span><span className={cn("font-black", paymentSettlementLabel === 'Pendiente' ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentSettlementLabel === 'Pendiente' ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</span></div>}
                   {!linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Destino</span><span className="font-black text-muted-foreground">Anticipo de cliente</span></div>}
                    {paymentChangeBase > 0.01 && <p className={cn("rounded-lg px-3 py-2 text-[10px] font-bold", paymentChangeUnsupported ? 'bg-rose-500/10 text-rose-600' : 'bg-emerald-500/10 text-emerald-600')}>{paymentChangeUnsupported ? 'No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe ser efectivo.' : `Vuelto por dar: ${formatConvertedAmount(paymentChangeBase, baseCurrency)} · efectivo disponible: ${formatConvertedAmount(paymentCashBase, baseCurrency)}`}</p>}
                 </div>

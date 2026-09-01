@@ -337,7 +337,7 @@ export function SolicitudesPagoRRHHView() {
             <div className={cn('rounded-xl border px-4 py-3', balanced ? 'border-primary/20 bg-primary/5' : 'border-amber-500/20 bg-amber-500/5')}>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto aplicado (base)</p><p className="mt-1 text-base font-black tabular-nums">{formatNativeAmount(paymentTotalBase, baseCurrency)}</p></div>
-                <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{excessBase > 0.01 ? 'Vuelto por dar' : remainingBase > 0.01 ? 'Falta por pagar' : 'Saldo cubierto'}</p><p className={cn('mt-1 text-base font-black tabular-nums', balanced ? 'text-primary' : excessBase > 0.01 ? 'text-emerald-600' : 'text-amber-600')}>{formatNativeAmount(excessBase > 0.01 ? excessBase : remainingBase, baseCurrency)}</p></div>
+                <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{excessBase > 0.01 ? 'Vuelto por dar' : remainingBase > 0.01 ? 'Pendiente' : 'Saldo cubierto'}</p><p className={cn('mt-1 text-base font-black tabular-nums', balanced ? 'text-primary' : excessBase > 0.01 ? 'text-emerald-600' : 'text-amber-600')}>{formatNativeAmount(excessBase > 0.01 ? excessBase : remainingBase, baseCurrency)}</p></div>
               </div>
               <p className="mt-2 text-[10px] text-muted-foreground">Total contable requerido: <span className="font-bold text-foreground">{formatNativeAmount(requestTotalBase, baseCurrency)}</span></p>
             </div>

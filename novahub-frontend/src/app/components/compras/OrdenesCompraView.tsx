@@ -47,6 +47,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { getPurchaseOrderOriginBadge } from '../../utils/document-origin-badges';
+import { parseVariantImportWorkbook, type VariantImportCatalog } from '../../utils/variant-import';
 
 interface Props {
   data: PurchaseOrder[];
@@ -76,6 +77,7 @@ const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 type PurchaseImportRow = {
   sku: string;
   productId?: string;
+  variantId?: string;
   skuResolution?: 'LINK_EXISTING' | 'MANUAL';
   description: string;
   commercialNoteSnapshot?: string | null;
@@ -514,6 +516,75 @@ const getProductListFromResponse = (response: any): any[] => (
 
 const normalizeProductCode = (product: any) => String(product?.code || product?.sku || '').trim().toLowerCase();
 
+const findImportProductMatch = (sku: unknown, catalog: any[] = []) => {
+  const normalized = String(sku || '').trim().toLowerCase();
+  if (!normalized) return undefined;
+  for (const product of catalog) {
+    if (normalizeProductCode(product) === normalized) return { product, variant: undefined };
+    const variant = Array.isArray(product?.variants)
+      ? product.variants.find((candidate: any) => String(candidate?.sku || '').trim().toLowerCase() === normalized)
+      : undefined;
+    if (variant) return { product, variant };
+  }
+  return undefined;
+};
+
+/**
+ * Convierte la plantilla avanzada de Inventario en líneas de una orden.
+ * Para productos con variantes se genera una línea por SKU; el stock inicial
+ * de la hoja Inventario se interpreta como cantidad solicitada y Costo entrada
+ * como precio unitario de compra. La plantilla sigue siendo compatible con
+ * productos simples (una sola línea con el SKU padre).
+ */
+const buildPurchaseImportRowsFromAdvancedCatalog = (catalog: VariantImportCatalog): PurchaseImportRow[] => {
+  const variantsByProduct = new Map<string, VariantImportCatalog['variants']>();
+  for (const variant of catalog.variants || []) {
+    const key = String(variant.productCode || '').trim().toLowerCase();
+    variantsByProduct.set(key, [...(variantsByProduct.get(key) || []), variant]);
+  }
+
+  return (catalog.products || []).flatMap((product) => {
+    const productKey = String(product.code || '').trim().toLowerCase();
+    const productVariants = variantsByProduct.get(productKey) || [];
+    const lines = productVariants.length > 0
+      ? productVariants.map((variant) => ({ sku: variant.sku, variant }))
+      : [{ sku: product.code, variant: undefined }];
+
+    return lines.map(({ sku, variant }) => {
+      const stockRows = (catalog.stock || []).filter((stock) => {
+        const stockSku = String(stock.variantSku || stock.productCode || '').trim().toLowerCase();
+        return stockSku === String(sku || '').trim().toLowerCase()
+          || (!variant && stockSku === productKey);
+      });
+      const requestedQuantity = stockRows.length > 0
+        ? stockRows.reduce((sum, stock) => sum + Math.max(0, Number(stock.quantity || 0)), 0)
+        : 1;
+      const entryCost = stockRows.find((stock) => stock.unitCost !== undefined && stock.unitCost !== null && String(stock.unitCost).trim() !== '')?.unitCost;
+      const effectiveCost = entryCost !== undefined
+        ? Number(entryCost)
+        : variant?.costPrice !== undefined && variant.costPrice !== null
+          ? Number(variant.costPrice)
+          : Number(product.costPrice || 0);
+      const attributes = (variant?.attributes || []).map((attribute) => `${attribute.attributeName}: ${attribute.value}`).join(' · ');
+      const variantLabel = variant?.name || attributes || variant?.sku || '';
+      return {
+        sku: String(sku || '').trim(),
+        description: `${product.name || product.code}${variantLabel ? ` · ${variantLabel}` : ''}`.trim(),
+        commercialNoteSnapshot: product.commercialNote || null,
+        category: product.category || '',
+        quantity: requestedQuantity,
+        unitPrice: Number.isFinite(effectiveCost) ? effectiveCost : 0,
+        taxType: 'GRAVADO',
+        taxBase: '',
+        taxRate: 15,
+        withholdingType: 'NONE',
+        withholdingBase: '',
+        withholdingRate: 0,
+      } as PurchaseImportRow;
+    });
+  });
+};
+
 export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
@@ -558,6 +629,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importData, setImportData] = useState<PurchaseImportRow[]>([]);
+  const [advancedImportCatalog, setAdvancedImportCatalog] = useState<VariantImportCatalog | null>(null);
   const [importCurrency, setImportCurrency] = useState<'NIO' | 'USD'>(normalizePurchaseCurrency(displayCurrency));
   const [importDataCurrency, setImportDataCurrency] = useState<'NIO' | 'USD'>(normalizePurchaseCurrency(displayCurrency));
   const [importFileName, setImportFileName] = useState('');
@@ -624,9 +696,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   }, [initialStatus]);
 
   const findImportProduct = (sku: unknown, catalog = products) => {
-    const normalized = String(sku || '').trim().toLowerCase();
-    if (!normalized) return undefined;
-    return catalog.find((product: any) => normalizeProductCode(product) === normalized);
+    return findImportProductMatch(sku, catalog)?.product;
   };
 
   const validateImportRows = useCallback((rows: PurchaseImportRow[], catalog = products) => {
@@ -644,12 +714,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     return rows.map((sourceRow): PurchaseImportRow => {
       const row = { ...sourceRow };
       const sku = String(row.sku || '').trim();
-      const product = findImportProduct(sku, catalog);
+      const match = findImportProductMatch(sku, catalog);
+      const product = match?.product;
       const forceManualSku = row.skuResolution === 'MANUAL';
       const linkedProduct = forceManualSku ? undefined : product;
+      const linkedVariant = forceManualSku ? undefined : match?.variant;
       const quantity = Number(row.quantity);
       const importedUnitPrice = Number(row.unitPrice);
-      const productCost = Number(linkedProduct?.costPrice ?? linkedProduct?.cost ?? linkedProduct?.lastPurchasePrice ?? 0);
+      const productCost = linkedVariant && linkedVariant.costPrice !== null && linkedVariant.costPrice !== undefined
+        ? Number(linkedVariant.costPrice)
+        : Number(linkedProduct?.costPrice ?? linkedProduct?.cost ?? linkedProduct?.lastPurchasePrice ?? 0) + Number(linkedVariant?.costModifier || 0);
       const unitPrice = linkedProduct && (!Number.isFinite(importedUnitPrice) || importedUnitPrice === 0) ? productCost : importedUnitPrice;
       const taxType = normalizeImportCatalogValue(row.taxType, importTaxOptions, 'GRAVADO');
       const withholdingType = normalizeImportCatalogValue(row.withholdingType, importWithholdingOptions, 'NONE', ['NONE', 'SIN RETENCION', 'NO APLICA', 'NINGUNA']);
@@ -667,7 +741,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       const withholdingBase = withholdingType === 'NONE' ? 0 : lineTotal;
       const errors = [
         !sku ? 'SKU requerido' : existingOrderSkus.has(sku.toLowerCase()) ? 'SKU ya está en esta orden' : skuCounts.get(sku.toLowerCase())! > 1 ? 'SKU duplicado en el archivo' : '',
-        product && forceManualSku && normalizeProductCode(product) === sku.toLowerCase() ? 'Este SKU ya está usado; escribe otro SKU para crear un producto nuevo' : '',
+        match && forceManualSku ? 'Este SKU ya está usado; escribe otro SKU para crear un producto nuevo' : '',
         !String(row.description || '').trim() && !linkedProduct ? 'Descripción requerida para SKU no encontrado' : '',
         !categoryName ? 'Categoría requerida' : !resolvedCategoryId ? 'Categoría no encontrada; selecciona una existente o créala' : '',
         !Number.isFinite(quantity) || quantity <= 0 ? 'Cantidad debe ser mayor que cero' : '',
@@ -686,13 +760,26 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       const commercialNoteSnapshot = String(row.commercialNoteSnapshot || linkedProduct?.commercialNote || '').trim();
       const noteLength = Array.from(commercialNoteSnapshot).length;
       const noteError = noteLength > 100 ? 'La nota comercial no puede superar los 100 caracteres' : '';
+      const productLevels = Array.isArray(linkedProduct?.inventoryLevels)
+        ? linkedProduct.inventoryLevels
+        : (Array.isArray(linkedProduct?.stockLevels) ? linkedProduct.stockLevels : []);
+      const variantLevels = linkedVariant
+        ? productLevels.filter((level: any) => String(level?.variantId || '') === String(linkedVariant.id))
+        : productLevels;
+      const linkedStock = linkedVariant
+        ? variantLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0)
+        : (linkedProduct?.stock != null ? Number(linkedProduct.stock) : variantLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0));
+      const linkedName = linkedVariant
+        ? `${linkedProduct?.name || ''} · ${linkedVariant.name || linkedVariant.sku || 'Variante'}`.trim()
+        : linkedProduct?.name;
 
       return {
         ...row,
-        sku: linkedProduct?.code || sku,
+        sku: linkedVariant?.sku || linkedProduct?.code || sku,
         productId: linkedProduct?.id,
-        currentStock: linkedProduct?.stock != null ? Number(linkedProduct.stock) : linkedProduct?.inventoryLevels?.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0),
-        description: String(row.description || linkedProduct?.name || '').trim(),
+        variantId: linkedVariant?.id,
+        currentStock: linkedProduct ? linkedStock : undefined,
+        description: String(row.description || linkedName || '').trim(),
         commercialNoteSnapshot,
         category: categoryName,
         categoryId: resolvedCategoryId,
@@ -710,7 +797,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         _hasWarning: warningParts.length > 0,
         _warningMessage: warningParts.join(' · '),
         _skuStatus: (skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : product ? 'found' : sku ? 'missing' : undefined) as PurchaseImportRow['_skuStatus'],
-        _skuMessage: product ? (forceManualSku ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${product.name || product.code || sku}`) : sku ? 'SKU no encontrado en inventario · se agregará como producto nuevo al recepcionar' : '',
+        _skuMessage: product ? (forceManualSku ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${linkedName || product.code || sku}`) : sku ? 'SKU no encontrado en inventario · se agregará como producto nuevo al recepcionar' : '',
       };
     });
   }, [categories, localDoc?.items, products, taxOptions, withholdingOptions]);
@@ -760,7 +847,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           report: true,
           includeInactive: true,
         });
-        remoteProducts.push(...getProductListFromResponse(response).filter((product) => batch.some((sku) => normalizeProductCode(product) === sku.toLowerCase())));
+        remoteProducts.push(...getProductListFromResponse(response).filter((product) => batch.some((sku) => Boolean(findImportProductMatch(sku, [product])))));
       } catch {
         // Si la resolución masiva falla, las filas quedan como manuales y la
         // persona puede corregirlas en la previsualización sin perder la carga.
@@ -803,6 +890,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       ['Notas', 'Opcional. Es la nota de la línea del producto; máximo 100 caracteres. Si se deja vacía y el SKU existe, se usará la nota del catálogo como respaldo.'],
       ['Bodega destino', `No se captura por fila. Todos los productos se agregarán a la bodega seleccionada en la orden actual: ${availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name || 'la bodega seleccionada en el formulario'}.`],
       ['Cantidad / Precio unitario', 'La cantidad debe ser mayor que cero y el precio no puede ser negativo.'],
+      ['Plantilla avanzada de Inventario', 'También puedes cargar la plantilla avanzada con Productos, Variantes, Atributos, Precios e Inventario. Se creará el catálogo faltante sin stock inicial; cada SKU variante se agregará como una línea y Stock inicial se tomará como cantidad solicitada. Costo entrada se tomará como precio unitario.'],
       ['Tipo IVA / Base IVA / Tasa IVA', 'Escribe el nombre en español de una opción configurada. La base y la tasa se calculan automáticamente según la cantidad, el precio y la opción seleccionada; no son editables.'],
       ['Opciones de IVA configuradas', formatGuideOptions(activeTaxOptions)],
       ['Retención / Base retención / Tasa retención', 'Escribe "Sin retención" cuando no aplique; de lo contrario escribe el nombre en español de una retención configurada. La base y la tasa se calculan automáticamente y no son editables.'],
@@ -840,10 +928,29 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setPreviewLoading(true);
     setPreviewProgress(3);
     try {
-          const { rows: raw } = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+          const { rows: raw, sheets } = await parseSpreadsheetInWorker(file, undefined, true, (progress) => {
             setPreviewProgress(Math.min(84, Math.max(3, progress)));
           });
           setPreviewProgress(88);
+          const normalizedSheetNames = Object.keys(sheets || {}).map((name) => normalizeImportHeader(name).replace(/ /g, ''));
+          const hasAdvancedSheets = normalizedSheetNames.includes('productos')
+            && normalizedSheetNames.some((name) => ['variantes', 'atributos', 'precios', 'inventario'].includes(name));
+          if (hasAdvancedSheets && sheets) {
+            const catalog = parseVariantImportWorkbook(sheets, []);
+            const advancedRows = buildPurchaseImportRowsFromAdvancedCatalog(catalog);
+            if (!advancedRows.length) throw new Error('La plantilla avanzada no contiene productos o variantes utilizables');
+            setAdvancedImportCatalog(catalog);
+            const importCatalog = await resolveImportProducts(advancedRows);
+            setPreviewProgress(96);
+            setImportData(validateImportRows(advancedRows, importCatalog));
+            setImportDataCurrency(importCurrency);
+            setImportFileName(file.name);
+            setImportProgress(0);
+            setPreviewProgress(100);
+            toast.success(`${advancedRows.length} línea(s) por producto/variante encontradas`);
+            return;
+          }
+          setAdvancedImportCatalog(null);
           if (raw.length < 2) throw new Error('El archivo está vacío o no tiene datos');
           const headers = raw[0].map(normalizeImportHeader);
           const fieldAliases: Record<string, string[]> = {
@@ -1042,7 +1149,61 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const skipped = importData.length - validRows.length;
     setImporting(true);
     setImportProgress(15);
-    const importedItems = validRows.map((row) => {
+    let rowsToImport = validRows;
+    try {
+      // Cuando la fuente es la plantilla avanzada de Inventario, primero se
+      // registra el catálogo padre/variantes sin stock inicial. El stock de
+      // esa plantilla se usa como cantidad solicitada de la orden, no como
+      // existencia ya disponible. Así la recepción futura será la que cree
+      // los movimientos y el costo ponderado por SKU.
+      if (advancedImportCatalog) {
+        const categoryByName = new Map(categories.map((category: any) => [String(category.name || '').trim().toLowerCase(), category]));
+        const knownProductCodes = new Set(products.map((product: any) => String(product.code || '').trim().toLowerCase()));
+        const newProductCodes = new Set(
+          advancedImportCatalog.products
+            .filter((product) => !knownProductCodes.has(String(product.code || '').trim().toLowerCase()))
+            .map((product) => String(product.code || '').trim().toLowerCase()),
+        );
+        if (newProductCodes.size > 0) {
+          const catalogProducts = advancedImportCatalog.products
+            .filter((product) => newProductCodes.has(String(product.code || '').trim().toLowerCase()))
+            .map((product) => {
+              const parentKey = String(product.code || '').trim().toLowerCase();
+              const fallbackCost = (advancedImportCatalog.stock || [])
+                .filter((stock) => String(stock.productCode || '').trim().toLowerCase() === parentKey)
+                .map((stock) => Number(stock.unitCost))
+                .find((cost) => Number.isFinite(cost) && cost >= 0);
+              return {
+                ...product,
+                categoryId: categoryByName.get(String(product.category || '').trim().toLowerCase())?.id,
+                itemType: 'PRODUCT',
+                costPrice: product.costPrice ?? fallbackCost ?? 0,
+              };
+            });
+          const catalogPayload = {
+            ...advancedImportCatalog,
+            products: catalogProducts,
+            variants: advancedImportCatalog.variants.filter((variant) => newProductCodes.has(String(variant.productCode || '').trim().toLowerCase())),
+            prices: advancedImportCatalog.prices.filter((price) => newProductCodes.has(String(price.productCode || '').trim().toLowerCase())),
+            // No se duplica stock: Inventario ya se convirtió en cantidad de
+            // compra y entrará únicamente al aprobar/recibir la orden.
+            stock: [],
+          };
+          setImportProgress(30);
+          await inventoryService.importInitialCatalog({
+            catalog: catalogPayload,
+            currency: importDataCurrency,
+            exchangeRate: importDataCurrency === 'USD' ? Number(localDoc.exchangeRate || globalRate || 1) : 1,
+            createMissingAttributes: true,
+            confirmText: 'IMPORTAR',
+          });
+          const refreshedCatalog = await resolveImportProducts(validRows);
+          rowsToImport = validateImportRows(validRows, refreshedCatalog).filter((row) => !row._hasError);
+          if (rowsToImport.length === 0) throw new Error('Los productos/variantes creados no pudieron vincularse a la orden');
+        }
+      }
+
+      const importedItems = rowsToImport.map((row) => {
       const tax = calcItemTax(row);
       const withholding = calcItemWithholding(row);
       const quantity = Number(row.quantity);
@@ -1050,6 +1211,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       return {
         id: `import-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         productId: row.productId || '',
+        variantId: row.variantId || null,
         code: row.sku,
         name: row.description || row.sku,
         description: row.description || row.sku,
@@ -1072,21 +1234,26 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         withholdingTotal: Number(withholding.withholdingTotal.toFixed(2)),
         total: Number((quantity * unitPrice).toFixed(2)),
       };
-    });
-    const currentItems = (localDoc.items || []) as any[];
-    const combinedItems = [...currentItems, ...importedItems];
-    const totals = calculateTotals(combinedItems);
-    setLocalDoc((current) => current ? { ...current, items: combinedItems, ...totals } : current);
-    setImportProgress(100);
-    setImportResults({ success: importedItems.length, skipped, failed: 0, errors: [] });
-    setImportPreviewOpen(false);
-    setImportModalOpen(false);
-    setImportConfirmOpen(false);
-    setImportConfirmText('');
-    setImporting(false);
-    setImportData([]);
-    setImportFileName('');
-    setImportProgress(0);
+      });
+      const currentItems = (localDoc.items || []) as any[];
+      const combinedItems = [...currentItems, ...importedItems];
+      const totals = calculateTotals(combinedItems);
+      setLocalDoc((current) => current ? { ...current, items: combinedItems, ...totals } : current);
+      setImportProgress(100);
+      setImportResults({ success: importedItems.length, skipped: skipped + (validRows.length - rowsToImport.length), failed: 0, errors: [] });
+      setImportPreviewOpen(false);
+      setImportModalOpen(false);
+      setImportConfirmOpen(false);
+      setImportConfirmText('');
+      setImportData([]);
+      setImportFileName('');
+      setAdvancedImportCatalog(null);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo agregar la plantilla a la orden');
+    } finally {
+      setImporting(false);
+      setImportProgress(0);
+    }
   };
 
   useEffect(() => {
@@ -1378,10 +1545,17 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           ],
           lines: (order.items || []).map((item: any) => ({
             description: item.description || item.name || item.code || 'Artículo sin descripción',
+            code: item.code,
+            productCode: item.productCode,
+            variantId: item.variantId,
+            variantSku: item.variantSku,
+            variantName: item.variantName,
+            variantAttributes: item.variantAttributes,
+            variant: item.variant,
             quantity: Number(item.quantity || 0),
             unitPrice: formatConvertedAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate || globalRate),
             total: formatConvertedAmount(Number(item.total || (Number(item.quantity || 0) * Number(item.unitPrice || 0))), order.currency, order.exchangeRate || globalRate),
-            secondary: [item.code ? `Código: ${item.code}${item.category ? ` · ${item.category}` : ''}` : item.category, item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : ''].filter(Boolean).join(' · '),
+            secondary: [item.category, item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : ''].filter(Boolean).join(' · '),
           })),
           total: formatConvertedAmount(Number(order.total || 0), order.currency, order.exchangeRate || globalRate),
           totalLabel: 'Total',
@@ -1647,7 +1821,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const selected = products.find((p: any) => String(p.id) === String(productId));
     if (!selected) return;
 
-    if (selected.isVariable && selected.variants && selected.variants.length > 1) {
+    if (selected.variants && selected.variants.length > 1) {
       setVariantPickerProduct(selected);
       setVariantPickerIdx(idx);
       setVariantPickerOpen(true);
@@ -1662,9 +1836,18 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
     const newItems = [...(localDoc.items || [])];
     const currentItem = newItems[idx] || {};
-    const purchasePrice = Number(selected.costPrice ?? selected.cost ?? selected.price ?? 0);
-    const currentStock = selected.stock != null ? selected.stock :
-      (selected.inventoryLevels?.[0]?.quantity ?? selected.quantity ?? 0);
+    const selectedVariant = selected.variantId && Array.isArray(selected.variants)
+      ? selected.variants.find((variant: any) => String(variant.id) === String(selected.variantId))
+      : undefined;
+    const purchasePrice = selectedVariant?.costPrice !== null && selectedVariant?.costPrice !== undefined
+      ? Number(selectedVariant.costPrice)
+      : Number(selected.costPrice ?? selected.cost ?? selected.price ?? 0) + Number(selectedVariant?.costModifier || 0);
+    const variantLevels = selectedVariant && Array.isArray(selected.inventoryLevels)
+      ? selected.inventoryLevels.filter((level: any) => String(level.variantId || '') === String(selectedVariant.id))
+      : [];
+    const currentStock = selectedVariant
+      ? variantLevels.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0)
+      : (selected.stock != null ? selected.stock : (selected.inventoryLevels?.[0]?.quantity ?? selected.quantity ?? 0));
     const rawTaxRate = Number(selected.taxRate);
     const taxRate = rawTaxRate > 0 && rawTaxRate <= 1 ? rawTaxRate * 100 : Number.isFinite(rawTaxRate) && rawTaxRate >= 0 ? rawTaxRate : 15;
     const quantity = Math.max(0, Math.trunc(Number(currentItem.quantity || 1)));
@@ -1677,6 +1860,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     newItems[idx] = {
       ...currentItem,
       productId: selected.id,
+      variantId: selected.variantId || null,
       code: selected.code || selected.sku || '',
       name: selected.name || '',
       description: selected.description || selected.name || '',
@@ -2109,6 +2293,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                           onChange={(val) => {
                             if (val === '__none__' || !val) {
                               handleItemChange(idx, 'productId', '');
+                              handleItemChange(idx, 'variantId', null);
                             } else {
                               handleSelectExistingProduct(idx, val);
                             }
@@ -2117,6 +2302,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                           searchPlaceholder="Buscar por nombre, código o SKU..."
                           className="h-9 text-xs"
                         />
+                        {item.variantId && (
+                          <Badge variant="secondary" className="mt-1 max-w-full truncate font-mono text-[9px]">
+                            Variante · {item.code || item.variantId}
+                          </Badge>
+                        )}
                       </div>
                       {canEditOrderItems && (
                         <Button
@@ -2267,7 +2457,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <p className="font-black uppercase tracking-widest text-primary">Guía rápida</p>
                 <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-muted-foreground">
                   <li>Descarga la plantilla con sus hojas de ítems y guía de llenado.</li>
-                  <li>Completa un producto por fila con SKU, cantidad y precio.</li>
+                  <li>Completa un producto por fila con SKU, cantidad y precio; si cargas la plantilla avanzada de Inventario, se generará una fila por SKU variante.</li>
                   <li>Revisa la previsualización: los SKU existentes se vinculan automáticamente y todos los productos respetan la Bodega destino de esta orden.</li>
                   <li>Confirma para agregar los ítems a esta orden; todavía deberás guardar la orden.</li>
                 </ol>
@@ -2283,7 +2473,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <Dialog open={importModalOpen} onOpenChange={(open) => {
           if (importing || importProcessing) return;
           setImportModalOpen(open);
-          if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
+          if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setAdvancedImportCatalog(null); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
         }}>
           <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
             <DialogHeader data-tour="purchases-order-import-title">
@@ -2536,7 +2726,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <Dialog open={false} onOpenChange={(open) => {
           if (importing || importProcessing) return;
           setImportModalOpen(open);
-          if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
+          if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setAdvancedImportCatalog(null); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
         }}>
           <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
             <DialogHeader>

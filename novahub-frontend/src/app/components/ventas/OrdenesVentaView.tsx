@@ -36,7 +36,7 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/Purch
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
-import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
+import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
@@ -384,6 +384,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     lines: (order.items || []).map((item) => ({
       id: item.id,
       description: item.description,
+      ...getSalesLineIdentifiers(item, products),
       secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate),
@@ -1131,6 +1132,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             }
                             newItems[idx].productId = val;
                             newItems[idx].variantId = null;
+                            newItems[idx].variantSku = null;
+                            newItems[idx].variantName = null;
+                            newItems[idx].variantAttributes = null;
                             if (selectedProd) {
                               newItems[idx].description = selectedProd.name;
                               newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
@@ -1159,7 +1163,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         className="sales-line-variant"
                         product={products.find((product) => product.id === item.productId)}
                         value={item.variantId}
-                        onChange={(variantId) => setLocalDoc({ ...localDoc, items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx ? { ...line, variantId } : line) } as any)}
+                        onChange={(variantId, variant) => setLocalDoc({
+                          ...localDoc,
+                          items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx
+                            ? { ...line, variantId, variantSku: variant?.sku || null, variantName: variant?.name || null, variantAttributes: variant?.attributes || null }
+                            : line),
+                        } as any)}
                       />
                       <SalesLinePriceListSelect
                         className="sales-line-price-list"

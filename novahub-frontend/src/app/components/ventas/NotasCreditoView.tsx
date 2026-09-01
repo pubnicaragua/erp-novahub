@@ -34,7 +34,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
-import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
+import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
@@ -626,6 +626,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     lines: (row.items || []).map((item) => ({
       id: item.id,
       description: item.description,
+      ...getSalesLineIdentifiers(item, products),
       secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), row.currency, row.exchangeRate),
@@ -784,6 +785,9 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                               updateItem(index, {
                                 productId: value,
                                 variantId: null,
+                                variantSku: null,
+                                variantName: null,
+                                variantAttributes: null,
                                 description: selectedProduct?.name || '',
                                 commercialNoteSnapshot: selectedProduct?.commercialNote || null,
                                 priceListId: itemType === 'SERVICE' ? null : (localDoc?.priceListId || getCustomerPriceListId(localDoc?.customerId)),
@@ -798,7 +802,12 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                           className="sales-line-variant"
                           product={product}
                           value={item.variantId}
-                          onChange={(variantId) => updateItem(index, { variantId })}
+                          onChange={(variantId, variant) => updateItem(index, {
+                            variantId,
+                            variantSku: variant?.sku || null,
+                            variantName: variant?.name || null,
+                            variantAttributes: variant?.attributes || null,
+                          })}
                         />
                         <SalesLinePriceListSelect
                           className="sales-line-price-list"
@@ -1084,13 +1093,13 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                   <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-3">
                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total a pagar</p><p className="mt-1 font-black text-primary">{formatConvertedAmount(paymentCreditBalance, paymentCreditCurrency, paymentCredit.exchangeRate)}</p></div>
                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pagado</p><p className="mt-1 font-black text-foreground">{formatConvertedAmount(paymentReceivedInCreditCurrency, paymentCreditCurrency, paymentCredit.exchangeRate)}</p></div>
-                    <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentRemainingBase > 0.01 ? 'Falta por pagar' : paymentChangeBase > 0.01 ? 'Vuelto por dar' : 'Saldo cubierto'}</p><p className={cn('mt-1 font-black', paymentRemainingBase > 0.01 ? 'text-amber-600 dark:text-amber-300' : paymentChangeInCreditCurrency > 0.01 ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{formatConvertedAmount(paymentRemainingBase > 0.01 ? paymentRemainingInCreditCurrency : paymentChangeInCreditCurrency, paymentCreditCurrency, paymentCredit.exchangeRate)}</p></div>
+                    <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentRemainingBase > 0.01 ? 'Pendiente' : paymentChangeBase > 0.01 ? 'Vuelto por dar' : 'Saldo cubierto'}</p><p className={cn('mt-1 font-black', paymentRemainingBase > 0.01 ? 'text-amber-600 dark:text-amber-300' : paymentChangeInCreditCurrency > 0.01 ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{formatConvertedAmount(paymentRemainingBase > 0.01 ? paymentRemainingInCreditCurrency : paymentChangeInCreditCurrency, paymentCreditCurrency, paymentCredit.exchangeRate)}</p></div>
                   </div>
                 ) : (
                   <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-3">
                      <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</p><p className="mt-1 font-black text-primary">{formatConvertedAmount(Math.min(paymentTotalBase, paymentCreditBalanceBase), baseCurrency)}</p></div>
                      <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Recibido (base)</p><p className="mt-1 font-black text-foreground">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</p></div>
-                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentRemainingBase > 0.01 ? 'Falta por pagar' : paymentChangeBase > 0.01 ? 'Vuelto por dar' : 'Saldo cubierto'}</p><p className={cn('mt-1 font-black', paymentChangeUnsupported ? 'text-rose-600 dark:text-rose-400' : paymentRemainingBase > 0.01 ? 'text-amber-600 dark:text-amber-300' : paymentChangeBase > 0.01 ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{formatConvertedAmount(paymentRemainingBase > 0.01 ? paymentRemainingInCreditCurrency : paymentChangeInCreditCurrency, paymentCreditCurrency)}</p></div>
+                     <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentRemainingBase > 0.01 ? 'Pendiente' : paymentChangeBase > 0.01 ? 'Vuelto por dar' : 'Saldo cubierto'}</p><p className={cn('mt-1 font-black', paymentChangeUnsupported ? 'text-rose-600 dark:text-rose-400' : paymentRemainingBase > 0.01 ? 'text-amber-600 dark:text-amber-300' : paymentChangeBase > 0.01 ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{formatConvertedAmount(paymentRemainingBase > 0.01 ? paymentRemainingInCreditCurrency : paymentChangeInCreditCurrency, paymentCreditCurrency)}</p></div>
                   </div>
                 )}
                 {paymentChangeUnsupported && <p className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce esos montos o agrega suficiente efectivo para cubrir el excedente.</p>}

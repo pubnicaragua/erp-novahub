@@ -55,6 +55,7 @@ import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtr
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 import { getPdfDesignSettings } from '../../utils/pdfGenerator';
+import { formatPdfVariantAttributes } from '../../utils/pdf-line-details';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
@@ -65,6 +66,7 @@ import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChang
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
+  productCode?: string | null;
   variantId?: string;
   lineTotal: number;
   taxRate: number;
@@ -73,7 +75,7 @@ interface CartItem extends PosInvoiceItem {
   irTaxId?: string | null;
   priceListId?: string;
   priceMissing?: boolean;
-  variant?: { sku?: string | null } | null;
+  variant?: { id?: string | null; sku?: string | null; name?: string | null; attributes?: Array<{ attributeId?: string; attributeName?: string; value?: string }> } | null;
 }
 
 type PricingMode = 'global' | 'individual';
@@ -219,7 +221,15 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   const itemRows = cart.map(item => {
     const commercialNote = item.commercialNoteSnapshot || (item as any).commercialNote || (item as any).product?.commercialNote || '';
     const variantSku = item.variant?.sku || item.variantId || '';
-    const variantHtml = variantSku ? `<div style="font-size:9px">SKU variante: ${escapeTicketHtml(variantSku)}</div>` : '';
+    const variantName = item.variant?.name || '';
+    const variantAttributes = formatPdfVariantAttributes(item.variant?.attributes);
+    const productCode = item.productCode || (item as any).product?.code || '';
+    const variantHtml = [
+      productCode ? `Código: ${productCode}` : '',
+      variantSku ? `SKU variante: ${variantSku}` : '',
+      variantName ? `Nombre variante: ${variantName}` : '',
+      variantAttributes ? `Atributos: ${variantAttributes}` : '',
+    ].filter(Boolean).map((line) => `<div style="font-size:9px">${escapeTicketHtml(line)}</div>`).join('');
     const noteHtml = commercialNote ? `<div style="font-size:9px">Nota: ${escapeTicketHtml(commercialNote)}</div>` : '';
     return `<div class="item"><div>${escapeTicketHtml(item.description)}</div>${variantHtml}${noteHtml}<div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`;
   }).join('');
@@ -833,8 +843,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       } as PosInvoice;
       const receiptCart: CartItem[] = (document.items || []).map((item) => ({
         productId: item.id,
+        productCode: (item as any).productCode || (item as any).product?.code || null,
         variantId: item.variantId || undefined,
-        variant: item.variant ? { sku: item.variant.sku } : null,
+        variant: item.variant ? { id: item.variant.id, sku: item.variant.sku, name: item.variant.name, attributes: item.variant.attributes } : null,
         description: item.description,
         quantity: Number(item.quantity || 0),
         unitPrice: Number(item.unitPrice || 0),
@@ -1356,9 +1367,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         ...prev,
         {
           productId: product.id,
+          productCode: product.code,
           itemType: product.itemType,
           variantId: isService ? undefined : variant.id,
-          variant: isService ? null : { sku: variant.sku },
+          variant: isService ? null : { id: variant.id, sku: variant.sku, name: variant.name, attributes: variant.attributes },
           warehouseId,
           description: variantDescription,
           commercialNoteSnapshot: product.commercialNote || null,
@@ -1424,6 +1436,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         ...prev,
         {
           productId: product.id,
+          productCode: product.code,
           itemType: product.itemType,
           warehouseId,
           description: product.name,
@@ -2976,12 +2989,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 : toBaseAmount(summary.total, paymentCurrency, documentRate);
               const getCurrentPaymentBase = (payment: PosPaymentLine) => getPaymentLineBase(payment, paymentCurrency);
               const totalPaidBase = getPaymentTotalBase(payments, getCurrentPaymentBase);
+              const pendingBase = Math.max(0, totalToPayBase - totalPaidBase);
               const changeLocal = getPaymentChangeBase(payments, totalToPayBase, getCurrentPaymentBase);
               const changeUnsupported = changeLocal > 0.005 && !cashCoversPaymentChange(payments, totalToPayBase, getCurrentPaymentBase, 0.005);
 
               return (
                 <>
-                  <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-xl bg-primary/10 p-3">
                       <span className="text-xs text-primary font-bold">Total a pagar</span>
                       <div className="text-xl font-black text-primary">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalToPayBase)}</div>
@@ -2989,6 +3003,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     <div className="rounded-xl bg-muted/40 p-3 border border-border/50">
                       <span className="text-xs text-muted-foreground">Pagado</span>
                       <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalPaidBase)}</div>
+                    </div>
+                    <div className={cn("rounded-xl p-3 border", pendingBase > 0.005 ? "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400")}>
+                      <span className="text-xs font-bold">Pendiente</span>
+                      <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(pendingBase)}</div>
                     </div>
                     <div className={cn("rounded-xl p-3 border", changeUnsupported ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400" : changeLocal > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted/20 border-border/30 text-muted-foreground")}>
                       <span className="text-xs font-bold">Cambio</span>
@@ -3154,9 +3172,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               const paymentSummary = getQueuePaymentSummary();
               return (
                 <>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-xl border border-primary/20 bg-primary/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total a pagar</p><p className="mt-1 font-mono text-lg font-black text-primary">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.totalBase)}</p></div>
                   <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Pagado</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.paidBase)}</p></div>
+                  <div className={cn('rounded-xl border p-3', paymentSummary.missingBase > 0.005 ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300')}><p className="text-[10px] font-black uppercase tracking-widest">Pendiente</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.missingBase)}</p></div>
                   <div className={cn('rounded-xl border p-3', paymentSummary.changeUnsupported ? 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300' : paymentSummary.changeBase > 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border/50 bg-muted/20 text-muted-foreground')}><p className="text-[10px] font-black uppercase tracking-widest">Cambio / vuelto</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.changeBase)}</p></div>
                 </div>
                 {paymentSummary.changeUnsupported && <p className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.</p>}

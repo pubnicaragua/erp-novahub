@@ -180,7 +180,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
   const requester = { name: 'Ana Martínez', address: 'Departamento de Ventas', phone: '+505 2255-0012', email: 'ana@empresa.com', contact: 'Responsable de la solicitud' };
   const payee = { name: 'Beneficiario de ejemplo', taxId: 'J0310000000000', address: 'Managua, Nicaragua', phone: '+505 2222-0000', email: 'beneficiario@empresa.com', contact: 'Contacto del pago' };
   const transactionItems = [
-    { description: 'Producto de muestra', quantity: '2', unitPrice: 'C$ 500.00', total: 'C$ 1,000.00' },
+    { description: 'Producto de muestra\nCódigo: PROD-001\nSKU variante: PROD-001-AZ-M\nNombre variante: Azul / M\nAtributos: Color: Azul · Talla: M', quantity: '2', unitPrice: 'C$ 500.00', total: 'C$ 1,000.00' },
     { description: 'Servicio adicional', quantity: '1', unitPrice: 'C$ 150.00', total: 'C$ 150.00' },
   ];
   const base: PdfTemplateData = {

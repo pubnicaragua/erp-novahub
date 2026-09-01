@@ -13,6 +13,8 @@ import { CurrencyRateDetails } from '../ui/CurrencyValuation';
 export interface SalesDocumentPanelLine {
   id: string;
   description: string;
+  productCode?: string | null;
+  variantSku?: string | null;
   quantity?: number;
   unitPriceLabel?: string;
   totalLabel?: string;
@@ -41,6 +43,15 @@ export interface SalesDocumentPanelData {
   notes?: string;
   reason?: string;
   history?: any[];
+}
+
+export function getSalesLineIdentifiers(item: any, products: any[] = []): { productCode: string | null; variantSku: string | null } {
+  const product = products.find((candidate) => candidate?.id === item?.productId);
+  const variant = product?.variants?.find((candidate: any) => candidate?.id === item?.variantId);
+  return {
+    productCode: item?.productCode || item?.product?.code || item?.code || product?.code || null,
+    variantSku: item?.variantSku || item?.variant?.sku || variant?.sku || null,
+  };
 }
 
 interface SalesDocumentDetailSheetProps {
@@ -195,6 +206,8 @@ export function SalesDocumentDetailSheet({
                     <div key={line.id} className="flex min-w-0 items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-semibold text-foreground">{line.description || 'Artículo sin descripción'}</p>
+                        {line.productCode && <p className="mt-1 break-words font-mono text-[10px] font-semibold text-primary">Código: {line.productCode}</p>}
+                        {line.variantSku && <p className="mt-1 break-words font-mono text-[10px] text-muted-foreground">SKU variante: {line.variantSku}</p>}
                         <p className="mt-1 break-words text-xs text-muted-foreground">{line.quantity ?? 0}{line.unitPriceLabel ? ` × ${line.unitPriceLabel}` : ''}</p>
                         {line.secondaryLabel && <p className="mt-1 text-[11px] font-medium text-muted-foreground">{line.secondaryLabel}</p>}
                       </div>

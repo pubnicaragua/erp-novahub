@@ -11,6 +11,13 @@ export interface SupplierHistoryItem {
   total: number;
   currency: string;
   exchangeRate?: number;
+  code?: string | null;
+  productCode?: string | null;
+  variantId?: string | null;
+  variantSku?: string | null;
+  variantName?: string | null;
+  variantAttributes?: unknown;
+  variant?: Record<string, unknown> | null;
 }
 
 const unwrapList = (response: any): any[] => {
@@ -75,6 +82,13 @@ export async function fetchSupplierHistoryItems(supplierId: string, signal?: Abo
         total: item.total,
         currency: order.currency || 'NIO',
         exchangeRate: order.exchangeRate,
+        code: item.code || item.product?.code || null,
+        productCode: item.productCode || item.product?.code || null,
+        variantId: item.variantId || null,
+        variantSku: item.variantSku || item.variant?.sku || null,
+        variantName: item.variantName || item.variant?.name || null,
+        variantAttributes: item.variantAttributes ?? item.variant?.attributes,
+        variant: item.variant || null,
       });
     });
   });
@@ -92,6 +106,13 @@ export async function fetchSupplierHistoryItems(supplierId: string, signal?: Abo
         total: item.total,
         currency: invoice.currency || 'NIO',
         exchangeRate: invoice.exchangeRate,
+        code: item.code || item.product?.code || null,
+        productCode: item.productCode || item.product?.code || null,
+        variantId: item.variantId || null,
+        variantSku: item.variantSku || item.variant?.sku || null,
+        variantName: item.variantName || item.variant?.name || null,
+        variantAttributes: item.variantAttributes ?? item.variant?.attributes,
+        variant: item.variant || null,
       });
     });
   });
