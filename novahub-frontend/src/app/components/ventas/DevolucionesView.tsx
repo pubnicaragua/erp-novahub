@@ -93,6 +93,7 @@ const buildInvoiceReturnItems = (invoice?: Invoice | null) => {
       invoiceItemId: row.source.id,
       itemType,
       productId: row.source.productId || '',
+      variantId: row.source.variantId || undefined,
       description: row.source.description || '',
       originalQuantity: row.originalQuantity,
       quantity: row.originalQuantity,
@@ -290,6 +291,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         items: (localDoc.items || []).map((item: any) => ({
           invoiceItemId: item.invoiceItemId || undefined,
           productId: item.productId || undefined,
+          variantId: item.variantId || undefined,
           description: item.description || '',
           commercialNoteSnapshot: item.commercialNoteSnapshot || null,
           quantity: toWholeQuantity(item.quantity || 1),

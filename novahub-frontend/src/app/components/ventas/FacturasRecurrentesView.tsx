@@ -417,6 +417,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const resolvedItemType = String(item.itemType || (item.productId ? 'PRODUCT' : 'SERVICE')).toUpperCase();
       return {
       productId: item.productId || undefined,
+      variantId: item.variantId || undefined,
       priceListId: item.priceListId || undefined,
       itemType: resolvedItemType,
       serviceName: resolvedItemType === 'SERVICE' ? (item.serviceName || item.description || '') : undefined,

@@ -34,6 +34,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   const [formBarcode, setFormBarcode] = useState('');
   const [formPriceModifier, setFormPriceModifier] = useState('0');
   const [formCostModifier, setFormCostModifier] = useState('0');
+  const [formCostPrice, setFormCostPrice] = useState('');
 
   const loadVariants = useCallback(async () => {
     if (!product) return;
@@ -65,6 +66,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
     setFormBarcode('');
     setFormPriceModifier('0');
     setFormCostModifier('0');
+    setFormCostPrice('');
   };
 
   const openCreate = () => {
@@ -80,6 +82,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
     setFormBarcode(variant.barcode || '');
     setFormPriceModifier(String(variant.priceModifier || 0));
     setFormCostModifier(String(variant.costModifier || 0));
+    setFormCostPrice(variant.costPrice === null || variant.costPrice === undefined ? '' : String(variant.costPrice));
     setEditingId(variant.id);
     setShowCreate(true);
   };
@@ -99,6 +102,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
         barcode: formBarcode.trim() || undefined,
         priceModifier: parseFloat(formPriceModifier) || 0,
         ...(canViewInventoryCost ? { costModifier: parseFloat(formCostModifier) || 0 } : {}),
+        ...(canViewInventoryCost ? { costPrice: formCostPrice.trim() === '' ? null : Number(formCostPrice) } : {}),
       };
 
       if (editingId) {
@@ -237,6 +241,11 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                                 costo {variant.costModifier}
                               </Badge>
                             )}
+                            {canViewInventoryCost && variant.costPrice !== null && variant.costPrice !== undefined && (
+                              <Badge variant="outline" className="text-[8px] text-amber-600">
+                                costo propio {variant.costPrice}
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
@@ -343,7 +352,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                 />
               </div>
               {canViewInventoryCost && <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Modificador costo</label>
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Ajuste de costo heredado</label>
                 <Input
                   type="number"
                   value={formCostModifier}
@@ -353,6 +362,11 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                 />
               </div>}
             </div>
+            {canViewInventoryCost && <div className="space-y-1.5">
+              <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo propio (opcional)</label>
+              <Input type="number" min={0} value={formCostPrice} onChange={(e) => setFormCostPrice(e.target.value)} className="h-9 text-xs" step="0.01" placeholder="Vacío = hereda el costo base" />
+              <p className="text-[10px] text-muted-foreground">Se expresa en la moneda funcional. Si se informa, tiene prioridad sobre el ajuste heredado.</p>
+            </div>}
           </div>
 
           <DialogFooter>

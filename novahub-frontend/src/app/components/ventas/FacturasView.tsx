@@ -987,6 +987,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           priceListId: localDoc.priceListId || undefined,
           items: localDoc.items.map((item: any) => ({
             productId: item.productId || undefined,
+            variantId: item.variantId || undefined,
             warehouseId: item.warehouseId || undefined,
             description: item.description || '',
             commercialNoteSnapshot: item.commercialNoteSnapshot || findProductForItem(item)?.commercialNote || null,

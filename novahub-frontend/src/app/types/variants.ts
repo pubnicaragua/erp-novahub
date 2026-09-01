@@ -6,6 +6,7 @@ export interface ProductVariant {
   attributes?: VariantAttribute[];
   priceModifier: number;
   costModifier: number;
+  costPrice?: number | null;
   isActive?: boolean;
   createdAt?: string;
   updatedAt?: string;

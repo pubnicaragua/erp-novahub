@@ -857,6 +857,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   // --- Venta suspendida / reservada inter-sucursal ---
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [availabilityProduct, setAvailabilityProduct] = useState<PosProduct | null>(null);
+  const [availabilityVariantId, setAvailabilityVariantId] = useState<string | null>(null);
   const [availabilityQuantity, setAvailabilityQuantity] = useState(1);
   const [availabilityRows, setAvailabilityRows] = useState<BranchProductAvailability[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -1237,14 +1238,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     return total;
   };
 
-  const openAvailabilityFor = async (product: PosProduct, quantity: number) => {
+  const openAvailabilityFor = async (product: PosProduct, quantity: number, variantId?: string | null) => {
+    const normalizedVariantId = String(variantId || '').trim() || null;
     setAvailabilityProduct(product);
+    setAvailabilityVariantId(normalizedVariantId);
     setAvailabilityQuantity(Math.max(1, quantity));
     setAvailabilityRows([]);
     setAvailabilityOpen(true);
     setAvailabilityLoading(true);
     try {
-      setAvailabilityRows(await cajaService.getProductAvailability(product.id, Math.max(1, quantity)));
+      setAvailabilityRows(await cajaService.getProductAvailability(product.id, Math.max(1, quantity), undefined, normalizedVariantId));
     } catch (error: unknown) {
       setAvailabilityRows([]);
       toast.error(getErrorMessage(error, 'Error al consultar disponibilidad'));
@@ -1300,7 +1303,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
     if (product.trackInventory && (variant.currentStock == null || requestedQty + globalQty > variant.currentStock)) {
       const available = Math.max(0, Number(variant.currentStock || 0) - globalQty);
-      toast.error(`Stock insuficiente para ${variantDescription}. Disponible en esta bodega: ${available}`);
+      toast.error(`Stock insuficiente para ${variantDescription}. Disponible en esta bodega: ${available}`, {
+        action: {
+          label: 'Ver otras sucursales',
+          onClick: () => void openAvailabilityFor(product, requestedQty, variant.id),
+        },
+      });
       return;
     }
 
@@ -1413,7 +1421,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         toast.error(message, {
           action: {
             label: 'Ver otras sucursales',
-            onClick: () => void openAvailabilityFor(product, quantity),
+            onClick: () => void openAvailabilityFor(product, quantity, variantId),
           },
         });
         finalQty = Math.max(1, availableStock - globalQty);
@@ -1461,10 +1469,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
     const product = availabilityProduct;
     const isService = product.itemType === 'SERVICE';
-    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
+    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id, availabilityVariantId);
+    const selectedVariant = availabilityVariantId
+      ? product.variants?.find((variant) => variant.id === availabilityVariantId)
+      : undefined;
+    const description = selectedVariant?.attributes?.length
+      ? `${product.name} - ${selectedVariant.attributes.map((attribute) => attribute.value).join(' / ')}`
+      : selectedVariant?.name
+        ? `${product.name} - ${selectedVariant.name}`
+        : product.name;
     const items: PosHoldItemInput[] = [{
       productId: product.id,
-      description: product.name,
+      variantId: availabilityVariantId || undefined,
+      description,
       commercialNoteSnapshot: product.commercialNote || null,
       quantity: availabilityQuantity,
       unitPrice: configuredPrice ?? 0,
@@ -1514,6 +1531,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       toast.success(`Venta ${created.number} reservada. El cliente deberá retirarla en la sucursal seleccionada.`);
       setAvailabilityOpen(false);
       setAvailabilityProduct(null);
+      setAvailabilityVariantId(null);
       void refreshCatalog();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'Error al reservar la venta'));
@@ -3155,9 +3173,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         open={availabilityOpen}
         onOpenChange={(open) => {
           setAvailabilityOpen(open);
-          if (!open) setAvailabilityProduct(null);
+          if (!open) {
+            setAvailabilityProduct(null);
+            setAvailabilityVariantId(null);
+          }
         }}
         product={availabilityProduct}
+        variantLabel={availabilityVariantId
+          ? (() => {
+            const selectedVariant = availabilityProduct?.variants?.find((variant) => variant.id === availabilityVariantId);
+            return selectedVariant?.attributes?.length
+              ? selectedVariant.attributes.map((attribute) => attribute.value).join(' / ')
+              : selectedVariant?.name || null;
+          })()
+          : null}
         requestedQuantity={availabilityQuantity}
         availability={availabilityRows}
         loading={availabilityLoading}

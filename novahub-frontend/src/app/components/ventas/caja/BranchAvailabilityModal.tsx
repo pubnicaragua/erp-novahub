@@ -20,6 +20,7 @@ interface BranchAvailabilityModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product: PosProduct | null;
+  variantLabel?: string | null;
   requestedQuantity: number;
   availability: BranchProductAvailability[];
   loading: boolean;
@@ -31,6 +32,7 @@ export function BranchAvailabilityModal({
   open,
   onOpenChange,
   product,
+  variantLabel,
   requestedQuantity,
   availability,
   loading,
@@ -84,6 +86,7 @@ export function BranchAvailabilityModal({
               <>
                 <span className="font-bold text-foreground">{product.name}</span>
                 <span className="ml-2 font-mono text-xs text-muted-foreground">{product.code}</span>
+                {variantLabel && <span className="ml-2 text-xs font-semibold text-primary">· {variantLabel}</span>}
                 {' · '}cantidad solicitada: <span className="font-bold text-foreground">{requestedQuantity}</span>
               </>
             ) : 'Consultando disponibilidad del producto en el resto de sucursales.'}

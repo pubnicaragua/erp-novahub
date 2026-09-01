@@ -430,6 +430,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
         priceListId: localDoc.priceListId || undefined,
         items: localDoc.items.map((item: any) => ({
           productId: item.productId || undefined,
+          variantId: item.variantId || undefined,
           priceListId: item.priceListId || undefined,
           description: item.description || '',
           commercialNoteSnapshot: item.commercialNoteSnapshot || null,

@@ -331,6 +331,7 @@ export interface BranchProductAvailability {
   currentStock: number;
   requestedQuantity: number;
   available: boolean;
+  variantId?: string | null;
   sourceType?: 'BODEGA' | 'ALMACEN_CORPORATIVO';
 }
 
@@ -659,8 +660,8 @@ export const cajaService = {
 
   // --- Ventas suspendidas / reservadas (entrega inter-sucursal) ---
 
-  getProductAvailability: (productId: string, quantity: number, signal?: AbortSignal) =>
-    api.get<BranchProductAvailability[]>(`/caja/products/${productId}/availability`, { params: { quantity }, signal }),
+  getProductAvailability: (productId: string, quantity: number, signal?: AbortSignal, variantId?: string | null) =>
+    api.get<BranchProductAvailability[]>(`/caja/products/${productId}/availability`, { params: { quantity, ...(variantId ? { variantId } : {}) }, signal }),
 
   createHold: (dto: CreatePosHoldDto, idempotencyKey?: string) =>
     api.idempotentPost<PosHold>('/caja/holds', dto, idempotencyKey),

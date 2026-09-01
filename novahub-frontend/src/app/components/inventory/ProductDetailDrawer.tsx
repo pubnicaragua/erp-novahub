@@ -380,6 +380,13 @@ export function ProductDetailDrawer({
   const isService = itemType === 'SERVICE';
 
   const costPrice = Number(product?.costPrice ?? product?.cost ?? 0);
+  const servicePrice = (() => {
+    const sourceCurrency = String(product?.priceCurrency || baseCurrency).toUpperCase();
+    const originalAmount = Number(product?.salePriceOriginal);
+    return sourceCurrency !== baseCurrency && Number.isFinite(originalAmount) && originalAmount > 0
+      ? { amount: originalAmount, sourceCurrency, sourceExchangeRate: Number(product?.priceExchangeRate || 1) }
+      : { amount: Number(product?.salePrice || 0), sourceCurrency: baseCurrency, sourceExchangeRate: 1 };
+  })();
   // El endpoint de detalle incluye stockLevels. Derivarlo aquí también evita
   // mostrar cero si se consume una versión anterior del backend sin `stock`.
   const stockFromLevels = Array.isArray(product?.stockLevels)
@@ -629,7 +636,7 @@ export function ProductDetailDrawer({
                 Historial
               </TabsTrigger>
             </TabsList>
-            <InventoryViewTutorial label={isService ? 'Cómo consultar servicio' : 'Cómo consultar producto'} targetPrefix="inventory-product-detail" stepKeys={['title', 'data']} copy={{ data: { description: 'Revisa información general, stock por bodega, kardex, series y movimientos históricos.' } }} />
+            <InventoryViewTutorial label={isService ? 'Cómo consultar servicio' : 'Cómo consultar producto'} targetPrefix="inventory-product-detail" stepKeys={['title', 'data']} copy={{ data: { description: isService ? 'Revisa la descripción, precio, disponibilidad y el historial del servicio. Los servicios no tienen stock ni distribución por bodega.' : 'Revisa información general, stock por bodega, kardex, series y movimientos históricos.' } }} />
           </SheetHeader>
 
         {/* ===== Contenido con scroll ===== */}
@@ -694,7 +701,7 @@ export function ProductDetailDrawer({
                     {isService ? (
                       <MetricCard
                         label="Precio"
-                        value={<CurrencyValuationAmount amount={Number(product?.salePrice || 0)} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
+                        value={<CurrencyValuationAmount {...servicePrice} className="text-base" />}
                         icon={DollarSign}
                         accent="text-emerald-500"
                         loading={loading && !productSnapshot}

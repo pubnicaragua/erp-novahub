@@ -14,7 +14,7 @@ export const inventoryService = {
   },
   createProduct: (data: Partial<Product> & {
     initialStock?: number;
-    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number }>;
+    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null }>;
   }) => api.post<Product>('/inventory/products', data),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   updateProductStatus: (id: string, isActive: boolean) => api.patch<Product>(`/inventory/products/${id}/status`, { isActive }),
@@ -97,9 +97,9 @@ export const inventoryService = {
 
   // ==================== PRODUCT VARIANTS ====================
   getVariants: (productId: string, signal?: AbortSignal) => api.get<any[]>(`/inventory/products/${productId}/variants`, { signal }),
-  createVariant: (productId: string, data: { sku: string; name?: string; barcode?: string; priceModifier?: number; costModifier?: number; attributes?: any[] }) =>
+  createVariant: (productId: string, data: { sku: string; name?: string; barcode?: string; priceModifier?: number; costModifier?: number; costPrice?: number | null; attributes?: any[] }) =>
     api.post<any>(`/inventory/products/${productId}/variants`, data),
-  updateVariant: (variantId: string, data: { sku?: string; name?: string; barcode?: string; priceModifier?: number; costModifier?: number; attributes?: any[] }) =>
+  updateVariant: (variantId: string, data: { sku?: string; name?: string; barcode?: string; priceModifier?: number; costModifier?: number; costPrice?: number | null; attributes?: any[] }) =>
     api.patch<any>(`/inventory/variants/${variantId}`, data),
   deleteVariant: (variantId: string) => api.delete(`/inventory/variants/${variantId}`),
   regenerateVariants: (productId: string) => api.post<any[]>(`/inventory/products/${productId}/variants/regenerate`),
@@ -123,7 +123,8 @@ export const inventoryService = {
     return results;
   },
   getInitialImportStatus: (signal?: AbortSignal) => api.get<{ completed: boolean; importedAt?: string | null; productCount?: number; priceListCode?: string | null; currency?: string | null; exchangeRate?: number | null; blockedByExistingProducts?: boolean }>('/inventory/initial-import/status', { signal }),
-  importInitialCatalog: (data: { items: any[]; currency: string; exchangeRate?: number; priceListCode?: string; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
+  importInitialCatalog: (data: { items?: any[]; catalog?: any; currency: string; exchangeRate?: number; priceListCode?: string; createMissingAttributes?: boolean; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
+  importServices: (data: { items: any[]; currency: string; exchangeRate?: number; confirmText: string }) => api.post<any>('/inventory/services/import', data),
   updateProductImages: (items: Array<{ code: string; imageUrl: string }>) => api.patch<{ updated: number }>('/inventory/products/images/batch', { items }),
   deactivateProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),
 

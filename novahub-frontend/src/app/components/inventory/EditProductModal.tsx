@@ -40,7 +40,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           ...stockLevels.map((level: any) => level.warehouseId).filter(Boolean),
           ...warehouseCatalogs.map((catalog: any) => catalog.warehouseId).filter(Boolean),
         ]));
-        const initialAllocations = allocationIds.length > 0
+        const initialAllocations = isService ? [] : allocationIds.length > 0
           ? allocationIds.map((warehouseId: string, i: number) => {
               const sl = stockLevels.find((level: any) => level.warehouseId === warehouseId);
               return {
@@ -105,7 +105,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           removeImage: false,
           attributeIds: Array.isArray(product.attributeIds) ? product.attributeIds : [],
           linkedAttributes: existingLinkedAttributes,
-          isVariable: Boolean(
+             isVariable: !isService && Boolean(
             product.isVariable
             || activeVariants.length > 1
             || activeVariants.some((variant: any) => Array.isArray(variant?.attributes) && variant.attributes.length > 0)
@@ -263,7 +263,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
         unit: draft.unit,
         minStock: draft.minStock,
         maxStock: draft.maxStock,
-        warehouseId: draft.itemType === 'SERVICE' ? draft.initialAllocations?.[0]?.warehouseId : undefined,
+         ...(draft.itemType === 'SERVICE' ? {} : { warehouseId: undefined }),
         warehouseIds: draft.itemType !== 'SERVICE' ? draft.initialAllocations?.map((a: any) => a.warehouseId).filter(Boolean) : undefined,
         imageUrl: nextImageUrl,
         attributeIds: draft.attributeIds?.length > 0 ? draft.attributeIds : [],
@@ -429,14 +429,14 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                 </Select>
               </div>
 
-               {!isService && canViewInventoryCost && <div className="col-span-1">
+                {canViewInventoryCost && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
                 <Input
                   type="number" min={0} step="any"
                   value={draft.costPrice}
                   onChange={e => handleUpdate('costPrice', e.target.value)}
                   className="h-8 text-xs text-right mt-1 tabular-nums"
-                  readOnly
+                   readOnly={!isService}
                 />
               </div>}
 
@@ -513,18 +513,6 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                     <Input type="number" min={0} value={draft.initialAllocations[0].maxStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { maxStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-8 text-xs text-right mt-1" placeholder="Max" />
                   </div>
                 </>
-              )}
-
-              {isService && (
-                <div className="sm:col-span-2 md:col-span-3">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén Vinculado *</label>
-                  <Select value={draft.initialAllocations?.[0]?.warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations?.[0]?.id, { warehouseId: v })}>
-                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén..." /></SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
               )}
 
               {isService && (

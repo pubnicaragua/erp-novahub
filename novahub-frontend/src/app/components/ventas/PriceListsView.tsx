@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp, Download, FileSpreadsheet, Layers, ListChecks, Package, Pencil, Plus, Search, Settings2, Square, SquareCheckBig, Tag, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp, Download, FileSpreadsheet, Layers, ListChecks, Loader2, Package, Pencil, Plus, Search, Settings2, Square, SquareCheckBig, Tag, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -322,7 +322,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
 
   const loading = matrixQuery.isPending;
   const refreshMatrix = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['sales', 'price-lists', 'matrix', tenantKey] });
+    await queryClient.refetchQueries({ queryKey: ['sales', 'price-lists', 'matrix', tenantKey], type: 'active' });
   };
 
   useEffect(() => {
@@ -445,6 +445,18 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       const rawValue = String(values[list.id] ?? '').trim();
       if (!rawValue) return null;
       const price = Number(rawValue);
+      const variantItem = matrixItems.find(
+        (item) => item.priceListId === list.id && item.productId === selectedVariantProduct.id && item.variantId === variantId,
+      );
+      const parentItem = matrixItems.find(
+        (item) => item.priceListId === list.id && item.productId === selectedVariantProduct.id && (!item.variantId || item.variantId === null),
+      );
+      const effectiveItem = variantItem || parentItem;
+      const previousPrice = effectiveItem ? convertBaseToDisplay(Number(effectiveItem.basePrice ?? effectiveItem.price ?? 0)) : null;
+      const rate = displayCurrency === baseCurrency ? 1 : Number(exchangeRate || 1);
+      const samePrice = previousPrice !== null && Math.abs(previousPrice - price) < 0.000001;
+      const sameFormat = !variantItem || (variantItem.currency === displayCurrency && Number(variantItem.exchangeRate || 1) === rate);
+      if (samePrice && sameFormat) return null;
       return { list, price };
     }).filter(Boolean) as Array<{ list: typeof visibleLists[number]; price: number }>;
     if (!changes.length) return cancelEditVariant(variantId);
@@ -534,28 +546,12 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     savingProductRef.current.add(productId);
     setSaving(productId);
     try {
-      const updatedItems = await Promise.all(changes.map(({ list, price }) => priceListsService.updateItem(list.id, productId, { price, currency, exchangeRate: rate })));
-      queryClient.setQueryData(['sales', 'price-lists', 'matrix', tenantKey], (current: any) => {
-        if (!current) return current;
-        const nextItems = [...current.items];
-        changes.forEach(({ list }, changeIndex) => {
-          const itemIndex = nextItems.findIndex((item: PriceListItem) => item.priceListId === list.id && item.productId === productId && !item.variantId);
-          const updated: any = updatedItems[changeIndex];
-          const price = Number(updated?.price ?? changes[changeIndex].price);
-          const basePrice = Number(updated?.basePrice ?? (currency === baseCurrency ? price : currency === 'USD' ? price * rate : price / rate));
-          const nextItem = { ...(itemIndex >= 0 ? nextItems[itemIndex] : {}), ...updated, priceListId: list.id, productId, variantId: null, price, currency, exchangeRate: rate, basePrice };
-          if (itemIndex >= 0) nextItems[itemIndex] = nextItem;
-          else nextItems.push(nextItem);
-        });
-        const nextProducts = current.products?.map((product: any) => {
-          const retailChange = changes.find(({ list }) => list.code === 'RETAIL');
-          if (!retailChange || product.id !== productId) return product;
-          const retailIndex = changes.findIndex(({ list }) => list.code === 'RETAIL');
-          const updated: any = updatedItems[retailIndex];
-          return { ...product, salePrice: Number(updated?.basePrice ?? (currency === baseCurrency ? retailChange.price : currency === 'USD' ? retailChange.price * rate : retailChange.price / rate)) };
-        });
-        return { ...current, items: nextItems, products: nextProducts };
-      });
+      await Promise.all(changes.map(({ list, price }) => priceListsService.updateItem(list.id, productId, { price, currency, exchangeRate: rate, variantId: null })));
+      // La respuesta de PATCH confirma la operación, pero la matriz debe
+      // quedar basada en la lectura posterior al commit del servidor. Esto
+      // evita mostrar un cambio solo local o conservar una fila variante en
+      // memoria cuando se acaba de modificar el precio padre.
+      await refreshMatrix();
       cancelEditProduct(productId);
       toast.success(`${changes.length} precio(s) guardado(s)`);
     } catch (error: any) { toast.error(error.message || 'No se pudieron guardar los precios'); }
@@ -888,10 +884,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                     <TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>
                     {visibleLists.map((list) => {
                       const item = byList?.get(list.id);
-                      return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</div>}<span className="mt-1 block text-[10px] text-muted-foreground">{item ? currencyLabel(displayCurrency) : 'Pendiente'}</span></TableCell>;
+                      return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</div>}{!item && <span className="mt-1 block text-[10px] text-muted-foreground">Pendiente</span>}</TableCell>;
                     })}
-                    <TableCell className="text-right">
-                      {isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id}><Check className="size-4" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}
+                      <TableCell className="text-right">
+                      {isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id} aria-label={`Guardar precios de ${product.name}`}>{saving === product.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}</Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}
                       {product.variants && product.variants.length > 1 && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-primary" title="Ver variantes" aria-label={`Ver variantes de ${product.name}`} onClick={() => openVariantDetail(product)}><Layers className="size-4" /></Button>}
                     </TableCell>
                   </TableRow>
@@ -919,7 +915,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                     <p className="mt-0.5 break-words text-[10px] text-muted-foreground">{product.category?.name || 'Sin categoría'}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    {isEditing ? <><Button variant="ghost" size="icon" className="size-8 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id} aria-label={`Guardar precios de ${product.name}`}><Check className="size-4" /></Button><Button variant="ghost" size="icon" className="size-8 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id} aria-label={`Cancelar edición de ${product.name}`}><X className="size-4" /></Button></> : canEditPriceList && <Button variant="ghost" size="icon" className="size-8" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}
+                    {isEditing ? <><Button variant="ghost" size="icon" className="size-8 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id} aria-label={`Guardar precios de ${product.name}`}>{saving === product.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}</Button><Button variant="ghost" size="icon" className="size-8 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id} aria-label={`Cancelar edición de ${product.name}`}><X className="size-4" /></Button></> : canEditPriceList && <Button variant="ghost" size="icon" className="size-8" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}
                     {product.variants && product.variants.length > 1 && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-primary" title="Ver variantes" aria-label={`Ver variantes de ${product.name}`} onClick={() => openVariantDetail(product)}><Layers className="size-4" /></Button>}
                   </div>
                 </div>
@@ -930,7 +926,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                       <span className="min-w-0 break-words text-xs font-bold">{list.name}<span className="ml-1.5 font-mono text-[9px] font-normal text-muted-foreground">{list.code}</span></span>
                       <div className="flex min-w-0 shrink-0 flex-col items-end">
                         {isEditing ? <Input className="h-8 w-32 max-w-[45vw] text-right text-xs" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} aria-label={`Precio ${list.name} para ${product.name}`} /> : <span className={`text-sm font-bold tabular-nums ${!item ? 'italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio'}</span>}
-                        <span className="mt-0.5 text-[9px] text-muted-foreground">{item ? currencyLabel(displayCurrency) : 'Pendiente'}</span>
+                        {!item && <span className="mt-0.5 text-[9px] text-muted-foreground">Pendiente</span>}
                       </div>
                     </div>;
                   })}
@@ -1133,23 +1129,30 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     <Dialog open={newListOpen} onOpenChange={(open) => { if (!creatingList) setNewListOpen(open); }}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[34rem]"><DialogHeader data-tour="sales-form-title"><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El sistema asignará automáticamente su identificador.</DialogDescription><SalesViewTutorial view="price-lists" context="form" /></DialogHeader><div data-tour="sales-form-data"><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus disabled={creatingList} /></div><DialogFooter data-tour="sales-form-actions"><Button variant="outline" onClick={() => setNewListOpen(false)} disabled={creatingList}>Cancelar</Button><Button onClick={() => void createList()} disabled={creatingList || !newListName.trim()}>{creatingList ? 'Creando…' : 'Crear lista'}</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={editingListId !== null} onOpenChange={(open) => { if (!open && !savingListName) { setEditingListId(null); setEditingListName(''); } }}><DialogContent className="w-[calc(100vw-2rem)] !max-w-[36rem]"><DialogHeader><DialogTitle>Editar nombre de lista</DialogTitle><DialogDescription>El cambio se aplicará a la lista existente. Los clientes asignados seguirán vinculados a la misma lista y mostrarán el nuevo nombre automáticamente.</DialogDescription></DialogHeader><Input placeholder="Nombre de la lista" value={editingListName} onChange={(event) => setEditingListName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveListName(); }} autoFocus disabled={savingListName} /><DialogFooter><Button variant="outline" onClick={() => { setEditingListId(null); setEditingListName(''); }} disabled={savingListName}>Cancelar</Button><Button onClick={() => void saveListName()} disabled={savingListName || !editingListName.trim()}>{savingListName ? 'Guardando…' : 'Guardar nombre'}</Button></DialogFooter></DialogContent></Dialog>
     <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, identificando los SKU y validando los precios de las listas seleccionadas." />
-    <Dialog open={variantDetailOpen} onOpenChange={setVariantDetailOpen}>
+    <Dialog open={variantDetailOpen} onOpenChange={(open) => { if (!open && savingVariant) return; setVariantDetailOpen(open); }}>
       <DialogContent className="!max-w-[90vw] !w-[90vw] max-h-[85vh] flex flex-col !overflow-hidden p-4">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Layers className="size-5 text-primary" /> Variantes — {selectedVariantProduct?.name}</DialogTitle>
           <DialogDescription>Precios por variante. Las celdas vacías heredan el precio del producto padre. Haz clic en el lápiz para editar.</DialogDescription>
+          {savingVariant && <div role="status" aria-live="polite" className="mt-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary"><Loader2 className="size-4 shrink-0 animate-spin" />Guardando precios de la variante… No cierres esta ventana.</div>}
         </DialogHeader>
         {selectedVariantProduct?.variants && (
           <div className="flex-1 min-h-0 overflow-auto rounded-xl border">
-            <Table>
+            <Table className="min-w-[72rem] table-fixed" containerClassName="w-full overflow-x-auto" responsiveCards>
+              <colgroup>
+                <col className="w-32" />
+                <col className="w-[24rem]" />
+                {visibleLists.map((list) => <col key={list.id} className="w-36" />)}
+                <col className="w-16" />
+              </colgroup>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-32">SKU</TableHead>
-                  <TableHead>Atributos</TableHead>
+                  <TableHead className="w-32 min-w-32">SKU</TableHead>
+                  <TableHead className="w-[24rem] min-w-[16rem]">Atributos</TableHead>
                   {visibleLists.map((list) => (
-                    <TableHead key={list.id} className="w-36 text-right">{list.name}</TableHead>
+                    <TableHead key={list.id} className="w-36 min-w-36 text-right">{list.name}</TableHead>
                   ))}
-                  <TableHead className="w-16 text-right">Acciones</TableHead>
+                  <TableHead className="w-16 min-w-16 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1174,12 +1177,14 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                         if (isEditing) {
                           const editValue = editingVariantPrices[variant.id]?.[list.id] ?? '';
                           return (
-                            <TableCell key={list.id} className="text-right">
+                            <TableCell key={list.id} className="w-36 min-w-36 text-right">
                               <Input
-                                className="h-8 w-24 text-right text-xs"
+                                className="h-8 w-full max-w-full text-right text-xs"
                                 type="number"
                                 min="0"
                                 value={editValue}
+                                disabled={savingVariant === variant.id}
+                                aria-label={`Precio ${list.name} para la variante ${variant.sku}`}
                                 onChange={(e) => setEditingVariantPrices((current) => ({
                                   ...current,
                                   [variant.id]: { ...current[variant.id], [list.id]: e.target.value },
@@ -1204,11 +1209,11 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                       <TableCell className="text-right">
                         {isEditing ? (
                           <div className="flex gap-1 justify-end">
-                            <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => cancelEditVariant(variant.id)} disabled={savingVariant === variant.id}><X className="size-3.5" /></Button>
-                            <Button type="button" variant="ghost" size="icon" className="size-7 text-emerald-500" onClick={() => void saveVariantPrices(variant.id)} disabled={savingVariant === variant.id}><Check className="size-3.5" /></Button>
+                          <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => cancelEditVariant(variant.id)} disabled={savingVariant === variant.id}><X className="size-3.5" /></Button>
+                            <Button type="button" variant="ghost" size="icon" className="size-7 text-emerald-500" onClick={() => void saveVariantPrices(variant.id)} disabled={savingVariant === variant.id} aria-label="Guardar precios de variante">{savingVariant === variant.id ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}</Button>
                           </div>
                         ) : canEditPriceList ? (
-                          <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => beginEditVariant(variant.id, selectedVariantProduct)}><Pencil className="size-3.5" /></Button>
+                          <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => beginEditVariant(variant.id, selectedVariantProduct)} disabled={Boolean(savingVariant)}><Pencil className="size-3.5" /></Button>
                         ) : null}
                       </TableCell>
                     </TableRow>
@@ -1219,7 +1224,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => setVariantDetailOpen(false)}>Cerrar</Button>
+          <Button variant="outline" onClick={() => setVariantDetailOpen(false)} disabled={Boolean(savingVariant)}>Cerrar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

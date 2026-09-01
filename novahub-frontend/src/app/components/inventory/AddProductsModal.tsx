@@ -39,6 +39,7 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   isActive: true,
   initialStock: '',
   variantInitialStocks: {} as Record<string, number>,
+  variantCostPrices: {} as Record<string, number | string>,
   initialWarehouseId: '',
   imageFile: null as File | null,
   imagePreviewUrl: '',
@@ -176,6 +177,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     }));
   };
 
+  const updateVariantCostPrice = (combination: VariantCombination, value: string) => {
+    const key = variantCombinationKey(combination);
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      variantCostPrices: {
+        ...(prev.variantCostPrices || {}),
+        [key]: value,
+      },
+    }));
+  };
+
   const validateVariableStockDistribution = (product: any) => {
     if (!product.isVariable) return true;
     const total = Number(product.initialStock || 0);
@@ -303,11 +315,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       toast.error('Debes seleccionar una Bodega para el producto');
       return;
     }
-    if (draftProduct.itemType === 'SERVICE' && !draftProduct.initialWarehouseId) {
-      toast.error('Debes seleccionar la Bodega del servicio');
-      return;
-    }
-
     setProductsList((prev) => [...prev, { ...draftProduct }]);
     
     // Reset draft
@@ -355,10 +362,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         toast.error('Debes seleccionar una Bodega para el producto');
         return;
       }
-      if (draftProduct.itemType === 'SERVICE' && !draftProduct.initialWarehouseId) {
-        toast.error('Debes seleccionar la Bodega del servicio');
-        return;
-      }
       listToSave.push(draftProduct);
     }
 
@@ -390,11 +393,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           name: product.name,
           categoryId: product.categoryId,
           type: product.itemType || 'PRODUCT',
-          warehouseId: product.initialWarehouseId || undefined,
+          ...(product.itemType === 'PRODUCT' ? { warehouseId: product.initialWarehouseId || undefined } : {}),
           trackInventory: product.itemType === 'PRODUCT',
           trackSeries: Boolean(product.trackSerialNumbers),
           ...(canViewInventoryCost ? { costPrice: convertedCost } : {}),
-          salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
+          salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? exchangeRate : 1 / exchangeRate),
+          salePriceOriginal: Number(product.salePrice || 0),
           priceCurrency: product.priceCurrency || baseCurrency,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           isActive: product.isActive !== false,
@@ -406,6 +410,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             ? buildVariantCombinations(product.linkedAttributes).map((combination) => ({
               attributes: combination,
               quantity: Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
+              costPrice: (() => {
+                const rawCost = product.variantCostPrices?.[variantCombinationKey(combination)];
+                return rawCost === undefined || rawCost === '' ? null : Number(rawCost) * rate;
+              })(),
             }))
             : undefined,
           imageUrl: uploadedImageUri || undefined,
@@ -619,7 +627,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 />
               </div>}
               
-              {catalogItemType !== 'SERVICE' && canViewInventoryCost && <div className="col-span-1">
+              {canViewInventoryCost && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
                 <Input 
                   type="number" min={0}
@@ -704,15 +712,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 )
               ) : (
                 <>
-                  <div className="sm:col-span-2 md:col-span-3">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega vinculada *</label>
-                    <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
-                      <SelectContent>
-                        {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="col-span-1">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Disponibilidad</label>
                     <Select value={draftProduct.isActive === false ? 'unavailable' : 'available'} onValueChange={v => handleUpdateDraft('isActive', v === 'available')}>
@@ -847,19 +846,35 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                     {variantCombinations.map((combination) => {
                       const key = variantCombinationKey(combination);
                       return (
-                        <div key={key} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-card px-3 py-2">
+                        <div key={key} className="grid gap-2 rounded-lg border border-border/60 bg-card px-3 py-2 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:items-center">
                           <span className="min-w-0 truncate text-xs font-semibold" title={combination.map((attribute) => attribute.value).join(' / ')}>
                             {combination.map((attribute) => attribute.value).join(' / ')}
                           </span>
-                          <Input
-                            type="number"
-                            min={0}
-                            step="1"
-                            value={draftProduct.variantInitialStocks?.[key] || ''}
-                            onChange={(e) => updateVariantInitialStock(combination, e.target.value)}
-                            className="h-8 w-20 shrink-0 text-right text-xs tabular-nums"
-                            aria-label={`Stock inicial para ${combination.map((attribute) => attribute.value).join(' / ')}`}
-                          />
+                          <div className="min-w-0">
+                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Stock</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="1"
+                              value={draftProduct.variantInitialStocks?.[key] || ''}
+                              onChange={(e) => updateVariantInitialStock(combination, e.target.value)}
+                              className="h-8 w-full text-right text-xs tabular-nums"
+                              aria-label={`Stock inicial para ${combination.map((attribute) => attribute.value).join(' / ')}`}
+                            />
+                          </div>
+                          {canViewInventoryCost && <div className="min-w-0">
+                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Costo propio</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={draftProduct.variantCostPrices?.[key] ?? ''}
+                              onChange={(e) => updateVariantCostPrice(combination, e.target.value)}
+                              className="h-8 w-full text-right text-xs tabular-nums"
+                              placeholder="Hereda base"
+                              aria-label={`Costo propio para ${combination.map((attribute) => attribute.value).join(' / ')}`}
+                            />
+                          </div>}
                         </div>
                       );
                     })}

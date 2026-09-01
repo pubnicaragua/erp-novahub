@@ -240,9 +240,11 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'inventory', label: 'Inventario de Mercancías', icon: Package,
-    description: 'Cuenta control de inventario: el motor crea y postea a subcuentas por almacén a partir de ella',
+    description: 'Cuenta control de inventario y cuentas separadas para el costo contable de los servicios',
     fields: [
       { key: 'control', label: 'Cuenta Control de Inventario', side: 'debit', description: 'Se debita al recibir mercancía y se acredita al salir; nunca se postea directamente (solo consolida)', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
+      { key: 'serviceCostDebit', label: 'Costo de Servicios (Debe)', side: 'debit', description: 'Se debita al reconocer el costo de cada servicio vendido, incluso en ventas mixtas o cobros parciales', defaultCode: '5800', defaultName: 'Costos directos de operación', defaultType: 'EXPENSE' },
+      { key: 'serviceCostCredit', label: 'Contrapartida de Servicios (Haber)', side: 'credit', description: 'Se acredita como contrapartida del costo del servicio; no representa stock ni una bodega', defaultCode: '1250', defaultName: 'Contrapartida de costos de servicios', defaultType: 'ASSET' },
     ],
   },
   {

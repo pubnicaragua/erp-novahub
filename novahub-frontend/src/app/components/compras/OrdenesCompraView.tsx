@@ -1707,7 +1707,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       id: variantPickerProduct.id,
       code: variant.sku || variantPickerProduct.code,
       name: `${variantPickerProduct.name} - ${(variant.attributes || []).map((a: any) => a.value).join(' / ')}`,
-      costPrice: Number(variantPickerProduct.costPrice || 0) + Number(variant.costModifier || 0),
+      costPrice: variant.costPrice !== null && variant.costPrice !== undefined && Number.isFinite(Number(variant.costPrice))
+        ? Number(variant.costPrice)
+        : Math.max(0, Number(variantPickerProduct.costPrice || 0) + Number(variant.costModifier || 0)),
       variantId: variant.id,
     };
     applyProductToItem(variantPickerIdx, selected);
