@@ -97,16 +97,16 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
   };
 
   return (
-    <div className="flex flex-1 bg-background w-full">
-      <main className="flex-1 relative">
-        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <Activity className="size-9 text-primary" />
+    <div className="flex min-w-0 max-w-full flex-1 overflow-x-hidden bg-background">
+      <main className="relative min-w-0 flex-1">
+        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] p-4 sm:p-6 md:p-10">
+          <div className="mb-6 flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:size-[66px]">
+                <Activity className="size-7 text-primary sm:size-9" />
               </div>
-              <div>
-                <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
+              <div className="min-w-0">
+                <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 break-words text-2xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
                   Actividades
                 </h1>
               </div>
@@ -115,15 +115,15 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
 
           <CurrencyValuationBanner className="mb-6" />
 
-          <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-            <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
-            <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
+          <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
+            <div className="mb-6 w-full min-w-0 max-w-full overscroll-x-contain overflow-x-auto custom-scrollbar">
+            <TabsList className="flex h-auto w-max min-w-full max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {visibleTabs.map((tab) => {
                 return (
                 <TabsTrigger 
                   key={tab.id} 
                   value={tab.id}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                  className="flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-xs font-black uppercase tracking-widest sm:px-4
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
                 >
@@ -138,6 +138,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
+                className="w-full min-w-0"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}

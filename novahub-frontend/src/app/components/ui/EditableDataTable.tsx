@@ -731,7 +731,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               aria-busy={isOpening || undefined}
               data-detail-opening={isOpening ? 'true' : undefined}
             >
-              <div className="flex items-start justify-between gap-3 border-b border-border/40 p-4">
+              <div className="flex min-w-0 items-start justify-between gap-3 border-b border-border/40 p-4">
                 <div className="flex min-w-0 items-start gap-3">
                   {showSelection && (
                     <Checkbox
@@ -751,7 +751,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       {String(row.code || row.number || rowId)}
                     </p>
                   </div>
-                  {isOpening && <span role="status" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary">
+                  {isOpening && <span role="status" className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary">
                     <Loader2 className="size-3 animate-spin" /> Abriendo…
                   </span>}
                 </div>
@@ -820,7 +820,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                             onBlur={() => void handleSave(rowId, colKey)}
                             onKeyDown={(event) => handleKeyDown(event, rowId, colKey)}
                             onClick={(event) => event.stopPropagation()}
-                            className="h-9 w-full rounded-lg border-primary text-sm font-medium"
+                            className="h-9 w-full min-w-0 rounded-lg border-primary text-sm font-medium"
                           />
                         )
                       ) : (
@@ -858,7 +858,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
 
       {pagination && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground" data-tour="sales-list-pagination">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span>Mostrar</span>
             <Select value={String(pagination.pageSize)} onValueChange={(nextValue) => pagination.onPageSizeChange(Number(nextValue) as SalesPaginationControls['pageSize'])}>
               <SelectTrigger size="sm" className="h-8 w-auto rounded-lg border-border/50 bg-background px-2 font-bold text-foreground" aria-label="Registros por página">

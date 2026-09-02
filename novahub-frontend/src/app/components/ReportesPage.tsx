@@ -14,7 +14,6 @@ import { PurchasesReportTab } from './reportes/PurchasesReportTab';
 import { CustomersReportTab } from './reportes/CustomersReportTab';
 import { InventoryReportTab } from './reportes/InventoryReportTab';
 import { HRReportTab } from './reportes/HRReportTab';
-import { SubscriptionsReportTab } from './reportes/SubscriptionsReportTab';
 import type { ReportExportRef } from './reportes/types';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
@@ -32,7 +31,6 @@ const REPORT_TAB_CONFIG = [
   { id: 'reportes-clientes', label: 'Clientes', module: 'REPORTS_CLIENTS' },
   { id: 'reportes-proveedores', label: 'Proveedores', module: 'REPORTS_PROVIDERS' },
   { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR' },
-  { id: 'reportes-suscripciones', label: 'Suscripciones', module: 'REPORTS_SUBSCRIPTIONS', superOnly: true },
 ] as const;
 
 export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ReportesPageProps) {
@@ -48,7 +46,6 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const customersRef = useRef<ReportExportRef>(null);
   const inventoryRef = useRef<ReportExportRef>(null);
   const hrRef = useRef<ReportExportRef>(null);
-  const subscriptionsRef = useRef<ReportExportRef>(null);
 
   const visibleReportTabs = useMemo(() => REPORT_TAB_CONFIG.filter((tab) => {
     const hasRequired = user?.enabledModules?.includes(tab.module);
@@ -72,7 +69,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const prevSubModule = useRef(activeSubModule);
 
   useEffect(() => {
-    if (activeSubModule && activeSubModule !== prevSubModule.current && activeSubModule.startsWith('reportes-')) {
+    if (activeSubModule && activeSubModule !== prevSubModule.current && activeSubModule.startsWith('reportes-') && REPORT_TAB_CONFIG.some((tab) => tab.id === activeSubModule)) {
       prevSubModule.current = activeSubModule;
       setActiveTab(activeSubModule);
     }
@@ -93,7 +90,6 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
       case 'reportes-clientes': customersRef.current?.exportPDF(); break;
       case 'reportes-inventario': inventoryRef.current?.exportPDF(); break;
       case 'reportes-rrhh': hrRef.current?.exportPDF(); break;
-      case 'reportes-suscripciones': subscriptionsRef.current?.exportPDF(); break;
     }
   };
 
@@ -112,7 +108,6 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
       case 'reportes-clientes': customersRef.current?.exportExcel(); break;
       case 'reportes-inventario': inventoryRef.current?.exportExcel(); break;
       case 'reportes-rrhh': hrRef.current?.exportExcel(); break;
-      case 'reportes-suscripciones': subscriptionsRef.current?.exportExcel(); break;
     }
   };
 
@@ -195,9 +190,6 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
         </TabsContent>
         <TabsContent value="reportes-rrhh" className="m-0 mt-4 outline-none">
           {activeTab === 'reportes-rrhh' && <HRReportTab ref={hrRef} dateRange={dateRange} />}
-        </TabsContent>
-        <TabsContent value="reportes-suscripciones" className="m-0 mt-4 outline-none">
-          {activeTab === 'reportes-suscripciones' && <SubscriptionsReportTab ref={subscriptionsRef} dateRange={dateRange} />}
         </TabsContent>
       </Tabs>
     </div>

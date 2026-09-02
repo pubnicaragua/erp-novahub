@@ -28,9 +28,13 @@ type BusinessUnitOption = { id: string; name: string; isActive?: boolean };
 const viewLabels: Record<ManagerInventoryView, string> = {
   overview: 'Resumen de inventario', branchInventory: 'Inventario de mi sucursal', corporateInventory: 'Inventario de almacén corporativo', products: 'Productos', services: 'Servicios', warehouses: 'Bodegas', corporateWarehouses: 'Almacenes', transfers: 'Transferencias', adjustments: 'Ajustes', audits: 'Auditorías', losses: 'Pérdidas', movements: 'Movimientos', assets: 'Mobiliario y equipos',
 };
-const statusLabels: Record<string, string> = { PENDING: 'Pendiente', IN_TRANSIT: 'En tránsito', COMPLETED: 'Completada', APPROVED: 'Aprobada', CANCELLED: 'Cancelada', OPEN: 'Abierta', IN_PROGRESS: 'En progreso', CLOSED: 'Cerrada', REOPENED: 'Reabierta', ADJUSTMENT_PENDING: 'Ajuste pendiente', DISPOSED: 'Dada de baja', DAMAGED: 'Dañada' };
+const statusLabels: Record<string, string> = { PENDING: 'Pendiente', IN_TRANSIT: 'En tránsito', COMPLETED: 'Completada', APPROVED: 'Aprobada', CANCELLED: 'Cancelada', OPEN: 'Abierta', IN_PROGRESS: 'En progreso', CLOSED: 'Cerrada', REOPENED: 'Reabierta', ADJUSTMENT_PENDING: 'Ajuste pendiente', AVAILABLE: 'Disponible', ASSIGNED: 'Asignado', IN_REPAIR: 'En reparación', DISPOSED: 'Dada de baja', DAMAGED: 'Dañada' };
+const assetCategoryLabels: Record<string, string> = { BUILDING: 'Edificio', VEHICLE: 'Vehículo', OFFICE_FURNITURE: 'Mobiliario y equipo de oficina', COMPUTER_EQUIPMENT: 'Equipo de cómputo', MACHINERY: 'Maquinaria y equipo', OTHER: 'Otro' };
+const assetStatusLabels: Record<string, string> = { AVAILABLE: 'Disponible', ASSIGNED: 'Asignado', IN_REPAIR: 'En reparación', DAMAGED: 'Dañado', DISPOSED: 'Dado de baja' };
 const movementTypeLabels: Record<string, string> = { IN: 'Entrada', OUT: 'Salida', TRANSFER_IN: 'Transferencia de entrada', TRANSFER_OUT: 'Transferencia de salida', ADJUSTMENT: 'Ajuste' };
 const formatStatus = (value: unknown) => statusLabels[String(value || '').toUpperCase()] || String(value || '—');
+const formatAssetCategory = (value: unknown) => assetCategoryLabels[String(value || '').toUpperCase()] || String(value || 'Sin categoría');
+const formatAssetStatus = (value: unknown) => assetStatusLabels[String(value || '').toUpperCase()] || formatStatus(value);
 const formatMovementType = (value: unknown) => movementTypeLabels[String(value || '').toUpperCase()] || String(value || '—');
 const formatMovementReference = (value: unknown) => {
   const reference = String(value || '').trim();
@@ -40,6 +44,11 @@ const formatMovementReference = (value: unknown) => {
 const formatNumber = (value: unknown) => new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 }).format(Number(value || 0));
 const ManagerMoney = ({ value, currency = 'NIO', sourceExchangeRate }: { value: unknown; currency?: string; sourceExchangeRate?: number }) => <CurrencyDisplayAmount amount={Number(value || 0)} sourceCurrency={currency} sourceExchangeRate={sourceExchangeRate} />;
 const formatDate = (value: unknown) => value ? new Intl.DateTimeFormat('es-NI', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(String(value))) : '—';
+const formatDateOnly = (value: unknown) => {
+  if (!value) return '—';
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium' }).format(date);
+};
 const formatApproverName = (approver: unknown) => {
   if (typeof approver === 'string' && approver.trim()) return approver.trim();
   if (approver && typeof approver === 'object') {
@@ -252,9 +261,9 @@ function ViewTable({ view, rows, onDetail, canViewInventoryCost, canApproveTrans
   if (view === 'products' || view === 'services') return <ProductCatalogTable view={view} rows={rows} onDetail={onDetail} canViewInventoryCost={canViewInventoryCost} />;
   if (view === 'warehouses') return <Card className="rounded-3xl border-border/60 shadow-sm"><CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Bodegas y almacenes por rubro</CardTitle></CardHeader><CardContent className="grid min-w-0 grid-cols-1 gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">{rows.map((row) => <button type="button" key={row.id} onClick={() => onDetail(row)} className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Warehouse className="size-5" /></div><div className="min-w-0"><p className="truncate font-bold">{row.name}</p><p className="truncate text-xs text-muted-foreground">{row.businessUnitName || 'Sin rubro'}</p></div></div><Badge variant="outline">{row.isCorporate ? 'Corporativo' : 'Bodega'}</Badge></div><div className="mt-4 grid grid-cols-2 gap-2 text-xs"><div className="rounded-xl bg-muted/30 px-3 py-2"><p className="text-muted-foreground">Stock visible</p><p className="mt-1 font-black">{formatNumber(row.stockTotal)}</p></div><div className="rounded-xl bg-muted/30 px-3 py-2"><p className="text-muted-foreground">Disponible</p><p className="mt-1 font-black text-emerald-600">{formatNumber(row.availableTotal)}</p></div></div><p className="mt-4 text-xs text-muted-foreground">{row.isCorporate ? 'Sucursales que puede abastecer:' : 'Sucursal propietaria:'}</p><div className="mt-2 flex flex-wrap gap-1.5">{row.branches.map((branch: any) => <Badge key={branch.id} variant="secondary" className="max-w-full truncate">{branch.name}</Badge>)}{!row.branches.length && <span className="text-xs text-muted-foreground">Sin sucursal vinculada</span>}</div></button>)}</CardContent></Card>;
   if (view === 'audits') return <SimpleTable title="Recuento de auditorías" headers={['Acta', 'Fecha', 'Sucursal', 'Ubicación', 'Responsable', 'Productos', 'Diferencia', 'Estado']} rows={rows} onDetail={onDetail} render={(row) => [row.number, formatDate(row.auditDate), row.branchName, row.warehouseName, row.supervisorName || row.stockKeeperName || '—', formatNumber(row.itemCount), formatNumber(row.difference), formatStatus(row.status)]} />;
-  if (view === 'losses') return <SimpleTable title="Pérdidas registradas" headers={canViewInventoryCost ? ['Ajuste', 'Fecha', 'Sucursal', 'Ubicación', 'Unidades', 'Monto', 'Motivo'] : ['Ajuste', 'Fecha', 'Sucursal', 'Ubicación', 'Unidades', 'Motivo']} rows={rows} onDetail={onDetail} render={(row) => canViewInventoryCost ? [row.number, formatDate(row.date), row.branchName, row.warehouseName, formatNumber(row.lossUnits), <ManagerMoney value={row.lossAmount} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />, row.reason || '—'] : [row.number, formatDate(row.date), row.branchName, row.warehouseName, formatNumber(row.lossUnits), row.reason || '—']} />;
+  if (view === 'losses') return <SimpleTable title="Pérdidas registradas" headers={canViewInventoryCost ? ['Ajuste', 'Fecha', 'Sucursal', 'Ubicación', 'Unidades', 'Monto', 'Motivo'] : ['Ajuste', 'Fecha', 'Sucursal', 'Ubicación', 'Unidades', 'Motivo']} rows={rows} onDetail={onDetail} render={(row) => canViewInventoryCost ? [row.number, formatDate(row.date), row.branchName, row.warehouseName, formatNumber(row.lossUnits), <ManagerMoney value={row.lossAmount} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />, formatAdjustmentReason(row.reason)] : [row.number, formatDate(row.date), row.branchName, row.warehouseName, formatNumber(row.lossUnits), formatAdjustmentReason(row.reason)]} />;
   if (view === 'movements') return <SimpleTable title="Kardex por ubicación" headers={['Fecha', 'Producto', 'Sucursal', 'Ubicación', 'Tipo', 'Cantidad', 'Saldo resultante', 'Referencia']} rows={rows} onDetail={onDetail} render={(row) => [formatDate(row.date), `${row.product?.code || '—'} · ${row.product?.name || 'Producto'}`, row.branchName, row.warehouse?.name || '—', formatMovementType(row.type), formatNumber(row.quantity), formatNumber(row.resultingQty), formatMovementReference(row.reference)]} />;
-  return <SimpleTable title="Mobiliario y equipos" headers={canViewInventoryCost ? ['Código', 'Activo', 'Categoría', 'Sucursal', 'Estado', 'Costo', 'Ubicación'] : ['Código', 'Activo', 'Categoría', 'Sucursal', 'Estado', 'Ubicación']} rows={rows} onDetail={onDetail} render={(row) => canViewInventoryCost ? [row.code, row.name, row.category, row.branchName, formatStatus(row.status), <ManagerMoney value={row.cost} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />, row.location || '—'] : [row.code, row.name, row.category, row.branchName, formatStatus(row.status), row.location || '—']} />;
+  return <SimpleTable title="Mobiliario y equipos" headers={canViewInventoryCost ? ['Código', 'Activo', 'Categoría', 'Sucursal', 'Estado', 'Costo', 'Ubicación'] : ['Código', 'Activo', 'Categoría', 'Sucursal', 'Estado', 'Ubicación']} rows={rows} onDetail={onDetail} render={(row) => canViewInventoryCost ? [row.code, row.name, formatAssetCategory(row.category), row.branchName, formatAssetStatus(row.status), <ManagerMoney value={row.cost} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />, row.location || '—'] : [row.code, row.name, formatAssetCategory(row.category), row.branchName, formatAssetStatus(row.status), row.location || '—']} />;
 }
 
 function ProductCatalogTable({ view, rows, onDetail, canViewInventoryCost }: { view: 'products' | 'services'; rows: any[]; onDetail: (row: any) => void; canViewInventoryCost: boolean }) {
@@ -387,7 +396,7 @@ function ProductDetailField({ label, value, mono = false }: { label: string; val
 }
 
 function DetailMetric({ label, value, tone = 'text-foreground' }: { label: string; value: ReactNode; tone?: string }) {
-  return <div className="rounded-2xl border border-border/60 bg-muted/20 p-3"><p className="truncate text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className={`mt-1 text-lg font-black tabular-nums ${tone}`}>{value}</p></div>;
+  return <div className="min-w-0 rounded-2xl border border-border/60 bg-muted/20 p-3"><p className="whitespace-normal break-words text-[9px] font-black uppercase leading-3 tracking-widest text-muted-foreground">{label}</p><p className={`mt-1 break-words text-lg font-black tabular-nums ${tone}`}>{value}</p></div>;
 }
 
 function ProductDistribution({ row, canViewInventoryCost, compact = false }: { row: any; canViewInventoryCost: boolean; compact?: boolean }) {
@@ -500,7 +509,7 @@ function DistributionStatus({ available, quantity }: { available: number; quanti
 }
 function InventoryDetailSheet({ view, row, canViewInventoryCost, groupId, onEnterBranch, canEnterBranch = false, onClose }: { view: ManagerInventoryView; row: any | null; canViewInventoryCost: boolean; groupId: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean; onClose: () => void }) {
   const recordBranchId = resolveRecordBranchId(row);
-  const detailPanelClassName = view === 'adjustments' ? 'erp-detail-panel erp-detail-panel--wide' : 'erp-detail-panel';
+  const detailPanelClassName = ['adjustments', 'losses', 'services', 'assets'].includes(view) ? 'erp-detail-panel erp-detail-panel--wide' : 'erp-detail-panel';
   const title = view === 'movements'
     ? row?.product?.name || 'Movimiento de inventario'
     : row?.name || row?.number || row?.code || viewLabels[view];
@@ -512,7 +521,7 @@ function InventoryDetailSheet({ view, row, canViewInventoryCost, groupId, onEnte
 
   return <Sheet open={Boolean(row)} onOpenChange={(open) => !open && onClose()}>
     <SheetContent side="right" className={`${detailPanelClassName} flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0`}>
-      <SheetHeader className="sticky top-0 z-10 space-y-0 border-b border-border/50 bg-background/95 px-6 py-5 backdrop-blur-md">
+      <SheetHeader className="sticky top-0 z-10 space-y-0 border-b border-border/50 bg-background/95 px-4 py-4 pr-12 backdrop-blur-md sm:px-6 sm:py-5">
         <div className="flex items-start gap-4 pr-8">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-inner">{createElement(viewIcon(view), { className: 'size-6' })}</div>
           <div className="min-w-0 flex-1 space-y-1">
@@ -525,7 +534,7 @@ function InventoryDetailSheet({ view, row, canViewInventoryCost, groupId, onEnte
         </div>
       </SheetHeader>
       <ScrollArea className="min-h-0 flex-1 overflow-hidden">
-        <div className="space-y-5 p-6">
+        <div className="min-w-0 space-y-5 p-4 sm:p-6">
           {row && <InventoryDetailContent view={view} row={row} canViewInventoryCost={canViewInventoryCost} />}
         </div>
       </ScrollArea>
@@ -534,9 +543,170 @@ function InventoryDetailSheet({ view, row, canViewInventoryCost, groupId, onEnte
   </Sheet>;
 }
 
-function InventoryDetailContent({ view, row, canViewInventoryCost }: { view: ManagerInventoryView; row: any; canViewInventoryCost: boolean }) {
+function LossDetailContent({ row, canViewInventoryCost }: { row: any; canViewInventoryCost: boolean }) {
+  const items = Array.isArray(row.items) ? row.items : [];
+  const totalUnits = items.reduce((sum: number, item: any) => sum + Number(item.lossUnits ?? Math.abs(Math.min(Number(item.difference || 0), 0))), 0);
+  const sourceExchangeRate = row.exchangeRate || items[0]?.exchangeRate;
+
+  return <>
+    <Card className="rounded-2xl border-rose-500/20 bg-rose-500/5 p-4 shadow-sm sm:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600"><TrendingDown className="size-5" /></div>
+          <div>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-rose-600">Pérdida registrada</p>
+            <p className="mt-1 text-2xl font-black tabular-nums tracking-tight text-rose-600">-{formatNumber(totalUnits)}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Unidades afectadas</p>
+          </div>
+        </div>
+        <Badge className="shrink-0 bg-emerald-500/10 text-[10px] font-black uppercase tracking-widest text-emerald-600">{formatStatus(row.status)}</Badge>
+      </div>
+    </Card>
+
+    <InfoGrid items={[
+      ['Ajuste', row.number || '—'],
+      ['Fecha', formatDate(row.date)],
+      ['Rubro', row.businessUnitName || '—'],
+      ['Sucursal', row.branchName || '—'],
+      ['Almacén / bodega', row.warehouseName || '—'],
+      ['Motivo', formatAdjustmentReason(row.reason)],
+      ['Estado', formatAdjustmentStatus(row.status)],
+      ['Aprobado por', formatApproverName(row.approvedBy || row.approvedByName)],
+      ['Fecha de aprobación', formatDate(row.approvedAt)],
+      ['Unidades perdidas', formatNumber(totalUnits)],
+      ...(canViewInventoryCost ? [['Monto de pérdida', <ManagerMoney value={row.lossAmount} currency={row.currency || 'NIO'} sourceExchangeRate={sourceExchangeRate} />] as [string, ReactNode]] : []),
+    ]} />
+
+    {row.notes && <Card className="rounded-2xl border-border/60 p-5 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{row.notes}</p></Card>}
+
+    <ProductDetailSection title="Productos afectados">
+      <div className="space-y-3 md:hidden">
+        {items.length === 0 && <p className="rounded-xl border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">Sin artículos registrados.</p>}
+        {items.map((item: any, index: number) => {
+          const itemDifference = Number(item.difference || 0);
+          return <div key={item.id || item.productId || `loss-${index}`} className="rounded-xl border border-border/60 bg-muted/10 p-3">
+            <div className="flex items-start justify-between gap-3 border-b border-border/50 pb-3"><div className="min-w-0"><p className="break-words text-xs font-semibold leading-4">{item.productName || 'Producto'}</p><p className="mt-1 break-words font-mono text-[10px] leading-3 text-muted-foreground">{item.productCode || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p></div><Badge variant="outline" className="max-w-[8rem] whitespace-normal text-center text-[9px]">{formatAdjustmentReason(item.reason || row.reason)}</Badge></div>
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3"><DetailMetric label="Existencia actual" value={formatNumber(item.currentStock)} /><DetailMetric label="Existencia real" value={formatNumber(item.actualStock)} /><DetailMetric label="Diferencia" value={formatNumber(itemDifference)} tone="text-rose-600" />{canViewInventoryCost && <><DetailMetric label="Costo unitario" value={<ManagerMoney value={item.unitCost ?? item.baseCost} currency={item.currency || row.currency || 'NIO'} sourceExchangeRate={item.exchangeRate} />} tone="text-violet-600" /><DetailMetric label="Impacto" value={<span className="text-rose-600">-<ManagerMoney value={item.lossAmount} currency={item.currency || row.currency || 'NIO'} sourceExchangeRate={item.exchangeRate} /></span>} tone="text-rose-600" /></>}</div>
+          </div>;
+        })}
+      </div>
+      <div className="hidden min-w-0 overflow-hidden rounded-2xl border border-border/60 md:block">
+        <Table className="w-full table-fixed text-xs">
+          <TableHeader><TableRow><TableHead className={canViewInventoryCost ? 'w-[25%] whitespace-normal break-words px-2 text-[10px]' : 'w-[34%] whitespace-normal break-words px-2 text-[10px]'}>Producto</TableHead><TableHead className="w-[14%] whitespace-normal break-words px-2 text-[10px]">Existencia actual</TableHead><TableHead className="w-[14%] whitespace-normal break-words px-2 text-[10px]">Existencia real</TableHead><TableHead className="w-[12%] whitespace-normal break-words px-2 text-[10px]">Diferencia</TableHead><TableHead className={canViewInventoryCost ? 'w-[15%] whitespace-normal break-words px-2 text-[10px]' : 'w-[26%] whitespace-normal break-words px-2 text-[10px]'}>Motivo</TableHead>{canViewInventoryCost && <><TableHead className="w-[10%] whitespace-normal break-words px-2 text-[10px]">Costo unitario</TableHead><TableHead className="w-[10%] whitespace-normal break-words px-2 text-[10px]">Impacto</TableHead></>}</TableRow></TableHeader>
+          <TableBody>{items.length === 0 ? <TableRow><TableCell colSpan={canViewInventoryCost ? 7 : 5} className="py-8 text-center text-xs text-muted-foreground">Sin artículos registrados.</TableCell></TableRow> : items.map((item: any) => <TableRow key={item.id}>
+            <TableCell className="min-w-0 whitespace-normal break-words px-2 align-top"><p className="break-words font-semibold leading-4">{item.productName || 'Producto'}</p><p className="break-words text-[10px] leading-3 text-muted-foreground">{item.productCode || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p></TableCell>
+            <TableCell className="whitespace-nowrap px-2 align-top tabular-nums">{formatNumber(item.currentStock)}</TableCell><TableCell className="whitespace-nowrap px-2 align-top tabular-nums">{formatNumber(item.actualStock)}</TableCell><TableCell className="whitespace-nowrap px-2 align-top font-bold tabular-nums text-rose-600">{formatNumber(item.difference)}</TableCell><TableCell className="min-w-0 whitespace-normal break-words px-2 align-top"><Badge variant="outline" className="max-w-full whitespace-normal break-words text-center text-[10px]">{formatAdjustmentReason(item.reason || row.reason)}</Badge></TableCell>
+            {canViewInventoryCost && <><TableCell className="whitespace-normal break-words px-2 align-top tabular-nums"><ManagerMoney value={item.unitCost ?? item.baseCost} currency={item.currency || row.currency || 'NIO'} sourceExchangeRate={item.exchangeRate} /></TableCell><TableCell className="whitespace-normal break-words px-2 align-top font-bold tabular-nums text-rose-600">-<ManagerMoney value={item.lossAmount} currency={item.currency || row.currency || 'NIO'} sourceExchangeRate={item.exchangeRate} /></TableCell></>}
+          </TableRow>)}</TableBody>
+        </Table>
+      </div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{items.length} {items.length === 1 ? 'producto afectado' : 'productos afectados'}</p>
+    </ProductDetailSection>
+  </>;
+}
+
+function ServiceDetailContent({ row, canViewInventoryCost }: { row: any; canViewInventoryCost: boolean }) {
   const locations = Array.isArray(row.locations) ? row.locations : [];
-  const pricesByBranch = Array.isArray(row.pricesByBranch) ? row.pricesByBranch : [];
+  const prices = Array.isArray(row.pricesByBranch) ? row.pricesByBranch : [];
+  const branches = row.branchNames?.length ? row.branchNames : uniqueStrings(locations.map((location: any) => location.branchName));
+  const primaryPrice = prices[0];
+  const isActive = row.isActive !== false;
+
+  return <>
+    <Card className="rounded-2xl border-violet-500/20 bg-violet-500/5 p-4 shadow-sm sm:p-5">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600"><Wrench className="size-5" /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="break-words text-lg font-black leading-tight">{row.name || 'Servicio'}</p>
+            <Badge variant="outline" className="shrink-0 border-violet-500/20 bg-violet-500/5 text-[10px] font-black uppercase tracking-wider text-violet-600">Servicio</Badge>
+          </div>
+          <p className="mt-1 break-words font-mono text-xs text-muted-foreground">{row.code || '—'}{row.sku ? ` · SKU: ${row.sku}` : ''}</p>
+        </div>
+      </div>
+      <div className="mt-5 grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
+        <DetailMetric label="Estado" value={isActive ? 'Activo' : 'Inactivo'} tone={isActive ? 'text-emerald-600' : 'text-muted-foreground'} />
+        <DetailMetric label="Categoría" value={row.category || 'Sin categoría'} />
+        <DetailMetric label="Sucursales" value={formatNumber(row.branchCount || branches.length)} tone="text-sky-600" />
+        <DetailMetric label="Precio base" value={primaryPrice ? <ManagerMoney value={primaryPrice.price} currency={primaryPrice.currency || 'NIO'} sourceExchangeRate={primaryPrice.exchangeRate} /> : '—'} tone="text-violet-600" />
+      </div>
+    </Card>
+
+    <ProductDetailSection title="Información del servicio">
+      <InfoGrid items={[
+        ['Código', row.code || '—'],
+        ['SKU', row.sku || row.code || '—'],
+        ['Categoría', row.category || 'Sin categoría'],
+        ['Unidad de medida', row.unit || 'unidad'],
+        ['Estado', isActive ? 'Activo' : 'Inactivo'],
+        ['Sucursales', branches.join(' · ') || '—'],
+        ...(canViewInventoryCost ? [['Costo unitario', <ManagerMoney value={row.costPrice} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />] as [string, ReactNode]] : []),
+      ]} />
+    </ProductDetailSection>
+
+    <ProductDetailSection title="Disponibilidad por ubicación">
+      {locations.length === 0 ? <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-5 text-sm leading-6 text-muted-foreground">Este servicio no maneja existencias físicas por bodega o almacén.</div> : <>
+        <div className="space-y-3 md:hidden">{locations.map((location: any, index: number) => <div key={`${location.branchId || location.branchName}-${location.warehouseId || index}`} className="rounded-xl border border-border/60 bg-muted/10 p-3"><div className="min-w-0"><p className="break-words text-sm font-semibold">{location.warehouseName || 'Ubicación'}</p><p className="mt-1 break-words text-xs text-muted-foreground">{location.branchName || 'Sucursal'} · {location.scopeType === 'BUSINESS_UNIT' ? 'Almacén corporativo' : 'Bodega de sucursal'}</p></div><div className="mt-3 grid grid-cols-2 gap-3"><DetailMetric label="Existencia" value={formatNumber(location.quantity)} /><DetailMetric label="Disponible" value={formatNumber(location.available)} tone="text-emerald-600" /></div></div>)}</div>
+        <div className="hidden overflow-hidden rounded-xl border border-border/60 md:block"><Table className="w-full table-fixed text-xs"><TableHeader><TableRow><TableHead className="w-[32%]">Sucursal</TableHead><TableHead className="w-[38%]">Bodega / almacén</TableHead><TableHead className="w-[15%] text-right">Existencia</TableHead><TableHead className="w-[15%] text-right">Disponible</TableHead></TableRow></TableHeader><TableBody>{locations.map((location: any, index: number) => <TableRow key={`${location.branchId || location.branchName}-${location.warehouseId || index}`}><TableCell className="whitespace-normal break-words align-top">{location.branchName || 'Sucursal'}</TableCell><TableCell className="whitespace-normal break-words align-top">{location.warehouseName || 'Ubicación'}</TableCell><TableCell className="text-right align-top tabular-nums">{formatNumber(location.quantity)}</TableCell><TableCell className="text-right align-top font-bold tabular-nums text-emerald-600">{formatNumber(location.available)}</TableCell></TableRow>)}</TableBody></Table></div>
+      </>}
+    </ProductDetailSection>
+
+    <ProductDetailSection title="Precios por sucursal">
+      {prices.length === 0 ? <p className="text-sm text-muted-foreground">Sin precios configurados.</p> : <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">{prices.map((price: any, index: number) => <div key={`${price.branchId || price.branchName || 'branch'}-${index}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/10 px-4 py-3"><span className="min-w-0 break-words text-sm font-semibold">{price.branchName || 'Sucursal'}</span><span className="shrink-0 font-black tabular-nums text-violet-600"><ManagerMoney value={price.price} currency={price.currency || 'NIO'} sourceExchangeRate={price.exchangeRate} /></span></div>)}</div>}
+    </ProductDetailSection>
+  </>;
+}
+
+function AssetDetailContent({ row, canViewInventoryCost }: { row: any; canViewInventoryCost: boolean }) {
+  const status = String(row.status || 'AVAILABLE').toUpperCase();
+  const statusTone = status === 'AVAILABLE' ? 'text-emerald-600' : status === 'ASSIGNED' ? 'text-sky-600' : status === 'IN_REPAIR' ? 'text-amber-600' : 'text-rose-600';
+
+  return <>
+    <Card className="rounded-2xl border-amber-500/20 bg-amber-500/5 p-4 shadow-sm sm:p-5">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600"><Landmark className="size-5" /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="break-words text-lg font-black leading-tight">{row.name || 'Activo'}</p>
+            <Badge variant="outline" className={`shrink-0 text-[10px] font-black uppercase tracking-wider ${statusTone}`}>{formatAssetStatus(status)}</Badge>
+          </div>
+          <p className="mt-1 break-words font-mono text-xs text-muted-foreground">{row.code || 'Código no disponible'}</p>
+        </div>
+      </div>
+      <div className="mt-5 grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
+        <DetailMetric label="Estado" value={formatAssetStatus(status)} tone={statusTone} />
+        <DetailMetric label="Categoría" value={formatAssetCategory(row.category)} />
+        <DetailMetric label="Sucursal" value={row.branchName || '—'} />
+        {canViewInventoryCost ? <DetailMetric label="Costo" value={<ManagerMoney value={row.cost} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />} tone="text-violet-600" /> : <DetailMetric label="Adquisición" value={formatDateOnly(row.acquisitionDate)} />}
+      </div>
+    </Card>
+
+    <ProductDetailSection title="Identificación del activo">
+      <InfoGrid items={[
+        ['Código', row.code || '—'],
+        ['Categoría', formatAssetCategory(row.category)],
+        ['Marca', row.brand || '—'],
+        ['Modelo', row.model || '—'],
+        ['Número de serie', row.serialNumber || '—'],
+        ['Estado', formatAssetStatus(status)],
+        ['Fecha de adquisición', formatDateOnly(row.acquisitionDate)],
+        ...(canViewInventoryCost ? [['Costo de adquisición', <ManagerMoney value={row.cost} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />] as [string, ReactNode]] : []),
+      ]} />
+    </ProductDetailSection>
+
+    <ProductDetailSection title="Ubicación y asignación">
+      <InfoGrid items={[
+        ['Sucursal', row.branchName || '—'],
+        ['Rubro', row.businessUnitName || '—'],
+        ['Ubicación física', row.location || 'Sin ubicación registrada'],
+      ]} />
+    </ProductDetailSection>
+
+    {row.observations && <Card className="rounded-2xl border-border/60 p-5 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Observaciones</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{row.observations}</p></Card>}
+  </>;
+}
+
+function InventoryDetailContent({ view, row, canViewInventoryCost }: { view: ManagerInventoryView; row: any; canViewInventoryCost: boolean }) {
   const branches = Array.isArray(row.branches) ? row.branches : [];
 
   if (view === 'branchInventory' || view === 'corporateInventory') return <>
@@ -544,11 +714,9 @@ function InventoryDetailContent({ view, row, canViewInventoryCost }: { view: Man
     <ProductDetailSection title="Existencia de la ubicación"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><ProductDetailField label="Reservado" value={formatNumber(row.reserved)} /><ProductDetailField label="Stock mínimo" value={formatNumber(row.minStock)} /><ProductDetailField label="Tipo de ubicación" value={row.inventoryScope === 'CORPORATE_WAREHOUSE' ? 'Almacén corporativo' : 'Bodega de sucursal'} /><ProductDetailField label="Rubro" value={row.businessUnitName || '—'} /></div></ProductDetailSection>
   </>;
 
-  if (view === 'services') return <>
-    <InfoGrid items={[["Sucursales", row.branchNames?.join(' · ') || row.branchName || '—'], ["Código", row.code], ["SKU", row.sku || row.code || '—'], ["Nombre", row.name], ["Categoría", row.category], ["Unidad", row.unit], ...(canViewInventoryCost ? [["Costo", <ManagerMoney value={row.costPrice} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />] as [string, ReactNode]] : [])]} />
-    <DetailList title="Desglose por sucursal y ubicación" rows={locations.map((location: any) => `${location.branchName} · ${location.warehouseName} · ${formatNumber(location.quantity)} unidades (${formatNumber(location.available)} disponibles)`)} />
-    <DetailList title="Precios por sucursal" rows={pricesByBranch.map((price: any, index: number) => <span key={`${price.branchId || price.branchName || 'branch'}-${index}`}>{price.branchName}: <ManagerMoney value={price.price} currency={price.currency || 'NIO'} sourceExchangeRate={price.exchangeRate} /></span>)} />
-  </>;
+  if (view === 'services') return <ServiceDetailContent row={row} canViewInventoryCost={canViewInventoryCost} />;
+
+  if (view === 'assets') return <AssetDetailContent row={row} canViewInventoryCost={canViewInventoryCost} />;
 
   if (view === 'warehouses') return <>
     <Card className="rounded-2xl border-primary/20 bg-primary/5 p-5 shadow-sm"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><ProductDetailField label="Almacén / bodega" value={row.name || '—'} /><ProductDetailField label="Tipo de ubicación" value={row.isCorporate ? 'Almacén corporativo' : 'Bodega de sucursal'} /><ProductDetailField label="Rubro" value={row.businessUnitName || '—'} /><ProductDetailField label="Ubicación física" value={row.location || '—'} /></div></Card>
@@ -600,10 +768,7 @@ function InventoryDetailContent({ view, row, canViewInventoryCost }: { view: Man
     </>;
   }
 
-  if (view === 'losses') return <>
-    <InfoGrid items={[["Ajuste", row.number], ["Fecha", formatDate(row.date)], ["Sucursal", row.branchName], ["Ubicación", row.warehouseName], ["Unidades perdidas", formatNumber(row.lossUnits)], ["Motivo", row.reason || '—'], ...(canViewInventoryCost ? [["Monto", <ManagerMoney value={row.lossAmount} currency={row.currency || 'NIO'} sourceExchangeRate={row.exchangeRate} />] as [string, ReactNode]] : [])]} />
-    {row.notes && <Card className="rounded-2xl border-border/60 p-5 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="mt-2 break-words text-sm leading-6 text-muted-foreground">{row.notes}</p></Card>}
-  </>;
+  if (view === 'losses') return <LossDetailContent row={row} canViewInventoryCost={canViewInventoryCost} />;
 
   if (view === 'movements') {
     const product = row.product || {};
@@ -664,8 +829,8 @@ function AuditValue({ label, value, tone = 'text-foreground' }: { label: string;
   return <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className={`mt-1 break-words text-sm font-bold tabular-nums ${tone}`}>{value}</p></div>;
 }
 
-function InfoGrid({ items }: { items: Array<[string, ReactNode]> }) { return <div className="grid grid-cols-1 gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-3">{items.map(([label, value]) => <div key={label}><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><div className="mt-1 truncate text-sm font-semibold">{value ?? '—'}</div></div>)}</div>; }
+function InfoGrid({ items }: { items: Array<[string, ReactNode]> }) { return <div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-3">{items.map(([label, value]) => <div key={label} className="min-w-0"><p className="whitespace-normal break-words text-[10px] font-black uppercase leading-3 tracking-widest text-muted-foreground">{label}</p><div className="mt-1 whitespace-normal break-words text-sm font-semibold leading-5">{value ?? '—'}</div></div>)}</div>; }
 function DetailList({ title, rows }: { title: string; rows: ReactNode[] }) { return <div className="rounded-2xl border border-border/60 p-4"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{title}</p><div className="mt-3 space-y-2">{rows.length ? rows.map((row, index) => <div key={index} className="rounded-xl bg-muted/30 px-3 py-2 text-sm">{row}</div>) : <p className="text-sm text-muted-foreground">Sin información.</p>}</div></div>; }
 function warehousesForBranch(warehouses: WarehouseOption[], branchId: string) { return warehouses.filter((warehouse) => warehouse.clientTenantId === branchId || warehouse.authorizedBranchIds?.includes(branchId)); }
-function exportRow(view: ManagerInventoryView, row: any, canViewInventoryCost: boolean) { if (view === 'branchInventory' || view === 'corporateInventory') return { Alcance: view === 'branchInventory' ? 'Mi sucursal' : 'Almacén corporativo', Código: row.code, Producto: row.name, SKU: row.sku, Sucursal: row.branchName, Ubicación: row.warehouseName, Stock: row.quantity, Reservado: row.reserved, Disponible: row.available }; if (view === 'products' || view === 'services') return { Sucursales: row.branchNames?.join(', ') || row.branchName, Código: row.code, SKU: row.sku || row.code, Nombre: row.name, Categoría: row.category, Unidad: row.unit, ...(canViewInventoryCost ? { Costo: row.costPrice } : {}), 'Stock total': row.branchStock, 'Disponible total': row.branchAvailable, Ubicaciones: row.locationCount, Desglose: row.locations.map((location: any) => `${location.branchName} / ${location.warehouseName}: ${location.quantity}`).join(' | ') }; if (view === 'warehouses') return { Nombre: row.name, Rubro: row.businessUnitName, Tipo: row.isCorporate ? 'Corporativo' : 'Bodega de sucursal', Sucursales: row.branches.map((branch: any) => branch.name).join(', '), Ubicación: row.location, 'Stock visible': row.stockTotal, Disponible: row.availableTotal }; if (view === 'transfers') return { Número: row.number, Fecha: formatDate(row.date), Origen: row.from?.name, Destino: row.to?.name, Estado: formatStatus(row.status), Productos: row.itemCount, Unidades: row.units }; if (view === 'audits') return { Acta: row.number, Fecha: formatDate(row.auditDate), Sucursal: row.branchName, Ubicación: row.warehouseName, Estado: formatStatus(row.status), Productos: row.itemCount, Diferencia: row.difference }; if (view === 'losses') return { Ajuste: row.number, Fecha: formatDate(row.date), Sucursal: row.branchName, Unidades: row.lossUnits, ...(canViewInventoryCost ? { Monto: row.lossAmount } : {}), Motivo: row.reason }; if (view === 'movements') return { Fecha: formatDate(row.date), Código: row.product?.code, Producto: row.product?.name, Sucursal: row.branchName, Ubicación: row.warehouse?.name, Tipo: formatMovementType(row.type), Cantidad: row.quantity, Saldo: row.resultingQty, Referencia: formatMovementReference(row.reference) }; return { Código: row.code, Activo: row.name, Categoría: row.category, Sucursal: row.branchName, Estado: formatStatus(row.status), ...(canViewInventoryCost ? { Costo: row.cost } : {}), Ubicación: row.location };
+function exportRow(view: ManagerInventoryView, row: any, canViewInventoryCost: boolean) { if (view === 'branchInventory' || view === 'corporateInventory') return { Alcance: view === 'branchInventory' ? 'Mi sucursal' : 'Almacén corporativo', Código: row.code, Producto: row.name, SKU: row.sku, Sucursal: row.branchName, Ubicación: row.warehouseName, Stock: row.quantity, Reservado: row.reserved, Disponible: row.available }; if (view === 'products' || view === 'services') return { Sucursales: row.branchNames?.join(', ') || row.branchName, Código: row.code, SKU: row.sku || row.code, Nombre: row.name, Categoría: row.category, Unidad: row.unit, ...(canViewInventoryCost ? { Costo: row.costPrice } : {}), 'Stock total': row.branchStock, 'Disponible total': row.branchAvailable, Ubicaciones: row.locationCount, Desglose: row.locations.map((location: any) => `${location.branchName} / ${location.warehouseName}: ${location.quantity}`).join(' | ') }; if (view === 'warehouses') return { Nombre: row.name, Rubro: row.businessUnitName, Tipo: row.isCorporate ? 'Corporativo' : 'Bodega de sucursal', Sucursales: row.branches.map((branch: any) => branch.name).join(', '), Ubicación: row.location, 'Stock visible': row.stockTotal, Disponible: row.availableTotal }; if (view === 'transfers') return { Número: row.number, Fecha: formatDate(row.date), Origen: row.from?.name, Destino: row.to?.name, Estado: formatStatus(row.status), Productos: row.itemCount, Unidades: row.units }; if (view === 'audits') return { Acta: row.number, Fecha: formatDate(row.auditDate), Sucursal: row.branchName, Ubicación: row.warehouseName, Estado: formatStatus(row.status), Productos: row.itemCount, Diferencia: row.difference }; if (view === 'losses') return { Ajuste: row.number, Fecha: formatDate(row.date), Sucursal: row.branchName, Unidades: row.lossUnits, ...(canViewInventoryCost ? { Monto: row.lossAmount } : {}), Motivo: formatAdjustmentReason(row.reason) }; if (view === 'movements') return { Fecha: formatDate(row.date), Código: row.product?.code, Producto: row.product?.name, Sucursal: row.branchName, Ubicación: row.warehouse?.name, Tipo: formatMovementType(row.type), Cantidad: row.quantity, Saldo: row.resultingQty, Referencia: formatMovementReference(row.reference) }; return { Código: row.code, Activo: row.name, Categoría: row.category, Sucursal: row.branchName, Estado: formatStatus(row.status), ...(canViewInventoryCost ? { Costo: row.cost } : {}), Ubicación: row.location };
 }

@@ -29,6 +29,7 @@ import { useBranchScope } from '../hooks/useBranchScope';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
 import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { cn } from './ui/utils';
+import { financeCategoryLabel } from './finanzas/financeChartTheme';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -354,7 +355,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
   const renderIncomeDetails = (item: any) => (
     <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-      {(item.groupedItems || []).map((child: any) => (
+      {(item.groupedItems || [item]).map((child: any) => (
         <div key={child.id} className="rounded-xl border border-border/60 bg-muted/20 p-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -366,6 +367,24 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
           </div>
         </div>
       ))}
+    </div>
+  );
+
+  const renderExpenseDetails = (item: any) => (
+    <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+      <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-mono text-xs font-black text-primary">{item.number || 'Gasto'}</p>
+            <p className="mt-1 text-xs font-semibold text-foreground">{item.description || 'Gasto registrado'}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{item.createdAt || item.date ? new Date(item.createdAt || item.date).toLocaleString('es-NI') : 'Sin fecha'}{item.notes ? ` · ${item.notes}` : ''}</p>
+          </div>
+          <CurrencyValuationAmount amount={Number(item.amount || 0)} sourceCurrency={item.currency} sourceExchangeRate={item.exchangeRate} className="shrink-0 font-black text-rose-600" />
+        </div>
+        <div className="mt-3 border-t border-border/30 pt-2 text-[10px] text-muted-foreground">
+          <span className="font-bold text-foreground">Categoría:</span> {financeCategoryLabel(item.category)}
+        </div>
+      </div>
     </div>
   );
 
@@ -601,7 +620,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     onDelete={async (id) => { await incomeService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] }); toast.success('Ingreso eliminado'); }}
                     loading={loading}
                     canCreate={false}
-                    canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
+                    canEdit={false}
                     canDelete={false}
                     canExport={canPerform('FINANCIAL_INCOMES', 'export')}
                     detailsRenderer={renderIncomeDetails}
@@ -626,9 +645,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     }}
                     loading={loading}
                     canCreate={false}
-                    canEdit={canPerform('FINANCIAL_EXPENSES', 'edit')}
+                    canEdit={false}
                     canDelete={false}
                     canExport={canPerform('FINANCIAL_EXPENSES', 'export')}
+                    detailsRenderer={renderExpenseDetails}
                     targetItemId={targetFinanceId?.tab === 'gastos' ? targetFinanceId.id : null}
                     onClearTargetItem={() => setTargetFinanceId(null)}
                   />

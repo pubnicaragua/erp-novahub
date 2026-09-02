@@ -109,7 +109,7 @@ export function FinancePayablesView() {
                 <XAxis dataKey="label" tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickMargin={8} />
                 <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={64} />
                 <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                <Bar dataKey="amount" fill="url(#ageG)" radius={[6, 6, 0, 0]} maxBarSize={52} onClick={(data: any) => toast.info(`CxP vencido ${data.label}: ${fmt(data.amount)}`)} style={{ cursor: 'pointer' }} />
+                <Bar dataKey="amount" name="Saldo vencido" fill="url(#ageG)" radius={[6, 6, 0, 0]} maxBarSize={52} onClick={(data: any) => toast.info(`CxP vencido ${data.label}: ${fmt(data.amount)}`)} style={{ cursor: 'pointer' }} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -129,7 +129,7 @@ export function FinancePayablesView() {
                   <XAxis type="number" tick={FINANCE_AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} tickMargin={8} />
                   <YAxis dataKey="name" type="category" tick={{ ...FINANCE_AXIS_TICK, fill: 'var(--foreground)', fontWeight: 500 }} width={96} />
                   <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                  <Bar dataKey="amount" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`${data.name}: ${fmt(data.amount)}`)} style={{ cursor: 'pointer' }}>
+                  <Bar dataKey="amount" name="Saldo pendiente" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`${data.name}: ${fmt(data.amount)}`)} style={{ cursor: 'pointer' }}>
                     {topCreditors.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>
                 </BarChart>

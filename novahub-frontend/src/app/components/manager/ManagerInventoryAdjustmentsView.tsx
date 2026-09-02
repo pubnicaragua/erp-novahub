@@ -32,6 +32,12 @@ const reasonLabels: Record<string, string> = {
   EXPIRATION: 'Vencimiento',
   THEFT: 'Pérdida / robo',
   OTHER: 'Otro',
+  SURPLUS: 'Sobrante',
+  LOSS: 'Pérdida',
+  SHRINKAGE: 'Merma',
+  SHORTAGE: 'Faltante',
+  DETERIORATION: 'Deterioro',
+  MIXED: 'Ajuste mixto',
 };
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });

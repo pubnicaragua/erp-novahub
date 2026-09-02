@@ -47,7 +47,6 @@ import {
   AlertTriangle,
   MessageSquare,
   Send,
-  Layers,
   Archive,
   History,
   Landmark,
@@ -234,7 +233,6 @@ const menuItems: MenuItem[] = [
       { id: 'reportes-clientes', label: 'Clientes', icon: <Users className="size-4" /> },
       { id: 'reportes-proveedores', label: 'Proveedores', icon: <Truck className="size-4" /> },
       { id: 'reportes-rrhh', label: 'Recursos Humanos', icon: <Users className="size-4" /> },
-      { id: 'reportes-suscripciones', label: 'Suscripciones', icon: <Layers className="size-4" /> },
     ]
   },
   {

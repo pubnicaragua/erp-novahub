@@ -27,6 +27,7 @@ import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper 
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { translatePaymentMethodText } from '../../utils/paymentMethods';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { financeCategoryLabel } from './financeChartTheme';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -91,19 +92,23 @@ export function FinanceTableView({
   const [categoryTargetItem, setCategoryTargetItem] = useState<{ id: string; key: string } | null>(null);
   const [detailItem, setDetailItem] = useState<any | null>(null);
 
+  // Edit Modal State (Mobile/Alternative Desktop)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [itemBeingEdited, setItemBeingEdited] = useState<any | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+
   useEffect(() => {
     if (!targetItemId) return;
+    if (!canEdit) {
+      onClearTargetItem?.();
+      return;
+    }
     const target = data.find((item) => item.id === targetItemId);
     if (!target) return;
     setItemBeingEdited(target);
     setIsEditModalOpen(true);
     onClearTargetItem?.();
-  }, [targetItemId, data, onClearTargetItem]);
-
-  // Edit Modal State (Mobile/Alternative Desktop)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [itemBeingEdited, setItemBeingEdited] = useState<any | null>(null);
-  const [editLoading, setEditLoading] = useState(false);
+  }, [targetItemId, data, canEdit, onClearTargetItem]);
 
   // Pagination State
   const [pageSize, setPageSize] = useState(10);
@@ -211,6 +216,7 @@ export function FinanceTableView({
   const paginatedData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const getLabelForValue = (col: Column, value: any) => {
+    if (col.key === 'category') return value ? financeCategoryLabel(value) : '-';
     if (value && col.options) {
       const opt = col.options.find(o => o.value === value);
       if (opt) return opt.label;
@@ -609,8 +615,8 @@ export function FinanceTableView({
       <Dialog open={Boolean(detailItem)} onOpenChange={(open) => !open && setDetailItem(null)}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Eye className="size-5 text-primary" /> Desglose del registro</DialogTitle>
-            <DialogDescription>{detailItem?.description || 'Detalle de los movimientos agrupados'}</DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><Eye className="size-5 text-primary" /> Detalles del registro</DialogTitle>
+            <DialogDescription>{detailItem?.description || 'Información del movimiento financiero'}</DialogDescription>
           </DialogHeader>
           {detailItem && detailsRenderer?.(detailItem)}
           <DialogFooter><Button variant="outline" onClick={() => setDetailItem(null)}>Cerrar</Button></DialogFooter>
@@ -671,8 +677,8 @@ export function FinanceTableView({
                   ))}
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {detailsRenderer && item.groupedItems?.length > 1 && (
-                        <button onClick={() => setDetailItem(item)} className="p-1.5 text-primary hover:bg-primary/10 rounded-md transition-colors" title="Ver desglose" aria-label="Ver desglose"><Eye className="size-3.5" /></button>
+                      {detailsRenderer && (
+                        <button onClick={() => setDetailItem(item)} className="p-1.5 text-primary hover:bg-primary/10 rounded-md transition-colors" title="Ver detalles" aria-label="Ver detalles"><Eye className="size-3.5" /></button>
                       )}
                       {canEdit && (
                         <button onClick={() => { if (item.isPayment) toast.error('No se puede editar un pago de factura'); else setEditingCell({ id: item.id, key: columns.find(c => c.editable)?.key || columns[0].key }); }} disabled={item.isPayment} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Editar"><Edit3 className="size-3.5" /></button>
@@ -724,8 +730,8 @@ export function FinanceTableView({
                 </div>
                 
                 <div className="flex items-center gap-1.5 bg-background/50 backdrop-blur-sm p-1 rounded-xl border border-border/40 shadow-inner shrink-0 relative z-20">
-                  {detailsRenderer && item.groupedItems?.length > 1 && (
-                    <button onClick={(e) => { e.stopPropagation(); setDetailItem(item); }} className="p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors" title="Ver desglose" aria-label="Ver desglose"><Eye className="size-4" /></button>
+                  {detailsRenderer && (
+                    <button onClick={(e) => { e.stopPropagation(); setDetailItem(item); }} className="p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors" title="Ver detalles" aria-label="Ver detalles"><Eye className="size-4" /></button>
                   )}
                   {canEdit && (
                     <button 

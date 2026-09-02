@@ -125,7 +125,6 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
   { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
   { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
-  { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
 
   // Contabilidad: únicamente las entradas presentes en el sidebar.
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
@@ -237,7 +236,6 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'reportes-inventario': ['REPORTS_INVENTORY'],
   'reportes-clientes': ['REPORTS_CLIENTS'],
   'reportes-proveedores': ['REPORTS_PROVIDERS'],
-  'reportes-suscripciones': ['REPORTS_SUBSCRIPTIONS'],
   'reportes-rrhh': ['REPORTS_HR'],
 
   'plan-cuentas': ['ACCOUNTING_CHART'],

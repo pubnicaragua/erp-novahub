@@ -14,7 +14,7 @@ import { invoicesService } from '../../services/ventas.service';
 import { supplierInvoicesService } from '../../services/compras.service';
 import { accountsService } from '../../services/finanzas.service';
 import { toast } from 'sonner';
-import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
+import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard, financeCategoryLabel } from './financeChartTheme';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 interface Props {
@@ -154,7 +154,10 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
 
   const categoryData = useMemo(() => {
     const cats: Record<string, number> = {};
-    for (const e of expenses) { const cat = e.category || 'OTROS'; cats[cat] = (cats[cat] || 0) + cv(e); }
+    for (const e of expenses) {
+      const cat = financeCategoryLabel(e.category || 'OTROS');
+      cats[cat] = (cats[cat] || 0) + cv(e);
+    }
     return Object.entries(cats).sort(([, a], [, b]) => b - a).slice(0, 6).map(([name, value]) => ({ name, value }));
   }, [expenses, valuationMode, convertAmount, convertCurrentAmount]);
 
@@ -243,7 +246,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                 <XAxis dataKey="label" tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickMargin={8} />
                 <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={64} />
                 <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#06b6d4', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                <Area dataKey="amount" fill="url(#projG)" stroke="#06b6d4" strokeWidth={2.5} type="monotone" dot={{ r: 4, fill: '#06b6d4', strokeWidth: 0 }} />
+                <Area dataKey="amount" name="Flujo proyectado" fill="url(#projG)" stroke="#06b6d4" strokeWidth={2.5} type="monotone" dot={{ r: 4, fill: '#06b6d4', strokeWidth: 0 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </CardContent>
@@ -279,12 +282,12 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
               <p className="text-xs text-muted-foreground py-12 text-center">Sin datos de gastos</p>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={categoryData} layout="vertical" margin={{ top: 4, right: 20, left: 8, bottom: 14 }}>
+                <BarChart data={categoryData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 14 }}>
                   <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} horizontal={false} />
                   <XAxis type="number" tick={FINANCE_AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} tickMargin={8} />
-                  <YAxis dataKey="name" type="category" tick={{ ...FINANCE_AXIS_TICK, fill: 'var(--foreground)', fontWeight: 500 }} width={96} />
+                  <YAxis dataKey="name" type="category" tick={{ ...FINANCE_AXIS_TICK, fill: 'var(--foreground)', fontWeight: 500, fontSize: 10 }} width={132} tickFormatter={(value: string) => value.length > 20 ? `${value.slice(0, 19)}…` : value} />
                   <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                  <Bar dataKey="value" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`Gastos ${data.name}: ${fmt(data.value)}`)} style={{ cursor: 'pointer' }}>
+                  <Bar dataKey="value" name="Gastos" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`Gastos ${data.name}: ${fmt(data.value)}`)} style={{ cursor: 'pointer' }}>
                     {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>
                 </BarChart>

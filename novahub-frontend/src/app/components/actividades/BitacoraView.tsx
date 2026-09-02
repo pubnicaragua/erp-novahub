@@ -165,10 +165,10 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
   const filtered = data.filter(l => l.entity?.toLowerCase().includes(searchTerm.toLowerCase()) || l.details?.toLowerCase().includes(searchTerm.toLowerCase()) || l.action?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
+    <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
-          <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
+          <Card key={i} className="min-w-0 border-none bg-background/50 backdrop-blur-xl shadow-sm transition-all duration-300 hover:shadow-md">
             <CardContent className="p-5 flex items-center gap-4">
               <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
               <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
@@ -179,10 +179,10 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2></div>
+          <div className="min-w-0"><h2 className="break-words text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué es la Bitácora" targetPrefix="bitacora-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Bitácora de Auditoría', description: 'La bitácora registra automáticamente todas las acciones del sistema: creaciones, ediciones, eliminaciones y subidas de archivos. Sirve para auditoría y seguimiento.' }, data: { title: 'Consulta', description: 'Usa la búsqueda y los filtros para encontrar acciones específicas por usuario, módulo o fecha.' }, actions: { title: 'Exportar', description: 'Puedes exportar el registro completo para auditorías externas o reportes.' } }} />
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_LOGS', 'create') && (
               <Button
                 data-toolbar-role="primary"
@@ -214,7 +214,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle className="font-black uppercase tracking-tight">Agregar a Bitácora</DialogTitle>
           </DialogHeader>
