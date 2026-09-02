@@ -34,7 +34,7 @@ import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency }
 interface ClientesViewProps {
   data: Customer[];
   loading: boolean;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   isSidebarCollapsed?: boolean;
@@ -74,8 +74,11 @@ const compareCustomerNames = (left: Customer, right: Customer) =>
 
 const customerCodeNumber = (customer: Customer) => {
   const match = String(customer.code || '').match(/(\d+)(?!.*\d)/);
-  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+  return match ? Number(match[1]) : Number.NEGATIVE_INFINITY;
 };
+
+const compareCustomerCodes = (left: Customer, right: Customer) =>
+  customerCodeNumber(right) - customerCodeNumber(left) || compareCustomerNames(left, right);
 
 const customerToDraft = (customer: Customer, fallbackCurrency: SupportedCurrency = 'NIO'): CustomerDraft => ({
   name: customer.name || '',
@@ -319,9 +322,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       });
       setImportProgress(90);
       setImportResult(result);
-      // No mantengas bloqueada la previsualización esperando el refresco de
-      // todo el módulo; la consulta puede terminar en segundo plano.
-      void onRefresh();
+      // Espera el refresco para que los clientes importados ya estén visibles
+      // al volver al listado.
+      if (pagination && pagination.page !== 1) pagination.onPageChange(1);
+      await onRefresh();
       setImportProgress(100);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo importar clientes');
@@ -352,7 +356,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   });
 
   const colFilters = useColumnFilters();
-  const filteredAndSorted = [...filtered].sort(compareCustomerNames);
+  // El código identifica la antigüedad/secuencia del cliente y debe ser el
+  // orden inicial del listado. Así el cliente recién creado aparece primero
+  // después de refrescar, sin depender del orden alfabético del nombre.
+  const filteredAndSorted = [...filtered].sort(compareCustomerCodes);
   const filterGetters = {
     code: (row: Customer) => customerCodeNumber(row),
     name: (row: Customer) => {
@@ -412,7 +419,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       }
       await customersService.update(id.toString(), effectiveUpdates);
       toast.success('Cliente actualizado correctamente');
-      onRefresh();
+      await onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar cliente');
       throw e;
@@ -514,7 +521,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       toast.success('Nuevo cliente creado');
       setNewCustomer(emptyCustomerDraft(displayCurrency));
       if (pendingCustomers.length === 0) setCreateOpen(false);
-      onRefresh();
+      if (pagination && pagination.page !== 1) pagination.onPageChange(1);
+      await onRefresh();
     } catch (e: any) {
       console.error('Error creating customer:', e);
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear cliente');
@@ -535,7 +543,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       setPendingCustomers([]);
       setNewCustomer(emptyCustomerDraft(displayCurrency));
       setCreateOpen(false);
-      onRefresh();
+      if (pagination && pagination.page !== 1) pagination.onPageChange(1);
+      await onRefresh();
     } finally {
       setCreating(false);
     }

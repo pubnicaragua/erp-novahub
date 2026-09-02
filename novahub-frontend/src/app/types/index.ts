@@ -1547,6 +1547,7 @@ export interface PurchaseRequestItem {
   purchaseRequestId: string;
   productId?: string;
   variantId?: string;
+  code?: string;
   description: string;
   quantity: number;
   unitCost?: number;
@@ -1593,6 +1594,7 @@ export interface PurchaseManagementItem {
   purchaseManagementId: string;
   productId?: string;
   variantId?: string;
+  code?: string;
   description: string;
   quantityRequested: number;
   quantityProposed: number;

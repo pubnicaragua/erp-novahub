@@ -1198,6 +1198,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const productSubtotal = items.filter((it: any) => resolveItemType(it) !== 'SERVICE')
       .reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
     const taxAmount = Math.max(0, productSubtotal - productSubtotal * (dRate / 100)) * (tRate / 100);
+    const base = subtotal - discountAmount;
     const total = base + taxAmount + additionalChargesTotal();
     // Mantener las líneas en ambos modos. El selector de lista de precios
     // también recalcula los totales cuando su matriz termina de cargar; si

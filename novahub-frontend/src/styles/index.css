@@ -14,7 +14,7 @@ button[data-action-busy='true'] {
   pointer-events: none !important;
 }
 
-button[data-action-busy='true']::after {
+button[data-action-busy='true']:not(:has(.animate-spin, [data-loading-indicator='true']))::after {
   content: '';
   display: inline-block;
   width: .9em;

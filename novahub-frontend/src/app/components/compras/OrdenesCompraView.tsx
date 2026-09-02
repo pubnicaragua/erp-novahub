@@ -2608,6 +2608,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         </ConfirmDialog>
 
         {renderOrderDetailPanel()}
+
+        <PurchaseVariantPickerModal
+          open={variantPickerOpen}
+          onOpenChange={setVariantPickerOpen}
+          product={variantPickerProduct}
+          onSelect={handlePurchaseVariantSelected}
+        />
       </div>
     );
   }
@@ -2706,13 +2713,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             <p className="mt-1">Después podrás abrir la recepción pendiente, indicar lo recibido y procesar el inventario.</p>
           </div>
         </ConfirmDialog>
-
-        <PurchaseVariantPickerModal
-          open={variantPickerOpen}
-          onOpenChange={setVariantPickerOpen}
-          product={variantPickerProduct}
-          onSelect={handlePurchaseVariantSelected}
-        />
 
         <Dialog open={false} onOpenChange={setImportIntroOpen}>
           <DialogContent className="max-w-2xl rounded-2xl">

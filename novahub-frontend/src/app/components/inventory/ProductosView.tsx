@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode, SlidersHorizontal, Tag } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode, SlidersHorizontal, Tag } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -790,6 +790,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [creatingWarehouse, setCreatingWarehouse] = useState(false);
   const [pendingWarehouseRowIndex, setPendingWarehouseRowIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedProductMap, setSelectedProductMap] = useState<Map<string, any>>(new Map());
   const [importProgress, setImportProgress] = useState(0);
   const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[]; warnings?: string[] } | null>(null);
   const [initialImportCompleted, setInitialImportCompleted] = useState(false);
@@ -1106,6 +1107,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     // la selección desde el catálogo completo y priorizamos el registro que
     // conserve sus variantes.
     const catalogById = new Map<string, any>();
+    selectedProductMap.forEach((product, productId) => catalogById.set(String(productId), product));
     [...products, ...(summaryProducts || []), ...solicitudCatalogProducts].forEach((product: any) => {
       const productId = String(product?.id || '').trim();
       if (!productId) return;
@@ -1189,6 +1191,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       : [...prev, item]);
   };
 
+  const removeSolicitudProduct = (productId: string) => {
+    setSolicitudProducts((previous) => previous.filter((item) => item.productId !== productId));
+  };
+
   const handleCreateSolicitud = async () => {
     if (solicitudProducts.length === 0) { toast.error('No hay productos en la solicitud'); return; }
     if (!solicitudWarehouseId) { toast.error('Selecciona una bodega'); return; }
@@ -1222,6 +1228,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               return {
               productId: item.productId,
               variantId: variant.id,
+              code: variant.sku || item.code || undefined,
               description: `${item.productName} · ${variantLabel(variant)}${variant.sku ? ` · ${variant.sku}` : ''}`,
               quantity,
               warehouseId: solicitudWarehouseId,
@@ -1232,6 +1239,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         }
         return [{
           productId: item.productId,
+          code: item.code || undefined,
           description: item.productName,
           quantity: item.quantity,
           warehouseId: solicitudWarehouseId,
@@ -1251,7 +1259,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       } as any);
       toast.success(`Solicitud creada con ${items.length} producto(s). Revisa Compras > Solicitudes.`);
       setSolicitudOpen(false);
-      setSelectedIds(new Set());
+      clearSelectedProducts();
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'Error al crear solicitud');
@@ -1404,6 +1412,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const start = (page - 1) * pageSize;
     return filteredData.slice(start, start + pageSize);
   }, [filteredData, page, pageSize, pagination]);
+
+  const selectedVisibleCount = useMemo(
+    () => paginatedProducts.reduce((count, product: any) => count + (selectedIds.has(String(product?.id)) ? 1 : 0), 0),
+    [paginatedProducts, selectedIds],
+  );
+  const allVisibleProductsSelected = paginatedProducts.length > 0 && selectedVisibleCount === paginatedProducts.length;
+  const someVisibleProductsSelected = selectedVisibleCount > 0 && !allVisibleProductsSelected;
+  const selectedCatalogProducts = useMemo(
+    () => Array.from(selectedIds)
+      .map((id) => selectedProductMap.get(String(id)))
+      .filter(Boolean),
+    [selectedIds, selectedProductMap],
+  );
 
   const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
 
@@ -2064,8 +2085,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     return (
       <TableRow key={product.id} className="bg-blue-500/5">
         <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.selector, minWidth: PRODUCT_TABLE_WIDTHS.selector }}>
-          <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
-            {selectedIds.has(product.id)
+          <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id, product); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60" aria-pressed={selectedIds.has(String(product.id))} aria-label={selectedIds.has(String(product.id)) ? `Quitar ${product.name} de la selección` : `Seleccionar ${product.name}`} title={selectedIds.has(String(product.id)) ? 'Quitar de la selección' : 'Agregar a la selección'}>
+            {selectedIds.has(String(product.id))
               ? <SquareCheckBig className="size-4 text-primary" />
               : <Square className="size-4 text-muted-foreground" />
             }
@@ -2385,18 +2406,61 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   // ==================== SELECTION ====================
   const toggleSelectAll = () => {
-    if (selectedIds.size === paginatedProducts.length && paginatedProducts.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(paginatedProducts.map((p: any) => p.id)));
-    }
+    const visibleProducts = paginatedProducts.filter((product: any) => product?.id);
+    const visibleIds = visibleProducts.map((product: any) => String(product.id));
+    if (visibleIds.length === 0) return;
+    const removeVisible = visibleIds.every((id) => selectedIds.has(id));
+
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      visibleIds.forEach((id) => (removeVisible ? next.delete(id) : next.add(id)));
+      return next;
+    });
+    setSelectedProductMap((previous) => {
+      const next = new Map(previous);
+      visibleProducts.forEach((product: any) => {
+        const id = String(product.id);
+        if (removeVisible) next.delete(id);
+        else next.set(id, product);
+      });
+      return next;
+    });
   };
 
-  const toggleSelect = (id: string) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedIds(next);
+  const toggleSelect = (id: string, product?: any) => {
+    const normalizedId = String(id);
+    const isSelected = selectedIds.has(normalizedId);
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (isSelected) next.delete(normalizedId);
+      else next.add(normalizedId);
+      return next;
+    });
+    setSelectedProductMap((previous) => {
+      const next = new Map(previous);
+      if (isSelected) next.delete(normalizedId);
+      else if (product) next.set(normalizedId, product);
+      return next;
+    });
+  };
+
+  const removeSelectedProduct = (id: string) => {
+    const normalizedId = String(id);
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      next.delete(normalizedId);
+      return next;
+    });
+    setSelectedProductMap((previous) => {
+      const next = new Map(previous);
+      next.delete(normalizedId);
+      return next;
+    });
+  };
+
+  const clearSelectedProducts = () => {
+    setSelectedIds(new Set());
+    setSelectedProductMap(new Map());
   };
 
   // ==================== EXCEL IMPORT ====================
@@ -3494,6 +3558,41 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           </div>
         </div>
 
+      {!isServiceView && selectedCatalogProducts.length > 0 && (
+        <section className="mb-4 min-w-0 rounded-2xl border border-primary/25 bg-primary/[0.04] p-3" aria-labelledby="inventory-selected-products-title">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div id="inventory-selected-products-title" className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-primary">
+                <Check className="size-4 shrink-0" /> Productos seleccionados
+                <Badge variant="secondary" className="text-[10px]">{selectedIds.size}</Badge>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">La selección permanece aunque cambies la búsqueda, los filtros o la página. Puedes quitar productos aquí o continuar con la solicitud.</p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {canCreatePurchaseRequest && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={openSelectedSolicitud}>
+                <PackageSearch className="mr-1.5 size-3.5" /> Solicitar compra
+              </Button>}
+              <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-destructive" onClick={clearSelectedProducts}>
+                <X className="mr-1.5 size-3.5" /> Quitar todos
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 flex max-h-28 min-w-0 flex-wrap gap-2 overflow-y-auto pr-1" role="list" aria-label="Productos seleccionados">
+            {selectedCatalogProducts.map((product: any) => (
+              <div key={String(product.id)} role="listitem" className="flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-primary/20 bg-background/80 px-2.5 py-1.5">
+                <div className="min-w-0">
+                  <span className="block max-w-[15rem] truncate text-[11px] font-bold" title={product.name}>{product.name || 'Producto sin nombre'}</span>
+                  <span className="block max-w-[15rem] truncate font-mono text-[9px] text-muted-foreground" title={product.code || undefined}>{product.code || 'Sin código'}</span>
+                </div>
+                <button type="button" className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => removeSelectedProduct(product.id)} aria-label={`Quitar ${product.name || 'producto'} de la selección`} title="Quitar de la selección">
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}
       <div className="space-y-3 xl:hidden" data-tour="inventory-products-table">
         {paginatedProducts.length === 0 ? (
@@ -3510,8 +3609,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           const costPrice = Number(product.costPrice || 0);
           const maxStock = getProductMaxStock(product);
           return (
-            <Card key={product.id} aria-busy={String(openingId) === String(product.id) || undefined} data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined} className={`min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-primary/60' : ''}`} onClick={() => openProductDetail(product)}>
+            <Card key={product.id} aria-busy={String(openingId) === String(product.id) || undefined} data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined} className={`min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm ${selectedIds.has(String(product.id)) ? 'border-primary/50 bg-primary/[0.05]' : ''} ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-primary/60' : ''}`} onClick={() => openProductDetail(product)}>
               <div className="flex min-w-0 items-start gap-3">
+                {!isServiceView && <button
+                  type="button"
+                  className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  onClick={(event) => { event.stopPropagation(); toggleSelect(product.id, product); }}
+                  aria-pressed={selectedIds.has(String(product.id))}
+                  aria-label={selectedIds.has(String(product.id)) ? `Quitar ${product.name} de la selección` : `Seleccionar ${product.name}`}
+                  title={selectedIds.has(String(product.id)) ? 'Quitar de la selección' : 'Agregar a la selección'}
+                >
+                  {selectedIds.has(String(product.id)) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}
+                </button>}
                 <button
                   type="button"
                   className="shrink-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -3619,10 +3728,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead style={{ width: PRODUCT_TABLE_WIDTHS.selector, minWidth: PRODUCT_TABLE_WIDTHS.selector }}>
-                <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelectAll(); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
-                  {selectedIds.size === paginatedProducts.length && paginatedProducts.length > 0
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); toggleSelectAll(); }}
+                  className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60"
+                  aria-pressed={allVisibleProductsSelected}
+                  aria-label={allVisibleProductsSelected ? 'Quitar selección de los productos visibles' : 'Seleccionar todos los productos visibles'}
+                  title={allVisibleProductsSelected ? 'Quitar selección de los productos visibles' : 'Seleccionar todos los productos visibles'}
+                >
+                  {allVisibleProductsSelected
                     ? <SquareCheckBig className="size-4 text-primary" />
-                    : <Square className="size-4 text-muted-foreground" />
+                    : someVisibleProductsSelected
+                      ? <span className="flex size-4 items-center justify-center rounded-[3px] border-2 border-primary text-primary"><Minus className="size-3" /></span>
+                      : <Square className="size-4 text-muted-foreground" />
                   }
                 </button>
               </TableHead>
@@ -3685,15 +3803,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                  return (
                    <TableRow 
                       key={product.id} 
-                      className={`group hover:bg-muted/30 cursor-pointer ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-inset ring-primary/60' : ''}`}
+                      className={`group cursor-pointer hover:bg-muted/30 ${selectedIds.has(String(product.id)) ? 'bg-primary/[0.05]' : ''} ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-inset ring-primary/60' : ''}`}
                       aria-busy={String(openingId) === String(product.id) || undefined}
                       data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined}
                       onClick={() => openProductDetail(product)}
                       onDoubleClick={() => canPerform('INVENTORY_PRODUCTS', 'edit') && handleEditRow(product)}
                      >
                      <TableCell className="w-10">
-                       <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
-                         {selectedIds.has(product.id)
+                       <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id, product); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60" aria-pressed={selectedIds.has(String(product.id))} aria-label={selectedIds.has(String(product.id)) ? `Quitar ${product.name} de la selección` : `Seleccionar ${product.name}`} title={selectedIds.has(String(product.id)) ? 'Quitar de la selección' : 'Agregar a la selección'}>
+                         {selectedIds.has(String(product.id))
                            ? <SquareCheckBig className="size-4 text-primary" />
                            : <Square className="size-4 text-muted-foreground" />
                          }
@@ -4139,7 +4257,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <DialogHeader data-tour="inventory-initial-import-title">
              <DialogTitle>{isServiceView ? 'Importación de servicios' : 'Importación inicial de inventario'}</DialogTitle>
              <DialogDescription>
-               {isServiceView ? 'Puedes importar servicios en cualquier momento. Descarga la plantilla, completa los datos y revisa la previsualización antes de confirmar. Las imágenes opcionales pueden cargarse en ZIP o RAR.' : 'Puedes importar productos varias veces por sucursal. La plantilla avanzada usa Productos, Variantes, Atributos, Precios e Inventario; permite crear o reutilizar atributos y valores faltantes después de confirmarla. Los SKU existentes se omiten para evitar duplicados.'}
+               {isServiceView ? 'Puedes importar servicios en cualquier momento. Descarga la plantilla, completa los datos y revisa la previsualización antes de confirmar. Las imágenes opcionales pueden cargarse en ZIP o RAR.' : 'Puedes importar productos varias veces por sucursal. La plantilla avanzada usa Productos, Variantes, Atributos, Precios e Inventario; permite crear o reutilizar atributos y valores faltantes después de confirmarla. Los SKU existentes se actualizan sin duplicar IDs, existencias ni historial; las variantes nuevas se agregan.'}
              </DialogDescription>
              <InventoryViewTutorial label={isServiceView ? 'Cómo importar servicios' : 'Cómo importar inventario'} targetPrefix="inventory-initial-import" copy={{ data: { description: isServiceView ? 'Descarga la plantilla, prepara servicios, su único precio, costos e imágenes y revisa las reglas. Los servicios no llevan IVA ni manejan stock o bodegas.' : 'Descarga la plantilla, prepara productos, precios, costos, stock e imágenes y revisa las reglas.' }, actions: { description: 'Descarga la plantilla o continúa con la carga para iniciar la importación.' } }} />
           </DialogHeader>
@@ -4172,7 +4290,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <DialogHeader data-tour="inventory-import-title">
              <DialogTitle>Importar {isServiceView ? 'Servicios' : 'Productos'}</DialogTitle>
              <DialogDescription>
-               {isServiceView ? 'Sube servicios con descripción, categoría, un único precio, costo y disponibilidad. La carga se confirma en dos pasos.' : 'Sube productos nuevos o pendientes de importar de la sucursal. Puedes repetir la carga; los SKU existentes se omiten y se confirma en dos pasos.'}
+               {isServiceView ? 'Sube servicios con descripción, categoría, un único precio, costo y disponibilidad. La carga se confirma en dos pasos.' : 'Sube productos nuevos o existentes de la sucursal. Puedes repetir la carga: los SKU existentes actualizan sus datos y precios, conservan IDs, existencias e historial, y las variantes nuevas se agregan. La carga se confirma en dos pasos.'}
              </DialogDescription>
              <InventoryViewTutorial label={`Cómo importar ${isServiceView ? 'servicios' : 'productos'}`} targetPrefix="inventory-import" copy={{ data: { description: isServiceView ? 'Configura moneda, tasa, archivo e imágenes; luego normaliza y revisa la previsualización. Los servicios no usan bodegas ni stock.' : 'Configura moneda, tasa, archivo, imágenes y bodega de destino; luego revisa la previsualización del catálogo.' }, actions: { description: 'Carga el archivo y abre la previsualización antes de confirmar.' } }} />
           </DialogHeader>
@@ -4509,6 +4627,40 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </DialogDescription>
             <InventoryViewTutorial label="Cómo crear una solicitud de compra" targetPrefix="inventory-request" copy={{ data: { description: solicitudOnlySelected ? 'Completa los datos de la solicitud, revisa la selección de la tabla y usa el buscador para agregar productos por nombre, código o categoría.' : 'Selecciona empleado, bodega, justificación, fecha, prioridad y productos a solicitar. Para agregar un producto adicional, búscalo por nombre, código o categoría.' }, actions: { description: 'Crea la solicitud para enviarla al flujo de Compras.' } }} />
           </DialogHeader>
+          {solicitudProducts.length > 0 && (
+            <section className="shrink-0 rounded-2xl border border-primary/25 bg-primary/[0.04] p-3" aria-labelledby="solicitud-selected-products-title">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div id="solicitud-selected-products-title" className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-primary">
+                    <Check className="size-4 shrink-0" /> Productos incluidos
+                    <Badge variant="secondary" className="text-[10px]">{solicitudProducts.length}</Badge>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Estos productos permanecen visibles aunque busques otro. Puedes ajustar cantidades o quitarlos desde aquí.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" className="h-8 w-fit shrink-0 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider" onClick={() => setSolicitudOnlySelected((value) => !value)} disabled={solicitudCreating}>
+                  {solicitudOnlySelected ? 'Ver catálogo completo' : 'Mostrar solo incluidos'}
+                </Button>
+              </div>
+              <div className="mt-3 grid max-h-32 min-w-0 gap-2 overflow-y-auto pr-1 sm:grid-cols-2" role="list" aria-label="Productos incluidos en la solicitud">
+                {solicitudProducts.map((item) => (
+                  <div key={item.productId} role="listitem" className="flex min-w-0 items-center gap-2 rounded-xl border border-primary/20 bg-background/80 px-2.5 py-2">
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-[11px] font-bold" title={item.productName}>{item.productName}</span>
+                      <span className="block truncate font-mono text-[9px] text-muted-foreground" title={item.code || undefined}>{item.code || 'Sin código'}</span>
+                    </div>
+                    {item.isVariable ? (
+                      <Badge variant="outline" className="shrink-0 text-[9px]">{item.quantity} uds. · variantes</Badge>
+                    ) : (
+                      <Input type="number" min={1} className="h-8 w-16 shrink-0 text-right text-xs tabular-nums" value={item.quantity} onChange={(event) => updateSolicitudQuantity(item.productId, Number(event.target.value))} disabled={solicitudCreating} aria-label={`Cantidad de ${item.productName}`} />
+                    )}
+                    <button type="button" className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => removeSolicitudProduct(item.productId)} disabled={solicitudCreating} aria-label={`Quitar ${item.productName} de la solicitud`} title="Quitar de la solicitud">
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1" data-tour="inventory-request-data">
           <div className="space-y-4 pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

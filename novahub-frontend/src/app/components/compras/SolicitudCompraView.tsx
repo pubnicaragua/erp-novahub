@@ -10,6 +10,7 @@ import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
 import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Combobox } from '../ui/Combobox';
 import { toast } from 'sonner';
 import { purchaseRequestsService, purchaseManagementService, purchaseOrdersService } from '../../services/compras.service';
 import type { Product, PurchaseRequest, PurchaseManagement, Warehouse, Supplier } from '../../types';
@@ -386,7 +387,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       return {
         productId: item.productId || null,
         variantId: item.variantId || variant?.id || null,
-        code: item.code || variant?.sku || product?.code || product?.sku || '',
+        code: item.code || item.productCode || variant?.sku || product?.code || product?.sku || '',
         name: item.name || product?.name || item.description || '',
         description: item.description || (variant?.name ? `${product?.name || ''} · ${variant.name}` : product?.name) || '',
         category: item.category || (product as any)?.category?.name || (product as any)?.category || '',
@@ -705,19 +706,22 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
             <Label htmlFor="purchase-request-approval-supplier" className="text-xs font-bold uppercase tracking-wider">
               Proveedor <span className="text-destructive">*</span>
             </Label>
-            <Select value={approvalSupplierId} onValueChange={setApprovalSupplierId}>
-              <SelectTrigger id="purchase-request-approval-supplier" className="h-11 w-full">
-                <SelectValue placeholder="Seleccionar proveedor..." />
-              </SelectTrigger>
-              <SelectContent>
-                {supplierCatalog.filter(supplier => String(supplier.status || '').toUpperCase() === 'ACTIVE' || supplier.id === approvalSupplierId).map(supplier => (
-                  <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>
-                ))}
-                {supplierCatalog.filter(supplier => String(supplier.status || '').toUpperCase() === 'ACTIVE' || supplier.id === approvalSupplierId).length === 0 && (
-                  <SelectItem value="__no_active_suppliers" disabled>No hay proveedores activos</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+            <Combobox
+              options={supplierCatalog
+                .filter(supplier => String(supplier.status || '').toUpperCase() === 'ACTIVE' || supplier.id === approvalSupplierId)
+                .map(supplier => ({
+                  label: supplier.name,
+                  value: supplier.id,
+                  description: [supplier.code, supplier.phone].filter(Boolean).join(' · ') || undefined,
+                }))}
+              value={approvalSupplierId}
+              onChange={setApprovalSupplierId}
+              placeholder="Seleccionar proveedor..."
+              searchPlaceholder="Buscar por nombre, código o teléfono..."
+              emptyMessage="No se encontró el proveedor."
+              maxVisibleOptions={supplierCatalog.length || 100}
+              className="h-11 text-sm"
+            />
             <p className="text-[11px] text-muted-foreground">El proveedor seleccionado quedará vinculado a la solicitud y a la orden de compra que se creará.</p>
           </div>
         )}

@@ -45,6 +45,8 @@ export function Combobox({
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
   const pointerSelection = React.useRef<string | null>(null)
+  const pendingWheelDelta = React.useRef(0)
+  const wheelFrame = React.useRef<number | null>(null)
 
   const visibleOptions = React.useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -64,6 +66,39 @@ export function Combobox({
     onChange(nextValue === value ? "" : nextValue)
     setOpen(false)
   }, [onChange, value])
+
+  React.useEffect(() => () => {
+    if (wheelFrame.current !== null) window.cancelAnimationFrame(wheelFrame.current)
+  }, [])
+
+  const handleListWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const list = event.currentTarget
+    const maxScrollTop = list.scrollHeight - list.clientHeight
+    if (maxScrollTop <= 0 || event.deltaY === 0) return
+
+    const canScroll = event.deltaY > 0
+      ? list.scrollTop < maxScrollTop
+      : list.scrollTop > 0
+    if (!canScroll) return
+
+    // Keep the browser's native wheel scrolling whenever possible. Some
+    // modal scroll locks prevent that default action, so only in that case
+    // accumulate the delta and apply it once per animation frame.
+    event.stopPropagation()
+    if (!event.defaultPrevented) return
+
+    event.preventDefault()
+    pendingWheelDelta.current += event.deltaY
+    if (wheelFrame.current !== null) return
+
+    wheelFrame.current = window.requestAnimationFrame(() => {
+      wheelFrame.current = null
+      const currentMaxScrollTop = list.scrollHeight - list.clientHeight
+      const nextScrollTop = list.scrollTop + pendingWheelDelta.current
+      pendingWheelDelta.current = 0
+      list.scrollTop = Math.max(0, Math.min(currentMaxScrollTop, nextScrollTop))
+    })
+  }, [])
 
   return (
     <Popover open={open} onOpenChange={disabled ? undefined : handleOpenChange}>
@@ -88,7 +123,10 @@ export function Combobox({
       <PopoverContent className="w-full p-0" align="start">
         <Command shouldFilter={false}>
           <CommandInput value={search} onValueChange={setSearch} placeholder={searchPlaceholder || placeholder} className="h-8 text-xs" />
-          <CommandList>
+          <CommandList
+            onWheelCapture={handleListWheel}
+            className="touch-pan-y overscroll-contain"
+          >
             <CommandEmpty className="text-xs py-2">{emptyMessage}</CommandEmpty>
             <CommandGroup>
               {visibleOptions.map((option) => (
