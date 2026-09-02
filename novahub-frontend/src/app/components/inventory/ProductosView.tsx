@@ -140,6 +140,17 @@ const normalizeImportHeader = (value: unknown) => String(value ?? '')
   .trim()
   .replace(/\s+/g, ' ');
 
+const hasProductVariants = (product: any) => {
+  if (product?.isVariable === true) return true;
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  if (variants.length > 1) return true;
+  return variants.some((variant: any) =>
+    (Array.isArray(variant?.attributes) && variant.attributes.length > 0)
+    || String(variant?.sku || '').trim().toLowerCase() !== String(product?.code || '').trim().toLowerCase()
+    || String(variant?.name || '').trim().toLowerCase() !== 'estándar',
+  );
+};
+
 interface ProductosViewProps {
   products: any[];
   summaryProducts?: any[];
@@ -3636,7 +3647,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="flex min-w-0 items-center gap-2 truncate font-semibold" title={product.name}>{product.name}{String(openingId) === String(product.id) && <span role="status" className="inline-flex shrink-0 items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</p>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <p className="min-w-0 truncate font-semibold" title={product.name}>{product.name}{String(openingId) === String(product.id) && <span role="status" className="ml-2 inline-flex shrink-0 items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</p>
+                        {!isServiceView && hasProductVariants(product) && <Badge variant="outline" className="shrink-0 border-primary/30 text-[9px] font-black uppercase text-primary">Con variantes</Badge>}
+                      </div>
                       <p className="truncate font-mono text-xs text-muted-foreground">{product.code}</p>
                     </div>
                     <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase">{isServiceView ? 'Servicio' : 'Producto'}</Badge>
@@ -3847,6 +3861,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                           >
                             {product.name}
                           </button>
+                          {!isServiceView && hasProductVariants(product) && <Badge variant="outline" className="shrink-0 border-primary/30 text-[9px] font-black uppercase text-primary">Con variantes</Badge>}
                           {!isServiceView && Boolean(
                             product.trackSerialNumbers ||
                             product.serialTracking ||

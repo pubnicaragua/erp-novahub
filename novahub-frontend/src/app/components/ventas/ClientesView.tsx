@@ -642,7 +642,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
-    { key: 'creditLimit', header: 'Límite de crédito', width: '160px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val, row) => <span className="text-xs font-bold tabular-nums">{formatCurrentAmount(Number(val || 0), normalizeCurrency(row.creditLimitCurrency, baseCurrency))} <span className="text-[9px] font-black text-muted-foreground">({normalizeCurrency(row.creditLimitCurrency, baseCurrency)})</span></span> },
+    { key: 'creditLimit', header: 'Límite de crédito', width: '160px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val, row) => <span className="text-xs font-bold tabular-nums">{formatCurrentAmount(Number(val || 0), normalizeCurrency(row.creditLimitCurrency, baseCurrency))}</span> },
     { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{(val ?? 0) === 0 || val == null ? 'Contado' : `${val} días`}</span> },
     {
       key: 'balance',
