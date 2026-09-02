@@ -33,6 +33,7 @@ import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -108,11 +109,7 @@ const normalizeCreditCatalogValue = (value: unknown, options: CreditImportCatalo
 };
 
 const normalizeCreditDecimalInput = (value: unknown) => {
-  const raw = String(value ?? '').replace(',', '.');
-  const cleaned = raw.replace(/[^\d.]/g, '');
-  const dotIndex = cleaned.indexOf('.');
-  if (dotIndex < 0) return cleaned;
-  return `${cleaned.slice(0, dotIndex)}.${cleaned.slice(dotIndex + 1).replace(/\./g, '')}`;
+  return normalizeDecimalInput(value);
 };
 
 const INVOICE_STATUS_LABELS: Record<string, string> = {
@@ -771,9 +768,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                     {localDoc.hasInterest && (
                       <Input
                         disabled={!canMutate}
-                        type="number" min="0" step="0.01"
-                        value={localDoc.interestRate || 0}
-                        onChange={(e) => setLocalDoc({ ...localDoc, interestRate: Number(e.target.value) })}
+                        type="text" inputMode="decimal" min="0"
+                        value={formatDecimalInput(localDoc.interestRate || 0)}
+                        onChange={(e) => setLocalDoc({ ...localDoc, interestRate: normalizeDecimalInput(e.target.value) as any })}
                         className="h-8 w-24 text-xs font-bold tabular-nums"
                         placeholder="% mensual"
                       />
@@ -872,9 +869,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <p className="text-[10px] text-muted-foreground mb-1">Tasa IVA (%)</p>
                   <Input
                     disabled={!canMutate || !!localDoc.supplierInvoiceId || !isGravado}
-                    type="number" min="0" step="0.01"
-                    value={isGravado ? creditTaxRate : 0}
-                    onChange={(e) => setLocalDoc({ ...localDoc, taxRate: Number(e.target.value) })}
+                    type="text" inputMode="decimal" min="0"
+                    value={formatDecimalInput(isGravado ? creditTaxRate : 0)}
+                    onChange={(e) => setLocalDoc({ ...localDoc, taxRate: normalizeDecimalInput(e.target.value) as any })}
                     className="h-8 text-xs font-bold tabular-nums" />
                 </div>
                 <div>
@@ -907,18 +904,18 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <p className="text-[10px] text-muted-foreground mb-1">Tasa IR (%)</p>
                   <Input
                     disabled={!canMutate || !!localDoc.supplierInvoiceId || String(localDoc.withholdingType || 'NONE').toUpperCase() === 'NONE'}
-                    type="number" min="0" step="0.01"
-                    value={String(localDoc.withholdingType || 'NONE').toUpperCase() !== 'NONE' ? (localDoc.withholdingRate || 0) : 0}
-                    onChange={(e) => setLocalDoc({ ...localDoc, withholdingRate: Number(e.target.value) })}
+                    type="text" inputMode="decimal" min="0"
+                    value={formatDecimalInput(String(localDoc.withholdingType || 'NONE').toUpperCase() !== 'NONE' ? (localDoc.withholdingRate || 0) : 0)}
+                    onChange={(e) => setLocalDoc({ ...localDoc, withholdingRate: normalizeDecimalInput(e.target.value) as any })}
                     className="h-8 text-xs font-bold tabular-nums" />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Descuento (%)</p>
                   <Input
                     disabled={!canMutate || !!localDoc.supplierInvoiceId}
-                    type="number" min="0" step="0.01"
-                    value={localDoc.discountRate || 0}
-                    onChange={(e) => setLocalDoc({ ...localDoc, discountRate: Number(e.target.value) })}
+                    type="text" inputMode="decimal" min="0"
+                    value={formatDecimalInput(localDoc.discountRate || 0)}
+                    onChange={(e) => setLocalDoc({ ...localDoc, discountRate: normalizeDecimalInput(e.target.value) as any })}
                     className="h-8 text-xs font-bold tabular-nums" />
                 </div>
                 <div className="sm:col-span-2 lg:col-span-3">
@@ -1022,7 +1019,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                         disabled={!canMutate}
                         type="text"
                         inputMode="decimal"
-                        value={item.unitPrice === 0 ? '' : String(item.unitPrice ?? '')}
+                        value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', normalizeCreditDecimalInput(e.target.value))}
                         className="h-8 text-xs text-right" 
                         placeholder="0" 
@@ -1177,7 +1174,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           actions={(row) => {
             return (
              <div className="flex items-center gap-1">
-              <Button title="Ver detalle" aria-label="Ver detalle del crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailCredit(row)}><Eye className="size-4" /></Button>
+              <Button title="Ver detalle completo" aria-label="Ver detalle completo del crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailCredit(null); openEditor(row.id); }}><Eye className="size-4" /></Button>
               {canPerform('PURCHASES_RETURNS', 'edit') && <Button title="Editar crédito" aria-label="Editar crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailCredit(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           );

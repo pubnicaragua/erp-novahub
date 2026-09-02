@@ -43,6 +43,7 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlerts
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { getPurchaseOrderStatusOption, normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES, PURCHASE_ORDER_STATUS_OPTIONS } from '../../utils/purchaseOrderStatus';
+import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
@@ -247,14 +248,14 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           <ImportPreviewField label="Notas"><div><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><p className="mt-1 text-[10px] text-muted-foreground">{Array.from(row.commercialNoteSnapshot || '').length}/100</p></div></ImportPreviewField>
           <ImportPreviewField label="Categoría" className="sm:col-span-2"><div className="flex min-w-0 items-center gap-1"><select aria-label={`Categoría de ${row.sku || `fila ${index + 1}`}`} value={categoryValue} onChange={(event) => onCategoryChange(index, event.target.value === '__none__' ? '' : event.target.value)} className={`${importPreviewFieldClass} min-w-0 flex-1 ${row._hasError ? 'border-red-500' : matchingCategory ? '' : 'border-amber-500/70 text-amber-700'}`} disabled={importing}><option value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'}</option>{categoryOptions.filter((category: any) => category.isActive !== false).map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg border-amber-500/50 p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button></div></ImportPreviewField>
           <ImportPreviewField label="Cantidad"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label={`Precio unitario (${currencySymbol})`}><Input type="text" inputMode="decimal" value={String(row.unitPrice ?? '')} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label={`Precio unitario (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(row.unitPrice)} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Tipo IVA"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="">Seleccionar IVA</option>{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
-          <ImportPreviewField label={`Base IVA (${currencySymbol})`}><Input type="number" value={isTaxExempt(taxValue) ? 0 : tax.taxBase} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
-          <ImportPreviewField label="IVA %"><Input type="number" value={tax.taxRate} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label={`Base IVA (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(isTaxExempt(taxValue) ? 0 : tax.taxBase)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label="IVA %"><Input type="text" inputMode="decimal" value={formatInputNumber(tax.taxRate)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
           <ImportPreviewField label={`Monto IVA (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(2)}</div></ImportPreviewField>
           <ImportPreviewField label="Retención" className="sm:col-span-2"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="NONE">Sin retención</option>{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
-          <ImportPreviewField label={`Base ret. (${currencySymbol})`}><Input type="number" value={withholdingValue === 'NONE' ? 0 : withholding.withholdingBase} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
-          <ImportPreviewField label="Ret. %"><Input type="number" value={withholding.withholdingRate} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label={`Base ret. (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(withholdingValue === 'NONE' ? 0 : withholding.withholdingBase)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label="Ret. %"><Input type="text" inputMode="decimal" value={formatInputNumber(withholding.withholdingRate)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
           <ImportPreviewField label={`Monto ret. (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(2)}</div></ImportPreviewField>
         </div>
       </ImportPreviewMobileCard>
@@ -369,14 +370,14 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                   </TableCell>
                   <TableCell className="p-1 text-right text-xs font-black text-primary">{row.currentStock ?? '—'}</TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className="h-8 border-2 border-border bg-background text-right text-xs shadow-sm" /></TableCell>
-                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={String(row.unitPrice ?? '')} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className="h-8 border-2 border-primary/30 bg-background text-right text-xs shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(row.unitPrice)} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className="h-8 border-2 border-primary/30 bg-background text-right text-xs shadow-sm" /></TableCell>
                   <TableCell className="p-1"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="">Seleccionar IVA</option>{taxValue && !taxOptionExists && <option value={taxValue}>{taxValue}</option>}{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
-                  <TableCell className="p-1"><Input type="number" value={isTaxExempt(taxValue) ? 0 : tax.taxBase} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" value={tax.taxRate} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(isTaxExempt(taxValue) ? 0 : tax.taxBase)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(tax.taxRate)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
                   <TableCell className="p-1 text-right text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(2)}</TableCell>
                   <TableCell className="p-1"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="NONE">Sin retención</option>{withholdingValue !== 'NONE' && !withholdingOptionExists && <option value={withholdingValue}>{withholdingValue}</option>}{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
-                  <TableCell className="p-1"><Input type="number" value={withholdingValue === 'NONE' ? 0 : withholding.withholdingBase} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" value={withholding.withholdingRate} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(withholdingValue === 'NONE' ? 0 : withholding.withholdingBase)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(withholding.withholdingRate)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
                   <TableCell className="p-1 text-right text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(2)}</TableCell>
                 </TableRow>
                 );
@@ -490,18 +491,11 @@ const LINKED_PRODUCT_LOCKED_FIELDS = new Set([
 ]);
 
 const formatInputNumber = (value: unknown) => {
-  if (value === '' || value === null || value === undefined) return '';
-  // No formatear durante la edición: toFixed(2) convertía "3" en "3.00"
-  // después de cada pulsación y hacía imposible escribir precios enteros.
-  return String(value);
+  return formatDecimalInput(value);
 };
 
 const normalizePurchaseDecimalInput = (value: unknown) => {
-  const raw = String(value ?? '').replace(',', '.');
-  const cleaned = raw.replace(/[^\d.]/g, '');
-  const dotIndex = cleaned.indexOf('.');
-  if (dotIndex < 0) return cleaned;
-  return `${cleaned.slice(0, dotIndex)}.${cleaned.slice(dotIndex + 1).replace(/\./g, '')}`;
+  return normalizeDecimalInput(value);
 };
 
 const formatInputInteger = (value: unknown) => {
@@ -515,6 +509,29 @@ const getProductListFromResponse = (response: any): any[] => (
 );
 
 const normalizeProductCode = (product: any) => String(product?.code || product?.sku || '').trim().toLowerCase();
+
+const getProductInventoryLevels = (product: any): any[] => (
+  Array.isArray(product?.inventoryLevels)
+    ? product.inventoryLevels
+    : (Array.isArray(product?.stockLevels) ? product.stockLevels : [])
+);
+
+const getProductStockForWarehouse = (product: any, variantId?: string | null, warehouseId?: string | null) => {
+  if (!product) return undefined;
+  const levels = getProductInventoryLevels(product);
+  const normalizedWarehouseId = String(warehouseId || '').trim();
+  const scopedLevels = normalizedWarehouseId
+    ? levels.filter((level: any) => String(level?.warehouseId || '') === normalizedWarehouseId)
+    : levels;
+  const matchingLevels = variantId
+    ? scopedLevels.filter((level: any) => String(level?.variantId || '') === String(variantId))
+    : scopedLevels;
+  if (variantId || normalizedWarehouseId || matchingLevels.length > 0) {
+    return matchingLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
+  }
+  if (product.stock !== undefined && product.stock !== null) return Number(product.stock);
+  return levels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
+};
 
 const findImportProductMatch = (sku: unknown, catalog: any[] = []) => {
   const normalized = String(sku || '').trim().toLowerCase();
@@ -1357,7 +1374,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     if (!doc || !Array.isArray(doc.items)) return doc;
     const items = doc.items.map((it: any) => {
       const prod = productCatalog.find((p: any) => String(p.id) === String(it.productId));
-      const stockVal = it.stock ?? it.currentStock ?? (prod ? (prod.stock != null ? prod.stock : (prod.quantity ?? 0)) : undefined);
+      const stockVal = prod
+        ? getProductStockForWarehouse(prod, it.variantId, doc.warehouseId)
+        : (it.currentStock ?? it.stock);
       if (prod) {
         const costPrice = Number(prod.costPrice ?? prod.cost ?? prod.price ?? it.unitPrice ?? 0);
         return {
@@ -1367,6 +1386,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           description: it.description || prod.name || it.name || '',
           category: prod.category?.name || prod.category || it.category || '',
           categoryId: it.categoryId || prod.categoryId || (prod.category?.id || ''),
+          commercialNoteSnapshot: it.commercialNoteSnapshot || prod.commercialNote || null,
           stock: stockVal,
           currentStock: stockVal,
           unitPrice: (it.unitPrice != null && Number(it.unitPrice) > 0) ? Number(it.unitPrice) : costPrice,
@@ -1858,12 +1878,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const purchasePrice = selectedVariant?.costPrice !== null && selectedVariant?.costPrice !== undefined
       ? Number(selectedVariant.costPrice)
       : Number(selected.costPrice ?? selected.cost ?? selected.price ?? 0) + Number(selectedVariant?.costModifier || 0);
-    const variantLevels = selectedVariant && Array.isArray(selected.inventoryLevels)
-      ? selected.inventoryLevels.filter((level: any) => String(level.variantId || '') === String(selectedVariant.id))
-      : [];
-    const currentStock = selectedVariant
-      ? variantLevels.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0)
-      : (selected.stock != null ? selected.stock : (selected.inventoryLevels?.[0]?.quantity ?? selected.quantity ?? 0));
+    const currentStock = getProductStockForWarehouse(selected, selectedVariant?.id, localDoc.warehouseId)
+      ?? (selected.quantity ?? 0);
     const rawTaxRate = Number(selected.taxRate);
     const taxRate = rawTaxRate > 0 && rawTaxRate <= 1 ? rawTaxRate * 100 : Number.isFinite(rawTaxRate) && rawTaxRate >= 0 ? rawTaxRate : 15;
     const quantity = Math.max(0, Math.trunc(Number(currentItem.quantity || 1)));
@@ -2596,6 +2612,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           title="¿Aprobar orden de compra?"
           description="Al aprobarla, la orden pasará a estado Aprobada y se generará una recepción pendiente vinculada para registrar las cantidades entregadas."
           confirmLabel="Sí, aprobar orden"
+          confirmSingleLine
+          contentClassName="!max-w-[520px]"
           variant="default"
           loading={approving}
           closeOnConfirm={false}
@@ -2662,7 +2680,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           } : undefined}
           actions={(row) => (
             <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-              <Button title="Ver detalle" aria-label="Ver detalle de la orden" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setPreviewOrder(row)}>
+              <Button title="Ver detalle completo" aria-label="Ver detalle completo de la orden" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setPreviewOrder(null); setEditingId(String(row.id)); }}>
                 <Eye className="size-4" />
               </Button>
               {canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Aprobar orden de compra" aria-label="Aprobar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(row); }}><CheckCircle2 className="size-4" /></Button>}
@@ -2703,6 +2721,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           title="¿Aprobar orden de compra?"
           description="Al aprobarla, la orden pasará a estado Aprobada y se generará una recepción pendiente vinculada para registrar las cantidades entregadas."
           confirmLabel="Sí, aprobar orden"
+          confirmSingleLine
+          contentClassName="!max-w-[520px]"
           variant="default"
           loading={approving}
           closeOnConfirm={false}

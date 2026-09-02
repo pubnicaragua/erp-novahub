@@ -489,7 +489,7 @@ export function LibroMayorView() {
                 <div className="rounded-2xl border border-border/60 bg-muted/15 p-4">
                   <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Operación de origen</p>
                   <p className="mt-1 text-sm font-bold">{referenceTypeLabel(selectedJournal.referenceType)}</p>
-                  <p className="mt-1 break-all font-mono text-xs text-muted-foreground">ID: {selectedJournal.referenceId || 'Sin referencia'}</p>
+                  <p className="mt-1 break-words font-mono text-xs text-muted-foreground">Documento: {selectedJournal.referenceNumber || 'Sin número de documento'}</p>
                   <p className="mt-3 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Sucursal de origen</p>
                   <p className="mt-1 text-sm font-semibold">
                     {selectedJournal.branchLinks?.length

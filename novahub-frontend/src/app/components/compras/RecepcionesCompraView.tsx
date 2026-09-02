@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
-  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, Pencil, Ban,
+  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, Ban,
   AlertTriangle, XCircle, ArrowDown, FileText, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign, RefreshCw, Send
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -38,6 +38,7 @@ import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; onOpenCredits?: () => void; }
 
@@ -171,6 +172,48 @@ function formatInventoryOperationQuantity(value: number) {
   return Number(value || 0).toLocaleString('es-NI', { maximumFractionDigits: 4 });
 }
 
+function getReceiptProductStock(product: any, variantId?: string | null, warehouseId?: string | null) {
+  if (!product) return undefined;
+  const levels = Array.isArray(product.inventoryLevels)
+    ? product.inventoryLevels
+    : (Array.isArray(product.stockLevels) ? product.stockLevels : []);
+  const normalizedWarehouseId = String(warehouseId || '').trim();
+  const scopedLevels = normalizedWarehouseId
+    ? levels.filter((level: any) => String(level?.warehouseId || '') === normalizedWarehouseId)
+    : levels;
+  const matchingLevels = variantId
+    ? scopedLevels.filter((level: any) => String(level?.variantId || '') === String(variantId))
+    : scopedLevels;
+  if (variantId || normalizedWarehouseId || matchingLevels.length > 0) {
+    return matchingLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
+  }
+  if (product.stock !== undefined && product.stock !== null) return Number(product.stock);
+  return levels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
+}
+
+function getReceiptCommercialNote(item: any, products: any[] = []) {
+  const currentNote = String(item?.commercialNoteSnapshot ?? item?.commercialNote ?? '').trim();
+  if (currentNote) return currentNote;
+  const parentProduct = item?.product || products.find((product: any) => String(product?.id) === String(item?.productId));
+  return String(parentProduct?.commercialNote || '').trim();
+}
+
+function getReceiptCurrentStock(item: any, products: any[] = [], fallbackWarehouseId?: string | null) {
+  if (item?.stockApplies === false) return undefined;
+  // La relación `item.product` que devuelve recepción es parcial (id y nota
+  // comercial), no incluye los niveles de inventario. Para mostrar la
+  // existencia real debemos tomar primero el producto completo del catálogo;
+  // la relación embebida queda como respaldo para respuestas históricas.
+  const catalogProduct = products.find((candidate: any) => String(candidate?.id) === String(item?.productId));
+  const product = catalogProduct || item?.product;
+  const warehouseId = item?.warehouseId || fallbackWarehouseId || null;
+  const catalogStock = product ? getReceiptProductStock(product, item?.variantId, warehouseId) : undefined;
+  if (catalogStock !== undefined) return catalogStock;
+  if (item?.currentStock !== null && item?.currentStock !== undefined) return Number(item.currentStock);
+  if (item?.stock !== null && item?.stock !== undefined) return Number(item.stock);
+  return undefined;
+}
+
 function getInventoryCostOperations(response: any): InventoryCostOperation[] {
   const payload = response?.data ?? response;
   return Array.isArray(payload?.inventoryCostOperations) ? payload.inventoryCostOperations : [];
@@ -215,7 +258,7 @@ const RECEIPT_PAYMENT_METHODS = [
 
 type ReceiptPaymentLine = {
   method: PaymentMethod;
-  amount: number;
+  amount: number | string;
   currency: 'NIO' | 'USD';
   exchangeRate: number;
   bankAccountId?: string;
@@ -456,7 +499,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                             const nextRate = paymentLineRate(nextCurrency);
                             return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
                           }))} />
-                          <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} disabled={saving} className="h-10 font-black tabular-nums" /></div>
+                          <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" value={formatDecimalInput(line.amount) || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))} disabled={saving} className="h-10 font-black tabular-nums" /></div>
                           <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || saving} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                         </div>
                         {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
@@ -523,7 +566,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const [creditReason, setCreditReason] = useState('');
   const [creditQuantities, setCreditQuantities] = useState<Record<string, number>>({});
   const [creditLoading, setCreditLoading] = useState(false);
-  const [codeEditMode, setCodeEditMode] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
@@ -533,22 +575,31 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     setCategories(productCategories);
   }, [supplierCatalog, orderCatalog, warehouseCatalog, productCatalog, productCategories]);
 
+  const availableProducts = products.length > 0 ? products : productCatalog;
+
   const [prevEdit, setPrevEdit] = useState({ editingId, data });
   if (editingId !== prevEdit.editingId || data !== prevEdit.data) {
     setPrevEdit({ editingId, data });
     if (editingId) {
-      setCodeEditMode({});
-       if (editingId === 'NEW') {
+      if (editingId === 'NEW') {
          setLocalDoc({
            supplierId: '',
            purchaseOrderId: '',
            date: new Date().toISOString(),
-         status: 'PENDING' as any,
+          status: 'PENDING' as any,
            items: [],
          });
        } else {
-          const found = data.find(x => x.id === editingId);
-          setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+        const found = data.find(x => x.id === editingId);
+        const cloned = found ? JSON.parse(JSON.stringify(found)) : null;
+        setLocalDoc(cloned ? {
+          ...cloned,
+             items: (cloned.items || []).map((item: any) => ({
+               ...item,
+               currentStock: getReceiptCurrentStock(item, availableProducts, cloned.purchaseOrder?.warehouseId),
+               commercialNoteSnapshot: getReceiptCommercialNote(item, availableProducts) || null,
+             })),
+        } : null);
        }
      } else {
        setLocalDoc(null);
@@ -909,7 +960,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     const linkedOrderForSave = orders.find((order) => String(order.id) === String(localDoc.purchaseOrderId));
     const receiptCurrency = normalizeReceiptCurrency(localDoc.currency || linkedOrderForSave?.currency);
     const receiptExchangeRate = Number(localDoc.exchangeRate || linkedOrderForSave?.exchangeRate || 1);
-    const itemsToSave = normalizeReceiptItemsForForm(localDoc.items || []);
+    const itemsToSave = normalizeReceiptItemsForForm((localDoc.items || []).map((item: any) => ({
+      ...item,
+      commercialNoteSnapshot: getReceiptCommercialNote(item, availableProducts) || null,
+    })));
     const autoComputedStatus = calcStatus(itemsToSave);
     const financialTotals = calculateReceiptTotalsForForm(itemsToSave);
     const documentToSave = {
@@ -1053,7 +1107,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       if (!current) return current;
       const newItems = [...(current.items || [])];
       const numericField = ['quantityOrdered', 'quantityReceived', 'quantityRejected', 'unitPrice', 'taxRate', 'withholdingRate'].includes(field);
-      const nextValue = numericField ? Math.max(0, Number(value) || 0) : value;
+      const decimalField = ['unitPrice', 'taxRate', 'withholdingRate'].includes(field);
+      const nextValue = numericField
+        ? decimalField ? normalizeDecimalInput(value) : (Number(value) || 0)
+        : value;
       const currentItem = newItems[idx] || {};
       const ordered = Math.max(0, Number(currentItem.quantityOrdered || 0));
       const currentReceived = Math.max(0, Number(currentItem.quantityReceived || 0));
@@ -1235,7 +1292,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Información General</p>
-              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <p className="text-[10px] text-foreground mb-1">Proveedor</p>
                   <Combobox 
@@ -1271,15 +1328,20 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                            ord = { ...(listOrd || {}), ...detailOrder, items: detailItems } as any;
                          }
                        }
-                       const newItems = ord?.items?.map((it: any) => ({
-                          description: (it as any).description,
+                        const orderWarehouseId = (ord as any)?.warehouseId || '';
+                        const newItems = ord?.items?.map((it: any) => ({
+                           ...it,
+                           description: (it as any).description,
                           code: (it as any).code || (it as any).sku || '',
                           name: (it as any).name || '',
+                          variantId: (it as any).variantId || null,
                           category: (it as any).category || '',
                           categoryId: (it as any).categoryId
                             || categories.find((c: any) => String(c.name || '').trim().toLowerCase() === String((it as any).category || '').trim().toLowerCase())?.id
                             || '',
                           stockApplies: (it as any).stockApplies !== false,
+                           stock: getReceiptCurrentStock(it, availableProducts, orderWarehouseId) ?? null,
+                           currentStock: getReceiptCurrentStock(it, availableProducts, orderWarehouseId) ?? null,
                           quantityOrdered: (it as any).quantity,
                           quantityReceived: (it as any).quantity,
                           productId: (it as any).productId,
@@ -1293,8 +1355,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                           // La recepción hereda la bodega destino de la orden.
                           // Si la orden histórica no la tiene, la selección debe
                           // quedar vacía para forzar una elección válida.
-                          warehouseId: (ord as any)?.warehouseId || '',
-                          commercialNoteSnapshot: (it as any).commercialNoteSnapshot || null,
+                           warehouseId: orderWarehouseId,
+                          commercialNoteSnapshot: getReceiptCommercialNote(it, availableProducts) || null,
                         })) || [];
                         const autoStatus = calcStatus(newItems);
                         setLocalDoc({
@@ -1328,10 +1390,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
                     className="h-8 text-xs" 
                   />
-                </div>
-                <div>
-                  <p className="text-[10px] text-foreground mb-1">Estado</p>
-                  <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Pendiente'}</Badge></div>
                 </div>
                 <div>
                   <p className="text-[10px] text-foreground mb-1">Moneda de la orden</p>
@@ -1411,165 +1469,215 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                       {rechazado && <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-amber-500/10 text-amber-700 dark:text-amber-300"><XCircle className="size-2.5 mr-1" /> No aceptado: {qRejected} uds.</Badge>}
                     </div>
                   )}
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-foreground">Producto de inventario</p>
+                  <div className="flex min-w-0 flex-col gap-3 border-b border-border/30 pb-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground">
+                        Producto de inventario
+                        {item.productId && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-primary font-black">
+                            <span className="size-1.5 rounded-full bg-primary inline-block" />
+                            Vinculado · campos bloqueados
+                          </span>
+                        )}
                         {!item.productId && item.stockApplies !== false && (
-                          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[8px] font-black uppercase tracking-wider text-amber-600">
+                          <Badge variant="outline" className="ml-2 border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[8px] font-black uppercase tracking-wider text-amber-600">
                             Nuevo al recepcionar
                           </Badge>
                         )}
-                      </div>
-                      {!item.productId && item.stockApplies !== false && (
-                        <p className="mb-2 text-[10px] text-amber-600">Se creará automáticamente con el SKU, nombre y categoría de esta línea al ingresar al inventario.</p>
-                      )}
-                      <Combobox
-                        disabled={!canEditCurrent}
-                        options={products.map((p) => ({
-                          label: `${p.code} - ${p.name}`,
-                          value: p.id,
-                          description: p.commercialNote ? `Nota: ${p.commercialNote}` : undefined,
-                        }))}
-                        value={item.productId || ''}
-                        onChange={(val) => {
-                          const prod = products.find((p) => p.id === val);
-                          handleItemChange(idx, 'productId', val);
-                          if (prod) {
-                            handleItemChange(idx, 'description', prod.name);
-                            handleItemChange(idx, 'name', prod.name);
-                            handleItemChange(idx, 'code', prod.code);
-                            handleItemChange(idx, 'category', prod.category?.name || prod.category || '');
-                            handleItemChange(idx, 'categoryId', prod.categoryId || (prod.category?.id ? prod.category.id : ''));
-                            handleItemChange(idx, 'commercialNoteSnapshot', prod.commercialNote || null);
-                            handleItemChange(idx, 'unitPrice', Number(prod.costPrice || prod.cost || prod.price || 0));
-                          }
-                        }}
-                        placeholder={item.productId ? 'Seleccionar producto del catálogo' : 'Sin vincular · se creará al recepcionar'}
-                      />
+                      </p>
+                      <p className="mt-1 text-[10px] font-medium text-foreground/70">
+                        {item.productId ? 'Desvincula el producto para editar este ítem manualmente.' : 'Sin vincular · se creará como producto nuevo al recepcionar.'}
+                      </p>
                     </div>
-                    {canEditCurrent && (
-                      <Button variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground/40 hover:bg-rose-500/10 hover:text-rose-500 rounded-xl opacity-0 group-hover:opacity-100 transition-all" onClick={() => handleDeleteItem(idx)}>
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    )}
+                    <div className="flex min-w-0 w-full items-end gap-2 sm:w-auto sm:max-w-[34rem] sm:flex-1">
+                      <div className="min-w-0 flex-1 sm:w-[28rem] sm:flex-none">
+                        <Combobox
+                          disabled={!canEditCurrent}
+                          options={[
+                            { label: 'Producto nuevo al recepcionar', value: '__none__', description: 'Se creará desde los datos de esta línea' },
+                            ...products.filter(Boolean).map((p: any) => ({
+                              label: p.name || 'Producto',
+                              value: String(p.id),
+                              description: [
+                                `${p.code || p.sku || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,
+                                p.commercialNote ? `Nota: ${p.commercialNote}` : null,
+                              ].filter(Boolean).join(' · '),
+                            })),
+                          ]}
+                          value={item.productId ? String(item.productId) : '__none__'}
+                          onChange={(val) => {
+                            if (val === '__none__' || !val) {
+                              handleItemChange(idx, 'productId', '');
+                              handleItemChange(idx, 'variantId', null);
+                              return;
+                            }
+                            const prod = products.find((p) => String(p.id) === String(val));
+                            handleItemChange(idx, 'productId', val);
+                            if (prod) {
+                              const productStock = getReceiptProductStock(prod, item.variantId, item.warehouseId);
+                              handleItemChange(idx, 'description', prod.name);
+                              handleItemChange(idx, 'name', prod.name);
+                              handleItemChange(idx, 'code', prod.code || prod.sku || '');
+                              handleItemChange(idx, 'category', prod.category?.name || prod.category || '');
+                              handleItemChange(idx, 'categoryId', prod.categoryId || prod.category?.id || '');
+                              handleItemChange(idx, 'commercialNoteSnapshot', prod.commercialNote || null);
+                              handleItemChange(idx, 'stock', productStock ?? null);
+                              handleItemChange(idx, 'currentStock', productStock ?? null);
+                              handleItemChange(idx, 'unitPrice', Number(prod.costPrice || prod.cost || prod.price || 0));
+                            }
+                          }}
+                          placeholder="Buscar producto..."
+                          searchPlaceholder="Buscar por nombre, código o SKU..."
+                          className="h-9 text-xs"
+                        />
+                        {item.variantId && (
+                          <Badge variant="secondary" className="mt-1 max-w-full truncate font-mono text-[9px]">
+                            Variante · {item.code || item.variantId}
+                          </Badge>
+                        )}
+                      </div>
+                      {canEditCurrent && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Eliminar ítem"
+                          className="size-9 shrink-0 rounded-xl text-muted-foreground/60 transition-colors hover:bg-rose-500/10 hover:text-rose-500 sm:opacity-0 sm:group-hover:opacity-100"
+                          onClick={() => handleDeleteItem(idx)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1.1fr)_minmax(13rem,0.8fr)_minmax(14rem,0.9fr)] md:items-end">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">Descripción / Nombre</p>
+
+                  <div className="purchase-item-fields grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-12">
+                    <div className="col-span-1 min-w-0 xl:col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Código</p>
                       <Input
                         disabled={!canEditCurrent}
-                        value={item.description || ''}
-                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                        className="h-8 text-xs font-bold"
-                        placeholder="Ej. Llantas Michelin"
+                        value={item.code || ''}
+                        onChange={(e) => handleItemChange(idx, 'code', e.target.value)}
+                        className="h-8 text-xs font-mono"
+                        placeholder="Código"
                       />
-                      <div className="mt-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">Nota comercial</p>
-                          <span className="text-[9px] text-muted-foreground">{Array.from(item.commercialNoteSnapshot || '').length}/100</span>
-                        </div>
-                        <Input
-                          disabled={!canEditCurrent}
-                          value={item.commercialNoteSnapshot || ''}
-                          maxLength={100}
-                          onChange={(e) => handleItemChange(idx, 'commercialNoteSnapshot', e.target.value.slice(0, 100))}
-                          className="h-8 text-xs"
-                          placeholder="Nota visible en documentos"
-                        />
+                    </div>
+                    <div className="col-span-1 min-w-0 xl:col-span-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Nombre</p>
+                      <Input
+                        disabled={!canEditCurrent}
+                        value={item.description || item.name || ''}
+                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
+                        className="h-8 text-xs"
+                        placeholder="Producto"
+                      />
+                    </div>
+                    <div className="col-span-1 min-w-0 xl:col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Categoría</p>
+                      <Select
+                        disabled={Boolean(item.productId) || !canEditCurrent}
+                        value={item.categoryId || '__none__'}
+                        onValueChange={(categoryId) => {
+                          const normalizedCategoryId = categoryId === '__none__' ? '' : categoryId;
+                          const category = categories.find((candidate: any) => String(candidate.id) === String(normalizedCategoryId));
+                          handleItemChange(idx, 'categoryId', normalizedCategoryId);
+                          handleItemChange(idx, 'category', category?.name || '');
+                        }}
+                      >
+                        <SelectTrigger className={cn('h-8 w-full text-xs', item.categoryId ? '' : 'text-muted-foreground/50')}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sin categoría</SelectItem>
+                          {categories.map((c: any) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-1 min-w-0 xl:col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Stock actual</p>
+                      <div className="flex h-8 items-center">
+                         {getReceiptCurrentStock(item, availableProducts, localDoc?.warehouseId) !== null && getReceiptCurrentStock(item, availableProducts, localDoc?.warehouseId) !== undefined
+                           ? <span className="text-xs font-black text-primary tabular-nums">{Number(getReceiptCurrentStock(item, availableProducts, localDoc?.warehouseId)).toLocaleString()}</span>
+                          : <span className="text-xs text-muted-foreground/40">—</span>}
                       </div>
                     </div>
-                    {!item.productId && (
-                      <>
-                        <div className="min-w-0">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">SKU {codeEditMode[idx] ? 'nuevo' : '(de la orden)'}</p>
-                          <div className="flex items-center gap-1.5">
-                            <Input
-                              disabled={!codeEditMode[idx] || !canEditCurrent}
-                              value={item.code || ''}
-                              onChange={(e) => handleItemChange(idx, 'code', e.target.value)}
-                              className={cn('h-8 text-xs font-mono', !codeEditMode[idx] && 'bg-muted/30')}
-                              placeholder="Sin código"
-                            />
-                            {canEditCurrent && (
-                              <Button variant="ghost" size="icon" title={codeEditMode[idx] ? 'Finalizar edición' : 'Agregar un código nuevo'} className="size-8 shrink-0 text-muted-foreground/50 hover:text-primary rounded-xl" onClick={() => setCodeEditMode((prev) => ({ ...prev, [idx]: !prev[idx] }))}>
-                                {codeEditMode[idx] ? <CheckCircle2 className="size-3.5" /> : <Pencil className="size-3.5" />}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">Categoría</p>
-                          <Select
-                            disabled={!canEditCurrent}
-                            value={item.categoryId || '__none__'}
-                            onValueChange={(categoryId) => handleItemChange(idx, 'categoryId', categoryId === '__none__' ? '' : categoryId)}
-                          >
-                            <SelectTrigger className="h-8 w-full text-xs font-bold"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">Sin categoría</SelectItem>
-                              {categories.map((c: any) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="purchase-item-fields grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant. Ordenada</p>
-                      <Input 
+                    <div className="col-span-1 min-w-0 xl:col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant. ordenada</p>
+                      <Input
                         disabled={!canEditCurrent}
-                        type="number" min="0" 
-                        value={item.quantityOrdered === 0 ? '' : item.quantityOrdered} 
-                        onChange={(e) => handleItemChange(idx, 'quantityOrdered', e.target.value)} 
-                        className="h-8 text-xs text-right bg-muted/20" placeholder="0" 
+                        type="number"
+                        min="0"
+                        value={item.quantityOrdered === 0 ? '' : item.quantityOrdered}
+                        onChange={(e) => handleItemChange(idx, 'quantityOrdered', e.target.value)}
+                        className="h-8 bg-muted/20 text-right text-xs"
+                        placeholder="0"
                       />
                     </div>
-                    <div className="col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant. Recibida</p>
-                      <Input 
+                    <div className="col-span-1 min-w-0 xl:col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant. recibida</p>
+                      <Input
                         disabled={!canEditCurrent}
-                        type="number" min="0" 
-                        value={item.quantityReceived === 0 ? '' : item.quantityReceived} 
-                        onChange={(e) => handleItemChange(idx, 'quantityReceived', e.target.value)} 
-                        className={cn('h-8 text-xs text-right font-bold', faltante ? 'text-amber-500 border-amber-500/50' : 'text-emerald-500 border-emerald-500/50')} placeholder="0" 
+                        type="number"
+                        min="0"
+                        value={item.quantityReceived === 0 ? '' : item.quantityReceived}
+                        onChange={(e) => handleItemChange(idx, 'quantityReceived', e.target.value)}
+                        className={cn('h-8 text-right text-xs font-bold', faltante ? 'border-amber-500/50 text-amber-500' : 'border-emerald-500/50 text-emerald-500')}
+                        placeholder="0"
                       />
                     </div>
-                    <div className="col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant. Rechazada</p>
-                      <Input 
+                    <div className="col-span-1 min-w-0 xl:col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant. rechazada</p>
+                      <Input
                         disabled={!canEditCurrent}
-                        type="number" min="0" 
-                        value={item.quantityRejected === 0 ? '' : item.quantityRejected} 
-                        onChange={(e) => handleItemChange(idx, 'quantityRejected', e.target.value)} 
-                        className={cn('h-8 text-xs text-right font-bold', rechazado ? 'text-amber-700 border-amber-500/50 dark:text-amber-300' : '')} placeholder="0"
+                        type="number"
+                        min="0"
+                        value={item.quantityRejected === 0 ? '' : item.quantityRejected}
+                        onChange={(e) => handleItemChange(idx, 'quantityRejected', e.target.value)}
+                        className={cn('h-8 text-right text-xs font-bold', rechazado ? 'border-amber-500/50 text-amber-700 dark:text-amber-300' : '')}
+                        placeholder="0"
                       />
                     </div>
-                    <div className="col-span-2">
+                    <div className="col-span-1 min-w-0 xl:col-span-1">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Precio U. ({receiptCurrencyMeta.symbol})</p>
-                      <Input 
+                      <Input
                         disabled={!canEditCurrent}
-                        type="number" min="0" 
-                        value={item.unitPrice === 0 ? '' : item.unitPrice} 
-                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
-                        className="h-8 text-xs text-right" placeholder="0" 
+                        type="text"
+                        inputMode="decimal"
+                        min="0"
+                        value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)}
+                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
+                        className="h-8 text-right text-xs"
+                        placeholder="0"
                       />
                     </div>
-                    <div className="col-span-2">
+                  </div>
+
+                  <div className="purchase-item-fields mt-3 grid min-w-0 grid-cols-1 items-end gap-2 border-t border-border/30 pt-3 sm:grid-cols-2 xl:grid-cols-12">
+                    <div className="col-span-1 min-w-0 sm:col-span-2 xl:col-span-5">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-foreground">Nota comercial</p>
+                        <span className="text-[9px] text-muted-foreground">{Array.from(getReceiptCommercialNote(item, availableProducts)).length}/100</span>
+                      </div>
+                      <Input
+                        disabled={!canEditCurrent}
+                         value={getReceiptCommercialNote(item, availableProducts)}
+                        maxLength={100}
+                        onChange={(e) => handleItemChange(idx, 'commercialNoteSnapshot', e.target.value.slice(0, 100))}
+                        className="h-8 text-xs"
+                        placeholder="Nota visible en documentos"
+                      />
+                    </div>
+
+                    <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Tipo IVA</p>
                       <TaxTypeSelect
                         type="TAX"
                         value={item.taxType || ''}
                         disabled={!canEditCurrent}
                         onChange={(v) => {
-                          handleItemChange(idx, 'taxType', v)
-                          if (v === 'GRAVADO_15' || v === 'GRAVADO') { handleItemChange(idx, 'taxRate', 15) }
-                          else { handleItemChange(idx, 'taxRate', 0) }
+                          handleItemChange(idx, 'taxType', v);
+                          handleItemChange(idx, 'taxRate', v === 'GRAVADO_15' || v === 'GRAVADO' ? 15 : 0);
                         }}
                       />
                     </div>
-                    <div className="col-span-2">
+                    <div className="col-span-1 min-w-0 sm:col-span-2 xl:col-span-5">
                       <div className="mb-1 flex items-center gap-2">
                         <p className={cn('text-[9px] font-black uppercase tracking-widest', missingWarehouse ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>Bodega destino *</p>
                         {missingWarehouse && <span className="rounded-full bg-rose-700 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">Requerido</span>}
@@ -1591,11 +1699,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                    <p className="mr-auto text-[9px] font-black uppercase tracking-widest text-foreground">Cuenta Contable</p>
-                    <span className="rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[10px] font-bold text-primary">
-                      Inventario + Inventario en Tránsito · configuración global
-                    </span>
-                    <div className="flex items-center gap-2 ml-2">
+                    <div className="flex min-w-0 items-center gap-2 sm:ml-2">
                       <TaxTypeSelect
                         type="WITHHOLDING"
                         value={item.withholdingType || 'NONE'}
@@ -1729,7 +1833,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               && canPerform('PURCHASES_PAYMENTS', 'approve');
             return (
               <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                <Button title="Ver detalle" aria-label={`Ver detalle de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailReceipt(row)}>
+                <Button title="Ver detalle completo" aria-label={`Ver detalle completo de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailReceipt(null); setEditingId(String(row.id)); }}>
                   <Eye className="size-4" />
                 </Button>
                 {canReceiveRow && (

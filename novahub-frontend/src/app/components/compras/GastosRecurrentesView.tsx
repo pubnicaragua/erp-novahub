@@ -27,6 +27,7 @@ import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
+import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -354,10 +355,11 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
                         <p className="text-[10px] text-muted-foreground mb-1">Monto Fijo Estimado</p>
                         <Input 
                           disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
-                          type="number" 
+                          type="text"
+                          inputMode="decimal"
                           min="0" 
-                          value={localDoc.amount || ''} 
-                          onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} 
+                          value={Number(localDoc.amount || 0) === 0 ? '' : formatDecimalInput(localDoc.amount)}
+                          onChange={(e) => setLocalDoc({ ...localDoc, amount: normalizeDecimalInput(e.target.value) as any })}
                           className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
                           placeholder="0.00" 
                         />
@@ -436,7 +438,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           } : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="Ver detalle" aria-label="Ver detalle del gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailExpense(row)}><Eye className="size-4" /></Button>
+              <Button title="Ver detalle completo" aria-label="Ver detalle completo del gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailExpense(null); openEditor(row.id); }}><Eye className="size-4" /></Button>
               {canPerform('PURCHASES_EXPENSES_REC', 'edit') && <Button title="Editar gasto recurrente" aria-label="Editar gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailExpense(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           )}

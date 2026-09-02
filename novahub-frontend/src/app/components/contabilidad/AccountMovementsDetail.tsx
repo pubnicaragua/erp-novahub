@@ -189,8 +189,8 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
                     {row.referenceType ? (
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-foreground" title={referenceTypeLabel(row.referenceType)}>{referenceTypeLabel(row.referenceType)}</p>
-                        <p className="truncate font-mono text-[10px] text-muted-foreground" title={row.referenceNumber || row.referenceId || ''}>
-                          {row.referenceNumber || row.referenceId || 'Referencia sin número'}
+                        <p className="truncate font-mono text-[10px] text-muted-foreground" title={row.referenceNumber || 'Referencia sin número'}>
+                          {row.referenceNumber || 'Referencia sin número'}
                         </p>
                       </div>
                     ) : '—'}

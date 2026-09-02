@@ -60,6 +60,14 @@ const linkedEmployeePuesto = (user: any, employees: any[]) => {
   return employee.position?.title || employee.position || '';
 };
 
+const userGroupingDepartments = (user: any) => {
+  const memberships = (user?.departmentMemberships || [])
+    .map((membership: any) => membership.department)
+    .filter((department: any) => department && (!department.type || department.type === 'ACCESS'));
+  if (memberships.length) return memberships;
+  return user?.department && (!user.department.type || user.department.type === 'ACCESS') ? [user.department] : [];
+};
+
 export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
   const { updateConfig } = useTheme();
   const { user: currentUser, canPerform, refreshProfile } = useAuth();
@@ -745,7 +753,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                         {isCurrentUser && <Badge className="bg-primary text-primary-foreground text-[9px] uppercase">Tu usuario</Badge>}
                       </div>
                       <p className="flex items-center gap-1 truncate text-xs text-muted-foreground"><Mail className="size-3" /> {u.email}</p>
-                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{u.departments?.map((department: any) => department.name).join(' · ') || u.department?.name || 'Sin departamento'}</p>
+                      {(() => { const groupingDepartments = userGroupingDepartments(u); return <><p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{groupingDepartments.map((department: any) => department.name).join(' · ') || 'Sin departamento'}</p><p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="size-3" /> {groupingDepartments.length} {groupingDepartments.length === 1 ? 'departamento' : 'departamentos'} de equipo</p></>; })()}
                       {u.employee ? <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-emerald-600"><UserRoundCheck className="size-3" /> Empleado: {u.employee.firstName} {u.employee.lastName}{linkedEmployeePuesto(u, employees) ? <span className="normal-case"> · Puesto: {linkedEmployeePuesto(u, employees)}</span> : <span className="font-semibold text-muted-foreground"> · Sin puesto</span>}</p> : <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><UserRoundCheck className="size-3" /> Sin puesto</p>}
                     </div>
                   </div>
@@ -811,7 +819,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               Permisos de {selectedUser?.name}
             </DialogTitle>
             <DialogDescription>
-              Accesos efectivos del usuario, incluyendo su rol directo y roles heredados de departamentos activos. {selectedUser?.employee ? `Empleado vinculado: ${selectedUser.employee.firstName} ${selectedUser.employee.lastName}.` : 'No hay empleado vinculado.'}
+              Accesos efectivos del usuario según su rol directo. Los departamentos solo sirven para agrupar y no otorgan permisos. {selectedUser?.employee ? `Empleado vinculado: ${selectedUser.employee.firstName} ${selectedUser.employee.lastName}.` : 'No hay empleado vinculado.'}
             </DialogDescription>
           </DialogHeader>
           
@@ -830,7 +838,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 <tbody className="divide-y divide-border">
                   {(() => {
                     const directRole = selectedUser?.customRole || customRoles.find(r => r.id === selectedUser?.customRoleId);
-                    const roleSources = [directRole, ...(selectedUser?.inheritedRoles || [])].filter(Boolean);
+                    const roleSources = [directRole].filter(Boolean);
                     const permissionMap = new Map<string, any>();
                     roleSources.flatMap((role: any) => normalizePermissions(role.permissions)).forEach((permission: any) => {
                       const current = permissionMap.get(permission.module) || { module: permission.module };

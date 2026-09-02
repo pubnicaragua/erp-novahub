@@ -170,6 +170,16 @@ export interface User {
   managerMode?: boolean;
   managerCanEdit?: boolean;
   branchIds?: string[];
+  /** Registro laboral vinculado a la cuenta, cuando existe. */
+  employee?: {
+    id: string;
+    employeeNumber?: string;
+    firstName?: string;
+    lastName?: string;
+    isSeller?: boolean;
+    employmentStatus?: string;
+    clientTenantId?: string;
+  } | null;
   /** Datos del tenant propietario tal como los devuelve /auth/profile.
    *  `expiresAt` es la fecha real de expiración de la suscripción/trial
    *  (validada contra el servidor, no un flag local editable). */
@@ -186,8 +196,6 @@ export interface User {
     name?: string;
     logo?: string | null;
   };
-  /** Roles heredados desde los departamentos activos del usuario/empleado. */
-  inheritedRoles?: Array<{ id: string; name: string; description?: string | null }>;
 }
 
 /**
@@ -556,6 +564,17 @@ const createUserObject = (apiPayload: any): User => {
     managerMode: Boolean(apiUser.managerMode),
     managerCanEdit: Boolean(apiUser.managerCanEdit),
     branchIds: apiUser.branchIds || apiUser.branchAccess?.map((b: any) => b.id) || undefined,
+    employee: apiUser.employee
+      ? {
+          id: apiUser.employee.id,
+          employeeNumber: apiUser.employee.employeeNumber,
+          firstName: apiUser.employee.firstName,
+          lastName: apiUser.employee.lastName,
+          isSeller: apiUser.employee.isSeller === true,
+          employmentStatus: apiUser.employee.employmentStatus,
+          clientTenantId: apiUser.employee.clientTenantId,
+        }
+      : null,
     sessionBranding,
     clientTenant: apiUser.clientTenant
       ? {
@@ -566,7 +585,6 @@ const createUserObject = (apiPayload: any): User => {
           logo: apiUser.clientTenant.logo,
         }
       : null,
-    inheritedRoles: Array.isArray(apiUser.inheritedRoles) ? apiUser.inheritedRoles : [],
   };
 };
 

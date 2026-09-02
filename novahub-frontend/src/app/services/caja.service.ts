@@ -201,6 +201,7 @@ export interface PosInvoice {
   id: string;
   number: string;
   customerId?: string;
+  sellerEmployeeId?: string | null;
   customCustomerName?: string;
   registerId?: string | null;
   sessionId?: string | null;
@@ -370,6 +371,7 @@ export interface PosHold {
   registerId: string;
   sessionId: string;
   customerId?: string | null;
+  sellerEmployeeId?: string | null;
   customCustomerName?: string | null;
   date: string;
   billingBranchId?: string | null;
@@ -430,6 +432,7 @@ export interface CreatePosHoldDto {
   registerId: string;
   sessionId: string;
   customerId?: string;
+  sellerEmployeeId?: string | null;
   customCustomerName?: string;
   date: string;
   discountPercent?: number;
@@ -605,6 +608,7 @@ export const cajaService = {
     registerId: string;
     sessionId: string;
     customerId?: string;
+    sellerEmployeeId?: string | null;
     customCustomerName?: string;
     date: string;
     discountPercent?: number;

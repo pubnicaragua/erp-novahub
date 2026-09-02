@@ -44,6 +44,7 @@ import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getSalesOrderOriginBadge } from '../../utils/document-origin-badges';
+import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 
 const paymentMethodOptions = [
   { label: 'Efectivo', value: 'CASH' },
@@ -642,7 +643,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   }, [draftHydrated, editingId, data]);
 
   const handleAddOrder = () => {
-    const draft = { id: `local-${Date.now()}`, number: '', customerId: '', date: new Date().toISOString(), expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(), discountAmount: 0, extraCostDescription: null, extraCostAmount: 0, extraCharges: [], deliveryDescription: null, deliveryAmount: 0, total: 0, subtotal: 0, taxAmount: 0, currency: displayCurrency as any, exchangeRate: globalRate, status: 'DRAFT', items: [], warehouseId: undefined } as any as SalesOrder;
+    const draft = { id: `local-${Date.now()}`, number: '', customerId: '', sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined, date: new Date().toISOString(), expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(), discountAmount: 0, extraCostDescription: null, extraCostAmount: 0, extraCharges: [], deliveryDescription: null, deliveryAmount: 0, total: 0, subtotal: 0, taxAmount: 0, currency: displayCurrency as any, exchangeRate: globalRate, status: 'DRAFT', items: [], warehouseId: undefined } as any as SalesOrder;
     commitLocalDoc(draft);
     setLocalRates({ dRate: 0, tRate: 0 });
     setPricingMode('global');

@@ -63,6 +63,7 @@ import { playNotificationSound } from '../../utils/notificationSound';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentTotalBase } from '../../utils/paymentSettlement';
+import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -1541,6 +1542,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       registerId: selectedRegisterId,
       sessionId: activeSession.id,
       customerId: selectedCustomerId,
+      sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined,
       date: emitDate,
       discountPercent: pricingMode === 'global' ? discountPercent || undefined : undefined,
       extraCostDescription: legacyExtraCostFields.extraCostDescription,
@@ -1862,6 +1864,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         registerId: selectedRegisterId,
         sessionId: activeSession.id,
         customerId: selectedCustomerId,
+        sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined,
         customCustomerName: selectedCustomerId ? undefined : GENERAL_CUSTOMER_NAME,
         date: emitDate,
         discountPercent: discountPercent || undefined,

@@ -42,6 +42,7 @@ import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { isBankPaymentMethod } from '../../utils/paymentMethods';
+import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -771,10 +772,11 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                       <p className="text-[10px] text-muted-foreground mb-1">Monto Total</p>
                       <Input 
                         disabled={!canMutate}
-                        type="number" 
+                        type="text"
+                        inputMode="decimal"
                         min="0" 
-                        value={localDoc.amount || ''} 
-                        onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} 
+                        value={Number(localDoc.amount || 0) === 0 ? '' : formatDecimalInput(localDoc.amount)}
+                        onChange={(e) => setLocalDoc({ ...localDoc, amount: normalizeDecimalInput(e.target.value) as any })}
                         className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
                         placeholder="0.00" 
                       />
@@ -995,7 +997,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           } : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="Ver detalle" aria-label="Ver detalle del gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedExpenseDetail(row)}><Eye className="size-4" /></Button>
+              <Button title="Ver detalle completo" aria-label="Ver detalle completo del gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setSelectedExpenseDetail(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
               {canPerform('PURCHASES_EXPENSES', 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase()) && (
                 <Button title="Editar gasto" aria-label="Editar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setEditingId(row.id); }}><Pencil className="size-4" /></Button>
               )}

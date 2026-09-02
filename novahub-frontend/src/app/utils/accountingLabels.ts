@@ -2,6 +2,7 @@ export const REFERENCE_TYPE_LABELS: Record<string, string> = {
   INVOICE: 'Factura de cliente',
   PAID_INVOICE: 'Factura pagada',
   SUPPLIER_INVOICE: 'Factura de proveedor',
+  SUPPLIER_INVOICE_PAYMENT: 'Pago de factura de proveedor',
   PAYMENT: 'Pago recibido',
   PAYMENT_MADE: 'Pago a proveedor',
   CREDIT_NOTE: 'Crédito',

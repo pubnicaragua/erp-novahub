@@ -23,6 +23,7 @@ interface ConfirmDialogProps {
   loading?: boolean;
   disabled?: boolean;
   closeOnConfirm?: boolean;
+  confirmSingleLine?: boolean;
   contentClassName?: string;
   children?: React.ReactNode;
 }
@@ -57,6 +58,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   loading = false,
   disabled = false,
   closeOnConfirm = true,
+  confirmSingleLine = false,
   contentClassName,
   children,
 }) => {
@@ -112,7 +114,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <Button
             onClick={handleConfirm}
             disabled={loading || disabled}
-            className={`h-auto min-h-11 w-full min-w-0 max-w-full rounded-xl font-bold uppercase leading-tight tracking-[0.08em] whitespace-normal sm:flex-1 ${config.buttonClass}`}
+            className={`h-auto min-h-11 w-full min-w-0 max-w-full rounded-xl font-bold uppercase leading-tight tracking-[0.08em] ${confirmSingleLine ? 'whitespace-nowrap' : 'whitespace-normal'} sm:flex-1 ${config.buttonClass}`}
           >
             {loading ? (
               <>
@@ -120,7 +122,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 <span className="min-w-0 whitespace-nowrap" aria-live="polite">Procesando…</span>
               </>
             ) : (
-              <span className="block min-w-0 max-w-full whitespace-normal break-words text-center">{confirmLabel}</span>
+              <span className={`block min-w-0 max-w-full text-center ${confirmSingleLine ? 'whitespace-nowrap' : 'whitespace-normal break-words'}`}>{confirmLabel}</span>
             )}
           </Button>
         </DialogFooter>

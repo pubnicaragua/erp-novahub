@@ -49,6 +49,7 @@ import { SalesVariantSelect } from './SalesVariantSelect';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase } from '../../utils/paymentSettlement';
+import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -889,7 +890,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       total: 0,
       status: 'DRAFT',
       notes: '',
-      sellerEmployeeId: '',
+      sellerEmployeeId: getLoggedInSellerEmployeeId(user) || '',
       commissionType: 'PERCENTAGE',
       commissionRate: 0,
       commissionAmount: 0,

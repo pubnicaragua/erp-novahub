@@ -80,6 +80,15 @@ export interface User {
   email: string;
   name: string;
   avatar?: string;
+  employee?: {
+    id: string;
+    employeeNumber?: string;
+    firstName?: string;
+    lastName?: string;
+    isSeller?: boolean;
+    employmentStatus?: string;
+    clientTenantId?: string;
+  } | null;
   role: 'admin' | 'manager' | 'employee' | 'viewer';
   isActive: boolean;
   lastLoginAt?: string;
@@ -755,9 +764,15 @@ export interface PurchaseReceiptItem {
   code?: string;
   name?: string;
   productId?: string;
+  variantId?: string;
   warehouseId?: string;
   description: string;
   commercialNoteSnapshot?: string | null;
+  category?: string;
+  categoryId?: string;
+  stockApplies?: boolean;
+  stock?: number;
+  currentStock?: number;
   quantityOrdered: number;
   quantityReceived: number;
   quantityRejected?: number;
@@ -1288,6 +1303,7 @@ export interface Permission {
 export interface Employee {
   id: string;
   userId?: string;
+  clientTenantId?: string;
   tenantId: string;
   code: string;
   firstName: string;
@@ -1314,6 +1330,7 @@ export interface Employee {
   emergencyPhone?: string;
   status: 'active' | 'on_leave' | 'terminated';
   employmentStatus?: string;
+  isSeller?: boolean;
   approvalStatus?: string;
   rejectionReason?: string;
   contractType?: string;

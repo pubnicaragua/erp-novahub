@@ -33,6 +33,7 @@ import { formatPdfItemDescription } from '../../utils/pdf-line-details';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { cn } from '../ui/utils';
+import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 
 interface Props {
   data: PaymentMade[];
@@ -58,7 +59,7 @@ const methodOpts = [
 type PurchasePaymentMethod = 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD';
 type PurchasePaymentLine = {
   method: PurchasePaymentMethod;
-  amount: number;
+  amount: number | string;
   currency: 'NIO' | 'USD';
   exchangeRate: number;
   bankAccountId?: string;
@@ -708,7 +709,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                                 const nextRate = paymentLineRate(newCurrency);
                                 return {
                                   ...item,
-                                  amount: Number(convertBetweenCurrencies(item.amount, item.currency, newCurrency, previousRate, nextRate).toFixed(2)),
+                                  amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, newCurrency, previousRate, nextRate).toFixed(2)),
                                   currency: newCurrency,
                                   exchangeRate: nextRate,
                                 };
@@ -718,11 +719,11 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                               <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p>
                               <Input
                                 disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 min="0"
-                                step="0.01"
-                                value={line.amount || ''}
-                                onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))}
+                                value={Number(line.amount || 0) === 0 ? '' : formatDecimalInput(line.amount)}
+                                onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))}
                               />
                             </div>
                             <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
@@ -881,7 +882,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           } : undefined}
            actions={(row) => (
               <div className="flex items-center gap-1">
-                <Button title="Ver detalle" aria-label="Ver detalle del pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailPayment(row)}><Eye className="size-4" /></Button>
+                <Button title="Ver detalle completo" aria-label="Ver detalle completo del pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailPayment(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
                 {canPerform('PURCHASES_PAYMENTS', 'edit') && !row.isGroupedPayment && <Button title="Editar pago" aria-label="Editar pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailPayment(null); setEditingId(row.id); }}><Pencil className="size-4" /></Button>}
               </div>
           )}

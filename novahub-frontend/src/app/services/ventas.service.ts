@@ -26,7 +26,7 @@ export const estimatesService = {
   create: (data: Partial<Estimate>, idempotencyKey?: string) => api.idempotentPost<Estimate>('/sales/estimates', data, idempotencyKey),
   update: (id: string, data: Partial<Estimate>) => api.patch<Estimate>(`/sales/estimates/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/estimates/${id}`),
-  convertToOrder: (id: string) => api.post<SalesOrder>(`/sales/estimates/${id}/convert-to-order`, {}),
+  convertToOrder: (id: string, data?: { sellerEmployeeId?: string | null }) => api.post<SalesOrder>(`/sales/estimates/${id}/convert-to-order`, data || {}),
 };
 
 // ---- Sales Orders ----

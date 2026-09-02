@@ -29,6 +29,7 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
+import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 
 interface Props {
   data: SupplierInvoice[];
@@ -367,7 +368,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const handleItemChange = (idx: number, field: string, value: any) => {
     if (!localDoc) return;
     const newItems = [...(localDoc.items || [])];
-    newItems[idx] = { ...newItems[idx], [field]: value };
+    const nextValue = field === 'unitPrice' ? normalizeDecimalInput(value) : value;
+    newItems[idx] = { ...newItems[idx], [field]: nextValue };
     
     if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'taxBase', 'taxAmount', 'withholdingType', 'withholdingRate'].includes(field)) {
        const q = Number(newItems[idx].quantity || 0);
@@ -669,8 +671,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Precio U.</p>
                       <Input 
                         disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                        type="number" min="0" 
-                        value={item.unitPrice === 0 ? '' : item.unitPrice} 
+                        type="text" inputMode="decimal" min="0"
+                        value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
                         className="h-8 text-xs text-right" placeholder="0" 
                       />

@@ -53,14 +53,8 @@ function formatAccountingDate(value?: string | Date | null): string {
   return new Date(raw).toLocaleDateString('es-NI');
 }
 
-function formatReferenceId(value?: string | null): string {
-  if (!value) return '—';
-  if (value.length <= 18) return value;
-  return `${value.slice(0, 8)}…${value.slice(-4)}`;
-}
-
 function referenceDisplay(journal: JournalEntry): string {
-  return journal.referenceNumber || formatReferenceId(journal.referenceId);
+  return journal.referenceNumber || 'Sin número de documento';
 }
 
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -624,7 +618,7 @@ export function DiarioView() {
                       <span className="truncate px-1 text-right text-xs tabular-nums">{formatCurrency(totalDeb)}</span>
                       <span className="truncate px-1 text-right text-xs tabular-nums">{formatCurrency(totalCred)}</span>
                       <span className="min-w-0 truncate px-1 text-xs text-muted-foreground" title={referenceTypeLabel((j as any).referenceType)}>{referenceTypeLabel((j as any).referenceType) || '-'}</span>
-                      <span className="min-w-0 truncate px-1 font-mono text-xs" title={j.referenceNumber || j.referenceId || ''}>{referenceDisplay(j)}</span>
+                      <span className="min-w-0 truncate px-1 font-mono text-xs" title={j.referenceNumber || 'Sin número de documento'}>{referenceDisplay(j)}</span>
                       <span className="flex justify-end px-1">{renderJournalActions(j)}</span>
                     </div>
                   );
@@ -747,7 +741,7 @@ export function DiarioView() {
                     </div>
                     <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referencia</p>
-                      <p className="truncate font-mono text-xs font-bold" title={viewJournal.referenceNumber || viewJournal.referenceId || ''}>{referenceDisplay(viewJournal)}</p>
+                      <p className="truncate font-mono text-xs font-bold" title={viewJournal.referenceNumber || 'Sin número de documento'}>{referenceDisplay(viewJournal)}</p>
                     </div>
                     <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Asientos</p>

@@ -27,6 +27,7 @@ import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { TaxDetail } from '../ui/TaxSelector';
 import { isTaxExempt } from '../../utils/taxUtils';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; warehouseCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -82,7 +83,7 @@ const isRecurringTaxExempt = (taxType?: string) => isTaxExempt(String(taxType ||
 
 const calculateRecurringLine = (item: any) => {
   const quantity = Math.max(0, Number(item.quantity || 0));
-  const unitPrice = Math.max(0, Number(item.unitPrice || 0));
+  const unitPrice = Math.max(0, Number(normalizeDecimalInput(item.unitPrice)) || 0);
   const lineTotal = quantity * unitPrice;
   const taxRate = isRecurringTaxExempt(item.taxType) ? 0 : Number(item.taxRate || 15);
   const taxBase = isRecurringTaxExempt(item.taxType) ? 0 : lineTotal;
@@ -344,7 +345,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
   const handleItemChange = (idx: number, field: string, value: any) => {
     if (!localDoc) return;
     const newItems = [...((localDoc as any).items || [])];
-    newItems[idx] = { ...newItems[idx], [field]: value };
+    const nextValue = field === 'unitPrice' ? normalizeDecimalInput(value) : value;
+    newItems[idx] = { ...newItems[idx], [field]: nextValue };
     
     recalculateTotals(newItems);
   };
@@ -541,7 +543,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                       <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Categoría</p><Input disabled value={snapshot.category} className="h-8 bg-muted/30 text-xs" placeholder="Sin categoría" /></div>
                       <div className="min-w-0 xl:col-span-1"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Stock actual</p><div className="flex h-8 items-center text-xs font-black tabular-nums text-primary">{snapshot.stock == null ? '—' : Number(snapshot.stock).toLocaleString()}</div></div>
                       <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Cant.</p><Input disabled={!canEditRecurrence} type="number" min="1" step="1" value={item.quantity ?? 1} onChange={(event) => handleItemChange(idx, 'quantity', event.target.value)} className="h-8 text-xs text-right" /></div>
-                      <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Precio</p><Input disabled={!canEditRecurrence} type="number" min="0" step="0.01" value={item.unitPrice ?? 0} onChange={(event) => handleItemChange(idx, 'unitPrice', event.target.value)} className="h-8 text-xs text-right" /></div>
+                      <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Precio</p><Input disabled={!canEditRecurrence} type="text" inputMode="decimal" min="0" value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)} onChange={(event) => handleItemChange(idx, 'unitPrice', event.target.value)} className="h-8 text-xs text-right" /></div>
                     </div>
                     <div className="mt-3 grid min-w-0 gap-3 border-t border-border/30 pt-3 lg:grid-cols-[10rem_minmax(0,1fr)] lg:items-start"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-foreground">Impuestos y retenciones</p><p className="mt-1 text-[10px] text-foreground/70">IVA y retención aplicables a esta línea.</p></div><TaxDetail item={{ ...item, currency: localDoc.currency }} onItemChange={(field, value) => handleItemChange(idx, field, value)} lineTotal={line.lineTotal} currency={localDoc.currency} disabled={!canEditRecurrence} calculatedFieldsReadOnly /></div>
                     <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-border/50 pt-2"><span className="text-[9px] font-black uppercase tracking-widest text-foreground">Subtotal costo</span><span className="text-sm font-black tabular-nums">{formatMoney(line.lineTotal)}</span><span className="text-[9px] font-black uppercase tracking-widest text-rose-500/70">IVA</span><span className="text-xs font-black tabular-nums text-rose-500">{formatMoney(line.taxAmount)}</span><span className="text-[9px] font-black uppercase tracking-widest text-amber-500/70">Retención</span><span className="text-xs font-black tabular-nums text-amber-500">-{formatMoney(line.withholdingTotal)}</span><span className="border-l border-border/70 pl-4 text-[9px] font-black uppercase tracking-widest text-primary">Total</span><span className="text-sm font-black tabular-nums text-primary">{formatMoney(line.total)}</span></div>
@@ -639,7 +641,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           } : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="Ver detalle" aria-label="Ver detalle de la compra recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailInvoice(row)}><Eye className="size-4" /></Button>
+              <Button title="Ver detalle completo" aria-label="Ver detalle completo de la compra recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailInvoice(null); openEditor(row.id); }}><Eye className="size-4" /></Button>
               {canPerform('PURCHASES_INVOICES_REC', 'edit') && <Button title="Editar compra recurrente" aria-label="Editar compra recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailInvoice(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           )}

@@ -3550,14 +3550,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <ImageIcon className="mr-2 size-4" /> Imágenes
             </Button>
           )}
-          {!isServiceView && canCreatePurchaseRequest && (
-            <Button type="button" size="sm" variant="outline" aria-label="Solicitar compra" title="Crear una solicitud de compra desde inventario" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
-              <PackageSearch className="mr-2 size-4" />{selectedIds.size > 0 ? `Solicitar compra (${selectedIds.size})` : 'Solicitar compra'}
-            </Button>
-          )}
-          {!isServiceView && selectedIds.size > 0 && canPerform('INVENTORY_PRODUCTS', 'export') && (
-            <Button type="button" size="sm" variant="outline" aria-label="Descargar plantilla de productos seleccionados" title="Descargar una plantilla avanzada con los productos seleccionados y sus variantes" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleDownloadSelectedTemplate()}>
-              <Download className="mr-2 size-4" /> Plantilla ({selectedIds.size})
+          {!isServiceView && selectedIds.size === 0 && canCreatePurchaseRequest && (
+            <Button type="button" size="sm" variant="outline" aria-label="Solicitar compra" title="Crear una solicitud de compra desde inventario" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={openLowStockSolicitud}>
+              <PackageSearch className="mr-2 size-4" />Solicitar compra
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
@@ -3582,6 +3577,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <div className="flex shrink-0 flex-wrap gap-2">
               {canCreatePurchaseRequest && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={openSelectedSolicitud}>
                 <PackageSearch className="mr-1.5 size-3.5" /> Solicitar compra
+              </Button>}
+              {canPerform('INVENTORY_PRODUCTS', 'export') && <Button type="button" size="sm" variant="outline" aria-label="Descargar plantilla de productos seleccionados" title="Descargar una plantilla avanzada con los productos seleccionados y sus variantes" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={() => void handleDownloadSelectedTemplate()}>
+                <Download className="mr-1.5 size-3.5" /> Plantilla
               </Button>}
               <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-destructive" onClick={clearSelectedProducts}>
                 <X className="mr-1.5 size-3.5" /> Quitar todos

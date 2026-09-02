@@ -43,6 +43,7 @@ import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehou
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
+import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -185,7 +186,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     setConvertingId(estimate.id);
     const conversionToastId = toast.loading('Generando orden de venta desde la cotización...');
     try {
-      const order = await estimatesService.convertToOrder(estimate.id);
+      const order = await estimatesService.convertToOrder(estimate.id, {
+        sellerEmployeeId: getLoggedInSellerEmployeeId(user) || null,
+      });
       toast.success('Cotización aprobada y enviada a Orden de Venta', { id: conversionToastId });
       onConvertedToOrder?.(order.id);
       await onRefresh();

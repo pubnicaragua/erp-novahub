@@ -26,7 +26,7 @@ import {
   creditNotesService,
 } from '../services/ventas.service';
 import type { 
-  Customer, Estimate, SalesOrder, Invoice, 
+  Customer, Estimate, SalesOrder, Invoice, Employee,
   PaymentReceived, RecurringInvoice, SalesReturn,
   CreditNote, Product
 } from '../types';
@@ -34,6 +34,7 @@ import type { SalesPageSize, SalesPaginationControls } from '../types';
 import { inventoryService } from '../services/inventario.service';
 import { hrService } from '../services/hr.service';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS } from '../utils/sidebarPermissions';
+import { getLoggedInSellerEmployeeId } from '../utils/salesSeller';
 
 // Sub-Views
 import { ClientesView } from './ventas/ClientesView';
@@ -311,6 +312,34 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     placeholderData: keepPreviousData,
   });
 
+  const loggedInSellerId = getLoggedInSellerEmployeeId(user);
+  const salesEmployees = useMemo(() => {
+    const catalog = toArray(employeesQuery.data) as Employee[];
+    if (!loggedInSellerId || catalog.some((employee) => employee.id === loggedInSellerId)) return catalog;
+    const linkedEmployee = user?.employee;
+    if (!linkedEmployee?.id) return catalog;
+    return [{
+      id: linkedEmployee.id,
+      clientTenantId: linkedEmployee.clientTenantId || user?.clientTenantId,
+      tenantId: linkedEmployee.clientTenantId || user?.tenantId || '',
+      code: linkedEmployee.employeeNumber || linkedEmployee.id,
+      firstName: linkedEmployee.firstName || user?.name?.split(' ')[0] || '',
+      lastName: linkedEmployee.lastName || user?.name?.split(' ').slice(1).join(' ') || '',
+      email: user?.email || '',
+      position: '',
+      department: '',
+      hireDate: '',
+      salary: 0,
+      salaryType: 'monthly',
+      currency: 'NIO',
+      status: 'active',
+      employmentStatus: linkedEmployee.employmentStatus || 'ACTIVE',
+      isSeller: true,
+      createdAt: '',
+      updatedAt: '',
+    } as Employee, ...catalog];
+  }, [employeesQuery.data, loggedInSellerId, user]);
+
   const data = {
     clientes: toArray(activeSection === 'clientes' ? customersListQuery.data : customersCatalogQuery.data) as Customer[],
     estimaciones: toArray(estimatesQuery.data) as Estimate[],
@@ -323,7 +352,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     productos: toArray(productsQuery.data) as Product[],
     series: toArray(seriesQuery.data),
     warehouses: toArray(warehousesQuery.data),
-    employees: toArray(employeesQuery.data),
+    employees: salesEmployees,
   };
 
   const filteredData = {
