@@ -791,7 +791,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [pendingWarehouseRowIndex, setPendingWarehouseRowIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importProgress, setImportProgress] = useState(0);
-  const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[] } | null>(null);
+  const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[]; warnings?: string[] } | null>(null);
   const [initialImportCompleted, setInitialImportCompleted] = useState(false);
   const [importCurrency, setImportCurrency] = useState(baseCurrency === 'USD' ? 'USD' : 'NIO');
   const [importExchangeRate, setImportExchangeRate] = useState<number>(Number(exchangeRate || 1));
@@ -2628,8 +2628,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     appendSheet('Precios', [priceHeaders, ...priceRows]);
     appendSheet('Inventario', [stockHeaders, ...stockRows]);
     const guide = XLSX.utils.aoa_to_sheet([
-      ['GUÍA COMPLETA · IMPORTACIÓN INICIAL DE PRODUCTOS CON VARIANTES'],
-      ['Cada carga crea productos, variantes, atributos, valores de atributos, precios y existencias en una sola operación transaccional. Puedes importar varias veces; los SKU que ya existen se reportan como incidencias y no se duplican.'],
+      ['GUÍA COMPLETA · IMPORTACIÓN DE PRODUCTOS CON VARIANTES'],
+      ['Cada carga crea o actualiza productos, variantes, atributos, valores de atributos, precios y existencias en una sola operación transaccional. Los registros existentes conservan sus IDs, existencias y movimientos; solo se actualizan datos maestros y se agregan variantes nuevas.'],
       ['1. Orden de trabajo', 'Completa primero Productos; después Variantes; luego Atributos, Precios e Inventario. No cambies los nombres de las hojas.'],
       ['2. Productos', `Una fila por producto padre. La primera hoja contiene SKU, nombre, nota comercial opcional, categoría, unidad, precios base y costo base. Incluye ${importPriceLists.map((list) => `Precio ${list.name}`).join(', ')}. El SKU es único y no debe repetirse.`],
       ['3. Variantes', 'Una fila por SKU vendible. El SKU variante debe ser único en todo el archivo. Si un producto no tiene filas aquí, el sistema crea automáticamente la variante Estándar con el mismo código del producto.'],
@@ -2640,17 +2640,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       ['8. Costos', 'Costo variante vacío = hereda el Costo del producto. Costo variante informado = costo propio. Costo entrada vacío usa el costo de la variante y, como respaldo, el del producto.'],
       ['9. Moneda', 'Los precios y costos usan la moneda elegida en la pantalla. Si es USD, la tasa debe ser mayor que cero. Usa números sin símbolo de moneda ni separador de miles.'],
       ['10. Categorías y bodegas', 'Deben existir, estar activas y pertenecer a la sucursal. Se envían por nombre en el Excel y se validan por su registro real antes de guardar.'],
-      ['11. Errores', 'SKU, nombre, categoría, costos, precios, bodegas y cantidades inválidas se muestran en la revisión. Las filas con error se omiten; las advertencias no bloquean.'],
-      ['12. Transacción', 'Si falla la creación de productos, variantes, precios, stock, atributos o el asiento de apertura, se revierte toda la operación; no queda una carga incompleta.'],
-      ['13. Columnas de Productos', `La primera hoja usa Código / SKU, Nombre, Categoría, Unidad, ${importPriceLists.map((list) => `Precio ${list.name}`).join(', ')}${canViewInventoryCost ? ', Costo' : ''}. No contiene Tasa IVA, Control inventario, Imagen URL, Estado, Stock inicial, Stock mínimo ni Almacén.`],
-      ['14. Columnas de Variantes', 'Código producto y SKU variante son obligatorios. Cada fila es una presentación vendible. Costo variante vacío hereda el costo base; informado crea un costo propio en moneda funcional.'],
-      ['15. Columnas de Atributos', 'Usa una fila por SKU variante + Atributo + Valor. También puedes agregar columnas dinámicas en Variantes; cualquier columna no reservada se reconoce como atributo.'],
-      ['16. Columnas de Precios', `Alcance PRODUCTO crea el precio padre heredable. Alcance VARIANTE crea una excepción para un SKU y una lista. En Lista escribe exactamente el nombre visible de una lista activa (${importPriceLists.map((list) => list.name).join(', ')}).`],
-      ['17. Columnas de Inventario', 'El stock se captura por SKU variante + Bodega. En productos con variantes, no existe stock capturable para el padre; su total es la suma de las cantidades de sus variantes. Stock mínimo y máximo también se controlan por SKU variante y bodega.'],
-      ['18. Costos de entrada', 'Costo entrada vacío usa costo propio de la variante o costo base del padre. Si se informa, ese importe se usa en el movimiento inicial; Moneda costo y Tasa costo permiten registrar otra moneda.'],
-      ['19. Números y moneda', 'Escribe números sin C$, $, %, símbolos ni separadores de miles. La tasa USD debe ser mayor que cero. Los valores se convierten a moneda funcional y el movimiento conserva su moneda original.'],
-      ['20. Productos sin variantes', 'Si no existe una fila válida en Variantes, NovaHub crea automáticamente la variante Estándar con el código del producto para que también tenga stock separado y selección en ventas.'],
-      ['21. Stock padre derivado', 'El campo stock del producto que se muestra en el catálogo es una lectura derivada de InventoryLevel. No se crea InventoryLevel ni InventoryMovement sin variantId cuando el producto tiene variantes.'],
+      ['11. Reimportación', 'Al confirmar desde Inventario se actualizan datos maestros, costos y precios sin sumar stock. Se agregan variantes nuevas; un código producto/servicio incompatible o un SKU variante de otro padre se rechaza para evitar reasignaciones.'],
+      ['12. Errores', 'SKU, nombre, categoría, costos, precios, bodegas y cantidades inválidas se muestran en la revisión. Las filas con error se omiten; las advertencias no bloquean.'],
+      ['13. Transacción', 'Si falla la creación de productos, variantes, precios, stock, atributos o el asiento de apertura, se revierte toda la operación; no queda una carga incompleta.'],
+      ['14. Columnas de Productos', `La primera hoja usa Código / SKU, Nombre, Categoría, Unidad, ${importPriceLists.map((list) => `Precio ${list.name}`).join(', ')}${canViewInventoryCost ? ', Costo' : ''}. No contiene Tasa IVA, Control inventario, Imagen URL, Estado, Stock inicial, Stock mínimo ni Almacén.`],
+      ['15. Columnas de Variantes', 'Código producto y SKU variante son obligatorios. Cada fila es una presentación vendible. Costo variante vacío hereda el costo base; informado crea un costo propio en moneda funcional.'],
+      ['16. Columnas de Atributos', 'Usa una fila por SKU variante + Atributo + Valor. También puedes agregar columnas dinámicas en Variantes; cualquier columna no reservada se reconoce como atributo.'],
+      ['17. Columnas de Precios', `Alcance PRODUCTO crea el precio padre heredable. Alcance VARIANTE crea una excepción para un SKU y una lista. En Lista escribe exactamente el nombre visible de una lista activa (${importPriceLists.map((list) => list.name).join(', ')}).`],
+      ['18. Columnas de Inventario', 'El stock se captura por SKU variante + Bodega. En productos con variantes, no existe stock capturable para el padre; su total es la suma de las cantidades de sus variantes. Stock mínimo y máximo también se controlan por SKU variante y bodega.'],
+      ['19. Costos de entrada', 'Costo entrada vacío usa costo propio de la variante o costo base del padre. Si se informa, ese importe se usa en el movimiento inicial; Moneda costo y Tasa costo permiten registrar otra moneda.'],
+      ['20. Números y moneda', 'Escribe números sin C$, $, %, símbolos ni separadores de miles. La tasa USD debe ser mayor que cero. Los valores se convierten a moneda funcional y el movimiento conserva su moneda original.'],
+      ['21. Productos sin variantes', 'Si no existe una fila válida en Variantes, NovaHub crea automáticamente la variante Estándar con el código del producto para que también tenga stock separado y selección en ventas.'],
+      ['22. Stock padre derivado', 'El campo stock del producto que se muestra en el catálogo es una lectura derivada de InventoryLevel. No se crea InventoryLevel ni InventoryMovement sin variantId cuando el producto tiene variantes.'],
       ['22. Revisión y contabilidad', 'Antes de IMPORTAR puedes editar el padre y descargar incidencias. El stock positivo crea movimientos IN por variante y un asiento de apertura agrupado por bodega; una falla revierte toda la operación.'],
       ['23. Imágenes', 'Las imágenes no se capturan en Excel. Carga un ZIP o RAR con JPG, JPEG o PNG nombrados exactamente como el SKU del producto padre (por ejemplo CAM-001.png, PAN-001.png y ZAP-001.png). Las imágenes se vinculan por SKU después de revisar la importación.'],
       ['24. Ejemplo incluido', 'La plantilla contiene CAM-001 (Camisa), PAN-001 (Pantalón) y ZAP-001 (Zapatos), cada uno con tres variantes Color/Talla, y BOL-001 (Bolso sin variantes). Sus totales derivados son 25, 18, 15 y 10 unidades respectivamente.'],
@@ -3124,12 +3125,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         }
         setImportProgress(25);
        const results = isServiceView
-         ? await inventoryService.importServices({ items, currency: importCurrency, exchangeRate: importExchangeRate, confirmText: 'IMPORTAR' })
+         ? await inventoryService.importServices({ items, currency: importCurrency, exchangeRate: importExchangeRate, reimportMode: 'MERGE', confirmText: 'IMPORTAR' })
          : advancedCatalogPayload
-           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, confirmText: 'IMPORTAR' })
-           : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', confirmText: 'IMPORTAR' });
+           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: 'MERGE', confirmText: 'IMPORTAR' })
+           : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', reimportMode: 'MERGE', confirmText: 'IMPORTAR' });
       setImportProgress(90);
-      setImportResults({ success: results.success || 0, skipped: (importData.length - valid.length) + (results.skipped || 0), failed: results.errors?.length || 0, errors: results.errors || [] });
+      setImportResults({ success: (results.success || 0) + (results.updatedProductCount || 0) + (results.updatedServiceCount || 0), skipped: (importData.length - valid.length) + (results.skipped || 0), failed: results.errors?.length || 0, errors: results.errors || [], warnings: results.warnings || [] });
       setImportModalOpen(false);
       setInitialImportConfirmOpen(false);
       setImportPreviewOpen(false);
@@ -4436,7 +4437,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         <DialogContent>
           <DialogHeader data-tour="inventory-initial-confirm-title">
              <DialogTitle>Formalizar importación</DialogTitle>
-          <DialogDescription>Esta acción creará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'productos'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios se guardarán con un único precio, sin IVA, bodega, stock ni variantes.' : 'Puedes repetir la importación cuando lo necesites; los SKU que ya existen se omitirán para evitar duplicados.'} {isServiceView ? `El precio se guardará en ${importCurrency}.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
+          <DialogDescription>Esta acción creará o actualizará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'registros de catálogo'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios se actualizarán sin IVA, bodega, stock ni variantes.' : 'La reimportación conserva IDs, existencias e historial; actualiza datos maestros y precios, agrega variantes nuevas y rechaza conflictos de tipo o SKU.'} {isServiceView ? `El precio se guardará en ${importCurrency}.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
           <InventoryViewTutorial label="Cómo confirmar importación" targetPrefix="inventory-initial-confirm" copy={{ data: { description: 'Escribe IMPORTAR únicamente después de revisar las filas válidas, errores y advertencias.' }, actions: { description: `Confirma la importación para crear ${isServiceView ? 'los servicios' : 'los productos nuevos'}.` } }} />
           </DialogHeader>
           <div data-tour="inventory-initial-confirm-data"><Input value={initialImportConfirmText} onChange={(event) => setInitialImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus /></div>
@@ -4464,6 +4465,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{importResults?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div>
             <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{importResults?.failed || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Incidencias</p></div>
           </div>
+          {Boolean(importResults?.warnings?.length) && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">{importResults?.warnings?.join(' ')}</p>}
           <DialogFooter>
             <Button className="w-full" onClick={() => setImportResults(null)}>Continuar al inventario</Button>
           </DialogFooter>

@@ -890,7 +890,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       ['Notas', 'Opcional. Es la nota de la línea del producto; máximo 100 caracteres. Si se deja vacía y el SKU existe, se usará la nota del catálogo como respaldo.'],
       ['Bodega destino', `No se captura por fila. Todos los productos se agregarán a la bodega seleccionada en la orden actual: ${availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name || 'la bodega seleccionada en el formulario'}.`],
       ['Cantidad / Precio unitario', 'La cantidad debe ser mayor que cero y el precio no puede ser negativo.'],
-      ['Plantilla avanzada de Inventario', 'También puedes cargar la plantilla avanzada con Productos, Variantes, Atributos, Precios e Inventario. Se creará el catálogo faltante sin stock inicial; cada SKU variante se agregará como una línea y Stock inicial se tomará como cantidad solicitada. Costo entrada se tomará como precio unitario.'],
+      ['Plantilla avanzada de Inventario', 'También puedes cargar la plantilla avanzada con Productos, Variantes, Atributos, Precios e Inventario. Se creará el catálogo faltante sin stock inicial; si el producto padre ya existe, se agregarán únicamente sus variantes nuevas. Cada SKU variante se agregará como una línea y Stock inicial se tomará como cantidad solicitada. Costo entrada se tomará como precio unitario.'],
       ['Tipo IVA / Base IVA / Tasa IVA', 'Escribe el nombre en español de una opción configurada. La base y la tasa se calculan automáticamente según la cantidad, el precio y la opción seleccionada; no son editables.'],
       ['Opciones de IVA configuradas', formatGuideOptions(activeTaxOptions)],
       ['Retención / Base retención / Tasa retención', 'Escribe "Sin retención" cuando no aplique; de lo contrario escribe el nombre en español de una retención configurada. La base y la tasa se calculan automáticamente y no son editables.'],
@@ -1159,14 +1159,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       if (advancedImportCatalog) {
         const categoryByName = new Map(categories.map((category: any) => [String(category.name || '').trim().toLowerCase(), category]));
         const knownProductCodes = new Set(products.map((product: any) => String(product.code || '').trim().toLowerCase()));
-        const newProductCodes = new Set(
-          advancedImportCatalog.products
-            .filter((product) => !knownProductCodes.has(String(product.code || '').trim().toLowerCase()))
-            .map((product) => String(product.code || '').trim().toLowerCase()),
-        );
-        if (newProductCodes.size > 0) {
+        const knownVariantSkus = new Set(products.flatMap((product: any) => Array.isArray(product.variants) ? product.variants : [])
+          .map((variant: any) => String(variant.sku || '').trim().toLowerCase())
+          .filter(Boolean));
+        const newProductCodes = new Set(advancedImportCatalog.products
+          .filter((product) => !knownProductCodes.has(String(product.code || '').trim().toLowerCase()))
+          .map((product) => String(product.code || '').trim().toLowerCase()));
+        const extensionProductCodes = new Set(advancedImportCatalog.variants
+          .filter((variant) => !knownVariantSkus.has(String(variant.sku || '').trim().toLowerCase()))
+          .map((variant) => String(variant.productCode || '').trim().toLowerCase())
+          .filter((code) => knownProductCodes.has(code)));
+        const catalogProductCodes = new Set([...newProductCodes, ...extensionProductCodes]);
+        if (catalogProductCodes.size > 0) {
           const catalogProducts = advancedImportCatalog.products
-            .filter((product) => newProductCodes.has(String(product.code || '').trim().toLowerCase()))
+            .filter((product) => catalogProductCodes.has(String(product.code || '').trim().toLowerCase()))
             .map((product) => {
               const parentKey = String(product.code || '').trim().toLowerCase();
               const fallbackCost = (advancedImportCatalog.stock || [])
@@ -1183,8 +1189,17 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           const catalogPayload = {
             ...advancedImportCatalog,
             products: catalogProducts,
-            variants: advancedImportCatalog.variants.filter((variant) => newProductCodes.has(String(variant.productCode || '').trim().toLowerCase())),
-            prices: advancedImportCatalog.prices.filter((price) => newProductCodes.has(String(price.productCode || '').trim().toLowerCase())),
+            variants: advancedImportCatalog.variants.filter((variant) => {
+              const productKey = String(variant.productCode || '').trim().toLowerCase();
+              const skuKey = String(variant.sku || '').trim().toLowerCase();
+              return catalogProductCodes.has(productKey) && !knownVariantSkus.has(skuKey);
+            }),
+            prices: advancedImportCatalog.prices.filter((price) => {
+              const productKey = String(price.productCode || '').trim().toLowerCase();
+              const variantKey = String(price.variantSku || '').trim().toLowerCase();
+              return newProductCodes.has(productKey)
+                || (extensionProductCodes.has(productKey) && String(price.scope || '').toUpperCase() === 'VARIANT' && !knownVariantSkus.has(variantKey));
+            }),
             // No se duplica stock: Inventario ya se convirtió en cantidad de
             // compra y entrará únicamente al aprobar/recibir la orden.
             stock: [],
@@ -1195,6 +1210,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             currency: importDataCurrency,
             exchangeRate: importDataCurrency === 'USD' ? Number(localDoc.exchangeRate || globalRate || 1) : 1,
             createMissingAttributes: true,
+            allowExistingParentVariantExtension: true,
             confirmText: 'IMPORTAR',
           });
           const refreshedCatalog = await resolveImportProducts(validRows);

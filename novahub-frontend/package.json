@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "architecture:check": "depcruise --config .dependency-cruiser.cjs src",
+    "architecture:graph": "depcruise --config .dependency-cruiser.cjs --output-type mermaid src",
     "dev": "vite",
     "lint": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --fix --max-warnings 0",
@@ -100,6 +102,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "4.7.0",
+    "dependency-cruiser": "^18.2.0",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
