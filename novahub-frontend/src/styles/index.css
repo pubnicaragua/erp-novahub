@@ -748,6 +748,33 @@ th .column-filter-menu .column-filter-icon,
   max-width: 100%;
 }
 
+/* Inventory actions need the full available row while the filter drawer is
+   open. Otherwise the primary actions can squeeze the filter trigger and its
+   panel into a very narrow column at intermediate widths or browser zoom. */
+.inventory-products-toolbar-open > .inventory-products-filter-section,
+.inventory-products-toolbar-open > .erp-toolbar-primary-group {
+  width: 100%;
+}
+
+.inventory-products-toolbar-open {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+.inventory-products-toolbar-open > .erp-toolbar-primary-group {
+  justify-content: flex-start;
+}
+
+@media (min-width: 768px) and (max-width: 1799px) {
+  .inventory-products-composite-toolbar .erp-toolbar-primary-group > button {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+    line-height: 1.1;
+  }
+}
+
 @media (max-width: 767px) {
   .inventory-products-toolbar {
     display: grid !important;

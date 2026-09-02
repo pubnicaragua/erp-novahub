@@ -1365,7 +1365,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           code: it.code || prod.code || prod.sku || '',
           name: it.name || prod.name || it.description || '',
           description: it.description || prod.name || it.name || '',
-          category: prod.category?.name || prod.category || prod.categoryId || it.category || '',
+          category: prod.category?.name || prod.category || it.category || '',
           categoryId: it.categoryId || prod.categoryId || (prod.category?.id || ''),
           stock: stockVal,
           currentStock: stockVal,

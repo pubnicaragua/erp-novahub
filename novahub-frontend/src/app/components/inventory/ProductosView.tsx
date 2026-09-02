@@ -3423,8 +3423,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
       {/* ─── Acciones fijas + filtros desplegables ─── */}
       <div className="mb-4 flex min-w-0 flex-col gap-3">
-        <div className="erp-composite-toolbar flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0 flex-1">
+      <div className={`inventory-products-composite-toolbar erp-composite-toolbar flex min-w-0 flex-col gap-3 min-[1800px]:flex-row min-[1800px]:items-start min-[1800px]:justify-between ${filtersOpen ? 'inventory-products-toolbar-open' : ''}`}>
+          <div className="inventory-products-filter-section min-w-0 flex-1">
             <Button
               type="button"
               size="sm"
@@ -3531,7 +3531,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             )}
           </div>
 
-          <div className="erp-toolbar-primary-group flex w-full max-w-full shrink-0 flex-wrap items-center justify-end gap-2 md:w-auto" data-tour="inventory-products-actions">
+          <div className="erp-toolbar-primary-group flex w-full max-w-full shrink-0 flex-wrap items-center justify-start gap-2 min-[1800px]:w-auto min-[1800px]:justify-end" data-tour="inventory-products-actions">
           {canPerform('INVENTORY_PRODUCTS', 'create') && (
             <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 md:order-last" onClick={() => setCreateModalOpen(true)}>
               <Plus className="mr-2 size-4" /> Nuevo
@@ -3647,10 +3647,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <p className="min-w-0 truncate font-semibold" title={product.name}>{product.name}{String(openingId) === String(product.id) && <span role="status" className="ml-2 inline-flex shrink-0 items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</p>
-                        {!isServiceView && hasProductVariants(product) && <Badge variant="outline" className="shrink-0 border-primary/30 text-[9px] font-black uppercase text-primary">Con variantes</Badge>}
-                      </div>
+                      <p className="line-clamp-2 break-words font-semibold leading-tight" title={product.name}>{product.name}{String(openingId) === String(product.id) && <span role="status" className="ml-2 inline-flex shrink-0 items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</p>
+                      {!isServiceView && hasProductVariants(product) && (
+                        <span className="mt-0.5 block text-[9px] font-black uppercase tracking-wider text-primary/80">Variante</span>
+                      )}
                       <p className="truncate font-mono text-xs text-muted-foreground">{product.code}</p>
                     </div>
                     <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase">{isServiceView ? 'Servicio' : 'Producto'}</Badge>
@@ -3850,10 +3850,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                         ) : (
                           <ProductThumbnail src={undefined} alt={product.name} size="sm" />
                         )}
-                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 overflow-hidden">
+                        <div className="min-w-0 flex-1 overflow-hidden">
                           <button
                             type="button"
-                            className="block min-w-0 max-w-full flex-1 truncate text-left text-sm font-medium hover:text-primary underline-offset-2 hover:underline"
+                            className="block w-full min-w-0 whitespace-normal break-words text-left text-sm font-medium leading-snug line-clamp-2 hover:text-primary underline-offset-2 hover:underline"
                             onClick={(e) => {
                               e.stopPropagation();
                               openProductDetail(product);
@@ -3861,28 +3861,32 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                           >
                             {product.name}
                           </button>
-                          {!isServiceView && hasProductVariants(product) && <Badge variant="outline" className="shrink-0 border-primary/30 text-[9px] font-black uppercase text-primary">Con variantes</Badge>}
-                          {!isServiceView && Boolean(
-                            product.trackSerialNumbers ||
-                            product.serialTracking ||
-                            product.serialNumberTracking ||
-                            String(product.trackingType || '').toUpperCase() === 'SERIAL',
-                          ) && (
-                            <Badge variant="outline" className="text-[9px] font-black">IMEI</Badge>
+                          {!isServiceView && hasProductVariants(product) && (
+                            <span className="mt-0.5 block text-[9px] font-black uppercase tracking-wider text-primary/80">Variante</span>
                           )}
-                          {!isServiceView && status.label !== 'OK' && (
-                            <Badge className={`${status.color} text-[10px] px-1.5 py-0`}>{status.label}</Badge>
-                          )}
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
+                            {!isServiceView && Boolean(
+                              product.trackSerialNumbers ||
+                              product.serialTracking ||
+                              product.serialNumberTracking ||
+                              String(product.trackingType || '').toUpperCase() === 'SERIAL',
+                            ) && (
+                              <Badge variant="outline" className="text-[9px] font-black">IMEI</Badge>
+                            )}
+                            {!isServiceView && status.label !== 'OK' && (
+                              <Badge className={`${status.color} text-[10px] px-1.5 py-0`}>{status.label}</Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-muted-foreground">{product.category?.name || '-'}</span>
                     </TableCell>
                     <TableCell className="max-w-[180px]">
                       <span className="block max-w-[180px] truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}>
                         {product.commercialNote || '—'}
                       </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">{product.category?.name || '-'}</span>
                     </TableCell>
                     {!isServiceView && <TableCell>
                       <span className="text-xs text-muted-foreground capitalize">{product.unit || 'unidad'}</span>

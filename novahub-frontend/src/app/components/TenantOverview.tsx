@@ -625,8 +625,6 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">Resumen operativo</p>
-           <h1 className="mt-1 text-2xl font-black tracking-tight text-foreground md:text-3xl">Ve lo importante. Decide a tiempo.</h1>
-           <p className="mt-2 max-w-xl text-sm text-muted-foreground">Un resumen claro de tu operación, con accesos directos al módulo correcto y vistas previas cuando el detalle aún no tiene una pantalla específica.</p>
         </div>
         <div className="flex items-center gap-2 z-10 shrink-0 flex-wrap">
           <Select value={period} onValueChange={(val) => {
