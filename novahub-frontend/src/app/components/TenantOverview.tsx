@@ -4,7 +4,7 @@ import {
   DollarSign, TrendingDown, ShoppingCart, Target,
   ArrowUpRight, Loader2, AlertTriangle, ShieldAlert,
   TrendingUp, Coins, Clock, BarChart3, Package, Store, Receipt,
-  FileDown, ClipboardCheck, CalendarDays, Settings2,
+  FileDown, CalendarDays, Settings2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -22,18 +22,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
-import { ImplementationSetupDashboard } from './ImplementationSetupDashboard';
-import {
-  getImplementationSetupSummary,
-  type ImplementationSetupSummary,
-} from '../services/implementation-setup.service';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../utils/pdfGenerator';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../utils/currency';
 
 interface TenantOverviewProps {
   onNavigate?: (module: Module) => void;
-  onNavigateToDashboard?: () => void;
 }
 
 const containerVariants: Variants = {
@@ -111,7 +105,7 @@ const KPI_DEFINITIONS = [
 
 const DEFAULT_KPI_IDS = ['totalRevenue', 'totalExpenses', 'ordersCount', 'netMargin'];
 
-export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOverviewProps) {
+export function TenantOverview({ onNavigate }: TenantOverviewProps) {
   const [loading, setLoading] = useState(true);
   const [loadStep, setLoadStep] = useState(0);
   const [period, setPeriod] = useState('month');
@@ -119,12 +113,9 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [dateTo, setDateTo] = useState('');
   const [cajaData, setCajaData] = useState<any>(null);
   const [prevData, setPrevData] = useState<any>(null);
-  const [setupSummary, setSetupSummary] = useState<ImplementationSetupSummary | null>(null);
   const [dataLoadError, setDataLoadError] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [showSetupView, setShowSetupView] = useState(false);
-  const [setupLoading, setSetupLoading] = useState(false);
   const [selectedKpiIds, setSelectedKpiIds] = useState<string[]>(DEFAULT_KPI_IDS);
   const [draftKpiIds, setDraftKpiIds] = useState<string[]>(DEFAULT_KPI_IDS);
   const [showKpiConfig, setShowKpiConfig] = useState(false);
@@ -136,11 +127,6 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const kpiStorageScope = `${user?.clientTenantId || user?.tenantId || 'default'}:${user?.id || 'anonymous'}`;
   const kpiStorageKey = `novahub.dashboard.kpis.${kpiStorageScope}`;
   const legacyKpiStorageKey = `novahub.dashboard.kpis.${user?.clientTenantId || user?.tenantId || user?.id || 'default'}`;
-  const returnToDashboard = () => {
-    setShowSetupView(false);
-    onNavigateToDashboard?.();
-  };
-
   useEffect(() => {
     if (!loading) return;
     const timer = setInterval(() => setLoadStep((s) => Math.min(s + 1, LOADING_STEPS.length - 1)), 2000);
@@ -595,27 +581,6 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     );
   }
 
-  if (showSetupView && setupSummary) {
-    return (
-      <div className="space-y-4 p-4 md:p-6">
-        <Button variant="ghost" size="sm" onClick={returnToDashboard} className="rounded-xl gap-1.5 text-xs font-bold">
-          ← Volver al Dashboard
-        </Button>
-        <ImplementationSetupDashboard
-          summary={setupSummary}
-          onNavigateToDashboard={returnToDashboard}
-          onRefresh={async () => {
-            try {
-              setSetupLoading(true);
-              setSetupSummary(await getImplementationSetupSummary(true, user?.enabledModules));
-            } catch { /* silent */ }
-            finally { setSetupLoading(false); }
-          }}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 p-4 md:p-6 pb-16">
       <CurrencyValuationBanner />
@@ -663,26 +628,6 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
           >
             {isExporting ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <FileDown className="size-3.5 mr-1.5" />}
             Exportar
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              setShowSetupView(true);
-              setSetupLoading(true);
-              try {
-                const summary = await getImplementationSetupSummary(true, user?.enabledModules);
-                setSetupSummary(summary);
-              } catch (error: any) {
-                toast.error(error?.message || 'No se pudo cargar la implementación');
-                setShowSetupView(false);
-              } finally { setSetupLoading(false); }
-            }}
-            disabled={setupLoading}
-            className="rounded-xl border-dashed border-primary/30 bg-transparent hover:bg-primary/5 text-primary/80 font-black uppercase text-[10px] tracking-widest gap-1.5"
-          >
-            {setupLoading ? <Loader2 className="size-3.5 animate-spin" /> : <ClipboardCheck className="size-3.5" />}
-            Implementación
           </Button>
           <Button
             variant="outline"

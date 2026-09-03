@@ -72,7 +72,7 @@ export function clearSessionCache(options: { preserveAuthToken?: boolean; preser
 
   try {
     // All sessionStorage entries belong to the ERP SPA: search state, pending
-    // navigation, onboarding drafts and recovery markers must not cross users.
+    // navigation drafts and recovery markers must not cross users.
     window.sessionStorage.clear();
   } catch {
     // Ignore restricted storage environments.

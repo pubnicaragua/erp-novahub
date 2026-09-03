@@ -121,6 +121,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [userDialogMode, setUserDialogMode] = useState<'plain' | 'withEmployee'>('plain');
   const [selectedCreateEmployeeId, setSelectedCreateEmployeeId] = useState('');
   const [activeTab, setActiveTab] = useState('general');
+  const isCurrentUserPrincipalAdmin = users.some((user) => user.id === currentUser?.id && user.isPrincipalAdmin);
 
   const { data: tenantData, isLoading: tenantDataLoading, refetch: refetchTenantData } = useTenantQuery(
     ['my-company-detail', tenant?.id || 'none'],
@@ -741,6 +742,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                const isManager = normalizedUserType === 'MANAGER' || normalizedRole === 'MANAGER';
                const isAdmin = !isManager && (normalizedUserType === 'ADMIN' || normalizedRole === 'ADMIN');
                const isCollaborator = !isManager && !isAdmin;
+               const canChangeThisPassword = canEditUsers && !isCurrentUser && !isManager && (!isAdmin || isCurrentUserPrincipalAdmin);
                return <div key={u.id} className={cn('space-y-3 rounded-lg bg-muted/20 px-4 py-3 transition-colors', isCurrentUser ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : 'hover:bg-muted/40')}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
@@ -750,7 +752,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <h4 className="truncate text-sm font-bold text-foreground">{u.name}</h4>
-                        {isCurrentUser && <Badge className="bg-primary text-primary-foreground text-[9px] uppercase">Tu usuario</Badge>}
+                         {isCurrentUser && <Badge className="bg-primary text-primary-foreground text-[9px] uppercase">Tu usuario</Badge>}
+                         {u.isPrincipalAdmin && <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-[9px] uppercase text-amber-600">Administrador principal</Badge>}
                       </div>
                       <p className="flex items-center gap-1 truncate text-xs text-muted-foreground"><Mail className="size-3" /> {u.email}</p>
                       {(() => { const groupingDepartments = userGroupingDepartments(u); return <><p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{groupingDepartments.map((department: any) => department.name).join(' · ') || 'Sin departamento'}</p><p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="size-3" /> {groupingDepartments.length} {groupingDepartments.length === 1 ? 'departamento' : 'departamentos'} de equipo</p></>; })()}
@@ -786,7 +789,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     </Select>
                   </div>}
 
-                   {canEditUsers && !isAdmin && !isManager && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
+                   {canChangeThisPassword && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
+                   {canEditUsers && !isCurrentUser && isAdmin && !isCurrentUserPrincipalAdmin && <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground" title="Solo el administrador principal puede cambiar esta contraseña">Solo Admin principal</span>}
                   {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
                   {(canViewUsers || canViewRoles) && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>}
                   {canDeactivateUsers && <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>

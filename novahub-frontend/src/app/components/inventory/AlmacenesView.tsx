@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Users, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -17,7 +17,6 @@ import { Switch } from '../ui/switch';
 
 import { getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
-import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { WarehouseSupplyPanel } from './WarehouseSupplyPanel';
@@ -75,7 +74,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const cameFromSetupRef = useRef(false);
   const [stockByWarehouse, setStockByWarehouse] = useState<Record<string, number>>({});
   const [detailWarehouse, setDetailWarehouse] = useState<any | null>(null);
 
@@ -200,19 +198,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     setEditingRows(new Map(editingRows.set(tempId, newWarehouse)));
   };
 
-  React.useEffect(() => {
-    const context = consumeImplementationTourContext('inventario', 'almacenes');
-    if (!context) return;
-
-    cameFromSetupRef.current = true;
-    setShowTutorial(context.tourActive);
-    window.setTimeout(() => {
-      if (context.action === 'open-warehouse-form') {
-        handleAddNewRow();
-      }
-    }, 250);
-  }, []);
-
   const handleEditRow = (wh: any) => {
     if (!canEditWarehouse) return;
     const editWarehouse: EditingWarehouse = {
@@ -266,11 +251,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       }
       handleCancelEdit(id);
       onRefresh();
-      if (cameFromSetupRef.current) {
-        cameFromSetupRef.current = false;
-        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } }));
-        return;
-      }
     } catch (e: any) {
       toast.error(e.message || 'Error al guardar');
     } finally {

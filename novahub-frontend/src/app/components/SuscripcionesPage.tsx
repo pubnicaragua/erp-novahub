@@ -621,6 +621,9 @@ export function SuscripcionesPage() {
     </>);
   }
 
+  const principalAdmin = tenantDetails?.users?.find((candidate: any) => candidate.id === tenantDetails?.principalAdminUserId)
+    || tenantDetails?.users?.[0];
+
   return (
     <div className="p-6 space-y-8 max-w-7xl mx-auto min-h-screen">
       {/* --- HEADER --- */}
@@ -1284,11 +1287,11 @@ export function SuscripcionesPage() {
                         <>
                           <div className="flex justify-between items-center border-b border-border/50 pb-2">
                             <span className="text-muted-foreground">Admin Principal:</span>
-                            <span className="font-bold">{tenantDetails.users[0]?.name}</span>
+                            <span className="font-bold">{principalAdmin?.name}</span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">Email Admin:</span>
-                            <span className="font-bold">{tenantDetails.users[0]?.email}</span>
+                            <span className="font-bold">{principalAdmin?.email}</span>
                           </div>
                         </>
                       ) : (

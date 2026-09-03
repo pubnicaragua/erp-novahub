@@ -16,8 +16,6 @@ interface AdministrarCajasModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRegistersChanged?: () => void;
-  initialMode?: 'create-register';
-  onInitialModeHandled?: () => void;
 }
 
 function toCajaPayload(form: Partial<CashRegister>) {
@@ -29,7 +27,7 @@ function toCajaPayload(form: Partial<CashRegister>) {
   };
 }
 
-export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, initialMode, onInitialModeHandled }: AdministrarCajasModalProps) {
+export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }: AdministrarCajasModalProps) {
   const [cajasList, setCajasList] = useState<CashRegister[]>([]);
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
@@ -58,19 +56,6 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
       Promise.resolve().then(fetchCajas);
     }
   }, [open]);
-
-  useEffect(() => {
-    if (!open || initialMode !== 'create-register') return;
-
-    const timer = window.setTimeout(() => {
-      onOpenChange(false);
-      setCajaForm({ isActive: true });
-      setIsCajaFormOpen(true);
-      onInitialModeHandled?.();
-    }, 250);
-
-    return () => window.clearTimeout(timer);
-  }, [initialMode, onInitialModeHandled, onOpenChange, open]);
 
   const handleManageAccess = async (caja: CashRegister) => {
     onOpenChange(false);

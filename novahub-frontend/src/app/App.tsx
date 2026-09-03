@@ -387,7 +387,7 @@ function DashboardLayout() {
       if (user?.role === 'partner') {
         return <PartnerDashboard onNavigate={handleNavigate} />;
       }
-      return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} onOverview={handleOverview} /></ModuleErrorBoundary>;
+      return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} /></ModuleErrorBoundary>;
     }
 
     if (!hasAccess(currentModule as Module)) {

@@ -195,7 +195,7 @@ export function EnterpriseGroupSetupView({
     null,
   );
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
-  const onboardingLogoScope = useRef(`onboarding-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const groupLogoScope = useRef(`group-logo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
   const persistLogo = async (value: string | null | undefined, folder: string, fileName: string) => {
     if (!value || !value.startsWith("data:")) return value || "";
@@ -205,7 +205,7 @@ export function EnterpriseGroupSetupView({
     }
     const uploaded = await storageService.uploadFile("tenant-branding", file, {
       folder,
-      scopeId: group?.id || onboardingLogoScope.current,
+      scopeId: group?.id || groupLogoScope.current,
     });
     return uploaded.url;
   };

@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback } from 'react';
 import { useCajaSession } from '../../hooks/useCajaSession';
 import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
@@ -18,7 +18,6 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '..
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { CajaSetupGuide } from './caja/CajaSetupGuide';
 import { getApiErrorMessage, api } from '../../services/api';
-import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
@@ -56,14 +55,12 @@ export function ControlDashboardCajaView({
   const [activeSection, setActiveSection] = useState<SectionType>(initialSection || 'session');
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
-  const [initialCajaModalMode, setInitialCajaModalMode] = useState<'create-register' | undefined>();
   const [showTutorial, setShowTutorial] = useState(false);
   const [deficitCharges, setDeficitCharges] = useState<any[]>([]);
   const [deficitsLoading, setDeficitsLoading] = useState(false);
   const [teamUsers, setTeamUsers] = useState<any[]>([]);
   const [responsibleDrafts, setResponsibleDrafts] = useState<Record<string, string>>({});
   const [savingCharge, setSavingCharge] = useState<string | null>(null);
-  const cameFromSetupRef = useRef(false);
 
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
   const isUSD = displayCurrency === 'USD';
@@ -92,10 +89,6 @@ export function ControlDashboardCajaView({
       if (registersData.length > 0) {
         const openRegister = registersData.find((r: any) => r.hasActiveSession);
         setSelectedRegister(prev => prev || (openRegister ? openRegister.id : registersData[0].id));
-      }
-      if (cameFromSetupRef.current && registersData.length > 0) {
-        cameFromSetupRef.current = false;
-        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } }));
       }
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Error al cargar cajas'));
@@ -173,20 +166,6 @@ export function ControlDashboardCajaView({
     if (initialRegisterId) setSelectedRegister(initialRegisterId);
     if (initialSection) setActiveSection(initialSection);
   }
-
-  useEffect(() => {
-    const context = consumeImplementationTourContext('ventas', 'control-caja');
-    if (!context) return;
-
-    cameFromSetupRef.current = true;
-    if (context.action === 'open-cash-register-form') {
-      window.setTimeout(() => {
-        setActiveSection('session');
-        setInitialCajaModalMode('create-register');
-        setManageCajasOpen(true);
-      }, 0);
-    }
-  }, []);
 
   if (loading && (!registers || registers.length === 0)) {
     return (
@@ -724,8 +703,6 @@ export function ControlDashboardCajaView({
         open={manageCajasOpen} 
         onOpenChange={setManageCajasOpen}
         onRegistersChanged={loadRegisters}
-        initialMode={initialCajaModalMode}
-        onInitialModeHandled={() => setInitialCajaModalMode(undefined)}
       />
     </div>
   );

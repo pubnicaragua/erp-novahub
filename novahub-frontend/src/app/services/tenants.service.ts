@@ -21,6 +21,7 @@ export interface TenantUser {
   name: string;
   email: string;
   role: string;
+  isPrincipalAdmin?: boolean;
   customRoleId?: string | null;
   customRole?: { id: string; name: string; permissions?: any; allowedModules: string[] } | null;
   departments?: Array<{ id: string; code?: string; name: string; isPrimary?: boolean }>;

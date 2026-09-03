@@ -29,7 +29,8 @@ export function ManagerUserEditorDialog({ user, open, saving = false, onOpenChan
 
   const emailValid = isValidEmail(email);
   const passwordError = getPasswordError(password, false);
-  const isProtectedAdmin = String(user?.role || '').toUpperCase() === 'ADMIN';
+  const isProtectedAdmin = String(user?.role || '').toUpperCase() === 'ADMIN'
+    || String(user?.userType || '').toUpperCase() === 'ADMIN';
   const canSave = Boolean(name.trim()) && emailValid && !passwordError && !saving;
 
   return (
@@ -62,11 +63,11 @@ export function ManagerUserEditorDialog({ user, open, saving = false, onOpenChan
                 <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-11 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal outline-none focus:border-primary" />
                 {!!email && !emailValid && <span className="block text-xs font-normal text-destructive">Escribe un correo válido.</span>}
               </label>
-              <label className="min-w-0 space-y-2 text-sm font-semibold sm:col-span-2">
+              {!isProtectedAdmin ? <label className="min-w-0 space-y-2 text-sm font-semibold sm:col-span-2">
                 <span>Nueva contraseña <span className="font-normal text-muted-foreground">(opcional)</span></span>
                 <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Déjala vacía para conservarla" className="h-11 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal outline-none focus:border-primary" />
                 {passwordError && <span className="block text-xs font-normal text-destructive">{passwordError}</span>}
-              </label>
+              </label> : <p className="text-xs font-normal text-muted-foreground sm:col-span-2">La contraseña de los administradores de sucursal solo la puede cambiar el administrador principal de esa sucursal.</p>}
             </div>
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 p-4">
               <input type="checkbox" checked={isProtectedAdmin || isActive} disabled={isProtectedAdmin} onChange={(event) => setIsActive(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" />

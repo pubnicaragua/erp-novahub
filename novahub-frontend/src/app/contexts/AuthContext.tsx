@@ -4,7 +4,6 @@ import { isLegacyAuthToken, storeAuthToken } from '../services/auth-token';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { queryClient } from '../services/query-client';
 import { clearSessionCache } from '../services/session-cache';
-import { clearImplementationSetupCache } from '../services/implementation-setup.service';
 import { clearStorageUrlCache } from '../services/storage.service';
 import { BrandLogoLoader } from '../components/BrandLogo';
 import { SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
@@ -256,7 +255,6 @@ function clearClientSessionState(options: { preserveAuthToken?: boolean; preserv
   void queryClient.cancelQueries();
   queryClient.clear();
   clearRequestCaches();
-  clearImplementationSetupCache();
   clearStorageUrlCache();
   clearSessionCache(options);
   if (typeof window !== 'undefined' && !options.preserveAuthToken) {
