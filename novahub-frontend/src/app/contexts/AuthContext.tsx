@@ -93,7 +93,8 @@ export type Module =
   | 'contabilidad'
   | 'dashboard-ventas'
   | 'qa-console'
-  | 'fuerza-comercial';
+  | 'fuerza-comercial'
+  | 'guia-implementacion';
 
 export type SubModule = string;
 
@@ -731,6 +732,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
+      if (module === 'guia-implementacion') return user.role === 'superadmin';
       const platformModules = [
         'dashboard', 'suscripciones', 'tenant-admin', 'configuracion', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',

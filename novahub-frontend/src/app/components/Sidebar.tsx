@@ -342,6 +342,13 @@ const platformMenuItems: MenuItem[] = [
     section: 'NovaHub Platform',
   },
   {
+    id: 'guia-implementacion',
+    label: 'Guía de implementación',
+    icon: <ClipboardCheck className="size-5" />,
+    section: 'NovaHub Platform',
+    superadminOnly: true,
+  },
+  {
     id: 'fuerza-comercial',
     label: 'Fuerza Comercial',
     icon: <MapPinned className="size-5" />,

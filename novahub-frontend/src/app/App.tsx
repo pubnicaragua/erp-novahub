@@ -89,6 +89,7 @@ const ContabilidadPage = lazyWithChunkRecovery(() => import('./components/contab
 const QaConsoleView = lazyWithChunkRecovery(() => import('./components/qa/QaConsoleView').then(m => ({ default: m.QaConsoleView })), 'qa');
 const ManagerPage = lazyWithChunkRecovery(() => import('./components/ManagerPage').then(m => ({ default: m.ManagerPage })), 'manager');
 const EnterpriseGroupsAdminView = lazyWithChunkRecovery(() => import('./components/admin/EnterpriseGroupsAdminView').then(m => ({ default: m.EnterpriseGroupsAdminView })), 'enterprise-groups');
+const ImplementationGuideView = lazyWithChunkRecovery(() => import('./components/admin/ImplementationGuideView').then(m => ({ default: m.ImplementationGuideView })), 'implementation-guide');
 
 function PageLoader() {
   return (
@@ -431,6 +432,7 @@ function DashboardLayout() {
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'novachat': return <NovaChatView />;
       case 'qa-console': return <ModuleErrorBoundary moduleName="Validador QA"><QaConsoleView /></ModuleErrorBoundary>;
+      case 'guia-implementacion': return user?.role === 'superadmin' ? <ImplementationGuideView onNavigate={handleNavigate} /> : <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6"><div className="text-center"><h1 className="text-2xl font-semibold tracking-tight">Acceso Denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para acceder a esta guía</p></div></div>;
       default: return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} /></ModuleErrorBoundary>;
     }
   };

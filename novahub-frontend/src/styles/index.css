@@ -1113,6 +1113,14 @@ th .column-filter-menu .column-filter-icon,
     color: hsl(var(--muted-foreground) / 0.82);
   }
 
+  .sales-line-product-header.sales-line-product-header--two-columns {
+    grid-template-columns: minmax(0, 1.45fr) minmax(7rem, 0.9fr);
+  }
+
+  .sales-line-product-header.sales-line-product-header--one-column {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .sales-line-product-fields > .sales-line-product-picker,
   .sales-line-product-fields > .sales-line-variant,
   .sales-line-product-fields > .sales-line-price-list {
@@ -1125,6 +1133,10 @@ th .column-filter-menu .column-filter-icon,
        price-list control next to the picker and let it use the remaining
        columns instead of leaving the former variant slot empty. */
     grid-column: 2 / -1;
+  }
+
+  .sales-line-product-fields:not(:has(> .sales-line-variant)):not(:has(> .sales-line-price-list)) > .sales-line-product-picker {
+    grid-column: 1 / -1;
   }
 
   .sales-line-product-fields .sales-line-variant > span,

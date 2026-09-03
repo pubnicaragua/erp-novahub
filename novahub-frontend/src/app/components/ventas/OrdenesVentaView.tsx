@@ -163,6 +163,18 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
     return options;
   };
+  const showVariantColumn = (localDoc?.items || []).some((item: any) => {
+    const product = findProductForItem(item);
+    return (product?.variants || []).filter((variant: any) => variant.isActive !== false).length > 1;
+  });
+  const showPriceTypeColumn = (localDoc?.items || []).some((item: any) => (
+    Boolean(item.productId) && resolveItemType(item) !== 'SERVICE'
+  ));
+  const productHeaderColumnClass = showVariantColumn && showPriceTypeColumn
+    ? undefined
+    : showVariantColumn || showPriceTypeColumn
+      ? 'sales-line-product-header--two-columns'
+      : 'sales-line-product-header--one-column';
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
   const savingOrderRef = useRef(false);
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
@@ -1101,10 +1113,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('sales-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
+                <div className={cn('sales-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5', productHeaderColumnClass)}>
                   <span>Descripción</span>
-                  <span>Variante</span>
-                  <span>Tipo de precio</span>
+                  {showVariantColumn && <span>Variante</span>}
+                  {showPriceTypeColumn && <span>Tipo de precio</span>}
                 </div>
                 {pricingMode === 'individual' && <div className="col-span-2 grid grid-cols-2 gap-1.5">
                   <div>Aplicar</div>
