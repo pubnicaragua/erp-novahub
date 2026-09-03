@@ -306,24 +306,37 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const { start: currentStart, end: currentEnd, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
   const prevWin = useMemo(() => prevStart && prevEnd ? { startMs: prevStart.getTime(), endMs: prevEnd.getTime() } : null, [prevStart, prevEnd]);
 
-  const empName = (e: any) => `${e?.firstName || ''} ${e?.lastName || ''}`.trim() || 'Sin nombre';
-  const empDept = (e: any) => (typeof e?.department === 'object' && e?.department?.name) || 'Gral';
-  const empPos = (e: any) => (typeof e?.position === 'object' && e?.position?.title) || '—';
+  const recordLabel = (value: any, fallback = '—') => {
+    if (value === null || value === undefined || value === '') return fallback;
+    if (typeof value !== 'object') return String(value);
+    return String(value.name || value.title || value.label || value.code || value.value || fallback);
+  };
+  const empName = (e: any) => `${e?.firstName || ''} ${e?.lastName || ''}`.trim() || recordLabel(e?.name, 'Sin nombre');
+  const empIdentification = (e: any) => recordLabel(e?.nationalId || e?.identification || e?.identificationNumber || e?.cedula || e?.taxId || e?.documentNumber || e?.identityNumber);
+  const empDept = (e: any) => recordLabel(e?.department || e?.departmentName, 'Gral');
+  const empPos = (e: any) => recordLabel(e?.position || e?.positionTitle || e?.cargo);
   const empSuc = (e: any) => e?.sucursal || e?.branchName || e?.branch?.name || '';
+  const empStatus = (e: any) => String(e?.employmentStatus || e?.status || 'ACTIVE').trim().toUpperCase();
+  const empContract = (e: any) => {
+    const value = String(e?.contractType || '').trim().toUpperCase();
+    return CONTRACT_LABELS[value] || value || 'Sin contrato';
+  };
 
   // ── Filtros ──
   const filterOptions = useMemo(() => {
     const depts = Array.from(new Set(employees.map(empDept))).sort();
     const positions = Array.from(new Set(employees.map(empPos).filter(p => p !== '—'))).sort();
-    const contracts = Array.from(new Set(employees.map(e => CONTRACT_LABELS[e.contractType] || e.contractType).filter(Boolean))).sort();
-    return { depts, positions, contracts };
+    const contracts = Array.from(new Set(employees.map(empContract))).sort();
+    const statusCodes = Array.from(new Set([...Object.keys(STATUS_LABELS), ...employees.map(empStatus)])).sort();
+    const statuses = statusCodes.map(value => ({ value, label: STATUS_LABELS[value] || value }));
+    return { depts, positions, contracts, statuses };
   }, [employees]);
 
   const fEmployees = useMemo(() => employees.filter(e =>
     (fDept === 'all' || empDept(e) === fDept) &&
     (fPos === 'all' || empPos(e) === fPos) &&
-    (fContract === 'all' || (CONTRACT_LABELS[e.contractType] || e.contractType) === fContract) &&
-    (fStatus === 'all' || e.employmentStatus === fStatus)
+    (fContract === 'all' || empContract(e) === fContract) &&
+    (fStatus === 'all' || empStatus(e) === fStatus)
   ), [employees, fDept, fPos, fContract, fStatus]);
 
   const fEmpIds = useMemo(() => new Set(fEmployees.map(e => e.id).filter(Boolean)), [fEmployees]);
@@ -350,7 +363,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   }, [fEmployees]);
 
   // ── Fuerza laboral ──
-  const activeEmployees = useMemo(() => fEmployees.filter(e => e.employmentStatus === 'ACTIVE' || !e.employmentStatus), [fEmployees]);
+  const activeEmployees = useMemo(() => fEmployees.filter(e => empStatus(e) === 'ACTIVE'), [fEmployees]);
   const altasPeriodo = useMemo(() => fEmployees.filter(e => isDateInRange(e.hireDate, dateRange)), [fEmployees, dateRange]);
   const bajasPeriodo = useMemo(() => fEmployees.filter(e => isDateInRange(e.terminationDate, dateRange)), [fEmployees, dateRange]);
   const variacion = altasPeriodo.length - bajasPeriodo.length;
@@ -387,7 +400,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     for (const e of fEmployees) {
       const dept = empDept(e);
       const cur = map.get(dept) || { bajas: 0, ini: 0, fin: 0 };
-      if ((e.employmentStatus === 'ACTIVE' || !e.employmentStatus)) cur.fin++;
+      if (empStatus(e) === 'ACTIVE') cur.fin++;
       if (isDateInRange(e.terminationDate, dateRange)) cur.bajas++;
       const hire = toDate(e.hireDate);
       if (hire && hire.getTime() <= currentStart.getTime()) {
@@ -571,7 +584,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       const d = toDate(e.hireDate);
       const months = d ? (now.getTime() - d.getTime()) / 2629746000 : 0;
       const anni = d ? nextAnniversary(d, now) : null;
-      return { id: e.id, name: empName(e), hireDate: d, months, dept: empDept(e), pos: empPos(e), contract: CONTRACT_LABELS[e.contractType] || e.contractType || '—', anni };
+      return { id: e.id, name: empName(e), hireDate: d, months, dept: empDept(e), pos: empPos(e), contract: empContract(e), anni };
     }).sort((a, b) => b.months - a.months);
     const avgMonths = list.length > 0 ? list.reduce((a, r) => a + r.months, 0) / list.length : 0;
     return { list, avgMonths };
@@ -687,7 +700,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const distribution = useMemo(() => {
     const keyOf = (e: any): string => {
       if (distKey === 'cargo') return empPos(e);
-      if (distKey === 'contrato') return CONTRACT_LABELS[e.contractType] || e.contractType || '—';
+      if (distKey === 'contrato') return empContract(e);
       if (distKey === 'sucursal') return empSuc(e) || 'Sin sucursal';
       return empDept(e);
     };
@@ -954,7 +967,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       title: `Colaboradores · ${name}`,
       desc: `${seg?.count || 0} colaboradores · ${seg?.pctPlantilla?.toFixed(1) || '0'}% de la plantilla · ${seg?.pctCosto ? `${seg.pctCosto.toFixed(1)}% del costo de nómina` : ''}`,
       rows: (seg?.emps || []).slice(0, 25).map(e => ({
-        label: empName(e), sub: empPos(e) + ' · ' + (CONTRACT_LABELS[e.contractType] || e.contractType || '—'), right: toDate(e.hireDate)?.toLocaleDateString('es-NI') || '—',
+        label: empName(e), sub: empPos(e) + ' · ' + empContract(e), right: toDate(e.hireDate)?.toLocaleDateString('es-NI') || '—',
       })),
     });
   };
@@ -968,7 +981,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.hr', title: 'Reporte de capital humano', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: fEmployees, columns: [{ header: 'Colaborador', value: row => row.name || [row.firstName, row.lastName].filter(Boolean).join(' ') || '—' }, { header: 'Identificación', value: row => row.taxId || row.identification || '—' }, { header: 'Cargo', value: row => row.position?.name || row.position || '—' }, { header: 'Departamento', value: row => row.department?.name || row.department || '—' }, { header: 'Estado', value: row => row.employmentStatus || 'Activo' }, { header: 'Ingreso', value: row => row.hireDate || '—' }], fileName: buildReportDownloadFileName(['reporte_rrhh'], 'pdf', dateRange) });
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.hr', title: 'Reporte de capital humano', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: fEmployees, columns: [{ header: 'Colaborador', value: row => empName(row) }, { header: 'Identificación', value: row => empIdentification(row) }, { header: 'Cargo', value: row => empPos(row) }, { header: 'Departamento', value: row => empDept(row) }, { header: 'Estado', value: row => STATUS_LABELS[empStatus(row)] || recordLabel(empStatus(row), 'Activo') }, { header: 'Ingreso', value: row => row.hireDate || '—' }], fileName: buildReportDownloadFileName(['reporte_rrhh'], 'pdf', dateRange) });
         if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
@@ -1220,8 +1233,9 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
 
         const addTable = (title: string, headers: string[], rows: (string | number)[][]) => {
-          const tRow = ws.addRow([title, '', '', '']);
-          ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
+          const endColumn = String.fromCharCode(64 + headers.length);
+          const tRow = ws.addRow([title]);
+          ws.mergeCells(`A${ws.rowCount}:${endColumn}${ws.rowCount}`);
           tRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFF59E0B' } };
           tRow.getCell(1).alignment = { horizontal: 'center' };
           ws.addRow([]);
@@ -1235,7 +1249,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           });
           rows.forEach((row, idx) => {
             const r = ws.addRow(row);
-            [1, 2, 3, 4].forEach((cIdx) => {
+            headers.forEach((_, headerIndex) => {
+              const cIdx = headerIndex + 1;
               const cell = r.getCell(cIdx);
               if (!cell.value) return;
               cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
@@ -1248,11 +1263,11 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         addTable('Mayor Antigüedad', ['Colaborador', 'Ingreso', 'Antigüedad', 'Departamento'],
           antiquity.list.slice(0, 10).map(r => [r.name, r.hireDate ? r.hireDate.toLocaleDateString('es-NI') : '—', fmtTenure(r.months), r.dept]));
 
-        addTable('Vacaciones Pendientes', ['Colaborador', 'Días pendientes', '', ''],
-          vacStats.topSaldo.map(v => [v.name, `${v.remaining}`, '', '']));
+        addTable('Vacaciones Pendientes', ['Colaborador', 'Días pendientes'],
+          vacStats.topSaldo.map(v => [v.name, `${v.remaining}`]));
 
-        addTable('Ausentismo por tipo', ['Tipo', 'Días', '', ''],
-          Object.entries(ausentismoPorTipo).map(([k, v]) => [k, `${v}`, '', '']));
+        addTable('Ausentismo por tipo', ['Tipo', 'Días'],
+          Object.entries(ausentismoPorTipo).map(([k, v]) => [k, `${v}`]));
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_recursos_humanos'], 'xlsx', dateRange));
         toast.success("Excel exportado exitosamente");
@@ -1344,7 +1359,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         </select>
         <select className={selectCls} value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
           <option value="all">Todos los estados</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {filterOptions.statuses.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}
         </select>
         {(fDept !== 'all' || fPos !== 'all' || fContract !== 'all' || fStatus !== 'all') && (
           <button onClick={() => { setFDept('all'); setFPos('all'); setFContract('all'); setFStatus('all'); }} className="text-xs font-black uppercase tracking-wide text-primary hover:underline">

@@ -230,6 +230,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     if (!prevStart || !prevEnd || comparison === 'anterior') return { prevStart, prevEnd };
     return { prevStart: startOfDay(shiftYearClamped(prevStart, 1)), prevEnd: endOfDay(shiftYearClamped(prevEnd, 1)) };
   }, [prevStart, prevEnd, comparison]);
+  const hasComparablePeriod = Boolean(prevStart && prevEnd);
 
   const rangeLabel = useMemo(() => fmtRange(currentStart.getTime() > 0 ? currentStart : null, endOfDay(new Date())), [currentStart]);
   const prevLabel = useMemo(() => fmtRange(cPrevStart, cPrevEnd), [cPrevStart, cPrevEnd]);
@@ -948,10 +949,10 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <p className="text-[10px] text-muted-foreground font-semibold">Período analizado: <span className="text-foreground font-black uppercase">{rangeLabel}</span></p>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Comparación</span>
-          <Select value={comparison} onValueChange={(v) => setComparison(v as 'anterior' | 'anio-anterior')}>
-            <SelectTrigger className="h-8 w-[240px] text-xs bg-background">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <span className="shrink-0 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Comparación</span>
+          <Select disabled={!hasComparablePeriod} value={comparison} onValueChange={(v) => setComparison(v as 'anterior' | 'anio-anterior')}>
+            <SelectTrigger className="h-8 w-full max-w-full text-xs bg-background sm:w-[240px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -959,6 +960,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
               <SelectItem value="anio-anterior">Mismo período del año anterior</SelectItem>
             </SelectContent>
           </Select>
+          {!hasComparablePeriod && <span className="w-full text-right text-[10px] text-muted-foreground">Selecciona un período acotado para comparar</span>}
         </div>
       </div>
 

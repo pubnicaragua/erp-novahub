@@ -299,6 +299,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     if (!prevStart || !prevEnd || comparison === 'anterior') return { prevStart, prevEnd };
     return { prevStart: startOfDay(shiftYearClamped(prevStart, 1)), prevEnd: endOfDay(shiftYearClamped(prevEnd, 1)) };
   }, [prevStart, prevEnd, comparison]);
+  const hasComparablePeriod = Boolean(prevStart && prevEnd);
 
   const rangeLabel = useMemo(() => currentStart.getTime() > 0 ? fmtRange(currentStart, endOfDay(new Date())) : 'Todo el historial', [currentStart]);
   const comparativoLabel = comparison === 'anterior' ? 'período anterior' : 'mismo período del año anterior';
@@ -1286,10 +1287,10 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <p className="text-[10px] text-muted-foreground font-semibold">Período analizado: <span className="text-foreground font-black uppercase">{rangeLabel}</span></p>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Comparación</span>
-          <Select value={comparison} onValueChange={(v) => setComparison(v as 'anterior' | 'anio-anterior')}>
-            <SelectTrigger className="h-8 w-[240px] text-xs bg-background">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <span className="shrink-0 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Comparación</span>
+          <Select disabled={!hasComparablePeriod} value={comparison} onValueChange={(v) => setComparison(v as 'anterior' | 'anio-anterior')}>
+            <SelectTrigger className="h-8 w-full max-w-full text-xs bg-background sm:w-[240px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1297,6 +1298,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
               <SelectItem value="anio-anterior">Mismo período del año anterior</SelectItem>
             </SelectContent>
           </Select>
+          {!hasComparablePeriod && <span className="w-full text-right text-[10px] text-muted-foreground">Selecciona un período acotado para comparar</span>}
         </div>
       </div>
 
@@ -1756,7 +1758,19 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                       >
                         {supplierComposition.data.map((_, i) => <Cell key={i} fill={['#f97316', '#fb923c', '#f59e0b', '#fdba74', '#fbbf24', '#fcd34d', '#94a3b8'][i % 7]} />)}
                       </Pie>
-                      <Tooltip contentStyle={DARK_TOOLTIP} formatter={(value: number, name: string) => [formatConvertedAmount(Number(value), 'NIO'), name]} />
+                      <Tooltip content={({ active, payload }: any) => {
+                        if (!active || !payload?.length) return null;
+                        const item = payload[0]?.payload || {};
+                        const total = supplierComposition.data.reduce((sum, supplier) => sum + Number(supplier.compras || 0), 0);
+                        const percentage = total > 0 ? (Number(item.compras || 0) / total) * 100 : 0;
+                        return (
+                          <div className="rounded-xl border border-white/10 bg-[#18181b] px-3.5 py-2.5 shadow-2xl">
+                            <p className="mb-1 text-xs font-black uppercase tracking-wider text-white">{item.name || 'Proveedor'}</p>
+                            <p className="text-xs font-bold text-orange-300">{formatConvertedAmount(Number(item.compras || 0), 'NIO')}</p>
+                            <p className="text-[10px] font-semibold text-zinc-300">{percentage.toFixed(1)}% del total · {item.facturas || 0} factura(s)</p>
+                          </div>
+                        );
+                      }} />
                       <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))', fontSize: 11 }}>{value.length > 18 ? value.substring(0, 17) + '…' : value}</span>} />
                     </PieChart>
                   </ResponsiveContainer>

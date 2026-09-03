@@ -300,6 +300,7 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
   appendVectorShapeBackground(element, node, settings);
   const rawContent = node.type === 'section' && isDecorativeSection(node) ? '' : node.type === 'field' ? tokenValue(node, data) : node.text || node.sample || node.label;
   const isStatusField = node.type === 'field' && (node.id === 'document-status' || /estado|status/i.test(`${node.label || ''} ${node.token || ''}`));
+  const isDocumentTitle = node.type === 'field' && (node.id === 'document-title' || node.token === 'document.title');
   const content = isStatusField && rawContent ? `Estado: ${pdfStatusLabel(rawContent)}` : rawContent;
   if (partyField(node)) {
     Object.assign(element.style, { flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: '1px', padding: '0.2% 0.4%' });
@@ -313,7 +314,15 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
   } else if (content) {
     const text = document.createElement('span');
     text.textContent = content;
-    Object.assign(text.style, { position: 'relative', zIndex: '1', display: 'flex', width: '100%', height: '100%', alignItems: node.type === 'section' && node.id === 'party-section' ? 'flex-start' : 'center', justifyContent: 'flex-start', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' });
+    const fittedTitleSize = isDocumentTitle
+      ? Math.min(Number(node.fontSize) || 14, Math.max(7.5, 260 / Math.max(String(content).length, 1)))
+      : undefined;
+    Object.assign(text.style, {
+      position: 'relative', zIndex: '1', display: 'flex', width: '100%', height: '100%',
+      alignItems: node.type === 'section' && node.id === 'party-section' ? 'flex-start' : 'center',
+      justifyContent: 'flex-start', whiteSpace: isDocumentTitle ? 'nowrap' : 'pre-wrap', overflowWrap: 'anywhere',
+      ...(isDocumentTitle ? { fontSize: pdfPointsToCss(fittedTitleSize, 7), overflow: 'hidden' } : {}),
+    });
     if (node.type === 'section' && node.id === 'party-section') {
       Object.assign(text.style, { fontSize: pdfPointsToCss(7), fontWeight: '700', letterSpacing: '0.45px', textTransform: 'uppercase', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155') });
     }

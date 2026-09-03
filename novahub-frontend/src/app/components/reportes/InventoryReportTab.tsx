@@ -1,33 +1,25 @@
-import { useState, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Button } from '../ui/button';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { inventoryService } from '../../services/inventario.service';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
-import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Warehouse, Tag, ShieldAlert, Gauge, Layers, Upload, CalendarClock, Download, Loader2, CheckCircle2 } from 'lucide-react';
+import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Warehouse, Tag, ShieldAlert, Gauge, Layers, CalendarClock } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
-import { buildReportDownloadFileName, buildDownloadFileName } from '../../utils/exportFileNames';
-import { ImportReviewSummary } from '../ui/ImportReviewSummary';
-import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
-import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
-import { VirtualizedImportList } from '../ui/VirtualizedImportList';
-import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 
@@ -49,19 +41,6 @@ function lastDayOfMonth(ym: string): Date {
   return new Date(year, month, 0, 23, 59, 59, 999);
 }
 
-function monthLabelOf(ym: string): string {
-  const parts = String(ym || '').split('-');
-  const year = Number(parts[0]);
-  const month = Number(parts[1]);
-  if (!year || !month) return ym;
-  return `${MONTH_NAMES[month - 1]} ${year}`;
-}
-
-function currentMonthYM(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
 function buildMonthOptions(count = 24): { value: string; label: string }[] {
   const opts: { value: string; label: string }[] = [];
   const now = new Date();
@@ -80,16 +59,6 @@ function signedMovementQty(m: any): number {
   if (m.type === 'OUT') return -qty;
   if (m.type === 'ADJUSTMENT' && Number(m.quantity) < 0) return -qty;
   return qty;
-}
-
-function stockOfProduct(product: any, warehouseId: string): number {
-  const levels = product?.stockLevels || [];
-  if (warehouseId && levels.length > 0) {
-    const lvl = levels.find((l: any) => l && String(l.warehouseId) === String(warehouseId));
-    if (lvl && lvl.quantity !== undefined) return Number(lvl.quantity || 0);
-  }
-  if (levels.length > 0) return levels.reduce((a: any, l: any) => a + Number(l?.quantity || 0), 0);
-  return Number(product?.stock || 0);
 }
 
 function getRangeDates(range: string) {
@@ -167,6 +136,10 @@ function fmtQty(v: number | null | undefined) {
   return num.toLocaleString('es-NI', { maximumFractionDigits: 0 });
 }
 
+function inventoryReasonLabel(value: unknown, fallback = '—') {
+  return pdfStatusLabel(value, fallback);
+}
+
 interface ProdRow {
   id: string;
   code: string;
@@ -211,8 +184,22 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'inventory'], async (signal) => {
     const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const getAllReportProducts = async () => {
+      const firstPage = await inventoryService.getProducts(filters, signal);
+      const firstRows = asList(firstPage);
+      const total = Number((firstPage as any)?.meta?.total ?? (firstPage as any)?.total ?? firstRows.length);
+      const pageSize = Number((firstPage as any)?.meta?.pageSize ?? filters.pageSize);
+      const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
+      if (totalPages === 1) return firstRows;
+      const remainingPages = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, index) =>
+          inventoryService.getProducts({ ...filters, page: index + 2 }, signal),
+        ),
+      );
+      return firstRows.concat(remainingPages.flatMap(asList));
+    };
     const [prodRes, movRes, adjRes, trfRes, replRes] = await Promise.all([
-      inventoryService.getProducts(filters, signal),
+      getAllReportProducts(),
       inventoryService.getMovements(filters, signal),
       inventoryService.getAdjustments(filters, signal),
       inventoryService.getTransfers(filters, signal),
@@ -321,21 +308,9 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const [nowMs] = useState(() => Date.now());
 
   // ── Corte mensual de existencias ──
-  const queryClient = useQueryClient();
   const [monthCutoff, setMonthCutoff] = useState('');
   const cutoffDate = useMemo(() => (monthCutoff ? lastDayOfMonth(monthCutoff) : null), [monthCutoff]);
   const monthOptions = useMemo(() => buildMonthOptions(24), []);
-
-  const warehouses = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const p of products) {
-      for (const l of p.stockLevels || []) {
-        if (!l || !l.warehouseId) continue;
-        map.set(String(l.warehouseId), l.warehouse?.name || 'Sin bodega');
-      }
-    }
-    return [...map.entries()].map(([id, name]) => ({ id, name }));
-  }, [products]);
 
   const qtyAtCutoff = useMemo(() => {
     const map = new Map<string, number>();
@@ -361,149 +336,6 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       return { ...r, qty: Math.max(0, r.qty - delta) };
     });
   }, [prodRows, qtyAtCutoff]);
-
-  // ── Importación de inventario por mes ──
-  const [importOpen, setImportOpen] = useState(false);
-  const [importMonth, setImportMonth] = useState(currentMonthYM());
-  const [importWarehouse, setImportWarehouse] = useState('');
-  const [importRows, setImportRows] = useState<any[]>([]);
-  const [importFileName, setImportFileName] = useState('');
-  const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
-  const [readingFile, setReadingFile] = useState(false);
-  const [readingProgress, setReadingProgress] = useState(0);
-  const importFileRef = useRef<HTMLInputElement>(null);
-  const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
-
-  const importPreview = useMemo(() => {
-    return importRows.map((r) => {
-      const product = r.productId ? productsById.get(r.productId) : null;
-      const currentStock = product ? stockOfProduct(product, importWarehouse) : 0;
-      const difference = r.error ? 0 : r.qty - currentStock;
-      return { ...r, currentStock, difference };
-    });
-  }, [importRows, importWarehouse, productsById]);
-  const importValidCount = importPreview.filter((r) => !r.error).length;
-
-  function downloadImportTemplate() {
-    const sample = products.filter((p) => (p.type ?? p.itemType) !== 'SERVICE').slice(0, 3);
-    const sampleRows: (string | number)[][] = sample.map((p) => [p.code || p.sku || '', 0]);
-    while (sampleRows.length < 3) sampleRows.push([`PRODUCTO-${sampleRows.length + 1}`, 0]);
-    const ws = XLSX.utils.aoa_to_sheet([['Código de producto', 'Cantidad'], ...sampleRows]);
-    ws['!cols'] = [{ wch: 28 }, { wch: 12 }];
-    const guide = XLSX.utils.aoa_to_sheet([
-      ['GUÍA DE LLENADO · IMPORTAR INVENTARIO POR MES'],
-      ['1. Código de producto = código o SKU del producto en el sistema (no distingue mayúsculas ni espacios).'],
-      ['2. Cantidad = existencias físicas del producto en el almacén al corte del mes seleccionado.'],
-      ['3. El importador crea un ajuste de inventario que deja el stock exacto en esa cantidad.'],
-      ['4. Las filas con códigos inexistentes o cantidades inválidas se omiten.'],
-    ]);
-    guide['!cols'] = [{ wch: 110 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
-    XLSX.utils.book_append_sheet(wb, guide, 'Guía');
-    XLSX.writeFile(wb, buildDownloadFileName(['plantilla_inventario', importMonth], 'xlsx'));
-  }
-
-  async function handleImportFile(file: File) {
-    if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
-      toast.error('El archivo debe ser Excel (.xlsx o .xls)');
-      return;
-    }
-    setReadingFile(true);
-    setReadingProgress(3);
-    try {
-      const parsed = await parseSpreadsheetInWorker(file, 'Inventario', false, (progress) => {
-        setReadingProgress(Math.min(84, Math.max(3, progress)));
-      });
-      setReadingProgress(88);
-      const raw = parsed.rows;
-      const nonEmpty = raw.filter((row: any[]) => Array.isArray(row) && row.some((cell: any) => String(cell ?? '').trim() !== ''));
-      if (nonEmpty.length < 2) {
-        toast.error('El archivo no contiene filas de datos');
-        return;
-      }
-      const headerRow = (nonEmpty[0] || []).map((h: any) =>
-        String(h ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-      const codeIdx = headerRow.findIndex((h: string) => h.includes('codigo') || h.includes('sku') || h.includes('producto'));
-      const qtyIdx = headerRow.findIndex((h: string) => h.includes('cantidad'));
-      if (codeIdx < 0 || qtyIdx < 0) {
-        toast.error('La plantilla debe contener las columnas "Código de producto" y "Cantidad"');
-        return;
-      }
-      const productByImportCode = new Map<string, any>();
-      products.forEach((product) => {
-        [product.code, product.sku].forEach((value) => {
-          const normalized = String(value || '').toUpperCase().replace(/\s+/g, '');
-          if (normalized) productByImportCode.set(normalized, product);
-        });
-      });
-      const rows = nonEmpty.slice(1).map((cols: any[], i) => {
-        const rowNum = i + 2;
-        const rawCode = String(cols[codeIdx] ?? '').trim();
-        const qtyText = String(cols[qtyIdx] ?? '').trim();
-        if (!rawCode && !qtyText) return null;
-        const code = rawCode.toUpperCase().replace(/\s+/g, '');
-        const product = code ? productByImportCode.get(code) : null;
-        let error = '';
-        if (!rawCode) error = 'Código vacío';
-        else if (!product) error = 'Código no encontrado en el catálogo';
-        else if (qtyText === '' || !Number.isFinite(Number(qtyText))) error = 'Cantidad no numérica';
-        else if (Number(qtyText) < 0) error = 'Cantidad negativa';
-        const qty = Number.isFinite(Number(qtyText)) ? Number(qtyText) : 0;
-        return { row: rowNum, rawCode, code, productId: product?.id || '', productName: product?.name || '', qty, error };
-      }).filter((r: any) => r !== null);
-      if (rows.length === 0) {
-        toast.error('El archivo no contiene filas de datos');
-        return;
-      }
-      setImportRows(rows);
-      setImportFileName(file.name);
-      setReadingProgress(100);
-      toast.success(`${rows.length} filas leídas`);
-    } catch (e: any) {
-      toast.error('No se pudo leer el archivo Excel');
-    } finally {
-      setReadingFile(false);
-      setReadingProgress(0);
-    }
-  }
-
-  async function confirmImport() {
-    const valid = importPreview.filter((r) => !r.error);
-    if (valid.length === 0) {
-      toast.error('No hay filas válidas para importar');
-      return;
-    }
-    if (!importWarehouse) {
-      toast.error('Selecciona el almacén del ajuste');
-      return;
-    }
-    const changes = valid.filter((r) => Math.abs(r.difference) > 0.0001);
-    setImporting(true);
-    setImportProgress(5);
-    try {
-      setImportProgress(25);
-      await inventoryService.createAdjustment({
-        warehouseId: importWarehouse,
-        reason: `Importación mensual ${importMonth}`,
-        notes: 'Carga masiva desde plantilla',
-        items: changes.map((row) => ({ productId: row.productId, actualStock: row.qty })),
-      });
-      setImportProgress(90);
-      setImportProgress(100);
-      toast.success(`Ajuste creado: ${changes.length} productos`);
-      if (changes.length === 0) toast.info('Las cantidades coinciden con el stock actual: no se requieren ajustes');
-      queryClient.invalidateQueries({ predicate: (q) => q.queryKey.includes('reports') && q.queryKey.includes('inventory') });
-      setImportOpen(false);
-      setImportRows([]);
-      setImportFileName('');
-    } catch (e: any) {
-      toast.error(e?.message || 'No se pudo importar el inventario');
-    } finally {
-      setImporting(false);
-    }
-  }
 
   // ── KPI: Valor del inventario a costo ──
   const valuation = useMemo(() => {
@@ -852,7 +684,15 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.inventory', title: 'Reporte de inventario', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: effectiveRows, columns: [{ header: 'Producto', value: row => row.name || row.product?.name || '—' }, { header: 'Código', value: row => row.code || row.sku || '—' }, { header: 'Categoría', value: row => row.category?.name || row.category || '—' }, { header: 'Bodega', value: row => row.warehouse?.name || row.warehouseName || '—' }, { header: 'Existencia', value: row => row.qty ?? row.quantity ?? 0, align: 'right' }, { header: 'Valor', value: row => row.value ?? row.stockValue ?? 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange) });
+        const exportRows = effectiveRows.map((row) => ({
+          ...row,
+          category: row.categoryName,
+          categoryName: row.categoryName,
+          warehouseName: row.mainWarehouse,
+          value: row.qty * row.costPrice,
+          stockValue: row.qty * row.costPrice,
+        }));
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.inventory', title: 'Reporte de inventario', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: exportRows, columns: [{ header: 'Producto', value: row => row.name || row.product?.name || '—' }, { header: 'Código', value: row => row.code || row.sku || '—' }, { header: 'Categoría', value: row => row.category?.name || row.category || '—' }, { header: 'Bodega', value: row => row.warehouse?.name || row.warehouseName || '—' }, { header: 'Existencia', value: row => row.qty ?? row.quantity ?? 0, align: 'right' }, { header: 'Valor', value: row => row.value ?? row.stockValue ?? 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange) });
         if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
@@ -931,7 +771,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           checkPage(height + 15);
           try {
             const canvas = await html2canvas(el, {
-              scale: 2,
+              scale: 1,
               backgroundColor: '#ffffff',
               onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex),
             });
@@ -1063,7 +903,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           if (!el) return targetRow;
           try {
             const canvas = await html2canvas(el, {
-              scale: 2,
+              scale: 1,
               backgroundColor: '#ffffff',
               onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
             });
@@ -1139,7 +979,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         <p className="text-[10px] text-muted-foreground">Valores expresados en {displayCurrency} ({currencySymbol})</p>
       </div>
 
-      {/* ═══ Corte mensual e importación ═══ */}
+      {/* ═══ Corte mensual ═══ */}
       <div className="flex flex-wrap items-center gap-2 px-1">
         <div className="flex items-center gap-1.5">
           <CalendarClock className="size-3.5 text-muted-foreground" />
@@ -1153,8 +993,14 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => { setImportMonth(monthCutoff || currentMonthYM()); setImportOpen(true); }}>
-          <Upload className="size-4" /> Importar inventario
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5"
+          onClick={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'inventario', subModule: 'productos' } }))}
+          title="Ir a Inventario → Productos"
+        >
+          <Package className="size-4" /> Ir a Inventario → Productos
         </Button>
         {cutoffDate && (
           <Badge variant="secondary" className="h-6 gap-1 text-[10px] font-bold">
@@ -1304,12 +1150,12 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                             <tr key={a.id} className="hover:bg-muted/30">
                               <td className={`${TD} font-bold`}>{a.number}</td>
                               <td className={TD}>{toDate(a.date || a.createdAt)?.toLocaleDateString('es-NI')}</td>
-                              <td className={`${TD} max-w-[220px] truncate`}>{a.reason || '—'}</td>
+                              <td className={`${TD} max-w-[220px] truncate`}>{inventoryReasonLabel(a.reason)}</td>
                               <td className={TD}>{a.warehouse?.name || '—'}</td>
                               <td className={`${TD} font-bold`}>{fmtQty(units)}</td>
                               <td className={TD}>
                                 <Badge variant={a.status === 'APPROVED' ? 'default' : a.status === 'REJECTED' ? 'destructive' : 'outline'} className="text-[9px]">
-                                  {a.status || 'PENDIENTE'}
+                                  {pdfStatusLabel(a.status, 'Pendiente')}
                                 </Badge>
                               </td>
                             </tr>
@@ -1347,7 +1193,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                             <td className={`${TD} font-bold`}>{(t.items || []).length}</td>
                             <td className={TD}>
                               <Badge variant={t.status === 'COMPLETED' ? 'default' : t.status === 'CANCELLED' ? 'destructive' : t.status === 'IN_TRANSIT' ? 'secondary' : 'outline'} className="text-[9px]">
-                                {t.status || 'PENDING'}
+                                {pdfStatusLabel(t.status, 'Pendiente')}
                               </Badge>
                             </td>
                           </tr>
@@ -1739,7 +1585,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                             <td className={TD}>{fmtQty(i.averageDailyDemand)}</td>
                             <td className={TD}>
                               <Badge variant={i.status === 'OUT_OF_STOCK' ? 'destructive' : i.status === 'LOW_STOCK' ? 'default' : 'outline'} className="text-[9px]">
-                                {i.status || '—'}
+                                {pdfStatusLabel(i.status, '—')}
                               </Badge>
                             </td>
                           </tr>
@@ -1803,7 +1649,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                       <td className={`${TD} font-black ${r.qty < 0 ? 'text-rose-500' : ''}`}>{fmtQty(r.qty)}</td>
                       <td className={TD}>{fmtQty(r.minStock)}</td>
                       <td className={TD}>{r.maxStock != null ? fmtQty(r.maxStock) : '—'}</td>
-                      <td className={`${TD} text-muted-foreground max-w-[220px] truncate`}>{r.reason}</td>
+                      <td className={`${TD} text-muted-foreground max-w-[220px] truncate`}>{inventoryReasonLabel(r.reason)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1813,125 +1659,6 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         </DialogContent>
       </Dialog>
 
-      {/* ═══ Modal de importación de inventario por mes ═══ */}
-      <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportOpen(false); setImportRows([]); setImportFileName(''); } }}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,760px)] overflow-y-auto rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="size-4 text-primary" /> Importar inventario por mes
-            </DialogTitle>
-            <DialogDescription>
-              Carga las existencias físicas de un almacén al corte del mes: por cada diferencia se crea un ajuste de inventario que deja el stock exacto en la cantidad reportada.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mes del corte</Label>
-              <Select value={importMonth} onValueChange={setImportMonth}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map((mo) => <SelectItem key={mo.value} value={mo.value}>{mo.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Almacén</Label>
-              <Select value={importWarehouse} onValueChange={setImportWarehouse}>
-                <SelectTrigger><SelectValue placeholder="Selecciona un almacén" /></SelectTrigger>
-                <SelectContent>
-                  {warehouses.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {warehouses.length === 0 && (
-                <p className="text-[10px] text-amber-600">No se encontraron almacenes con existencias en el catálogo.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={downloadImportTemplate}>
-              <Download className="size-4" /> Descargar plantilla (.xlsx)
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => importFileRef.current?.click()}>
-              <Upload className="size-4" /> Subir archivo
-            </Button>
-            <input ref={importFileRef} type="file" accept=".xlsx,.xls" className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleImportFile(f);
-                e.target.value = '';
-              }} />
-            {importFileName && <p className="text-[10px] text-muted-foreground">{importFileName}</p>}
-          </div>
-
-          {importRows.length > 0 && (
-            <div className="space-y-3">
-              <ImportReviewSummary total={importPreview.length} valid={importValidCount} skipped={importPreview.length - importValidCount} entityLabel="productos" />
-              <div data-import-preview-horizontal-scroller="true" className="hidden min-w-0 max-w-full max-h-60 overflow-x-auto overflow-y-hidden rounded-xl border border-border/40 scrollbar-overlay sm:block">
-                <table className="w-full min-w-[640px]">
-                  <thead className="bg-muted/40 sticky top-0">
-                    <tr>
-                      <th className={TH}>Código</th>
-                      <th className={TH}>Producto</th>
-                      <th className={TH}>Cantidad</th>
-                      <th className={TH}>Stock actual</th>
-                      <th className={TH}>Diferencia</th>
-                      <th className={TH}>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40" />
-                </table>
-                <VirtualizedImportList count={importPreview.length} estimateSize={38} className="h-60 min-w-[640px]" renderItem={(index) => {
-                  const r = importPreview[index];
-                  return <div className={`grid min-w-[640px] grid-cols-[1.1fr_2fr_0.8fr_1fr_1fr_1.4fr] items-center border-t border-border/40 text-xs ${r.error ? 'bg-rose-500/5' : 'hover:bg-muted/30'}`}>
-                    <div className={`${TD} font-mono text-[10px]`}>{r.rawCode || '—'}</div>
-                    <div className={`${TD} truncate font-bold`} title={r.productName}>{r.productName || '—'}</div>
-                    <div className={`${TD} font-bold`}>{fmtQty(r.qty)}</div>
-                    <div className={TD}>{r.error ? '—' : fmtQty(r.currentStock)}</div>
-                    <div className={`${TD} font-black ${r.error ? 'text-muted-foreground' : r.difference > 0 ? 'text-emerald-500' : r.difference < 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>{r.error ? '—' : fmtQty(r.difference)}</div>
-                    <div className={TD}>{r.error ? <Badge variant="destructive" className="text-[9px]">{r.error}</Badge> : <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[9px] text-emerald-600">Válida</Badge>}</div>
-                  </div>;
-                }} />
-              </div>
-              <section className="space-y-3 sm:hidden" aria-label="Ajustes de inventario para revisar">
-                <div className="flex items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3 py-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Revisión móvil</p>
-                  <Badge variant="secondary" className="text-[10px]">{importPreview.length} filas</Badge>
-                </div>
-                <VirtualizedImportList count={importPreview.length} estimateSize={220} className="h-[min(62vh,40rem)] space-y-3" renderItem={(index) => {
-                  const r = importPreview[index];
-                  return <ImportPreviewMobileCard key={r.row} index={r.row} title={r.productName || r.rawCode} error={r.error}>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <ImportPreviewField label="Código"><p className="break-words font-mono text-xs">{r.rawCode || '—'}</p></ImportPreviewField>
-                      <ImportPreviewField label="Fila"><p className="font-mono text-xs">{r.row + 2}</p></ImportPreviewField>
-                      <ImportPreviewField label="Producto" className="col-span-2"><p className="break-words text-xs font-bold">{r.productName || '—'}</p></ImportPreviewField>
-                      <ImportPreviewField label="Cantidad"><p className="text-right text-xs font-bold">{fmtQty(r.qty)}</p></ImportPreviewField>
-                      <ImportPreviewField label="Stock actual"><p className="text-right text-xs">{r.error ? '—' : fmtQty(r.currentStock)}</p></ImportPreviewField>
-                      <ImportPreviewField label="Diferencia" className="col-span-2"><p className={`text-right text-xs font-black ${r.error ? 'text-muted-foreground' : r.difference > 0 ? 'text-emerald-500' : r.difference < 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>{r.error ? '—' : fmtQty(r.difference)}</p></ImportPreviewField>
-                    </div>
-                  </ImportPreviewMobileCard>;
-                }} />
-              </section>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cancelar</Button>
-            <Button onClick={confirmImport} disabled={importing || importValidCount === 0 || !importWarehouse} className="gap-1.5">
-              {importing ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-              Importar {importValidCount} válidas
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <ImportProgressOverlay
-        open={readingFile || importing}
-        progress={readingFile ? readingProgress : importProgress}
-        title={readingFile ? 'Preparando inventario' : 'Importando inventario'}
-        description={readingFile ? 'Leyendo el archivo y preparando todas las filas para revisión.' : `Creando ajustes del mes ${monthLabelOf(importMonth)} en el almacén seleccionado...`}
-      />
     </div>
   );
 });
