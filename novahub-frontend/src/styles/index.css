@@ -273,6 +273,18 @@ select.erp-filter-select,
   line-height: 1.4 !important;
 }
 
+/* Dashboard section titles need the subtitle scale, not the compact card scale. */
+main.module-overview [data-slot="card-title"] {
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+}
+
+main.module-overview [data-slot="card-description"] {
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+}
+
 :is(main[class*="module-"], .manager-shell, .master-console-module) :is(.font-black, .font-extrabold) {
   font-weight: 700 !important;
 }
