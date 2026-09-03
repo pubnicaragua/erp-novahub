@@ -75,14 +75,14 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
           </div>
         </div>
         <div className="flex flex-wrap gap-2 md:justify-end">
-          <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
+          <Badge variant="outline" className="rounded-md px-3 py-1 text-xs">
             {data?.groups?.length || 0} grupos · {data?.unassignedBranches?.length || 0} pendientes
           </Badge>
-          <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
+          <Badge variant="outline" className="rounded-md px-3 py-1 text-xs">
             Métrica global en Master Console
           </Badge>
-          <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs"><Users className="size-3.5 text-primary" /> {totalGroupUsers} usuarios</Badge>
-          <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs"><HardDrive className="size-3.5 text-primary" /> {formatStorage(data?.storageBytes)} · {data?.storageObjects || 0} archivos</Badge>
+          <Badge variant="outline" className="gap-1.5 rounded-md px-3 py-1 text-xs"><Users className="size-3.5 text-primary" /> {totalGroupUsers} usuarios</Badge>
+          <Badge variant="outline" className="gap-1.5 rounded-md px-3 py-1 text-xs"><HardDrive className="size-3.5 text-primary" /> {formatStorage(data?.storageBytes)} · {data?.storageObjects || 0} archivos</Badge>
         </div>
       </div>
 

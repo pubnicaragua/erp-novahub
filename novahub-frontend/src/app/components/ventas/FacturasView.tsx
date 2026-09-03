@@ -1369,7 +1369,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         return (
           <div className="flex min-w-0 flex-col items-start gap-1">
             <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={(event) => { event.stopPropagation(); void openInvoiceDetail(row); }}>{val}</span>
-            {source && <Badge className={cn('border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge>}
+            {source && <Badge className={cn('max-w-full rounded-md whitespace-normal break-words text-left leading-tight border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge>}
           </div>
         );
       }

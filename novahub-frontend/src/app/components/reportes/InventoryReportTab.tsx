@@ -1069,18 +1069,18 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       {/* ═══ Franja operativa ═══ */}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
         {[
-          { key: 'existencia', label: 'Con existencia', value: valuation.productsWithStock, color: 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' },
-          { key: 'sin-existencia', label: 'Sin existencia', value: risk.sinExistencia.length, color: 'text-slate-400 border-slate-400/20 bg-slate-400/5' },
-          { key: 'lento', label: 'Lento movimiento (90d)', value: risk.lento90, color: 'text-orange-500 border-orange-500/20 bg-orange-500/5' },
-          { key: 'sobrestock', label: 'Sobrestock', value: risk.sobrestock.length, color: 'text-purple-500 border-purple-500/20 bg-purple-500/5' },
-          { key: 'sin-costo', label: 'Sin costo', value: risk.sinCosto.length, color: 'text-amber-500 border-amber-500/20 bg-amber-500/5' },
-          { key: 'sin-precio', label: 'Sin precio', value: risk.sinPrecio.length, color: 'text-blue-500 border-blue-500/20 bg-blue-500/5' },
-          { key: 'negativo', label: 'Inventario negativo', value: risk.negativo.length, color: risk.negativo.length > 0 ? 'text-rose-500 border-rose-500/40 bg-rose-500/10' : 'text-slate-500 border-slate-500/20 bg-slate-500/5' },
+          { key: 'existencia', label: 'Con existencia', value: valuation.productsWithStock },
+          { key: 'sin-existencia', label: 'Sin existencia', value: risk.sinExistencia.length },
+          { key: 'lento', label: 'Lento movimiento (90d)', value: risk.lento90 },
+          { key: 'sobrestock', label: 'Sobrestock', value: risk.sobrestock.length },
+          { key: 'sin-costo', label: 'Sin costo', value: risk.sinCosto.length },
+          { key: 'sin-precio', label: 'Sin precio', value: risk.sinPrecio.length },
+          { key: 'negativo', label: 'Inventario negativo', value: risk.negativo.length },
         ].map((chip) => (
           <button key={chip.key} type="button" onClick={() => setRiskGroup(chip.key)}
-            className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors hover:opacity-80 ${chip.color}`}>
+            className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground">
             <span className="text-[10px] font-black uppercase tracking-wider">{chip.label}</span>
-            <span className="text-sm font-black">{chip.value}</span>
+            <span className="text-sm font-black text-foreground">{chip.value}</span>
           </button>
         ))}
       </div>
@@ -1096,10 +1096,10 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           </CardHeader>
           <CardContent>
             <Tabs value={movTab} onValueChange={setMovTab}>
-              <TabsList className="mb-4">
-                <TabsTrigger value="movimientos">Movimientos</TabsTrigger>
-                <TabsTrigger value="ajustes">Ajustes y mermas</TabsTrigger>
-                <TabsTrigger value="transferencias">Transferencias</TabsTrigger>
+              <TabsList className="mb-4 h-auto max-w-full overflow-x-auto rounded-lg bg-muted/60 p-1">
+                <TabsTrigger value="movimientos" className="rounded-md px-3 py-2 text-[10px] font-bold data-[state=active]:border data-[state=active]:border-border/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">Movimientos</TabsTrigger>
+                <TabsTrigger value="ajustes" className="rounded-md px-3 py-2 text-[10px] font-bold data-[state=active]:border data-[state=active]:border-border/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">Ajustes y mermas</TabsTrigger>
+                <TabsTrigger value="transferencias" className="rounded-md px-3 py-2 text-[10px] font-bold data-[state=active]:border data-[state=active]:border-border/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">Transferencias</TabsTrigger>
               </TabsList>
 
               <TabsContent value="movimientos" className="mt-0">
@@ -1154,7 +1154,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                               <td className={TD}>{a.warehouse?.name || '—'}</td>
                               <td className={`${TD} font-bold`}>{fmtQty(units)}</td>
                               <td className={TD}>
-                                <Badge variant={a.status === 'APPROVED' ? 'default' : a.status === 'REJECTED' ? 'destructive' : 'outline'} className="text-[9px]">
+                                <Badge variant={a.status === 'APPROVED' ? 'default' : a.status === 'REJECTED' ? 'destructive' : 'outline'} className="rounded-md text-[9px]">
                                   {pdfStatusLabel(a.status, 'Pendiente')}
                                 </Badge>
                               </td>
@@ -1192,7 +1192,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                             <td className={TD}>{t.to?.name || '—'}</td>
                             <td className={`${TD} font-bold`}>{(t.items || []).length}</td>
                             <td className={TD}>
-                              <Badge variant={t.status === 'COMPLETED' ? 'default' : t.status === 'CANCELLED' ? 'destructive' : t.status === 'IN_TRANSIT' ? 'secondary' : 'outline'} className="text-[9px]">
+                              <Badge variant={t.status === 'COMPLETED' ? 'default' : t.status === 'CANCELLED' ? 'destructive' : t.status === 'IN_TRANSIT' ? 'secondary' : 'outline'} className="rounded-md text-[9px]">
                                 {pdfStatusLabel(t.status, 'Pendiente')}
                               </Badge>
                             </td>
@@ -1584,7 +1584,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                             <td className={`${TD} font-black text-amber-500`}>{fmtQty(i.suggestedQuantity)}</td>
                             <td className={TD}>{fmtQty(i.averageDailyDemand)}</td>
                             <td className={TD}>
-                              <Badge variant={i.status === 'OUT_OF_STOCK' ? 'destructive' : i.status === 'LOW_STOCK' ? 'default' : 'outline'} className="text-[9px]">
+                              <Badge variant={i.status === 'OUT_OF_STOCK' ? 'destructive' : i.status === 'LOW_STOCK' ? 'default' : 'outline'} className="rounded-md text-[9px]">
                                 {pdfStatusLabel(i.status, '—')}
                               </Badge>
                             </td>

@@ -138,7 +138,7 @@ export function ImplementationSetupDashboard({ summary, onRefresh, onNavigateToD
           <div className="absolute right-0 top-0 h-40 w-72 bg-primary/10 blur-3xl" />
           <div className="relative z-10 flex flex-col gap-5 p-5 md:p-7 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <Badge className="mb-3 border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary">
+              <Badge className="mb-3 rounded-md border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary">
                 Configuración inicial
               </Badge>
               <h1 className="text-3xl font-black uppercase italic leading-none tracking-[-0.04em] md:text-5xl">

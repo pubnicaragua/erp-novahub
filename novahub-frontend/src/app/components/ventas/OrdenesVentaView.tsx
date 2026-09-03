@@ -669,7 +669,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           </span>
           {(() => {
             const source = getSalesOrderOriginBadge(row);
-            return source ? <Badge className={cn('border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge> : null;
+            return source ? <Badge className={cn('max-w-full rounded-md whitespace-normal break-words text-left leading-tight border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge> : null;
           })()}
         </div>
       )
