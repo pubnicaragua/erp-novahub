@@ -208,6 +208,7 @@ export interface ManagerInventoryImportOptions {
   businessUnitId: string;
   branches: Array<{ id: string; name: string; code?: string | null; baseCurrency?: string | null }>;
   categories: Array<{ id: string; name: string }>;
+  priceLists: Array<{ code: string; name: string }>;
   locations: ManagerInventoryImportLocation[];
   generatedAt: string;
 }

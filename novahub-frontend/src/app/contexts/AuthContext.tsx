@@ -232,7 +232,7 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
   const normalized = String(module || '').toUpperCase();
   const candidates = new Set(TENANT_PERMISSION_SUBSCRIPTION_ALIASES[normalized] || [normalized]);
   const parent = normalized.split('_')[0];
-  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL'].includes(parent)) {
+  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT'].includes(parent)) {
     candidates.add(parent);
   }
   return [...candidates];

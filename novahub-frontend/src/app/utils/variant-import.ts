@@ -370,9 +370,13 @@ export function buildVariantImportPreviewRows(catalog: VariantImportCatalog) {
 
   return catalog.products.map((product) => {
     const variants = variantsByProduct.get(product.code.toLowerCase()) || [];
-    const stockRows = catalog.stock.filter((row) => {
+    const stockRows = catalog.stock.flatMap((row, catalogIndex) => {
       const variant = variants.find((candidate) => candidate.sku.toLowerCase() === row.variantSku.toLowerCase());
-      return Boolean(variant) || row.variantSku.toLowerCase() === product.code.toLowerCase();
+      if (!variant && row.variantSku.toLowerCase() !== product.code.toLowerCase()) return [];
+      // El índice permite editar una fila de distribución concreta en la
+      // previsualización sin cambiar por accidente otra fila de la misma
+      // variante que pertenece a una bodega diferente.
+      return [{ ...row, __catalogIndex: catalogIndex }];
     });
     const hasVariants = variants.length > 0;
     const simpleStockRows = hasVariants

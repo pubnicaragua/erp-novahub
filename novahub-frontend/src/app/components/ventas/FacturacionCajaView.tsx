@@ -336,7 +336,7 @@ function isQueueDocumentCollectible(queue: InvoiceCashQueue) {
   const document = queue.invoice || queue.creditNote;
   if (!document) return false;
   const status = String(document.status || '').toUpperCase();
-  if (['PAID', 'CANCELLED', 'VOIDED'].includes(status)) return false;
+  if (['PAID', 'CANCELLED', 'CREDIT', 'VOIDED'].includes(status)) return false;
   const balance = Number(document.balance);
   return !Number.isFinite(balance) || balance > 0.005;
 }

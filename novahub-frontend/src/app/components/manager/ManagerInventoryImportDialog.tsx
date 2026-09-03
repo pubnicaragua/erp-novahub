@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import type { Worksheet } from 'exceljs';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Download, FileSpreadsheet, ImageIcon, Info, Loader2, PackagePlus, Plus, RefreshCw, Upload, Warehouse } from 'lucide-react';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
@@ -20,6 +19,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { parseVariantImportWorkbook, type VariantImportCatalog } from '../../utils/variant-import';
+import { downloadCanonicalVariantImportTemplate } from '../../utils/variant-import-template';
 
 type Currency = 'NIO' | 'USD';
 type StockMode = 'SET' | 'ADD';
@@ -42,14 +43,6 @@ const statusLabels: Record<string, string> = {
 };
 
 const rowCode = (row: Record<string, unknown>) => String(row['Código producto'] ?? row.parentCode ?? row['Código / SKU'] ?? row.Código ?? row.Codigo ?? row.code ?? row.codigo ?? row.SKU ?? row.sku ?? '').trim();
-
-const safeFileNamePart = (value: string) =>
-  value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase() || 'rubro';
 
 const displayLocationLabel = (location: ManagerInventoryImportLocation) =>
   location.selectionLabel || (location.type === 'BODEGA' ? `${location.name} · ${location.branchName}` : `${location.name} · Corporativo`);
@@ -84,7 +77,7 @@ const findHeaderRow = (matrix: unknown[][]) => {
   return headerIndex >= 0 ? headerIndex : 0;
 };
 
-async function readSpreadsheetRows(file: File, onProgress?: (progress: number) => void) {
+async function readSpreadsheetRows(file: File, priceLists: Array<{ code: string; name: string }> = [], onProgress?: (progress: number) => void) {
     const parsed = await parseSpreadsheetInWorker(file, undefined, true, onProgress);
     const sheets = parsed.sheets || { [parsed.sheetName || 'Hoja 1']: parsed.rows };
     const normalizeSheetName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
@@ -102,6 +95,50 @@ async function readSpreadsheetRows(file: File, onProgress?: (progress: number) =
     const sheetNames = Object.keys(sheets);
     const productSheetName = sheetNames.find((name) => normalizeSheetName(name) === 'productos');
     const distributionSheetName = sheetNames.find((name) => ['distribucion', 'asignaciones', 'ubicaciones'].includes(normalizeSheetName(name)));
+    const hasCanonicalSheets = Boolean(productSheetName && sheetNames.some((name) => ['variantes', 'atributos', 'precios', 'inventario'].includes(normalizeSheetName(name))));
+    if (hasCanonicalSheets) {
+      const catalog = parseVariantImportWorkbook(sheets, priceLists);
+      const productByCode = new Map(catalog.products.map((product) => [normalizeImportKey(product.code), product]));
+      const variantBySku = new Map(catalog.variants.map((variant) => [normalizeImportKey(variant.sku), variant]));
+      const rows = catalog.stock.map((stock, index) => {
+        const productCode = String(stock.productCode || '').trim();
+        const variant = catalog.variants.find((candidate) => normalizeImportKey(candidate.productCode) === normalizeImportKey(productCode) && normalizeImportKey(candidate.sku) === normalizeImportKey(stock.variantSku))
+          || variantBySku.get(normalizeImportKey(stock.variantSku));
+        const resolvedProductCode = String(stock.productCode || variant?.productCode || '').trim();
+        const product = productByCode.get(normalizeImportKey(resolvedProductCode));
+        const effectiveCost = stock.unitCost ?? variant?.costPrice ?? product?.costPrice;
+        return {
+          __importRowNumber: index + 2,
+          code: resolvedProductCode,
+          parentCode: resolvedProductCode,
+          variantSku: String(stock.variantSku || resolvedProductCode).trim(),
+          variantName: variant?.name || '',
+          variantAttributes: variant?.attributes || [],
+          name: product?.name || '',
+          description: product?.description || '',
+          commercialNote: product?.commercialNote || '',
+          category: product?.category || '',
+          unit: product?.unit || 'unidad',
+          barcode: product?.barcode || '',
+          brand: product?.brand || '',
+          model: product?.model || '',
+          imageUrl: product?.imageUrl || '',
+          taxRate: product?.taxRate,
+          costPrice: effectiveCost,
+          productCostPrice: product?.costPrice,
+          variantCostPrice: variant?.costPrice,
+          warehouseSelection: String(stock.warehouse || '').trim(),
+          stock: stock.quantity,
+          minStock: stock.minStock ?? 0,
+          maxStock: stock.maxStock,
+          unitCost: stock.unitCost,
+          costCurrency: stock.currency,
+          costExchangeRate: stock.exchangeRate,
+          registerCatalog: 'SI',
+        };
+      });
+      return { rows, catalog, productRows: catalog.products.length, distributionRows: catalog.stock.length, format: 'canonical' as const };
+    }
     const products = readSheet(productSheetName);
     const distributions = readSheet(distributionSheetName);
     const productByCode = new Map<string, Record<string, unknown>>();
@@ -135,7 +172,7 @@ async function readSpreadsheetRows(file: File, onProgress?: (progress: number) =
           registerCatalog: String(readImportValue(distribution, ['Registrar catálogo', 'Registrar catalogo', 'registerCatalog']) ?? 'SI').trim() || 'SI',
         };
       });
-      return { rows, productRows: products.length, distributionRows: distributions.length, format: 'two-sheet' as const };
+      return { rows, catalog: null, productRows: products.length, distributionRows: distributions.length, format: 'two-sheet' as const };
     }
     const firstSheet = sheetNames[0];
     const legacyRows = readSheet(firstSheet).map((row, index) => ({
@@ -154,7 +191,7 @@ async function readSpreadsheetRows(file: File, onProgress?: (progress: number) =
       minStock: parseImportNumber(readImportValue(row, ['Stock mínimo', 'Stock minimo', 'Mínimo', 'minStock'])) ?? 0,
       registerCatalog: String(readImportValue(row, ['Registrar catálogo', 'Registrar catalogo', 'registerCatalog']) ?? 'SI').trim() || 'SI',
     }));
-    return { rows: legacyRows, productRows: 0, distributionRows: 0, format: 'legacy' as const };
+    return { rows: legacyRows, catalog: null, productRows: 0, distributionRows: 0, format: 'legacy' as const };
 }
 
 export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, businessUnits, onImported }: Props) {
@@ -164,7 +201,8 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
   const [exchangeRate, setExchangeRate] = useState('');
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [fileName, setFileName] = useState('');
-  const [sheetSummary, setSheetSummary] = useState<{ productRows: number; distributionRows: number; format: 'two-sheet' | 'legacy' } | null>(null);
+  const [sheetSummary, setSheetSummary] = useState<{ productRows: number; distributionRows: number; format: 'canonical' | 'two-sheet' | 'legacy' } | null>(null);
+  const [canonicalCatalog, setCanonicalCatalog] = useState<VariantImportCatalog | null>(null);
   const [preview, setPreview] = useState<ManagerInventoryImportPreview | null>(null);
   const [previewDirty, setPreviewDirty] = useState(false);
   const [preparedCategoryNames, setPreparedCategoryNames] = useState<string[]>([]);
@@ -186,6 +224,7 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
     setRows([]);
     setFileName('');
     setSheetSummary(null);
+    setCanonicalCatalog(null);
     setPreview(null);
     setPreviewDirty(false);
     setPreparedCategoryNames([]);
@@ -233,7 +272,8 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
     stockMode,
     exchangeRate: Number.isFinite(parsedExchangeRate) && parsedExchangeRate > 0 ? parsedExchangeRate : undefined,
     rows,
-  }), [importBusinessUnitId, currency, stockMode, parsedExchangeRate, rows]);
+    ...(canonicalCatalog ? { catalog: canonicalCatalog } : {}),
+  }), [importBusinessUnitId, currency, stockMode, parsedExchangeRate, rows, canonicalCatalog]);
 
   const previewMutation = useMutation({
     mutationFn: () => enterpriseGroupsService.previewSharedInventory(groupId, requestBody),
@@ -295,8 +335,17 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
         const imageUrl = imageUrlByCode.get(productImageKey(rowCode(row)));
         return imageUrl ? { ...row, imageUrl } : row;
       });
+      const catalogWithImages = canonicalCatalog
+        ? {
+          ...canonicalCatalog,
+          products: canonicalCatalog.products.map((product) => {
+            const imageUrl = imageUrlByCode.get(productImageKey(product.code));
+            return imageUrl ? { ...product, imageUrl } : product;
+          }),
+        }
+        : null;
       setImportProgress(90);
-      const result = await enterpriseGroupsService.importSharedInventory(groupId, { ...requestBody, rows: rowsWithImages });
+      const result = await enterpriseGroupsService.importSharedInventory(groupId, { ...requestBody, rows: rowsWithImages, ...(catalogWithImages ? { catalog: catalogWithImages } : {}) });
       setImportProgress(100);
       return { result, imageUpload: { attempted: matchedEntries.length, uploaded: imageUrlByCode.size } };
     },
@@ -315,15 +364,16 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
     setReadingFile(true);
     setReadingProgress(3);
     try {
-      const parsed = await readSpreadsheetRows(file, (progress) => {
+      const parsed = await readSpreadsheetRows(file, options?.priceLists || [], (progress) => {
         setReadingProgress(Math.min(84, Math.max(3, progress)));
       });
       setReadingProgress(90);
       if (!parsed.rows.length) {
-        toast.error(parsed.format === 'two-sheet' ? 'La hoja Distribución no contiene filas para importar' : 'El archivo no contiene filas para importar');
+        toast.error(parsed.format === 'two-sheet' ? 'La hoja Distribución no contiene filas para importar' : parsed.format === 'canonical' ? 'La hoja Inventario no contiene asignaciones para importar' : 'El archivo no contiene filas para importar');
         return;
       }
       setRows(parsed.rows);
+      setCanonicalCatalog(parsed.catalog || null);
       setFileName(file.name);
       setSheetSummary(parsed);
       setPreview(null);
@@ -344,11 +394,45 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
     if (draftIndex < 0) return;
     const productFields = new Set(['code', 'name', 'category', 'unit', 'costPrice']);
     const currentCode = rowCode(rows[draftIndex]) || previewRow.code;
+    const currentVariantSku = String(rows[draftIndex].variantSku || '').trim();
     setRows((current) => current.map((row, index) => {
       const sameProduct = productFields.has(field) && currentCode && rowCode(row).toLowerCase() === currentCode.toLowerCase();
       if (index !== draftIndex && !sameProduct) return row;
       return { ...row, [field]: value };
     }));
+    if (canonicalCatalog) {
+      const stockIndex = Number(previewRow.rowNumber) - 2;
+      setCanonicalCatalog((current) => {
+        if (!current) return current;
+        const nextValue = String(value ?? '').trim();
+        const nextCode = field === 'code' ? nextValue : currentCode;
+        const next = { ...current, products: current.products.map((product) => {
+          if (normalizeImportKey(product.code) !== normalizeImportKey(currentCode)) return product;
+          if (!productFields.has(field)) return product;
+          const productField = field === 'code' ? 'code' : field === 'name' ? 'name' : field === 'category' ? 'category' : field === 'unit' ? 'unit' : 'costPrice';
+          return { ...product, [productField]: field === 'costPrice' ? parseImportNumber(value) : nextValue };
+        }) };
+        if (field === 'code' && nextValue) {
+          next.variants = current.variants.map((variant) => normalizeImportKey(variant.productCode) === normalizeImportKey(currentCode) ? { ...variant, productCode: nextCode } : variant);
+          next.stock = current.stock.map((stock) => normalizeImportKey(stock.productCode) === normalizeImportKey(currentCode) ? { ...stock, productCode: nextCode } : stock);
+        }
+        if (field === 'variantSku' && currentVariantSku) {
+          next.variants = current.variants.map((variant) => normalizeImportKey(variant.sku) === normalizeImportKey(currentVariantSku) ? { ...variant, sku: nextValue } : variant);
+          next.stock = current.stock.map((stock) => normalizeImportKey(stock.variantSku) === normalizeImportKey(currentVariantSku) ? { ...stock, variantSku: nextValue } : stock);
+        }
+        if (['warehouseSelection', 'stock', 'minStock', 'maxStock', 'unitCost'].includes(field) && stockIndex >= 0 && stockIndex < next.stock.length) {
+          next.stock = next.stock.map((stock, index) => index === stockIndex ? {
+            ...stock,
+            ...(field === 'warehouseSelection' ? { warehouse: String(value ?? '').trim() } : {}),
+            ...(field === 'stock' ? { quantity: parseImportNumber(value) ?? 0 } : {}),
+            ...(field === 'minStock' ? { minStock: parseImportNumber(value) } : {}),
+            ...(field === 'maxStock' ? { maxStock: parseImportNumber(value) } : {}),
+            ...(field === 'unitCost' ? { unitCost: parseImportNumber(value) } : {}),
+          } : stock);
+        }
+        return next;
+      });
+    }
     setPreviewDirty(true);
   };
 
@@ -382,156 +466,37 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
     }
   };
 
-  const downloadTemplate = async () => {
-    const activeLocations = options?.locations || [];
+  const downloadTemplate = () => {
+    const activeLocations = (options?.locations || []).filter((location) => location.active !== false);
     if (!activeLocations.length) {
       toast.error('No hay ubicaciones activas disponibles para generar la plantilla');
       return;
     }
-
-    try {
-      const { Workbook } = (await import('exceljs')).default;
-      const workbook = new Workbook();
-      workbook.creator = 'NovaHub ERP';
-      workbook.created = new Date();
-
-      const uniquePhysicalLocations = Array.from(new Map(activeLocations.map((location) => [location.warehouseId, location])).values());
-      const uniqueLocationLabels = [...new Set(uniquePhysicalLocations.map(displayLocationLabel).filter(Boolean))];
-
-      const products = workbook.addWorksheet('Productos');
-      products.columns = [
-        { header: 'Código producto', key: 'parentCode', width: 20 },
-        { header: 'SKU variante', key: 'variantSku', width: 24 },
-        { header: 'Nombre variante', key: 'variantName', width: 24 },
-        { header: 'Atributos variante (JSON)', key: 'variantAttributes', width: 48 },
-        { header: 'Nombre', key: 'name', width: 30 },
-        { header: 'Categoría', key: 'category', width: 24 },
-        { header: 'Unidad', key: 'unit', width: 14 },
-        { header: 'Costo', key: 'cost', width: 16 },
-      ];
-      products.addRow({ parentCode: '', variantSku: '', variantName: '', variantAttributes: '', name: '', category: '', unit: 'unidad', cost: '' });
-
-      const distribution = workbook.addWorksheet('Distribución');
-      distribution.columns = [
-        { header: 'Código producto', key: 'parentCode', width: 20 },
-        { header: 'SKU variante', key: 'variantSku', width: 24 },
-        { header: 'Ubicación destino', key: 'location', width: 48 },
-        { header: 'Stock inicial', key: 'stock', width: 16 },
-        { header: 'Stock mínimo', key: 'minStock', width: 16 },
-        { header: 'Registrar catálogo', key: 'registerCatalog', width: 20 },
-      ];
-      uniquePhysicalLocations.forEach((location) => {
-        distribution.addRow({
-          parentCode: '',
-          variantSku: '',
-          location: displayLocationLabel(location),
-          stock: 0,
-          minStock: 0,
-          registerCatalog: 'SI',
-        });
-      });
-
-      const locationRows = uniquePhysicalLocations.map((location) => {
-        const isCorporate = Boolean(location.isCorporate || location.scopeType === 'BUSINESS_UNIT');
-        return {
-          Tipo: isCorporate ? 'Almacén corporativo' : 'Bodega de sucursal',
-          Sucursal: isCorporate ? '—' : location.branchName,
-          Ubicación: location.name,
-          Destino: displayLocationLabel(location),
-          Dirección: location.location || '',
-          Alcance: isCorporate ? 'Fuera de las sucursales · pertenece al rubro' : 'Dentro de la sucursal',
-          Activa: location.active ? 'SI' : 'NO',
-        };
-      });
-      const locationsSheet = workbook.addWorksheet('Ubicaciones activas');
-      locationsSheet.columns = [
-        { header: 'Tipo', key: 'type', width: 25 },
-        { header: 'Ubicación destino', key: 'location', width: 48 },
-        { header: 'Sucursal (solo bodega)', key: 'branch', width: 28 },
-        { header: 'Dirección', key: 'address', width: 24 },
-        { header: 'Alcance', key: 'scope', width: 42 },
-        { header: 'Activa', key: 'active', width: 12 },
-      ];
-      locationRows.forEach((row) => locationsSheet.addRow({
-        type: row.Tipo,
-        location: row.Destino,
-        branch: row.Sucursal,
-        address: row.Dirección,
-        scope: row.Alcance,
-        active: row.Activa,
-      }));
-
-      const guide = workbook.addWorksheet('Guía de llenado');
-      [
-        ['GUÍA DE LLENADO · IMPORTACIÓN POR RUBRO'],
-        ['Productos contiene una fila por presentación vendible. Distribución repite el Código producto + SKU variante para asignar stock a varias ubicaciones.'],
-        ['Los nombres de bodega y almacén son únicos dentro del rubro, por eso normalmente basta seleccionar “Bodega 1” o “Almacén central”. Si existe un registro histórico duplicado, el sistema agrega la sucursal como contexto.'],
-        ['Campo', 'Hoja', 'Regla'],
-        ['Código producto', 'Productos y Distribución', 'Obligatorio. Es el código padre; se repite en sus variantes y no requiere IDs.'],
-        ['SKU variante', 'Productos y Distribución', 'Obligatorio para cada presentación vendible. Debe ser único en el catálogo.'],
-        ['Nombre variante / Atributos variante (JSON)', 'Productos', 'Describe la presentación. Los atributos deben existir en el catálogo de Inventario.'],
-        ['Nombre', 'Productos', 'Obligatorio cuando el producto todavía no existe en el rubro.'],
-        ['Costo', 'Productos', 'Obligatorio para la presentación; puede variar entre variantes, pero debe ser igual en todas sus ubicaciones.'],
-        ['Ubicación destino', 'Distribución', 'Selecciona una opción del dropdown. Una bodega ya incluye su sucursal; un almacén corporativo no pertenece a ninguna sucursal y el sistema aplica su configuración de abastecimiento.'],
-        ['Stock inicial', 'Distribución', 'Cantidad final o cantidad a sumar según el modo seleccionado. Puede ser 0.'],
-        ['Stock mínimo', 'Distribución', 'Nivel mínimo de inventario para esa relación de stock.'],
-        ['Registrar catálogo', 'Distribución', 'SI/NO. Permite crear el registro de catálogo y stock aunque la cantidad sea 0.'],
-        ['Almacén corporativo', 'Ubicaciones activas', 'Se muestra una sola vez, fuera de sucursales. Las sucursales que puede abastecer ya están configuradas en el sistema y no se repiten en la plantilla.'],
-        ['Imágenes', 'Importación', 'Opcional. Carga un ZIP o RAR con JPG/PNG nombrados exactamente como el SKU; la asociación se revisa por nombre antes de confirmar.'],
-      ].forEach((row) => guide.addRow(row));
-      guide.getColumn(1).width = 34;
-      guide.getColumn(2).width = 28;
-      guide.getColumn(3).width = 105;
-
-      const catalogs = workbook.addWorksheet('Catálogos');
-      catalogs.state = 'veryHidden';
-      catalogs.getCell('A1').value = 'Ubicaciones activas';
-      uniqueLocationLabels.forEach((label, index) => { catalogs.getCell(index + 2, 1).value = label; });
-      workbook.definedNames.add('UbicacionesActivas', `'Catálogos'!$A$2:$A$${Math.max(uniqueLocationLabels.length + 1, 2)}`);
-
-      const headerStyle = {
-        font: { bold: true, color: { argb: 'FFFFFFFF' } },
-        fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF087F5B' } },
-        alignment: { vertical: 'middle' as const, wrapText: true },
-      };
-      const styleHeader = (sheet: Worksheet) => {
-        sheet.getRow(1).height = 30;
-        sheet.getRow(1).eachCell((cell) => { cell.style = headerStyle; });
-        sheet.views = [{ state: 'frozen', ySplit: 1 }];
-        sheet.autoFilter = { from: 'A1', to: `${String.fromCharCode(64 + sheet.columnCount)}${Math.max(sheet.rowCount, 2)}` };
-      };
-      [products, distribution, locationsSheet].forEach(styleHeader);
-      guide.getRow(1).font = { bold: true, color: { argb: 'FF087F5B' } };
-      guide.getRow(1).height = 28;
-      guide.views = [{ state: 'frozen', ySplit: 3 }];
-
-      for (let rowNumber = 2; rowNumber <= Math.max(distribution.rowCount, 2); rowNumber += 1) {
-        distribution.getCell(rowNumber, 2).dataValidation = { type: 'list', allowBlank: false, formulae: ['=UbicacionesActivas'], showErrorMessage: true, errorTitle: 'Ubicación no válida', error: 'Selecciona una ubicación activa del listado.' };
-        distribution.getCell(rowNumber, 3).dataValidation = { type: 'decimal', operator: 'greaterThanOrEqual', allowBlank: false, formulae: [0], showErrorMessage: true, errorTitle: 'Cantidad no válida', error: 'Ingresa un número mayor o igual que cero.' };
-        distribution.getCell(rowNumber, 4).dataValidation = { type: 'decimal', operator: 'greaterThanOrEqual', allowBlank: false, formulae: [0], showErrorMessage: true, errorTitle: 'Mínimo no válido', error: 'Ingresa un número mayor o igual que cero.' };
-        distribution.getCell(rowNumber, 5).dataValidation = { type: 'list', allowBlank: false, formulae: ['"SI,NO"'], showErrorMessage: true, errorTitle: 'Opción no válida', error: 'Selecciona SI o NO.' };
-      }
-      products.getCell(2, 5).dataValidation = { type: 'decimal', operator: 'greaterThanOrEqual', allowBlank: true, formulae: [0], showErrorMessage: true, errorTitle: 'Costo no válido', error: 'Ingresa un costo mayor o igual que cero.' };
-
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `plantilla-importacion-${safeFileNamePart(selectedBusinessUnitName)}.xlsx`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo generar la plantilla Excel');
-    }
+    downloadCanonicalVariantImportTemplate({
+      categoryName: options?.categories?.[0]?.name || 'Categoría',
+      priceLists: options?.priceLists || [],
+      currency,
+      exchangeRate: Number.isFinite(parsedExchangeRate) && parsedExchangeRate > 0 ? parsedExchangeRate : 1,
+      canViewInventoryCost: true,
+      locations: activeLocations.map((location) => ({
+        label: displayLocationLabel(location),
+        type: location.type,
+        branchName: location.branchName,
+        address: location.location,
+      })),
+      context: { mode: 'MANAGER', managerBusinessUnitName: selectedBusinessUnitName },
+      fileName: `plantilla-importacion-${selectedBusinessUnitName.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase() || 'rubro'}.xlsx`,
+    });
+    toast.success('Plantilla vacía de productos y variantes descargada');
   };
 
   const hasLinkableImage = !imageArchiveEntries.size || rows.some((row) => imageArchiveEntries.has(productImageKey(rowCode(row))));
-  const validForImport = Boolean(preview && !previewDirty && preview.summary.errorRows === 0 && preview.summary.validRows === preview.summary.totalRows && preview.summary.validRows > 0 && hasLinkableImage);
+  const validForImport = Boolean(preview && !previewDirty && preview.errors.length === 0 && preview.summary.errorRows === 0 && preview.summary.validRows === preview.summary.totalRows && preview.summary.validRows > 0 && hasLinkableImage);
+  const previewErrorCount = preview ? Math.max(preview.summary.errorRows, preview.errors.length) : 0;
   const importBlockReason = previewDirty
     ? 'Valida nuevamente los cambios de la previsualización antes de confirmar.'
-    : preview && preview.summary.errorRows > 0
-      ? `Corrige las ${preview.summary.errorRows} fila(s) con error antes de confirmar.`
+    : preview && preview.errors.length > 0
+      ? `Corrige los ${previewErrorCount} problema(s) de la importación antes de confirmar.`
       : preview && preview.summary.validRows === 0
         ? 'No hay filas válidas para importar.'
         : imageArchiveEntries.size > 0 && !hasLinkableImage
@@ -566,7 +531,7 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
               <li><span className="font-semibold text-foreground">Bodegas:</span> pertenecen a una sucursal.</li>
               <li><span className="font-semibold text-foreground">Almacenes:</span> son corporativos, están fuera de las sucursales y conservan stock independiente.</li>
               <li>Solo se aceptan ubicaciones activas y autorizadas del rubro.</li>
-              <li>El SKU se define una vez en <span className="font-semibold text-foreground">Productos</span> y se distribuye en <span className="font-semibold text-foreground">Distribución</span>.</li>
+              <li>El SKU se define una vez en <span className="font-semibold text-foreground">Productos</span> y se asigna por destino en <span className="font-semibold text-foreground">Inventario</span>.</li>
               <li>El costo es único por SKU; IVA e IR no forman parte de esta plantilla.</li>
             </ul>
           </PopoverContent>
@@ -585,12 +550,12 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
         {requiresManualExchangeRate && !hasValidExchangeRate && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">Ingresa una tasa mayor que cero antes de previsualizar o confirmar la importación.</div>}
 
         <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><FileSpreadsheet className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">1. Plantilla activa</p><p className="text-[11px] text-muted-foreground">Productos + Distribución</p></div></div><Button type="button" variant="outline" size="sm" className="w-full rounded-xl" onClick={downloadTemplate} disabled={optionsQuery.isLoading || !options?.locations.length}><Download className="mr-2 size-4" />Descargar Excel</Button></CardContent></Card>
-          <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Upload className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">2. Archivo</p><p className="truncate text-[11px] text-muted-foreground">{fileName || 'XLSX/XLS · dos hojas'}</p></div></div><label className="flex h-9 cursor-pointer items-center justify-center rounded-xl border border-dashed border-primary/40 bg-background px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/5"><input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="sr-only" />{fileName ? 'Reemplazar archivo' : 'Seleccionar archivo'}</label></CardContent></Card>
+          <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><FileSpreadsheet className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">1. Plantilla activa</p><p className="text-[11px] text-muted-foreground">Productos + Variantes + Inventario</p></div></div><Button type="button" variant="outline" size="sm" className="w-full rounded-xl" onClick={downloadTemplate} disabled={optionsQuery.isLoading || !options?.locations.length}><Download className="mr-2 size-4" />Descargar Excel</Button></CardContent></Card>
+          <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Upload className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">2. Archivo</p><p className="truncate text-[11px] text-muted-foreground">{fileName || 'XLSX/XLS · plantilla canónica'}</p></div></div><label className="flex h-9 cursor-pointer items-center justify-center rounded-xl border border-dashed border-primary/40 bg-background px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/5"><input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="sr-only" />{fileName ? 'Reemplazar archivo' : 'Seleccionar archivo'}</label></CardContent></Card>
           <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><ImageIcon className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">3. Imágenes</p><p className="truncate text-[11px] text-muted-foreground">{imageArchiveFileName ? `${imageArchiveFileName} · ${imageArchiveEntries.size} SKU indexado(s)` : 'Opcional · ZIP/RAR'}</p></div></div><label className="flex h-9 cursor-pointer items-center justify-center rounded-xl border border-dashed border-primary/40 bg-background px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/5"><input type="file" accept=".zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed" onChange={onImageArchive} className="sr-only" disabled={imageArchiveProcessing} />{imageArchiveProcessing ? 'Leyendo imágenes…' : imageArchiveFileName ? 'Reemplazar ZIP/RAR' : 'Seleccionar ZIP/RAR'}</label></CardContent></Card>
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2.5 text-xs"><div className="flex min-w-0 items-center gap-2"><Info className="size-4 shrink-0 text-sky-600" /><span className="truncate text-muted-foreground">Rubro: <span className="font-bold text-foreground">{selectedBusinessUnitName}</span></span></div><div className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-muted-foreground"><Badge variant="outline" className="rounded-full">{options?.branches.length || 0} sucursales</Badge><Badge variant="outline" className="rounded-full">{activeLocationSummary.bodegaCount} bodegas</Badge><Badge variant="outline" className="rounded-full">{activeLocationSummary.warehouseCount} almacenes</Badge><Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-7 rounded-full text-sky-700 dark:text-sky-300" aria-label="Ver instrucciones del archivo"><Info className="size-3.5" /></Button></PopoverTrigger><PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] rounded-2xl p-4 text-xs leading-5"><p className="font-black text-foreground">Cómo llenar el Excel</p><p className="mt-2 text-muted-foreground">En <span className="font-semibold text-foreground">Productos</span> escribe cada SKU una sola vez. En <span className="font-semibold text-foreground">Distribución</span> repítelo para repartir stock entre destinos. Selecciona el nombre visible de la ubicación; no uses IDs. El costo debe ser igual para todas las filas del SKU. Stock 0 crea el registro sin movimiento.</p><p className="mt-2 text-muted-foreground">Las bodegas muestran su sucursal. Los almacenes corporativos aparecen una sola vez; sus autorizaciones solo indican a qué sucursales pueden transferir.</p></PopoverContent></Popover></div></div>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2.5 text-xs"><div className="flex min-w-0 items-center gap-2"><Info className="size-4 shrink-0 text-sky-600" /><span className="truncate text-muted-foreground">Rubro: <span className="font-bold text-foreground">{selectedBusinessUnitName}</span></span></div><div className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-muted-foreground"><Badge variant="outline" className="rounded-full">{options?.branches.length || 0} sucursales</Badge><Badge variant="outline" className="rounded-full">{activeLocationSummary.bodegaCount} bodegas</Badge><Badge variant="outline" className="rounded-full">{activeLocationSummary.warehouseCount} almacenes</Badge><Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-7 rounded-full text-sky-700 dark:text-sky-300" aria-label="Ver instrucciones del archivo"><Info className="size-3.5" /></Button></PopoverTrigger><PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] rounded-2xl p-4 text-xs leading-5"><p className="font-black text-foreground">Cómo llenar el Excel</p><p className="mt-2 text-muted-foreground">En <span className="font-semibold text-foreground">Productos</span> escribe cada producto padre una sola vez; sus variantes y precios se relacionan por código y SKU. En <span className="font-semibold text-foreground">Inventario</span> repite cada SKU para repartir stock entre bodegas de distintas sucursales y/o almacenes corporativos. Selecciona el nombre visible de la ubicación; no uses IDs. El costo de entrada debe ser igual para todas las filas del mismo SKU variante. Stock 0 crea el registro sin movimiento.</p><p className="mt-2 text-muted-foreground">Las bodegas muestran su sucursal. Los almacenes corporativos aparecen una sola vez y conservan stock independiente; sus autorizaciones solo indican a qué sucursales pueden transferir.</p></PopoverContent></Popover></div></div>
 
         {optionsQuery.isLoading && <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Cargando ubicaciones activas…</div>}
         {optionsQuery.isError && <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">No se pudieron cargar las ubicaciones activas. {optionsQuery.error.message}</div>}
@@ -598,7 +563,7 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
         {branchesWithoutActiveBodega.length > 0 && <div role="alert" className="flex min-w-0 items-start gap-2 rounded-xl border border-amber-500/35 bg-amber-500/[0.07] px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" /><p className="min-w-0 leading-5"><span className="font-bold">Sin bodega activa:</span> {branchesWithoutActiveBodega.map((branch) => branch.name).join(', ')}. Revisa Bodegas o utiliza un almacén corporativo autorizado para esas sucursales.</p></div>}
         {options && options.branches.length > 0 && <div className="space-y-2"><div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cobertura por sucursal</p><span className="text-[11px] text-muted-foreground">Solo bodegas activas</span></div><div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{options.branches.map((branch) => { const bodegas = bodegasByBranch.get(branch.id) || []; const hasNoBodega = bodegas.length === 0; return <div key={branch.id} className={`min-w-0 rounded-xl border px-3 py-2.5 ${hasNoBodega ? 'border-amber-500/40 bg-amber-500/[0.06]' : 'border-border/60 bg-muted/20'}`}><div className="flex min-w-0 items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><Warehouse className={`size-3.5 shrink-0 ${hasNoBodega ? 'text-amber-600' : 'text-primary'}`} /><span className="min-w-0 truncate text-sm font-semibold">{branch.name}</span></div><Badge variant={hasNoBodega ? 'destructive' : 'outline'} className="shrink-0 rounded-full text-[10px]">{hasNoBodega ? 'Sin bodega activa' : `${bodegas.length} ${bodegas.length === 1 ? 'bodega' : 'bodegas'}`}</Badge></div>{hasNoBodega ? <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-300">No puede recibir stock directamente en una bodega. Revisa Bodegas o usa un almacén corporativo autorizado.</p> : <p className="mt-1.5 break-words text-xs text-foreground">{bodegas.join(' · ')}</p>}</div>; })}</div></div>}
 
-        {rows.length > 0 && <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Archivo cargado</p><p className="truncate text-xs font-semibold">{sheetSummary?.format === 'two-sheet' ? `${sheetSummary.productRows} producto(s) · ${sheetSummary.distributionRows} distribución(es)` : `${rows.length} fila(s)`} · {fileName}</p></div><Button type="button" size="sm" className="shrink-0 rounded-xl" onClick={() => previewMutation.mutate()} disabled={!importBusinessUnitId || !hasValidExchangeRate || previewMutation.isPending || optionsQuery.isLoading || imageArchiveProcessing}><PackagePlus className="mr-2 size-4" />{previewMutation.isPending ? 'Validando…' : 'Previsualizar importación'}</Button></div>}
+        {rows.length > 0 && <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Archivo cargado</p><p className="truncate text-xs font-semibold">{sheetSummary?.format === 'two-sheet' ? `${sheetSummary.productRows} producto(s) · ${sheetSummary.distributionRows} asignación(es)` : sheetSummary?.format === 'canonical' ? `${sheetSummary.productRows} producto(s) · ${sheetSummary.distributionRows} ubicación(es)` : `${rows.length} fila(s)`} · {fileName}</p></div><Button type="button" size="sm" className="shrink-0 rounded-xl" onClick={() => previewMutation.mutate()} disabled={!importBusinessUnitId || !hasValidExchangeRate || previewMutation.isPending || optionsQuery.isLoading || imageArchiveProcessing}><PackagePlus className="mr-2 size-4" />{previewMutation.isPending ? 'Validando…' : 'Previsualizar importación'}</Button></div>}
 
         {preview && <PreviewPanel
           preview={preview}

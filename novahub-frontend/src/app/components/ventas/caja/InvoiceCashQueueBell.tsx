@@ -52,7 +52,13 @@ export function InvoiceCashQueueBell({ onItemSelect }: InvoiceCashQueueBellProps
     try {
       const response = await cajaService.getInvoiceCashQueue({ status: 'PENDING,CLAIMED', page: 1, pageSize: MAX_VISIBLE_QUEUE_ITEMS }, signal);
       const payload = (response as any)?.data || response;
-      setItems(Array.isArray(payload?.items) ? payload.items.slice(0, MAX_VISIBLE_QUEUE_ITEMS) : []);
+      setItems(Array.isArray(payload?.items)
+        ? payload.items.filter((queue: InvoiceCashQueue) => {
+            const document = queue.invoice || queue.creditNote;
+            const status = String(document?.status || '').toUpperCase();
+            return Boolean(document) && !['PAID', 'CANCELLED', 'CREDIT', 'VOIDED'].includes(status);
+          }).slice(0, MAX_VISIBLE_QUEUE_ITEMS)
+        : []);
       setError(null);
     } catch (requestError: unknown) {
       if ((requestError as any)?.name !== 'AbortError') setError('No se pudo consultar la cola de caja.');

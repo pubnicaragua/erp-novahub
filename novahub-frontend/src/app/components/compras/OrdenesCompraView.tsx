@@ -49,6 +49,8 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { getPurchaseOrderOriginBadge } from '../../utils/document-origin-badges';
 import { parseVariantImportWorkbook, type VariantImportCatalog } from '../../utils/variant-import';
+import { downloadCanonicalVariantImportTemplate } from '../../utils/variant-import-template';
+import { priceListsService } from '../../services/price-lists.service';
 
 interface Props {
   data: PurchaseOrder[];
@@ -101,6 +103,7 @@ type PurchaseImportRow = {
   _warningMessage?: string;
   _skuStatus?: 'found' | 'missing' | 'duplicate';
   _skuMessage?: string;
+  _advanced?: boolean;
 };
 
 type ImportCatalogOption = {
@@ -597,6 +600,7 @@ const buildPurchaseImportRowsFromAdvancedCatalog = (catalog: VariantImportCatalo
         withholdingType: 'NONE',
         withholdingBase: '',
         withholdingRate: 0,
+        _advanced: true,
       } as PurchaseImportRow;
     });
   });
@@ -631,6 +635,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [purchasePriceLists, setPurchasePriceLists] = useState<Array<{ code: string; name: string }>>([]);
   const [taxOptions, setTaxOptions] = useState<ImportCatalogOption[]>(FALLBACK_IMPORT_TAX_OPTIONS);
   const [withholdingOptions, setWithholdingOptions] = useState<ImportCatalogOption[]>(FALLBACK_IMPORT_WITHHOLDING_OPTIONS);
   
@@ -697,10 +702,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     Promise.all([
       contabilidadService.getTaxCatalog('TAX'),
       contabilidadService.getTaxCatalog('WITHHOLDING'),
-    ]).then(([taxResponse, withholdingResponse]) => {
+      priceListsService.getAll(),
+    ]).then(([taxResponse, withholdingResponse, priceListResponse]) => {
       if (!active) return;
       setTaxOptions(readCatalog(taxResponse, FALLBACK_IMPORT_TAX_OPTIONS));
       setWithholdingOptions(readCatalog(withholdingResponse, FALLBACK_IMPORT_WITHHOLDING_OPTIONS));
+      const activePriceLists = (Array.isArray(priceListResponse) ? priceListResponse : [])
+        .filter((list: any) => list?.isActive !== false)
+        .map((list: any) => ({ code: String(list.code || '').trim().toUpperCase(), name: String(list.name || '').trim() }))
+        .filter((list) => list.code && list.name);
+      setPurchasePriceLists(activePriceLists);
     }).catch(() => {
       // Los valores de respaldo mantienen la previsualización operativa si el catálogo no responde.
     });
@@ -749,6 +760,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       const categoryName = String(row.category || linkedProduct?.category?.name || linkedProduct?.category || '').trim();
       const categoryByName = categories.find((category: any) => String(category.name || '').trim().toLowerCase() === categoryName.toLowerCase());
       const resolvedCategoryId = String(row.categoryId || linkedProduct?.categoryId || linkedProduct?.category?.id || categoryByName?.id || '').trim();
+      const canCreateCategoryOnImport = Boolean(row._advanced) && Boolean(categoryName);
       // La tasa no se toma del archivo: siempre la gobierna la opción fiscal
       // seleccionada en el catálogo para evitar que una fila altere la regla.
       const taxRate = isTaxExempt(taxType) ? 0 : (taxOption?.rate ?? (['GRAVADO', 'GRAVADO_15', 'IVA_GRAVADO_15'].includes(taxType) ? 15 : 0));
@@ -760,7 +772,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         !sku ? 'SKU requerido' : existingOrderSkus.has(sku.toLowerCase()) ? 'SKU ya está en esta orden' : skuCounts.get(sku.toLowerCase())! > 1 ? 'SKU duplicado en el archivo' : '',
         match && forceManualSku ? 'Este SKU ya está usado; escribe otro SKU para crear un producto nuevo' : '',
         !String(row.description || '').trim() && !linkedProduct ? 'Descripción requerida para SKU no encontrado' : '',
-        !categoryName ? 'Categoría requerida' : !resolvedCategoryId ? 'Categoría no encontrada; selecciona una existente o créala' : '',
+        !categoryName ? 'Categoría requerida' : !resolvedCategoryId && !canCreateCategoryOnImport ? 'Categoría no encontrada; selecciona una existente o créala' : '',
         !Number.isFinite(quantity) || quantity <= 0 ? 'Cantidad debe ser mayor que cero' : '',
         !Number.isFinite(unitPrice) || unitPrice < 0 ? 'Precio unitario inválido' : '',
         !validTaxCodes.has(taxType) ? 'Tipo de IVA inválido; selecciona una opción del catálogo' : '',
@@ -770,6 +782,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         sku && !product && !forceManualSku ? 'SKU no encontrado en inventario; se agregará como producto nuevo al recepcionar' : '',
         sku && !product && forceManualSku ? 'SKU libre; se agregará como producto nuevo al recepcionar' : '',
         sku && product && forceManualSku ? 'SKU coincide con inventario; escribe otro SKU para crear un producto nuevo' : '',
+        canCreateCategoryOnImport && !resolvedCategoryId ? `La categoría "${categoryName}" se creará al confirmar` : '',
       ].filter(Boolean);
 
       // Si el archivo trae una nota explícita, prevalece sobre la nota del
@@ -883,58 +896,28 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   }, [products]);
 
   const handleDownloadPurchaseTemplate = useCallback(() => {
-    const headers = ['SKU', 'Descripción', 'Notas', 'Categoría', 'Cantidad', 'Precio unitario', 'Tipo IVA', 'Base IVA', 'Tasa IVA', 'Retención', 'Base retención', 'Tasa retención'];
-    const exampleProduct = products[0];
-    // taxOptions/withholdingOptions ya contienen el catálogo del tenant; solo
-    // contienen los respaldos cuando el catálogo aún no responde.
-    const activeTaxOptions = taxOptions.filter((option) => option.isActive !== false);
-    const activeWithholdingOptions = withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE');
-    const exampleTax = activeTaxOptions[0] || taxOptions[0] || FALLBACK_IMPORT_TAX_OPTIONS[0] || { code: 'GRAVADO', name: 'IVA gravado', rate: 15 };
-    const formatGuideOptions = (options: ImportCatalogOption[]) => options.length > 0
-      ? options.map((option) => `${option.name} (${option.rate}%)`).join(' · ')
-      : 'No hay opciones activas configuradas';
-    const ws = XLSX.utils.aoa_to_sheet([
-      headers,
-      [exampleProduct?.code || 'SKU-001', exampleProduct?.name || 'Producto de ejemplo', exampleProduct?.commercialNote || 'Nota de la línea', exampleProduct?.category?.name || exampleProduct?.category || 'Categoría', 1, Number(exampleProduct?.costPrice || exampleProduct?.cost || 0), exampleTax.name, '', exampleTax.rate, 'Sin retención', '', 0],
-    ]);
-    ws['!cols'] = headers.map((header) => ({ wch: Math.max(13, Math.min(30, header.length + 3)) }));
-    const guide = XLSX.utils.aoa_to_sheet([
-      ['GUÍA DE LLENADO · IMPORTACIÓN DE ÍTEMS EN ORDEN DE COMPRA'],
-      ['Cada fila representa un artículo que se agregará a la orden de compra actualmente abierta. Esta carga no crea órdenes nuevas.'],
-      ['Campo', 'Regla'],
-      ['SKU', 'Obligatorio. Si existe en el inventario, se vinculará automáticamente; si se repite en el archivo se marcará como error.'],
-      ['Descripción / Categoría', 'Si el SKU existe, se completan desde inventario cuando estén vacíos. Para un SKU no encontrado, ambos campos son obligatorios y se agregará como producto nuevo al recepcionar.'],
-      ['Notas', 'Opcional. Es la nota de la línea del producto; máximo 100 caracteres. Si se deja vacía y el SKU existe, se usará la nota del catálogo como respaldo.'],
-      ['Bodega destino', `No se captura por fila. Todos los productos se agregarán a la bodega seleccionada en la orden actual: ${availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name || 'la bodega seleccionada en el formulario'}.`],
-      ['Cantidad / Precio unitario', 'La cantidad debe ser mayor que cero y el precio no puede ser negativo.'],
-      ['Plantilla avanzada de Inventario', 'También puedes cargar la plantilla avanzada con Productos, Variantes, Atributos, Precios e Inventario. Se creará el catálogo faltante sin stock inicial; si el producto padre ya existe, se agregarán únicamente sus variantes nuevas. Cada SKU variante se agregará como una línea y Stock inicial se tomará como cantidad solicitada. Costo entrada se tomará como precio unitario.'],
-      ['Tipo IVA / Base IVA / Tasa IVA', 'Escribe el nombre en español de una opción configurada. La base y la tasa se calculan automáticamente según la cantidad, el precio y la opción seleccionada; no son editables.'],
-      ['Opciones de IVA configuradas', formatGuideOptions(activeTaxOptions)],
-      ['Retención / Base retención / Tasa retención', 'Escribe "Sin retención" cuando no aplique; de lo contrario escribe el nombre en español de una retención configurada. La base y la tasa se calculan automáticamente y no son editables.'],
-      ['Opciones de retención configuradas', ['Sin retención', ...activeWithholdingOptions.map((option) => `${option.name} (${option.rate}%)`)].join(' · ')],
-      ['Compatibilidad', 'El sistema también reconoce los códigos internos de IVA y retención si el archivo los conserva de una exportación anterior.'],
-      ['Cuentas contables', 'No se solicitan por producto. El asiento utiliza las cuentas configuradas en Contabilidad > Configuración para el evento de compra pagada.'],
-      ['Previsualización', 'La carga no modifica la orden inmediatamente. Corrige los errores y confirma para agregar los ítems.'],
-    ]);
-    guide['!cols'] = [{ wch: 34 }, { wch: 115 }];
-    const workbook = XLSX.utils.book_new();
-    const context = XLSX.utils.aoa_to_sheet([
-      ['CONTEXTO DE LA ORDEN ACTUAL'],
-      ['La plantilla importa productos a la orden abierta; no crea órdenes nuevas ni cambia la bodega desde Excel.'],
-      ['Campo', 'Valor'],
-      ['Proveedor', suppliers.find((supplier) => String(supplier.id) === String(localDoc?.supplierId))?.name || 'El proveedor de la orden actual'],
-      ['Bodega destino', availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name || 'La bodega seleccionada en el formulario'],
-      ['Tipo de compra', String(localDoc?.purchaseType || 'INVENTORY').toUpperCase()],
-      ['Moneda', getCurrencyLabel(String(localDoc?.currency || displayCurrency))],
-      ['Notas generales', String(localDoc?.notes || '').trim() || 'Se editan en la orden después de importar los productos.'],
-    ]);
-    context['!cols'] = [{ wch: 24 }, { wch: 90 }];
-    XLSX.utils.book_append_sheet(workbook, ws, 'Productos de la orden');
-    XLSX.utils.book_append_sheet(workbook, context, 'Contexto de la orden');
-    XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
-    XLSX.writeFile(workbook, 'plantilla_importacion_productos_orden_compra.xlsx');
-    toast.success('Plantilla de productos para orden descargada');
-  }, [availableWarehouseCatalog, displayCurrency, localDoc?.currency, localDoc?.notes, localDoc?.purchaseType, localDoc?.supplierId, localDoc?.warehouseId, products, suppliers, taxOptions, withholdingOptions]);
+    downloadCanonicalVariantImportTemplate({
+      categoryName: categories[0]?.name || 'Categoría',
+      warehouseName: availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name || '',
+      priceLists: purchasePriceLists,
+      currency: String(localDoc?.currency || displayCurrency),
+      exchangeRate: Number(localDoc?.exchangeRate || globalRate || 1),
+      canViewInventoryCost: canPerform('INVENTORY_PRODUCTS', 'viewCost'),
+      locations: availableWarehouseCatalog.map((warehouse: any) => ({
+        label: String(warehouse.name || '').trim(),
+        type: 'BODEGA' as const,
+      })).filter((location) => location.label),
+      fileName: 'plantilla_importacion_productos_orden_compra.xlsx',
+      context: {
+        mode: 'PURCHASE_ORDER',
+        orderNumber: String(localDoc?.number || 'La orden abierta'),
+        supplierName: suppliers.find((supplier) => String(supplier.id) === String(localDoc?.supplierId))?.name,
+        purchaseWarehouseName: availableWarehouseCatalog.find((warehouse: any) => String(warehouse.id) === String(localDoc?.warehouseId))?.name,
+        purchaseType: String(localDoc?.purchaseType || 'INVENTORY').toUpperCase(),
+      },
+    });
+    toast.success('Plantilla vacía de productos para orden descargada');
+  }, [availableWarehouseCatalog, canPerform, categories, displayCurrency, globalRate, localDoc?.currency, localDoc?.purchaseType, localDoc?.supplierId, localDoc?.warehouseId, purchasePriceLists, suppliers]);
 
   const handlePurchaseImportFile = useCallback(async (file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {

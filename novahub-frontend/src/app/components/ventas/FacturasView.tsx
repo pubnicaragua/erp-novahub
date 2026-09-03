@@ -2227,12 +2227,30 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_CREDIT_NOTES', 'approve') &&
                 !['PAID', 'CANCELLED', 'CREDIT'].includes(String(row.status).toUpperCase()) &&
                 !row.creditNotes?.some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) &&
-                getInvoiceBalance(row) > 0.01 &&
-                invoiceFitsAvailableCredit(row) && (
-                <Button type="button" title="Enviar saldo a crédito" aria-label={`Enviar saldo a crédito de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10 transition-colors" onClick={() => openInvoiceCredit(row)}>
-                  <Send className="size-4" />
-                </Button>
-              )}
+                getInvoiceBalance(row) > 0.01 && (() => {
+                  const creditFits = invoiceFitsAvailableCredit(row);
+                  const creditTitle = creditFits
+                    ? 'Enviar saldo a crédito'
+                    : 'Crédito no disponible: el límite o saldo disponible no cubre esta factura';
+                  return (
+                    <span title={creditTitle} className="inline-flex">
+                      <Button
+                        type="button"
+                        aria-label={`${creditTitle} de ${row.number}`}
+                        variant="ghost"
+                        size="icon"
+                        disabled={!creditFits}
+                        className={cn('size-8 shrink-0 rounded-lg text-primary transition-colors hover:bg-primary/10', !creditFits && 'cursor-not-allowed text-muted-foreground opacity-60 hover:bg-transparent')}
+                        onClick={() => openInvoiceCredit(row)}
+                      >
+                        <span className="relative inline-flex size-4 items-center justify-center">
+                          <Send className="size-4" />
+                          {!creditFits && <span aria-hidden="true" className="pointer-events-none absolute left-[-2px] top-1/2 h-px w-5 -rotate-45 bg-current" />}
+                        </span>
+                      </Button>
+                    </span>
+                  );
+                })()}
               {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
                 !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
                 getInvoiceBalance(row) > 0 && (
