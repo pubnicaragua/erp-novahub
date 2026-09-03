@@ -3,6 +3,13 @@
 @import './theme.css';
 @import './print.css';
 
+/* Los controles principales de los módulos operativos siguen el estilo
+   rectangular solicitado. Se limita a estas vistas para no alterar botones
+   circulares o controles auxiliares del resto del ERP. */
+main[class*='module-'] :is(button, a[role='button'], [role='tab']) {
+  border-radius: 0 !important;
+}
+
 /*
    One-shot protection for server actions. The component guard adds the
    attribute on the first click and the API client keeps it active until the

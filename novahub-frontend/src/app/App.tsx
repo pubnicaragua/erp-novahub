@@ -455,7 +455,7 @@ function DashboardLayout() {
         />
         <main
           ref={mainRef}
-          className="scrollbar-overlay min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+          className={`scrollbar-overlay module-${currentModule} min-w-0 flex-1 overflow-x-hidden overflow-y-auto`}
           style={{ overflowAnchor: 'none' }}
         >
           <Suspense fallback={<PageLoader />}>
