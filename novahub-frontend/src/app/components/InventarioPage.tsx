@@ -802,6 +802,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <InventoryLossesView
                     warehouses={scopedWarehouses}
                     warehouseId={scopeWarehouseParam}
+                    active={activeTab === 'perdidas'}
                   />
                 </motion.div>
               </TabsContent>

@@ -123,10 +123,10 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
   const filtered = data.filter(r => r.title?.toLowerCase().includes(searchTerm.toLowerCase()) || r.description?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
+    <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
-          <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
+          <Card key={i} className="min-w-0 border-none bg-background/50 backdrop-blur-xl shadow-sm transition-all duration-300 hover:shadow-md">
             <CardContent className="p-5 flex items-center gap-4">
               <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
               <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
@@ -137,10 +137,10 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Recordatorios</h2></div>
+          <div className="min-w-0"><h2 className="break-words text-xl font-black uppercase tracking-tight">Recordatorios</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son los Recordatorios" targetPrefix="recordatorios-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Recordatorios', description: 'Los recordatorios envían alertas automáticas en la fecha y hora que indiques. Pueden ser globales (para todo el equipo), departamentales o personales.' }, data: { title: 'Crear recordatorio', description: 'Haz clic en "Nuevo Aviso". Define el título, mensaje, fecha de envío y alcance (global/departamento/personal).' }, actions: { title: 'Gestionar', description: 'Revisa el estado (Pendiente/Enviado/Cancelado), edita o elimina avisos que ya no necesites.' } }} />
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_REMINDERS', 'create') && (
               <Button data-toolbar-role="primary" variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Aviso</Button>
             )}
@@ -156,7 +156,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle className="font-black uppercase tracking-tight">Programar Recordatorio</DialogTitle>
           </DialogHeader>
@@ -165,13 +165,13 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
               <Label>Título / Asunto</Label>
               <Input placeholder="Ej. Reunión de Equipo..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Fecha y Hora</Label>
                 <Input type="datetime-local" value={formData.reminderDate} onChange={e => setFormData({...formData, reminderDate: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label>Alcance (Scope)</Label>
+                <Label>Alcance</Label>
                 <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.scope} onChange={e => setFormData({...formData, scope: e.target.value, selectedUsers: [], selectedDept: ''})}>
                   <option value="PERSONAL">Personal</option>
                   <option value="DEPARTMENT">Departamento</option>

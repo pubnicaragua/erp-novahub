@@ -22,6 +22,12 @@ const REASON_LABELS: Record<string, string> = {
   OTHER: 'Otro',
 };
 
+function formatReferenceCost(value: unknown): string {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '0.00';
+  return (Math.round((numericValue + Number.EPSILON) * 100) / 100).toFixed(2);
+}
+
 function StatCard({ label, value, className, valueClassName }: { label: string; value: React.ReactNode; className?: string; valueClassName?: string }) {
   return (
     <div className={`rounded-xl border p-3 ${className || 'border-border/60 bg-muted/20'}`}>
@@ -132,7 +138,7 @@ function TransferDetail({ data }: { data: any }) {
 function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewInventoryCost: boolean }) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const totalDelta = items.reduce((sum: number, item: any) => sum + (Number(item.actualStock || 0) - Number(item.currentStock || 0)), 0);
-  const referenceCost = items[0]?.unitCost != null ? `${items[0].currency || ''} ${Number(items[0].unitCost || 0)}` : '—';
+  const referenceCost = items[0]?.unitCost != null ? `${items[0].currency || ''} ${formatReferenceCost(items[0].unitCost)}` : '—';
   const approved = data.status === 'APPROVED';
 
   return (
@@ -206,7 +212,7 @@ function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewIn
                     <p className="truncate text-xs font-semibold" title={item.product?.name || 'Producto'}>{item.product?.name || 'Producto'}</p>
                     <p className="mt-1 truncate text-[10px] text-muted-foreground">
                       {item.product?.code || 'Sin referencia'}
-                      {canViewInventoryCost && <> · {item.currency || ''} {Number(item.unitCost || 0)}</>}
+                      {canViewInventoryCost && <> · {item.currency || ''} {formatReferenceCost(item.unitCost)}</>}
                     </p>
                   </div>
                   <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">

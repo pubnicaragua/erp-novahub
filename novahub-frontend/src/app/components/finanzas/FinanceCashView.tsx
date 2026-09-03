@@ -110,7 +110,13 @@ export function FinanceCashView() {
   if (distribution.length === 0) distribution.push({ name: 'Efectivo', value: 0 }, { name: 'Bancos', value: 0 })
 
   const subtypeLabel = (s: string) => {
-    const map: Record<string, string> = { CASH: 'Efectivo', BANK: 'Banco', DETAIL_ACCOUNT: 'Cuenta Detalle', GROUP_ACCOUNT: 'Cuenta Grupo', PRINCIPAL_ACCOUNT: 'Cuenta Principal' }
+    const map: Record<string, string> = {
+      CASH: 'Efectivo', BANK: 'Banco', CASH_ACCOUNT: 'Cuenta de efectivo', BANK_ACCOUNT: 'Cuenta bancaria',
+      CHECKING: 'Cuenta corriente', CHECKING_ACCOUNT: 'Cuenta corriente', SAVINGS: 'Cuenta de ahorro',
+      SAVINGS_ACCOUNT: 'Cuenta de ahorro', CREDIT_CARD: 'Tarjeta de crédito', DETAIL_ACCOUNT: 'Cuenta de detalle',
+      MAIN_GROUP: 'Grupo principal', GROUP: 'Grupo', GROUP_ACCOUNT: 'Cuenta grupo', SUBACCOUNT: 'Subcuenta',
+      PRINCIPAL_ACCOUNT: 'Cuenta principal',
+    }
     return map[s?.toUpperCase()] || s?.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase()) || '—'
   }
 
@@ -137,7 +143,7 @@ export function FinanceCashView() {
                 <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={64} />
                 <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#06b6d4', strokeWidth: 1, strokeDasharray: '4 4' }} />
               <Legend verticalAlign="bottom" height={28} formatter={(value: string) => <span style={{ color: 'var(--foreground)', fontWeight: 600, fontSize: 11 }}>{value}</span>} />
-                <Area dataKey="saldo" fill="url(#balG)" stroke="#06b6d4" strokeWidth={2.5} type="monotone" dot={{ r: 3, fill: '#06b6d4', strokeWidth: 0 }} />
+                <Area dataKey="saldo" name="Saldo" fill="url(#balG)" stroke="#06b6d4" strokeWidth={2.5} type="monotone" dot={{ r: 3, fill: '#06b6d4', strokeWidth: 0 }} />
                 <Bar dataKey="entradas" name="Entradas" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`Entradas ${data.month}: ${fmt(data.entradas)}`)} style={{ cursor: 'pointer' }} />
                 <Bar dataKey="salidas" name="Salidas" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`Salidas ${data.month}: ${fmt(data.salidas)}`)} style={{ cursor: 'pointer' }} />
               </ComposedChart>
@@ -156,7 +162,7 @@ export function FinanceCashView() {
                 <XAxis type="number" tick={FINANCE_AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} tickMargin={8} />
                 <YAxis dataKey="name" type="category" tick={{ ...FINANCE_AXIS_TICK, fill: 'var(--foreground)', fontWeight: 500 }} width={112} />
                 <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                <Bar dataKey="value" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`${data.name}: ${fmt(data.value)}`)} style={{ cursor: 'pointer' }}>
+                <Bar dataKey="value" name="Saldo" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`${data.name}: ${fmt(data.value)}`)} style={{ cursor: 'pointer' }}>
                   {distribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Bar>
               </BarChart>

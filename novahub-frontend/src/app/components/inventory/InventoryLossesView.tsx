@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingDown, PackageX, BookOpenCheck, ExternalLink, Eye } from 'lucide-react';
+import { TrendingDown, PackageX, BookOpenCheck, ExternalLink, Eye, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
@@ -31,9 +31,10 @@ const REASON_LABELS: Record<string, string> = {
 interface InventoryLossesViewProps {
   warehouses: any[];
   warehouseId?: string;
+  active?: boolean;
 }
 
-export function InventoryLossesView({ warehouses, warehouseId }: InventoryLossesViewProps) {
+export function InventoryLossesView({ warehouses, warehouseId, active = true }: InventoryLossesViewProps) {
   const { user, canPerform } = useAuth();
   const canReadInventory = canPerform('INVENTORY', 'view');
   const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
@@ -45,7 +46,7 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
   const [detail, setDetail] = useState<any | null>(null);
 
   const lossesQuery = useQuery({
-    queryKey: ['inventory', 'losses', tenantKey, dateFrom, dateTo, page, warehouseId],
+    queryKey: ['inventory', 'losses', tenantKey, user?.id || 'anonymous', dateFrom, dateTo, page, warehouseId],
     queryFn: ({ signal }) => inventoryService.getLosses({
       page,
       pageSize: 50,
@@ -53,11 +54,12 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
       ...(dateTo ? { dateTo } : {}),
       ...(warehouseId ? { warehouseId } : {}),
     }, signal),
-    staleTime: 30_000,
+    staleTime: 0,
     gcTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
     retry: 1,
-    enabled: Boolean(user) && canReadInventory,
+    enabled: Boolean(user) && canReadInventory && active,
   });
 
   const data = lossesQuery.data;
@@ -78,6 +80,9 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
     : formatConvertedAmount(amount, normalizeCurrency(currency || baseCurrency));
   const formatCurrentAmount = (amount: number, currency?: string) => renderLossAmount(amount, currency);
   const loading = lossesQuery.isLoading || lossesQuery.isFetching;
+  const loadErrorMessage = lossesQuery.error instanceof Error
+    ? lossesQuery.error.message
+    : 'No se pudieron cargar las pérdidas de inventario.';
   const reasonLabel = (value: unknown) => REASON_LABELS[String(value || '').toUpperCase()] || String(value || 'Sin motivo');
   const accountSummary = rows[0]?.account || rows[0]?.accounts?.[0];
 
@@ -103,6 +108,18 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
           </Button>
         </div>
       </div>
+
+      {lossesQuery.isError && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-700 sm:flex-row sm:items-center sm:justify-between dark:text-red-300">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>{loadErrorMessage}</span>
+          </div>
+          <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 text-[10px] font-bold" onClick={() => lossesQuery.refetch()} disabled={lossesQuery.isFetching}>
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 gap-3 ${canViewInventoryCost ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`} data-tour="inventory-losses-data">
         <Card className="rounded-2xl border-border/50">

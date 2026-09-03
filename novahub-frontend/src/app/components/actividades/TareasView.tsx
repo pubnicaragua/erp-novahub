@@ -178,10 +178,10 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   const filtered = data.filter(t => t.title?.toLowerCase().includes(searchTerm.toLowerCase()) || t.description?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
+    <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
-          <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
+          <Card key={i} className="min-w-0 border-none bg-background/50 backdrop-blur-xl shadow-sm transition-all duration-300 hover:shadow-md">
             <CardContent className="p-5 flex items-center gap-4">
               <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
               <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
@@ -192,7 +192,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0"><h2 className="text-xl font-black uppercase tracking-tight">Tareas</h2></div>
+          <div className="min-w-0"><h2 className="break-words text-xl font-black uppercase tracking-tight">Tareas</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son las Tareas" targetPrefix="tareas-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Tareas', description: 'Las tareas te permiten crear, asignar y dar seguimiento a actividades pendientes. Cada tarea puede tener prioridad, fecha de vencimiento y un responsable. Al completarla, queda registrada en la bitácora.' }, data: { title: 'Crear y asignar', description: 'Haz clic en "Nueva Tarea" para crear una. Asigna un responsable, prioridad y fecha de vencimiento.' }, actions: { title: 'Gestionar', description: 'Edita directamente en la tabla, cambia el estado a "Completada" cuando termines, o elimina tareas obsoletas.' } }} />
             <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
@@ -212,7 +212,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle className="font-black uppercase tracking-tight">Crear Nueva Tarea</DialogTitle>
           </DialogHeader>
@@ -225,7 +225,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
               <Label>Descripción</Label>
               <Input placeholder="Detalles de la tarea..." value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Fecha de Vencimiento</Label>
                 <Input type="datetime-local" value={newTask.dueDate} onChange={e => setNewTask({...newTask, dueDate: e.target.value})} />
@@ -264,7 +264,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       </Dialog>
 
       <Dialog open={isCompleteOpen} onOpenChange={setIsCompleteOpen}>
-        <DialogContent className="sm:max-w-[420px]">
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle className="font-black uppercase tracking-tight">Completar Tarea</DialogTitle>
           </DialogHeader>

@@ -14,6 +14,39 @@ export const FINANCE_TOOLTIP_WRAPPER: CSSProperties = {
   pointerEvents: 'none',
 };
 
+const FINANCE_CATEGORY_LABELS: Record<string, string> = {
+  MARKETING: 'Marketing',
+  RENT: 'Alquiler',
+  UTILITIES: 'Servicios públicos',
+  SALARY: 'Salarios',
+  SALARIES: 'Salarios',
+  HARDWARE: 'Equipo y hardware',
+  MAINTENANCE: 'Mantenimiento',
+  OFFICE: 'Oficina',
+  TRAINING: 'Capacitación',
+  SUPPLIES: 'Suministros',
+  TRAVEL: 'Viajes',
+  EVENTS: 'Eventos',
+  SERVICES: 'Servicios',
+  FOOD: 'Alimentos',
+  ADVERTISING: 'Publicidad',
+  FUEL: 'Combustible',
+  TAXES: 'Impuestos',
+  INSURANCE: 'Seguros',
+  COMMISSIONS: 'Comisiones',
+  SOFTWARE: 'Software',
+  OTHER: 'Otro',
+  OTROS: 'Otros',
+};
+
+/** Translates the technical category codes that can arrive from the API. */
+export function financeCategoryLabel(value: unknown) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 'Sin categoría';
+  const normalized = raw.toUpperCase().replace(/[\s-]+/g, '_');
+  return FINANCE_CATEGORY_LABELS[normalized] || raw;
+}
+
 interface FinanceTooltipCardProps {
   active?: boolean;
   payload?: Array<any>;
