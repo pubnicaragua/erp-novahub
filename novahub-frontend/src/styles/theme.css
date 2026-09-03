@@ -2,14 +2,14 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
+  --background: #f8fafc;
   --foreground: oklch(0.145 0 0);
   --card: #ffffff;
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.65 0.2 155);
-  --primary-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.52 0.16 155);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.95 0.0058 264.53);
   --secondary-foreground: #030213;
   --muted: #ececf0;
@@ -30,7 +30,7 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
+  --radius: 0.375rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;
@@ -48,8 +48,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.235 0.005 155);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.72 0.19 155);
-  --primary-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.68 0.16 155);
+  --primary-foreground: oklch(0.15 0.01 155);
   --secondary: oklch(0.31 0.005 155);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.28 0.005 155);
@@ -167,7 +167,8 @@ html[data-theme-transition="active"]::view-transition-new(root) {
 
   body {
     @apply text-foreground min-h-screen bg-transparent;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Acumin Pro', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
   }
 
   /* Los select nativos no heredan de forma consistente el color de option
@@ -265,7 +266,7 @@ html[data-theme-transition="active"]::view-transition-new(root) {
       padding: 0.375rem;
       overflow: hidden;
       border: 1px solid var(--border);
-      border-radius: 1rem;
+      border-radius: 0.375rem;
       background: color-mix(in srgb, var(--popover) 96%, transparent);
       color: var(--popover-foreground);
       outline: none;
@@ -276,7 +277,7 @@ html[data-theme-transition="active"]::view-transition-new(root) {
       min-height: 2.25rem;
       margin-block: 0.2rem;
       padding: 0.55rem 0.75rem;
-      border-radius: 0.75rem;
+      border-radius: 0.25rem;
       background-clip: padding-box;
       color: var(--popover-foreground);
       background: transparent;
@@ -298,15 +299,9 @@ html[data-theme-transition="active"]::view-transition-new(root) {
     color-scheme: dark;
   }
 
-  html.dark body {
-    background: radial-gradient(circle at 0% 0%, #04883333 0%, #14201a 50%, #1a2620 100%);
-    background-color: #1a2620;
-    background-attachment: fixed;
-  }
-
+  html.dark body,
   html:not(.dark) body {
-    background: radial-gradient(circle at 100% 0%, #04883333 0%, #f8fafc 40%, #ffffff 100%);
-    background-color: #ffffff;
+    background: var(--background);
     background-attachment: fixed;
   }
 
@@ -341,7 +336,7 @@ html[data-theme-transition="active"]::view-transition-new(root) {
   }
 
   .font-handwritten {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Acumin Pro', 'Inter', ui-sans-serif, system-ui, sans-serif;
     /* fallback */
   }
 

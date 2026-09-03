@@ -115,7 +115,7 @@ export function ClientesPage() {
             <UserCircle className="size-6 text-primary" />
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">Directorio de Clientes</h1>
+            <h1 className="truncate text-2xl font-semibold tracking-tight">Directorio de clientes</h1>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -126,7 +126,7 @@ export function ClientesPage() {
             {canPerform('SALES_CLIENTS', 'create') && (
               <DialogTrigger asChild>
                 <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleOpenDialog()}>
-                  <Plus className="size-4" /> Nuevo Cliente
+                  <Plus className="size-4" /> Nuevo cliente
                 </Button>
               </DialogTrigger>
             )}
@@ -216,7 +216,7 @@ export function ClientesPage() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Directorio de Clientes</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Directorio de clientes</CardTitle></CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>

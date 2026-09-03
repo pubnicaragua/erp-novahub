@@ -223,6 +223,232 @@ select.erp-filter-select,
   }
 }
 
+/* Corporate ERP visual baseline.
+ * The application has legacy utility classes in many modules, so this
+ * contract deliberately lives at the shell level and normalizes them in one
+ * place while preserving semantic colors for statuses and badges. */
+:is(main[class*="module-"], .manager-shell, .master-console-module) {
+  font-size: 14px;
+  letter-spacing: normal;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [class~="uppercase"] {
+  text-transform: none !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [class*="tracking-"] {
+  letter-spacing: normal !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(h1, h2, h3, h4, p, label, button, th, td) {
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(h1, h2, h3, h4) {
+  font-style: normal !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) h1 {
+  font-size: 32px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) h2 {
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) h3 {
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) h4 {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(.font-black, .font-extrabold) {
+  font-weight: 700 !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(.font-bold, .font-semibold) {
+  font-weight: 600 !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(button, [role="button"], input, select, textarea) {
+  border-radius: 6px !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(input, select, textarea) {
+  font-size: 13px !important;
+  letter-spacing: normal !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(button, [role="button"]) {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(label, [data-slot="label"]) {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="card"] {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [class*="shadow-"] {
+  box-shadow: none !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-container"],
+:is(main[class*="module-"], .manager-shell, .master-console-module) .sales-responsive-table {
+  border-radius: 8px;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-head"],
+:is(main[class*="module-"], .manager-shell, .master-console-module) th {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1.3;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-cell"],
+:is(main[class*="module-"], .manager-shell, .master-console-module) td {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  padding-block: 12px !important;
+  border-color: color-mix(in srgb, var(--border) 32%, transparent) !important;
+  font-family: inherit !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-cell"] :is(span, p) {
+  font-size: 13px !important;
+  font-family: inherit !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-cell"] .font-mono {
+  font-family: inherit !important;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="badge"] {
+  min-height: 22px;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-cell"] :is(.font-black, .font-extrabold, .font-bold, .font-semibold),
+:is(main[class*="module-"], .manager-shell, .master-console-module) td :is(.font-black, .font-extrabold, .font-bold, .font-semibold) {
+  font-weight: 500 !important;
+}
+
+@media (min-width: 768px) {
+  :is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-cell"],
+  :is(main[class*="module-"], .manager-shell, .master-console-module) td {
+    height: 54px;
+  }
+}
+
+/* Horizontal module navigation: quiet rail, clear active tab. */
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="tabs-list"] {
+  border-radius: 8px !important;
+  border-color: var(--border) !important;
+  background: var(--muted) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  gap: 2px !important;
+  padding: 4px !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="tabs-trigger"] {
+  min-height: 36px;
+  border-radius: 6px !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: var(--muted-foreground) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+  box-shadow: none !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="tabs-trigger"][data-state="active"] {
+  background: color-mix(in srgb, var(--primary) 12%, var(--card)) !important;
+  color: var(--foreground) !important;
+  box-shadow: inset 0 -2px 0 var(--primary) !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="tabs"] > div {
+  margin-bottom: 16px !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-tour$="-kpis"] {
+  gap: 12px !important;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) [data-tour$="-kpis"] > [data-slot="card"] [data-slot="card-content"] {
+  padding: 14px !important;
+}
+
+/* Customers are a high-frequency list: keep the toolbar short and quiet. */
+:is(main.module-clientes, main.module-ventas) [data-tour="sales-list-actions"] {
+  gap: 8px !important;
+}
+
+:is(main.module-clientes, main.module-ventas) [data-tour="sales-list-actions"] .erp-list-toolbar {
+  gap: 8px !important;
+}
+
+:is(main.module-clientes, main.module-ventas) [data-tour="sales-list-actions"] .erp-list-toolbar input,
+:is(main.module-clientes, main.module-ventas) [data-tour="sales-list-actions"] .erp-list-toolbar [data-slot="select-trigger"],
+:is(main.module-clientes, main.module-ventas) [data-tour="sales-list-actions"] .erp-list-toolbar button {
+  min-height: 36px !important;
+  height: 36px !important;
+}
+
+:is(main.module-clientes, main.module-ventas) [data-tour="sales-list-actions"] .erp-list-toolbar input {
+  width: min(16rem, 100%) !important;
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  main.module-ventas [data-tour="sales-list-actions"] {
+    grid-template-columns: minmax(220px, 1fr) minmax(280px, 1fr);
+  }
+
+  main.module-ventas [data-tour="sales-list-actions"] .customer-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}
+
+/* The legacy standalone customer directory used decorative blue/purple KPI
+   accents. Keep the status colors in the data table, but make the summary
+   cards neutral and reserve the brand color for actions. */
+main.module-clientes :is(.text-blue-400, .text-purple-400, .text-green-400) {
+  color: var(--foreground) !important;
+}
+
+main.module-clientes :is(.border-blue-500\/20, .border-purple-500\/20, .border-green-500\/20) {
+  border-color: var(--border) !important;
+}
+
+main.module-clientes :is(.from-blue-500\/5, .from-purple-500\/5, .from-green-500\/5) {
+  --tw-gradient-from: transparent !important;
+  background-image: none !important;
+}
+
 /* En una cabecera de tabla el texto de la columna ya da el contexto. */
 th .column-filter-menu-trigger,
 [role="columnheader"] .column-filter-menu-trigger {

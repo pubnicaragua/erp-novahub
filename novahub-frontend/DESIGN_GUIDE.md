@@ -1,6 +1,6 @@
 # 🎨 Guía de Diseño NovaHub - Sistema Unificado
 
-**Versión 2.4.0 - Diseño Base Oficial**
+**Versión 3.0.0 - Diseño Corporativo Oficial**
 
 Esta guía define el estilo visual, tipografía, animaciones y componentes que **TODOS** los módulos deben seguir para mantener consistencia profesional en todo el ERP.
 
@@ -8,11 +8,11 @@ Esta guía define el estilo visual, tipografía, animaciones y componentes que *
 
 ## 🎯 Filosofía de Diseño
 
-- **Tipografía audaz y moderna**: Font-black, italic, uppercase, tracking-widest
+- **Tipografía sobria y consistente**: Inter, jerarquía clara y tracking neutro
 - **Contraste adaptativo**: Dark mode nativo + Light mode optimizado
 - **Animaciones suaves**: Framer Motion con transiciones fluidas
-- **Espaciado generoso**: Padding y gaps amplios para respiración
-- **Colores vibrantes**: Emerald como color primario, con acentos por módulo
+- **Densidad operativa**: espacios contenidos para lectura y trabajo frecuente
+- **Color funcional**: el color de marca se reserva para acciones y estados importantes
 
 ---
 
@@ -20,29 +20,29 @@ Esta guía define el estilo visual, tipografía, animaciones y componentes que *
 
 ### Headers Principales
 ```tsx
-<h1 className="text-4xl font-black tracking-tighter text-white uppercase italic flex items-center gap-3">
-  <IconComponent className="size-10 text-emerald-500 fill-emerald-500/20" />
-  Nombre <span className="text-emerald-500">Módulo</span>
+<h1 className="text-[32px] font-bold flex items-center gap-3">
+  <IconComponent className="size-7 text-primary" />
+  Nombre del módulo
 </h1>
 ```
 
 ### Badges de Versión
 ```tsx
-<Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+<Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-xs font-medium">
   Descripción del Módulo
 </Badge>
 ```
 
 ### Labels de Formularios
 ```tsx
-<Label className="text-[10px] uppercase font-black tracking-widest text-white/40 ml-1">
+<Label className="text-xs font-medium text-muted-foreground ml-1">
   Campo
 </Label>
 ```
 
 ### Texto de Ayuda
 ```tsx
-<p className="text-[9px] text-white/30 ml-1">
+<p className="text-sm text-muted-foreground ml-1">
   Descripción o ayuda contextual
 </p>
 ```
