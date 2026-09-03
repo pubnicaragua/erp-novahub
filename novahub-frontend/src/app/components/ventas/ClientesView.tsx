@@ -574,15 +574,15 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       header: 'ID / Código',
       width: '110px',
       headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" />,
-      render: (val, row) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val || row.id.slice(0, 8)}</span>
+      render: (val, row) => <span className="text-[13px] font-medium tabular-nums text-muted-foreground">{val || row.id.slice(0, 8)}</span>
     },
     { 
       key: 'name', 
-      header: 'Nombre del Cliente', 
+      header: 'Nombre del cliente',
       width: '220px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
       headerExtra: <ColumnFilterMenu label="Nombre" options={[{ value: '__empty__', label: 'Sin nombre' }]} selected={colFilters.state.name?.values || []} onSelect={(values) => colFilters.setValues('name', values)} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Z → A (alfabético inverso)' }]} />,
-      render: (val) => <span className="text-[13px] font-bold text-foreground">{val || 'Sin nombre'}</span>
+      render: (val) => <span className="text-[13px] font-medium text-foreground">{val || 'Sin nombre'}</span>
     },
     { 
       key: 'type', 
@@ -597,7 +597,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       ],
       render: (val) => (
         <Badge variant="outline" className={cn(
-          "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
+          "text-xs font-medium px-2 py-0.5 border-none shadow-none",
           'bg-primary/10 text-primary'
         )}>
           {(val || '').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Particular'}
@@ -609,21 +609,21 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       header: 'Cédula',
       width: '130px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
-      render: (val) => <span className="font-mono text-xs text-muted-foreground">{val || '—'}</span>,
+      render: (val) => <span className="text-[13px] text-muted-foreground">{val || '—'}</span>,
     },
     {
       key: 'ruc',
       header: 'RUC',
       width: '130px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
-      render: (val) => <span className="font-mono text-xs text-muted-foreground">{val || '—'}</span>,
+      render: (val) => <span className="text-[13px] text-muted-foreground">{val || '—'}</span>,
     },
     {
       key: 'fiscalRegime',
       header: 'Régimen fiscal',
       width: '150px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
-      render: (val) => <span className="text-xs text-muted-foreground">{val || '—'}</span>,
+      render: (val) => <span className="text-[13px] text-muted-foreground">{val || '—'}</span>,
     },
     {
       key: 'priceListId',
@@ -637,7 +637,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
           .filter((list) => list.isActive !== false)
           .map((list) => ({ label: list.name, value: list.id })),
       ],
-      render: (_val, row) => <span className="text-xs font-bold text-primary">{row.priceList?.name || 'Sin asignar'}</span>,
+      render: (_val, row) => <span className="text-[13px] font-medium text-primary">{row.priceList?.name || 'Sin asignar'}</span>,
     },
     { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
@@ -727,12 +727,22 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
-        <div className="flex min-w-0 flex-col gap-3 py-2 lg:flex-row lg:items-center lg:justify-between" data-tour="sales-list-actions">
-          <div className="min-w-0">
-            <h2 className="truncate text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de Clientes</h2>
+        <div className="grid min-w-0 gap-3 py-2 lg:grid-cols-[minmax(220px,1fr)_minmax(300px,1.1fr)_auto] lg:items-center lg:gap-4" data-tour="sales-list-actions">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de clientes</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowTutorial(true)}
+              className="size-8 shrink-0 text-muted-foreground"
+              aria-label="Cómo gestionar clientes"
+              title="Cómo gestionar clientes"
+            >
+              <CircleHelp className="size-4" />
+            </Button>
           </div>
-          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-            <div className="relative">
+          <div className="customer-search-group flex min-w-0 flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1 lg:max-w-sm">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
                 placeholder="Buscar cliente..." 
@@ -751,13 +761,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 <SelectItem value="ALL">Todos</SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              variant="outline"
-              onClick={() => setShowTutorial(true)}
-              className="h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"
-            >
-              <CircleHelp className="mr-2 size-4" /> Cómo gestionar clientes
-            </Button>
+          </div>
+          <div className="customer-actions erp-list-toolbar flex flex-wrap items-center justify-start gap-2 lg:justify-end">
             <Button
               variant="outline"
               onClick={() => setColumnConfigOpen(true)}
@@ -782,9 +787,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 onClick={() => { setNewCustomer(emptyCustomerDraft(displayCurrency)); setCreateOpen(true); }}
                 data-toolbar-role="primary"
                 data-tour="customers-new"
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 border border-primary/20"
               >
-                <UserPlus className="size-4" /> Nuevo Cliente
+                <UserPlus className="size-4" /> Nuevo cliente
               </Button>
             )}
           </div>

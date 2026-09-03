@@ -513,7 +513,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-none">
               {showSelection && (
-                <TableHead className="w-12 text-center h-12">
+                  <TableHead className="h-12 w-12 text-center text-[13px] font-semibold">
                   <Checkbox 
                     checked={allSelectableRowsSelected ? true : selectedIds.size > 0 ? 'indeterminate' : false}
                     disabled={selectableIds.length === 0}
@@ -525,7 +525,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 <TableHead 
                   key={col.key as string} 
                   style={{ width: col.width }}
-                  className="h-12 whitespace-nowrap align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60"
+                  className="h-12 whitespace-nowrap align-middle text-[13px] font-semibold text-muted-foreground"
                 >
                   <span className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap">
                     <span className="min-w-0 truncate">{col.header}</span>
@@ -535,7 +535,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   </span>
                 </TableHead>
               ))}
-              <TableHead data-actions-column="true" className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60', actionsWidth)}>
+              <TableHead data-actions-column="true" className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[13px] font-semibold text-muted-foreground', actionsWidth)}>
                 Acciones
               </TableHead>
             </TableRow>
@@ -555,7 +555,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   onClick={(event) => handleRowInteraction(event, row)}
                   onDoubleClick={(event) => handleRowInteraction(event, row, true)}
                   className={cn(
-                    "group/row h-14 transition-all duration-300",
+                    "group/row h-14 transition-colors duration-150",
                     (onRowClick || onRowDoubleClick) && !editOnPencilOnly && "cursor-pointer",
                     isHighlighted
                       ? "bg-primary/10 hover:bg-primary/15 border-l-2 border-l-primary ring-1 ring-inset ring-primary/50"
@@ -640,8 +640,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                           <div className="flex items-center h-full px-2">
                             {col.render ? col.render(value, row) : (
                               <span className={cn(
-                                "text-[13px] transition-all",
-                                isDraft ? "text-primary italic flex items-center gap-1.5" : "text-foreground font-medium"
+                                "text-[13px] transition-colors",
+                                isDraft ? "text-primary flex items-center gap-1.5" : "text-foreground font-normal"
                               )}>
                                 {isDraft && <span title="Borrador">📝</span>}
                                 {value}
@@ -698,7 +698,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             {/* Empty State */}
             {data.length === 0 && !isLoading && (
               <TableRow>
-                <TableCell colSpan={columns.length + (showSelection ? 2 : 1)} className="h-32 text-center text-muted-foreground/50 italic text-sm">
+                <TableCell colSpan={columns.length + (showSelection ? 2 : 1)} className="h-32 text-center text-muted-foreground/50 text-sm">
                    No hay registros disponibles.
                 </TableCell>
               </TableRow>
