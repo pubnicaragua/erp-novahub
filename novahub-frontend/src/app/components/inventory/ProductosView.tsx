@@ -324,7 +324,7 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
     <TableRow
       data-index={index}
       aria-busy={importing}
-      style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', height: isService ? '84px' : hasVariants ? '78px' : '58px', boxSizing: 'border-box', transform: `translateY(${start}px)` }}
+      style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', height: isService ? '84px' : hasVariants ? '78px' : '58px', marginBottom: '8px', boxSizing: 'border-box', transform: `translateY(${start}px)` }}
       className={expandable ? 'border-y-2 border-primary/20 bg-primary/5' : row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}
     >
       <TableCell className="p-1">
@@ -373,11 +373,11 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
       </> : hasVariants ? <>
         <TableCell className="p-1 text-center"><span className="text-[10px] font-semibold text-muted-foreground">Por variante</span></TableCell>
         <TableCell className="p-1 text-center"><span className="text-[10px] text-muted-foreground">—</span></TableCell>
-        <TableCell className="p-1 text-center" title={advancedWarehouseSummary}><span className={`block truncate text-[10px] font-semibold ${row._hasError ? 'text-red-600' : 'text-muted-foreground'}`}>{advancedWarehouseSummary}</span></TableCell>
+        <TableCell className="p-1 text-center" title={advancedWarehouseSummary}><span className={`block min-w-0 whitespace-normal break-words text-[10px] font-semibold leading-tight ${row._hasError ? 'text-red-600' : 'text-muted-foreground'}`}>{advancedWarehouseSummary}</span></TableCell>
       </> : isAdvanced ? <>
         <TableCell className="p-1 text-right"><span className="text-xs tabular-nums">{Number(row.initialStock || 0)}</span></TableCell>
         <TableCell className="p-1 text-center"><span className="text-[10px] text-muted-foreground">Por bodega</span></TableCell>
-        <TableCell className="p-1" title={advancedWarehouseSummary}><span className="block truncate text-[10px] text-muted-foreground">{advancedWarehouseSummary}</span></TableCell>
+        <TableCell className="p-1" title={advancedWarehouseSummary}><span className="block min-w-0 whitespace-normal break-words text-[10px] leading-tight text-muted-foreground">{advancedWarehouseSummary}</span></TableCell>
       </> : <>
         <TableCell className="p-1"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} aria-label="Stock inicial" title="Edita el stock inicial antes de confirmar la importación" className="h-8 text-right text-xs" /></TableCell>
         <TableCell className="p-1"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className="h-8 text-right text-xs" /></TableCell>
@@ -435,11 +435,11 @@ const ProductImportVariantPreviewRow = memo(function ProductImportVariantPreview
   return (
     <TableRow
       data-index={entry.key}
-      style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', minHeight: '76px', transform: `translateY(${start}px)` }}
+      style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', minHeight: '84px', marginBottom: '8px', boxSizing: 'border-box', transform: `translateY(${start}px)` }}
       className="border-b-2 border-primary/15 bg-primary/[0.025]"
     >
       <TableCell colSpan={99} style={{ gridColumn: '1 / -1' }} className="p-0 whitespace-normal">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2 border-l-4 border-primary/35 px-4 py-4 pl-6 text-xs">
+        <div className="flex min-w-0 flex-wrap items-start gap-x-5 gap-y-2 border-l-4 border-primary/35 px-4 py-4 pl-6 text-xs">
           <div className="min-w-[170px]">
             <p className="text-[9px] font-black uppercase tracking-[0.14em] text-primary">Variante</p>
             <p className="mt-1 break-words font-mono font-black text-foreground">{variantSku || 'Sin SKU'}</p>
@@ -460,10 +460,10 @@ const ProductImportVariantPreviewRow = memo(function ProductImportVariantPreview
               }) : <span className="text-muted-foreground">Sin listas de precios</span>}
             </div>
           </div>
-          <div className="min-w-[180px]">
+          <div className="min-w-[180px] max-w-[240px] flex-[0_1_240px]">
             <p className="text-[9px] font-black uppercase tracking-[0.14em] text-muted-foreground">Costo / stock</p>
             <p className="mt-1 font-bold tabular-nums">{effectiveCost === undefined ? 'Costo no indicado' : `${currencySymbol} ${formatImportAmount(effectiveCost)}`} · {formatImportAmount(stockTotal)} uds.</p>
-            <p className="mt-1 break-words text-[10px] text-muted-foreground">{warehouseNames.length ? warehouseNames.join(' · ') : 'Sin distribución'}</p>
+            <p className="mt-1 min-w-0 max-w-full whitespace-normal break-words text-[10px] leading-tight text-muted-foreground" title={warehouseNames.length ? warehouseNames.join(' · ') : 'Sin distribución'}>{warehouseNames.length ? warehouseNames.join(' · ') : 'Sin distribución'}</p>
           </div>
         </div>
       </TableCell>
@@ -494,7 +494,6 @@ function ImportPreviewPage({
   useImportPreviewLayout();
   const { canPerform } = useAuth();
   const [advancedCardOpen, setAdvancedCardOpen] = useState(false);
-  const [collapsedParentKeys, setCollapsedParentKeys] = useState<Set<string>>(() => new Set());
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const visiblePriceLists = isService ? [] : priceLists;
   const currencySymbol = getImportCurrencySymbol(importCurrency);
@@ -531,7 +530,7 @@ function ImportPreviewPage({
     '32px', '128px', 'minmax(220px, 1fr)', '180px', '80px', '128px', '112px',
     ...(isService ? ['112px'] : visiblePriceLists.map(() => '112px')),
     ...(canViewInventoryCost ? ['112px'] : []),
-    ...(isService ? ['130px'] : ['96px', '96px', '160px']),
+    ...(isService ? ['130px'] : ['96px', '96px', '220px']),
     '160px',
   ].join(' ');
   const previewEntries = useMemo<Extract<ProductImportPreviewEntry, { kind: 'parent' | 'row' }>[]>(() => importData.map((row, rowIndex) => {
@@ -545,6 +544,8 @@ function ImportPreviewPage({
       variants: (advancedCatalog?.variants || []).filter((variant) => String(variant.productCode || '').trim().toLowerCase() === parentCode),
     };
   }), [advancedCatalog, importData, isService]);
+  const [collapsedParentKeys, setCollapsedParentKeys] = useState<Set<string>>(() => new Set(previewEntries.filter((entry) => entry.kind === 'parent').map((entry) => entry.key)));
+  const parentExpansionInitializedRef = useRef(previewEntries.some((entry) => entry.kind === 'parent'));
   const groupedParents = previewEntries.filter((entry): entry is Extract<ProductImportPreviewEntry, { kind: 'parent' }> => entry.kind === 'parent');
   const visiblePreviewEntries = useMemo<ProductImportPreviewEntry[]>(() => previewEntries.flatMap((entry) => {
     if (entry.kind === 'row') return [entry];
@@ -560,7 +561,19 @@ function ImportPreviewPage({
   const allParentsExpanded = groupedParents.length > 0 && groupedParents.every((entry) => !collapsedParentKeys.has(entry.key));
   const allParentsCollapsed = groupedParents.length > 0 && groupedParents.every((entry) => collapsedParentKeys.has(entry.key));
   const variantCount = groupedParents.reduce((sum, entry) => sum + entry.variants.length, 0);
-  const tableVirtualizer = useVirtualizedImportRows(rowsReady ? visiblePreviewEntries.length : 0, tableScrollRef, isService ? 84 : 78, { overscan: 2 });
+  useEffect(() => {
+    if (parentExpansionInitializedRef.current || groupedParents.length === 0) return;
+    parentExpansionInitializedRef.current = true;
+    setCollapsedParentKeys(new Set(groupedParents.map((entry) => entry.key)));
+  }, [groupedParents]);
+  const tableRowEstimate = useCallback((index: number) => {
+    if (isService) return 92;
+    const entry = visiblePreviewEntries[index];
+    if (entry?.kind === 'variant') return 92;
+    if (entry?.kind === 'parent') return 86;
+    return 66;
+  }, [isService, visiblePreviewEntries]);
+  const tableVirtualizer = useVirtualizedImportRows(rowsReady ? visiblePreviewEntries.length : 0, tableScrollRef, tableRowEstimate, { overscan: 2 });
   useEffect(() => {
     if (!rowsReady) return;
     const frame = window.requestAnimationFrame(() => tableVirtualizer.measure());
@@ -820,9 +833,9 @@ function ImportPreviewPage({
           </div>
         </div>
       ) : <>
-      <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
+      <div className="hidden h-[clamp(28rem,68dvh,52rem)] min-h-[28rem] min-w-0 max-w-full flex-none sm:flex">
       <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className={`block ${isService ? 'min-w-[1420px]' : 'min-w-[1500px]'}`}>
+          <Table responsiveCards={false} containerClassName="w-max min-w-full max-w-none overflow-visible" className={`block ${isService ? 'min-w-[1420px]' : 'min-w-[1500px]'}`}>
             <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
@@ -835,7 +848,7 @@ function ImportPreviewPage({
                 {isService && <TableHead className="w-28 text-right text-[10px] uppercase">Duración (min)</TableHead>}
                 {isService ? <TableHead className="w-28 text-right text-[10px] uppercase">Precio</TableHead> : visiblePriceLists.map((list) => <TableHead key={list.code} className="w-28 text-right text-[10px] uppercase">{list.name}</TableHead>)}
                   {canViewInventoryCost && <TableHead className="w-28 text-right text-[10px] uppercase">Costo</TableHead>}
-                {isService ? <TableHead className="w-32 text-[10px] uppercase">Disponibilidad</TableHead> : <><TableHead className="w-24 text-right text-[10px] uppercase">Stock</TableHead><TableHead className="w-24 text-right text-[10px] uppercase">Min</TableHead><TableHead className="w-40 text-[10px] uppercase">Bodega</TableHead></>}
+                {isService ? <TableHead className="w-32 text-[10px] uppercase">Disponibilidad</TableHead> : <><TableHead className="w-24 text-right text-[10px] uppercase">Stock</TableHead><TableHead className="w-24 text-right text-[10px] uppercase">Min</TableHead><TableHead className="w-56 text-[10px] uppercase">Bodega</TableHead></>}
                 <TableHead className="w-40 text-[10px] uppercase">Validación</TableHead>
               </TableRow>
             </TableHeader>

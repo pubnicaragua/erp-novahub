@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 export type ImportScrollRef = RefObject<HTMLDivElement | null>;
+export type ImportRowEstimate = number | ((index: number) => number);
 
 /**
  * Shared virtualization primitives for import previews. The complete dataset
@@ -11,13 +12,13 @@ export type ImportScrollRef = RefObject<HTMLDivElement | null>;
 export function useVirtualizedImportRows(
   count: number,
   scrollRef: ImportScrollRef,
-  estimateSize: number,
+  estimateSize: ImportRowEstimate,
   options: { overscan?: number } = {},
 ) {
   return useVirtualizer({
     count,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => estimateSize,
+    estimateSize: (index) => typeof estimateSize === 'function' ? estimateSize(index) : estimateSize,
     // Mantener pocas filas fuera del viewport evita trabajo innecesario al
     // desplazarse por archivos grandes y sigue el patrón optimizado de
     // Productos para todas las importaciones.
