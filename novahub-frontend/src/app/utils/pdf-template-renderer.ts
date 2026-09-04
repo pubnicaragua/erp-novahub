@@ -113,7 +113,18 @@ function normalizeData(data: PdfTemplateData | undefined, settings: PdfTemplateR
   const target = getPdfTemplateTarget(targetKey);
   const source = data || {};
   const firstRow = asRows(source)[0];
-  const company = { name: settings.footerText ? undefined : undefined, ...(source.company || {}) };
+  const sourceCompany = source.company || {};
+  const configuredSettings = settings as PdfTemplateRenderSettings & Record<string, unknown>;
+  const company = {
+    ...sourceCompany,
+    name: configuredSettings.companyName || sourceCompany.name,
+    slogan: configuredSettings.slogan || sourceCompany.slogan,
+    fiscalInfo: configuredSettings.fiscalInfo || sourceCompany.fiscalInfo,
+    address: configuredSettings.address || sourceCompany.address,
+    phone: configuredSettings.phone || sourceCompany.phone,
+    email: configuredSettings.email || sourceCompany.email,
+    website: configuredSettings.website || sourceCompany.website,
+  };
   const document = { title: target.label.toUpperCase(), notes: '', terms: '', ...(source.document || {}) };
   return {
     ...source,
@@ -335,6 +346,7 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
   const rawContent = node.type === 'section' && isDecorativeSection(node) ? '' : node.type === 'field' ? tokenValue(node, data) : node.text || node.sample || node.label;
   const isStatusField = node.type === 'field' && (node.id === 'document-status' || /estado|status/i.test(`${node.label || ''} ${node.token || ''}`));
   const isDocumentTitle = node.type === 'field' && (node.id === 'document-title' || node.token === 'document.title');
+  const isReportKpiLabel = node.type === 'field' && /^report-kpi-label-\d+$/.test(node.id);
   const content = isStatusField && rawContent ? `Estado: ${pdfStatusLabel(rawContent)}` : rawContent;
   if (partyField(node)) {
     Object.assign(element.style, { flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: '1px', padding: '0.2% 0.4%' });
@@ -352,9 +364,12 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
       ? Math.min(Number(node.fontSize) || 14, Math.max(7.5, 260 / Math.max(String(content).length, 1)))
       : undefined;
     Object.assign(text.style, {
-      position: 'relative', zIndex: '1', display: 'flex', width: '100%', height: '100%',
+      position: 'relative', zIndex: '1', display: 'flex', width: '100%', height: '100%', minWidth: '0', minHeight: '0',
       alignItems: node.type === 'section' && node.id === 'party-section' ? 'flex-start' : 'center',
-      justifyContent: 'flex-start', whiteSpace: isDocumentTitle ? 'nowrap' : 'pre-wrap', overflowWrap: 'anywhere',
+      justifyContent: isReportKpiLabel ? 'center' : 'flex-start', textAlign: isReportKpiLabel ? 'center' : node.align || 'left',
+      whiteSpace: isDocumentTitle ? 'nowrap' : isReportKpiLabel ? 'normal' : 'pre-wrap', overflowWrap: 'anywhere', wordBreak: isReportKpiLabel ? 'break-word' : 'normal',
+      overflow: 'hidden',
+      ...(isReportKpiLabel ? { lineHeight: '1.05', padding: '0 2px' } : {}),
       ...(isDocumentTitle ? { fontSize: pdfPointsToCss(fittedTitleSize, 7), overflow: 'hidden' } : {}),
     });
     if (node.type === 'section' && node.id === 'party-section') {
@@ -397,11 +412,11 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const headerBackground = node.tableHeaderColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? '#ffffff' : primaryColor);
   const headerColor = node.tableHeaderTextColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff');
   const rowBackground = node.tableStripeColor || (tableLayout === 'striped' || tableLayout === 'standard' || tableLayout === 'accent' ? '#f8fafc' : 'transparent');
-  columns.forEach(column => { const cell = head.insertCell(); cell.textContent = column.label; cell.style.width = `${column.width || 25}%`; cell.style.textAlign = column.align || 'left'; cell.style.padding = compact ? '4px 4px' : '7px 8px'; cell.style.backgroundColor = safeHtml2CanvasColor(column.backgroundColor || headerBackground, headerBackground); cell.style.color = safeHtml2CanvasColor(column.color || headerColor, headerColor); cell.style.fontWeight = '700'; cell.style.fontSize = pdfPointsToCss(Math.max(compact ? 6.2 : 7, (node.fontSize || settings.fontSize || 9) - (compact ? 2.5 : 1.5))); cell.style.letterSpacing = compact ? '0' : '0.15px'; cell.style.textTransform = 'uppercase'; cell.style.borderBottom = `${compact ? 1 : 2}px solid ${primaryColor}`; });
+  columns.forEach(column => { const cell = head.insertCell(); cell.textContent = column.label; cell.style.width = `${column.width || 25}%`; cell.style.minWidth = '0'; cell.style.maxWidth = '100%'; cell.style.textAlign = column.align || 'left'; cell.style.padding = compact ? '4px 4px' : '7px 8px'; cell.style.backgroundColor = safeHtml2CanvasColor(column.backgroundColor || headerBackground, headerBackground); cell.style.color = safeHtml2CanvasColor(column.color || headerColor, headerColor); cell.style.fontWeight = '700'; cell.style.fontSize = pdfPointsToCss(Math.max(compact ? 6.2 : 7, (node.fontSize || settings.fontSize || 9) - (compact ? 2.5 : 1.5))); cell.style.letterSpacing = compact ? '0' : '0.15px'; cell.style.textTransform = 'uppercase'; cell.style.borderBottom = `${compact ? 1 : 2}px solid ${primaryColor}`; cell.style.whiteSpace = 'normal'; cell.style.overflow = 'hidden'; cell.style.overflowWrap = 'anywhere'; cell.style.wordBreak = 'break-word'; });
   const body = table.createTBody();
   asRows(data).slice(0, 30).forEach((row, rowIndex) => {
     const tr = body.insertRow();
-    columns.forEach(column => { const cell = tr.insertCell(); const rawValue = row[column.token] ?? row[column.id]; cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue); cell.style.padding = compact ? '3px 4px' : tableLayout === 'compact' ? '4px 6px' : '6px 8px'; cell.style.borderTop = `1px solid ${lineColor}`; cell.style.textAlign = column.align || 'left'; const isDescription = column.token === 'description' || column.id === 'description' || /descrip|concepto|detalle/i.test(`${column.label || ''} ${column.token || ''} ${column.id || ''}`) || String(rawValue ?? '').includes('\n'); cell.style.verticalAlign = isDescription ? 'top' : 'middle'; cell.style.lineHeight = compact ? '1.12' : '1.25'; cell.style.whiteSpace = isDescription ? 'pre-wrap' : 'normal'; cell.style.overflowWrap = 'anywhere'; if (node.tableRowColor) cell.style.backgroundColor = safeHtml2CanvasColor(node.tableRowColor, '#ffffff'); else if (rowIndex % 2 && rowBackground !== 'transparent') cell.style.backgroundColor = safeHtml2CanvasColor(rowBackground, '#f8fafc'); if (tableLayout === 'boxed' || tableLayout === 'cards') cell.style.borderLeft = `1px solid ${lineColor}`; });
+    columns.forEach(column => { const cell = tr.insertCell(); const rawValue = row[column.token] ?? row[column.id]; cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue); cell.style.padding = compact ? '3px 4px' : tableLayout === 'compact' ? '4px 6px' : '6px 8px'; cell.style.minWidth = '0'; cell.style.maxWidth = '100%'; cell.style.borderTop = `1px solid ${lineColor}`; cell.style.textAlign = column.align || 'left'; const isDescription = column.token === 'description' || column.id === 'description' || /descrip|concepto|detalle/i.test(`${column.label || ''} ${column.token || ''} ${column.id || ''}`) || String(rawValue ?? '').includes('\n'); cell.style.verticalAlign = isDescription ? 'top' : 'middle'; cell.style.lineHeight = compact ? '1.12' : '1.25'; cell.style.whiteSpace = isDescription ? 'pre-wrap' : 'normal'; cell.style.overflow = 'hidden'; cell.style.overflowWrap = 'anywhere'; cell.style.wordBreak = 'break-word'; if (node.tableRowColor) cell.style.backgroundColor = safeHtml2CanvasColor(node.tableRowColor, '#ffffff'); else if (rowIndex % 2 && rowBackground !== 'transparent') cell.style.backgroundColor = safeHtml2CanvasColor(rowBackground, '#f8fafc'); if (tableLayout === 'boxed' || tableLayout === 'cards') cell.style.borderLeft = `1px solid ${lineColor}`; });
   });
   element.appendChild(table);
   return element;
@@ -456,7 +471,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
       const cell = head.insertCell();
       cell.textContent = column.label;
       const configuredColumn = node.columns?.[columnIndex];
-      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, textAlign: column.align || 'left', padding: compact ? '3px 4px' : '5px 6px', backgroundColor: safeHtml2CanvasColor(column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || configuredColumn?.backgroundColor || sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || configuredColumn?.color || sectionStyle.headerTextColor || headerColor, headerColor), fontWeight: '700', fontSize: pdfPointsToCss(compact ? 6.2 : 7), textTransform: 'uppercase', borderBottom: `2px solid ${sectionStyle.headerColor || primaryColor}`, overflowWrap: 'anywhere' });
+      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, minWidth: '0', maxWidth: '100%', textAlign: column.align || 'left', padding: compact ? '3px 4px' : '5px 6px', backgroundColor: safeHtml2CanvasColor(column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || configuredColumn?.backgroundColor || sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || configuredColumn?.color || sectionStyle.headerTextColor || headerColor, headerColor), fontWeight: '700', fontSize: pdfPointsToCss(compact ? 6.2 : 7), textTransform: 'uppercase', borderBottom: `2px solid ${sectionStyle.headerColor || primaryColor}`, whiteSpace: 'normal', overflow: 'hidden', overflowWrap: 'anywhere', wordBreak: 'break-word' });
     });
     const body = table.createTBody();
     const rows = section.rows;
@@ -466,7 +481,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
         const cell = tr.insertCell();
         const rawValue = row[column.token] ?? row[column.id];
         cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue ?? '—');
-        Object.assign(cell.style, { padding: compact ? '3px 4px' : '5px 6px', color: textColor, borderTop: `1px solid ${lineColor}`, textAlign: column.align || 'left', verticalAlign: 'top', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', backgroundColor: sectionStyle.rowColor || node.tableRowColor ? safeHtml2CanvasColor(sectionStyle.rowColor || node.tableRowColor, '#ffffff') : rowIndex % 2 === 1 && ['standard', 'striped', 'accent'].includes(tableLayout) ? safeHtml2CanvasColor(sectionStyle.stripeColor || rowBackground, '#f8fafc') : 'transparent' });
+        Object.assign(cell.style, { padding: compact ? '3px 4px' : '5px 6px', minWidth: '0', maxWidth: '100%', color: textColor, borderTop: `1px solid ${lineColor}`, textAlign: column.align || 'left', verticalAlign: 'top', whiteSpace: 'normal', overflow: 'hidden', overflowWrap: 'anywhere', wordBreak: 'break-word', backgroundColor: sectionStyle.rowColor || node.tableRowColor ? safeHtml2CanvasColor(sectionStyle.rowColor || node.tableRowColor, '#ffffff') : rowIndex % 2 === 1 && ['standard', 'striped', 'accent'].includes(tableLayout) ? safeHtml2CanvasColor(sectionStyle.stripeColor || rowBackground, '#f8fafc') : 'transparent' });
       });
     });
     sectionElement.appendChild(table);
@@ -569,6 +584,7 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
   definition.nodes
     .filter(node => node.enabled !== false && (node.page || 1) === 1)
     .filter(node => !node.firstPageOnly || Number((data.page as Record<string, unknown> | undefined)?.number || 1) === 1)
+    .filter(node => !(node.id === 'company-name' && (settings as PdfTemplateRenderSettings & Record<string, unknown>).showCompanyName === false))
     .filter(node => node.id !== 'party-section' || hasParty)
     .filter(node => !partyField(node) || hasRenderablePartyValue(node, data))
     .forEach(node => {
@@ -587,11 +603,14 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
   // sessionBranding o clientTenant). El almacenamiento de sesión es la fuente
   // común del contexto de sucursal y evita que un reporte pierda el logo solo
   // porque su componente no recibió themeConfig.logo en ese render.
+  const configuredLogo = (settings as PdfTemplateRenderSettings & Record<string, unknown>).logoUrl;
   const runtimeLogo = typeof data?.logo === 'string' && data.logo
     ? data.logo
     : typeof data?.company?.logo === 'string' && data.company.logo
       ? data.company.logo
-      : rememberedSessionLogo();
+      : typeof configuredLogo === 'string' && configuredLogo
+        ? configuredLogo
+        : rememberedSessionLogo();
   const safeLogo = await prepareLogoSource(runtimeLogo);
   const renderData: PdfTemplateData = safeLogo
     ? { ...(data || {}), logo: safeLogo, company: { ...(data?.company || {}), logo: safeLogo } }

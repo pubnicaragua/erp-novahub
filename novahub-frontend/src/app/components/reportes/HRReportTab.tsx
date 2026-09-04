@@ -17,7 +17,7 @@ import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, GraduationCap, F
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -984,7 +984,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const doc = new jsPDF(pdfDesignPaper(pdfSettings));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        const companyName = themeConfig.tenantName || 'Mi Empresa';
+        const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
+        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -1002,8 +1003,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           }
         };
 
-        if (themeConfig.logo) {
-          const logoBase64 = await getBase64Image(themeConfig.logo);
+        if (logoUrl) {
+          const logoBase64 = await getBase64Image(logoUrl);
           if (logoBase64) {
             doc.addImage(logoBase64, 'PNG', (pageWidth - 30) / 2, currentY, 30, 30, undefined, 'FAST');
             currentY += 35;
@@ -1027,6 +1028,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         doc.setTextColor(120, 120, 120);
         doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')}  |  Moneda: ${displayCurrency}  |  Período: ${dateRange}`, pageWidth / 2, currentY, { align: 'center' });
         currentY += 5;
+        currentY = drawReportBrandMeta({ doc, settings: pdfSettings, pageWidth, contentWidth, currentY });
 
         doc.setDrawColor(rgbPrimary[0] as any, rgbPrimary[1] as any, rgbPrimary[2] as any);
         doc.setLineWidth(0.8);
@@ -1042,48 +1044,13 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           { label: 'ANTIGÜEDAD', value: fmtTenure(antiquity.avgMonths), detail: 'Desde fecha de ingreso', color: [59, 130, 246] },
         ];
 
-        const cols = 6;
-        const boxW = (contentWidth - (cols - 1) * 3) / cols;
         const boxH = 22;
         checkPage(boxH + 5);
-        kpis.forEach((kpi, idx) => {
-          const x = marginX + idx * (boxW + 3);
-          doc.setFillColor(kpi.color[0] as any, kpi.color[1] as any, kpi.color[2] as any);
-          doc.roundedRect(x, currentY, boxW, boxH, 3, 3, 'F');
-          doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
-          doc.text(kpi.label, x + boxW / 2, currentY + 6, { align: 'center' });
-          doc.setFontSize(9); doc.text(kpi.value, x + boxW / 2, currentY + 13, { align: 'center' });
-          doc.setFontSize(6); doc.setFont('helvetica', 'normal');
-          doc.text(kpi.detail, x + boxW / 2, currentY + 18.5, { align: 'center' });
-        });
-        currentY += boxH + 10;
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 6, gap: 3, boxHeight: boxH, labelFontSize: 6.5, valueFontSize: 9, detailFontSize: 5.8 });
 
         const renderTable = (title: string, headers: string[], rows: (string | number)[][], widths: number[]) => {
           reportSections.push({ title, headers, rows });
-          checkPage(40);
-          doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
-          doc.text(title, marginX, currentY); currentY += 7;
-          doc.setFillColor(245, 158, 11);
-          doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
-          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
-          let accX = marginX;
-          headers.forEach((h, i) => {
-            doc.text(h, accX + 3, currentY + 5.5);
-            accX += widths[i];
-          });
-          currentY += 10;
-          rows.forEach((row, i) => {
-            checkPage(12);
-            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
-            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
-            accX = marginX;
-            row.forEach((cell, ci) => {
-              doc.text(String(cell).substring(0, 28), accX + 3, currentY + 4);
-              accX += widths[ci];
-            });
-            currentY += 7;
-          });
-          currentY += 10;
+          currentY = drawReportTable({ doc, title, headers, rows, color: [245, 158, 11], marginX, contentWidth, currentY, columnWidths: widths });
         };
 
         renderTable('Directorio de Colaboradores',
@@ -1211,7 +1178,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           [72, 42, 68]);
 
         const configured = await generateConfiguredReportSectionsPDF({
-          targetKey: 'reportes.hr', title: 'Reporte de Recursos Humanos', tenantName: companyName, tenantLogo: themeConfig.logo,
+          targetKey: 'reportes.hr', title: 'Reporte de Recursos Humanos', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_recursos_humanos'], 'pdf', dateRange), periodLabel: dateRange,
         });
         if (configured) { toast.success("PDF generado exitosamente"); return; }

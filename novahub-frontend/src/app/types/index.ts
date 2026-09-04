@@ -1513,7 +1513,7 @@ export interface Document {
 }
 
 export interface Task { id: string; title: string; description?: string; status: TaskStatus; priority: Priority; dueDate?: string; assignedTo?: string; createdAt: string; updatedAt: string; }
-export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; guestEmails?: string[]; cost?: number; income?: number; currency?: string; exchangeRate?: number; baseCost?: number | null; baseIncome?: number | null; expenseId?: string; incomeId?: string; createdAt: string; }
+export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; guestEmails?: string[]; cost?: number; income?: number; currency?: string; exchangeRate?: number; baseCost?: number | null; baseIncome?: number | null; expenseId?: string; incomeId?: string; status?: 'PENDING' | 'COMPLETED' | 'CANCELLED' | string; createdAt: string; }
 export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; createdAt: string; }
 export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; activityId?: string; fileUrl?: string; fileName?: string; fileSize?: number; }
 

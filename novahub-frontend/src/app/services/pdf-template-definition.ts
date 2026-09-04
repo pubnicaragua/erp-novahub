@@ -107,11 +107,13 @@ export interface PdfTemplateData {
 
 export const TEMPLATE_TOKENS = [
   { token: 'company.name', label: 'Empresa', sample: 'NovaHub Comercial' },
+  { token: 'company.slogan', label: 'Eslogan', sample: 'Soluciones simples para crecer' },
   { token: 'company.fiscalInfo', label: 'Identificación fiscal', sample: 'RUC J0310000000000' },
   { token: 'company.address', label: 'Dirección', sample: 'Managua, Nicaragua' },
   { token: 'company.phone', label: 'Teléfono', sample: '+505 2255-0000' },
   { token: 'company.email', label: 'Correo', sample: 'contacto@empresa.com' },
-  { token: 'company.summary', label: 'Datos de la sucursal', sample: 'RUC J0310000000000 · Managua, Nicaragua · +505 2255-0000 · contacto@empresa.com' },
+  { token: 'company.website', label: 'Sitio web', sample: 'www.empresa.com' },
+  { token: 'company.summary', label: 'Datos de la sucursal', sample: 'Soluciones simples para crecer · RUC J0310000000000 · Managua, Nicaragua · +505 2255-0000 · contacto@empresa.com · www.empresa.com' },
   { token: 'document.title', label: 'Título del documento', sample: 'COTIZACIÓN' },
   { token: 'document.number', label: 'Número', sample: 'COT-000123' },
   { token: 'document.date', label: 'Fecha', sample: '29/08/2026' },
@@ -220,7 +222,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     { description: 'Servicio adicional', quantity: '1', unitPrice: 'C$ 150.00', total: 'C$ 150.00' },
   ];
   const base: PdfTemplateData = {
-    company: { name: 'NovaHub Comercial', fiscalInfo: 'RUC J0310000000000', address: 'Managua, Nicaragua', phone: '+505 2255-0000', email: 'contacto@empresa.com', logo: '' },
+    company: { name: 'NovaHub Comercial', slogan: 'Soluciones simples para crecer', fiscalInfo: 'RUC J0310000000000', address: 'Managua, Nicaragua', phone: '+505 2255-0000', email: 'contacto@empresa.com', logo: '' },
     document: { title: target.label.toUpperCase(), number: 'DOC-000123', date: '29/08/2026', status: 'Pendiente', notes: 'Notas del documento', terms: 'Vigencia: 15 días' },
     customer,
     supplier,
@@ -667,7 +669,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   const logoNode = node({ type: 'image', label: 'Logotipo', x: 8, y: 7, width: headerLayout === 'ribbon' ? 11 : 16, height: 8, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent' }, 'company-logo');
   const reportHeaderFields = target.module === 'reportes'
     ? [
-      ...headerFields.filter(item => ['company-name', 'document-title'].includes(item.id)),
+      ...headerFields.filter(item => ['company-name', 'company-summary', 'document-title'].includes(item.id)),
       node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 24, width: 84, height: 4, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
     ]
     : headerFields;
@@ -689,7 +691,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     for (let index = 0; index < kpiCount; index += 1) {
       const x = 5 + index * (kpiWidth + 2);
       nodes.push(node({ type: 'section', label: '', text: '', x, y: 30, width: kpiWidth, height: 13, backgroundColor: kpiColors[index], borderColor: kpiColors[index], borderRadius: 3, firstPageOnly: true }, `report-kpi-card-${index}`));
-      nodes.push(node({ type: 'field', label: 'Indicador', token: `reportKpis.${index}.label`, x: x + 1, y: 31, width: kpiWidth - 2, height: 2.4, fontSize: 5.2, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-label-${index}`));
+      nodes.push(node({ type: 'field', label: 'Indicador', token: `reportKpis.${index}.label`, x: x + 1, y: 31, width: kpiWidth - 2, height: 3.2, fontSize: 5.2, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-label-${index}`));
       nodes.push(node({ type: 'field', label: 'Valor', token: `reportKpis.${index}.value`, x: x + 1, y: 34.2, width: kpiWidth - 2, height: 4.5, fontSize: 9, color: '#ffffff', bold: true, align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-value-${index}`));
       nodes.push(node({ type: 'field', label: 'Detalle', token: `reportKpis.${index}.detail`, x: x + 1, y: 39.4, width: kpiWidth - 2, height: 2.6, fontSize: 4.6, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-detail-${index}`));
     }
@@ -849,8 +851,12 @@ function safeReportSectionStyles(value: unknown): Record<string, PdfTemplateRepo
 }
 
 function upgradeReportTemplateNodes(nodes: PdfTemplateNode[], targetKey: string, settings?: Record<string, unknown>) {
-  if (getPdfTemplateTarget(targetKey).module !== 'reportes' || nodes.some(item => item.type === 'report-sections')) return nodes;
+  if (getPdfTemplateTarget(targetKey).module !== 'reportes') return nodes;
   const fallback = createDefaultTemplateDefinition(targetKey, settings);
+  const companySummaryNode = nodes.find(item => item.id === 'company-summary') || fallback.nodes.find(item => item.id === 'company-summary');
+  if (nodes.some(item => item.type === 'report-sections')) {
+    return nodes.some(item => item.id === 'company-summary') || !companySummaryNode ? nodes : [...nodes, companySummaryNode];
+  }
   const reportKpiNodes = fallback.nodes.filter(item => item.id.startsWith('report-kpi-'));
   const reportMetaNode = fallback.nodes.find(item => item.id === 'report-meta');
   const previousTable = nodes.find(item => item.type === 'table');
@@ -873,6 +879,7 @@ function upgradeReportTemplateNodes(nodes: PdfTemplateNode[], targetKey: string,
   return [
     ...nodes.filter(item => item.type !== 'table' && !item.id.startsWith('report-kpi-') && !['company-summary', 'document-number', 'document-status', 'document-date', 'report-meta'].includes(item.id)),
     ...reportKpiNodes,
+    ...(companySummaryNode ? [companySummaryNode] : []),
     reportMetaNode,
     migratedReportNode,
   ];
@@ -932,6 +939,14 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
     // recorta la segunda línea del resumen fiscal aunque el preset nuevo ya
     // tenga dimensiones correctas. Normalizamos solo este nodo semántico;
     // los demás tamaños siguen siendo editables por el usuario.
+    if (/^report-kpi-label-\d+$/.test(sanitizedNode.id)) {
+      return [{
+        ...sanitizedNode,
+        height: Math.max(sanitizedNode.height, 3.2),
+        align: 'center',
+        lineHeight: Math.min(sanitizedNode.lineHeight || 1.25, 1.05),
+      }];
+    }
     if (sanitizedNode.id === 'company-summary') {
       return [{
         ...sanitizedNode,
@@ -1002,7 +1017,7 @@ export function resolveTemplateToken(token: string | undefined, data: PdfTemplat
   if (!token) return fallback;
   if (token === 'company.summary') {
     const company = data.company || {};
-    const summary = [company.fiscalInfo, company.address, company.phone, company.email]
+    const summary = [company.slogan, company.fiscalInfo, company.address, company.phone, company.email, company.website]
       .filter(value => typeof value === 'string' && value.trim())
       .join(' · ');
     return summary || fallback;

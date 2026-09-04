@@ -29,7 +29,7 @@ import {
 } from './financialAnalytics';
 import type { FinancialData, BreakEvenConfig, BreakEvenResult, CostBehavior } from './financialAnalytics';
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -508,8 +508,8 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const doc = new jsPDF(pdfDesignPaper(pdfSettings));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
-        const logoUrl = themeConfig.logo || '';
+        const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || user?.tenantName || 'Mi Empresa');
+        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') 
@@ -551,6 +551,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
         doc.text(`Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}  |  Período: ${rangeLabel}`, pageWidth / 2, currentY, { align: 'center' });
         currentY += 5;
+        currentY = drawReportBrandMeta({ doc, settings: pdfSettings, pageWidth, contentWidth, currentY });
 
         doc.setDrawColor(rgbPrimary[0], rgbPrimary[1], rgbPrimary[2]);
         doc.setLineWidth(0.8);
@@ -565,44 +566,13 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
           { label: 'COBERTURA DE PAGOS', value: cobertura === null ? 'N/D' : `${cobertura.toFixed(1)}%`, detail: cobertura === null ? 'Sin pagos en el período' : cobertura >= 100 ? 'Excedente' : 'Déficit', color: cobertura === null ? [148, 163, 184] : cobertura >= 100 ? [16, 185, 129] : [244, 63, 94] },
         ];
 
-        const cols = 5;
-        const boxW = (contentWidth - (cols - 1) * 4) / cols;
         const boxH = 24;
         checkPage(boxH + 5);
-        kpis.forEach((kpi, idx) => {
-          const x = marginX + idx * (boxW + 4);
-          doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
-          doc.roundedRect(x, currentY, boxW, boxH, 3, 3, 'F');
-          doc.setFontSize(7);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(255, 255, 255);
-          doc.text(kpi.label, x + boxW / 2, currentY + 6, { align: 'center' });
-          doc.setFontSize(10);
-          doc.text(kpi.value, x + boxW / 2, currentY + 13, { align: 'center' });
-          doc.setFontSize(6);
-          doc.setFont('helvetica', 'normal');
-          doc.text(kpi.detail, x + boxW / 2, currentY + 20, { align: 'center' });
-        });
-        currentY += boxH + 10;
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 5, boxHeight: boxH, labelFontSize: 7, valueFontSize: 10, detailFontSize: 6 });
 
         const renderTable = (title: string, header: string[], rows: (string | number)[][], color: number[]) => {
           reportSections.push({ title, headers: header, rows });
-          checkPage(rows.length * 6 + 30);
-          doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
-          doc.text(title, marginX, currentY); currentY += 7;
-          doc.setFillColor(color[0], color[1], color[2]);
-          doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
-          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
-          header.forEach((h, i) => doc.text(h, marginX + 3 + i * (contentWidth / header.length), currentY + 5.5));
-          currentY += 10;
-          rows.forEach((r, i) => {
-            checkPage(8);
-            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
-            doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
-            r.forEach((cell, ci) => doc.text(String(cell).substring(0, 28), marginX + 3 + ci * (contentWidth / header.length), currentY + 4));
-            currentY += 7;
-          });
-          currentY += 8;
+          currentY = drawReportTable({ doc, title, headers: header, rows, color, marginX, contentWidth, currentY });
         };
 
         const fmt = (v: number) => formatConvertedAmount(Number(v || 0), 'NIO');

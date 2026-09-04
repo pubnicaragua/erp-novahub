@@ -677,17 +677,18 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       {isOpening && <span role="status" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary" title="Abriendo detalle">
                         <Loader2 className="size-3 animate-spin" /> <span className="hidden 2xl:inline">Abriendo…</span>
                       </span>}
-                      {actions ? actions(row) : (
-                        onRowDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
-                            onClick={() => setConfirmDeleteId(rowId)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        )
+                      {actions?.(row)}
+                      {onRowDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Eliminar registro"
+                          aria-label="Eliminar registro"
+                          className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
+                          onClick={() => setConfirmDeleteId(rowId)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
                       )}
                     </div>
                   </TableCell>
@@ -834,7 +835,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               </div>
               {(actions || onRowDelete) && (
                 <div data-action-group="true" className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-muted/10 p-3">
-                  {actions ? actions(row) : (
+                  {actions?.(row)}
+                  {onRowDelete && (
                     <Button
                       type="button"
                       variant="destructive"
@@ -891,7 +893,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           </DialogHeader>
           <div className="flex flex-col gap-2 p-4" onClick={() => setMobileActionsRow(null)}>
             {mobileActionsRow && actions?.(mobileActionsRow)}
-            {mobileActionsRow && !actions && onRowDelete && (
+            {mobileActionsRow && onRowDelete && (
               <Button
                 type="button"
                 variant="destructive"

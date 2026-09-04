@@ -18,7 +18,7 @@ import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Warehouse, T
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
@@ -669,7 +669,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const doc = new jsPDF(pdfDesignPaper(pdfSettings));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        const companyName = themeConfig.tenantName || 'Mi Empresa';
+        const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
+        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -687,8 +688,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           }
         };
 
-        if (themeConfig.logo) {
-          const logoBase64 = await getBase64Image(themeConfig.logo);
+        if (logoUrl) {
+          const logoBase64 = await getBase64Image(logoUrl);
           if (logoBase64) {
             doc.addImage(logoBase64, 'PNG', (pageWidth - 30) / 2, currentY, 30, 30, undefined, 'FAST');
             currentY += 35;
@@ -712,6 +713,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         doc.setTextColor(120, 120, 120);
         doc.text(`${cutoffText(cutoffDate ?? new Date())}  |  Período: ${rangeLabel}  |  Moneda: ${displayCurrency}`, pageWidth / 2, currentY, { align: 'center' });
         currentY += 5;
+        currentY = drawReportBrandMeta({ doc, settings: pdfSettings, pageWidth, contentWidth, currentY });
 
         doc.setDrawColor(rgbPrimary[0] as any, rgbPrimary[1] as any, rgbPrimary[2] as any);
         doc.setLineWidth(0.8);
@@ -726,41 +728,13 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           { label: 'VALOR POTENCIAL A PRECIO DE VENTA', value: formatConvertedAmount(potential.totalSaleValue, 'NIO'), detail: 'No representa ingreso ni utilidad', color: [245, 158, 11] }
         ];
 
-        const cols = 4;
-        const boxW = (contentWidth - (cols - 1) * 4) / cols;
         const boxH = 22;
         checkPage(boxH + 5);
-        kpis.forEach((kpi, idx) => {
-          const x = marginX + idx * (boxW + 4);
-          doc.setFillColor(kpi.color[0] as any, kpi.color[1] as any, kpi.color[2] as any);
-          doc.roundedRect(x, currentY, boxW, boxH, 3, 3, 'F');
-          doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
-          doc.text(kpi.label, x + boxW / 2, currentY + 6, { align: 'center' });
-          doc.setFontSize(12); doc.text(kpi.value, x + boxW / 2, currentY + 13, { align: 'center' });
-          doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-          doc.text(kpi.detail, x + boxW / 2, currentY + 18.5, { align: 'center' });
-        });
-        currentY += boxH + 10;
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5 });
 
         const renderTable = (title: string, headers: string[], rows: any[][], accent: [number, number, number]) => {
           reportSections.push({ title, headers, rows });
-          checkPage(rows.length * 7 + 30);
-          doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
-          doc.text(title, marginX, currentY); currentY += 7;
-          doc.setFillColor(accent[0], accent[1], accent[2]);
-          doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
-          doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
-          const colW = contentWidth / headers.length;
-          headers.forEach((h, i) => doc.text(h, marginX + i * colW + 2, currentY + 5.5));
-          currentY += 10;
-          rows.forEach((row, ri) => {
-            checkPage(8);
-            if (ri % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
-            doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
-            row.forEach((cell, ci) => doc.text(String(cell), marginX + ci * colW + 2, currentY + 4));
-            currentY += 7;
-          });
-          currentY += 10;
+          currentY = drawReportTable({ doc, title, headers, rows, color: accent, marginX, contentWidth, currentY });
         };
 
         renderTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name.substring(0, 32), fmtQty(p.qty), formatConvertedAmount(p.costPrice, 'NIO'), formatConvertedAmount(p.value, 'NIO'), `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]), [16, 185, 129]);
@@ -849,7 +823,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         }), [244, 63, 94]);
 
         const configured = await generateConfiguredReportSectionsPDF({
-          targetKey: 'reportes.inventory', title: 'Reporte de Inventario', tenantName: companyName, tenantLogo: themeConfig.logo,
+          targetKey: 'reportes.inventory', title: 'Reporte de Inventario', tenantName: companyName, tenantLogo: logoUrl,
           sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange), periodLabel: rangeLabel,
         });
         if (configured) { toast.success("PDF generado exitosamente"); return; }
