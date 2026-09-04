@@ -223,8 +223,11 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
 
 function extractServerMessages(errorBody: ApiErrorBody | null) {
   if (!errorBody) return [];
+  const nestedMessage = errorBody.message && typeof errorBody.message === 'object' && !Array.isArray(errorBody.message)
+    ? (errorBody.message as any)
+    : null;
   return [
-    ...asTextList(typeof errorBody.message === 'object' ? (errorBody.message as any)?.message || (errorBody.message as any)?.error : errorBody.message),
+    ...asTextList(Array.isArray(errorBody.message) ? errorBody.message : nestedMessage?.message || nestedMessage?.error || errorBody.message),
     ...asTextList(errorBody.details),
     ...asTextList(errorBody.error),
   ];
@@ -300,22 +303,28 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
       throw err;
     }
 
-    // Un 401 genérico con token presente significa que el token expiró o fue
-    // revocado. No dejar la interfaz "operativa": se limpia el token y se fuerza
-    // la expulsión a login. Se excluyen las rutas de arranque/login donde un 401
-    // es un flujo normal (credenciales incorrectas o perfil aún sin restaurar).
+    // Un 401 en una ruta protegida significa que la sesión ya no es válida,
+    // aunque el navegador todavía conserve la pantalla anterior. No dejar la
+    // interfaz "operativa" ni confundirlo con un 403 de permisos.
     const authFlowPath =
       path === '/auth/login' ||
       path === '/auth/register' ||
-      path === '/auth/register-tenant' ||
-      path === '/auth/session-status' ||
-      path === '/auth/me/branches' ||
-      path === '/auth/switch-context';
-    if (response.status === 401 && !authFlowPath && localStorage.getItem('nh-auth-token')) {
+      path === '/auth/register-tenant';
+    if (response.status === 401 && !authFlowPath) {
       localStorage.removeItem('nh-auth-token');
-      const err = new Error('Tu sesión expiró. Inicia sesión nuevamente.');
+      const authMessages = extractServerMessages(errorBody);
+      const backendMessage = authMessages.find(Boolean)?.trim() || '';
+      const isTechnicalAuthMessage = /no autorizado para acceder a nova hub|unauthorized|jwt expired|jwt malformed|invalid token|invalid signature/i.test(backendMessage);
+      const message = backendMessage && !isTechnicalAuthMessage
+        ? backendMessage
+        : 'Tu sesión expiró o no es válida. Inicia sesión nuevamente.';
+      const sessionCode = errorBody?.error === 'SESSION_EXPIRED' ||
+        (errorBody?.message && typeof errorBody.message === 'object' && (errorBody.message as any)?.error === 'SESSION_EXPIRED')
+        ? 'SESSION_EXPIRED'
+        : 'SESSION_INVALID';
+      const err = new Error(message);
       err.name = 'SessionClosedError';
-      window.dispatchEvent(new CustomEvent('session-closed', { detail: { code: 'SESSION_CLOSED' } }));
+      window.dispatchEvent(new CustomEvent('session-closed', { detail: { code: sessionCode, message } }));
       throw err;
     }
 

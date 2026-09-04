@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Download, FileSpreadsheet, ImageIcon, Info, Loader2, PackagePlus, Plus, RefreshCw, Upload, Warehouse } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, Download, FileSpreadsheet, ImageIcon, Info, Loader2, PackagePlus, Plus, RefreshCw, Upload, Warehouse } from 'lucide-react';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import {
   enterpriseGroupsService,
@@ -33,6 +33,23 @@ type Props = {
   businessUnits: BusinessUnitOption[];
   onImported: () => void;
 };
+
+type ManagerImportPreviewEntry =
+  | {
+      kind: 'parent';
+      key: string;
+      parentCode: string;
+      parentName: string;
+      rowIndices: number[];
+      variantKeys: string[];
+      totalStock: number;
+    }
+  | {
+      kind: 'row';
+      key: string;
+      rowIndex: number;
+      parentKey?: string;
+    };
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
@@ -66,6 +83,22 @@ const parseImportNumber = (value: unknown) => {
   const normalized = String(value).trim().replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const parseVariantAttributes = (value: unknown): Array<{ attributeName: string; value: string }> => {
+  let parsed: unknown = value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      parsed = value.split(/[;,|]/).map((item) => ({ value: item.trim() })).filter((item) => item.value);
+    }
+  }
+  const items = Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? [parsed] : [];
+  return items.map((item: any) => ({
+    attributeName: String(item?.attributeName || item?.name || item?.attribute || '').trim(),
+    value: String(item?.value || item?.option || '').trim(),
+  })).filter((item) => item.attributeName || item.value);
 };
 
 const findHeaderRow = (matrix: unknown[][]) => {
@@ -610,6 +643,7 @@ function PreviewPanel({
 }) {
   const tableScrollerRef = useRef<HTMLDivElement>(null);
   const [tableScroll, setTableScroll] = useState({ canScrollLeft: false, canScrollRight: false });
+  const [collapsedParentKeys, setCollapsedParentKeys] = useState<Set<string>>(() => new Set());
   const hasErrors = preview.errors.length > 0;
   const locationOptions = Array.from(new Map(preview.locations.map((location) => {
     const label = displayLocationLabel(location);
@@ -620,6 +654,54 @@ function PreviewPanel({
   const valueFor = (row: ManagerInventoryImportPreview['rows'][number], field: string, fallback: unknown = '') => {
     const value = draftFor(row)?.[field];
     return value === undefined || value === null ? fallback : value;
+  };
+  const previewEntries = useMemo<ManagerImportPreviewEntry[]>(() => {
+    const entries: ManagerImportPreviewEntry[] = [];
+    const parents = new Map<string, Extract<ManagerImportPreviewEntry, { kind: 'parent' }>>();
+    preview.rows.forEach((row, rowIndex) => {
+      const parentCode = String(valueFor(row, 'code', row.code) || row.code || '').trim();
+      const sourceRow = row as any;
+      const variantSku = String(valueFor(row, 'variantSku', sourceRow.variantSku || '') || '').trim();
+      const attributes = parseVariantAttributes(valueFor(row, 'variantAttributes', sourceRow.variantAttributes || []));
+      const hasVariant = Boolean((variantSku && normalizeImportKey(variantSku) !== normalizeImportKey(parentCode)) || attributes.length > 0 || String(valueFor(row, 'variantName', sourceRow.variantName || '') || '').trim());
+      if (!hasVariant) {
+        entries.push({ kind: 'row', key: `row:${rowIndex}`, rowIndex });
+        return;
+      }
+      const parentKey = `parent:${normalizeImportKey(parentCode || row.name || rowIndex)}`;
+      let parent = parents.get(parentKey);
+      if (!parent) {
+        parent = { kind: 'parent', key: parentKey, parentCode, parentName: String(valueFor(row, 'name', row.name) || row.name || 'Producto padre').trim(), rowIndices: [], variantKeys: [], totalStock: 0 };
+        parents.set(parentKey, parent);
+        entries.push(parent);
+      }
+      parent.rowIndices.push(rowIndex);
+      if (variantSku && !parent.variantKeys.some((key) => normalizeImportKey(key) === normalizeImportKey(variantSku))) parent.variantKeys.push(variantSku);
+      parent.totalStock += Math.max(0, Number(valueFor(row, 'stock', row.stock) || 0));
+    });
+    return entries;
+  }, [draftRows, preview.rows]);
+  const groupedParents = previewEntries.filter((entry): entry is Extract<ManagerImportPreviewEntry, { kind: 'parent' }> => entry.kind === 'parent');
+  const visiblePreviewEntries = useMemo(() => previewEntries.flatMap((entry) => {
+    if (entry.kind === 'row') return [entry];
+    if (collapsedParentKeys.has(entry.key)) return [entry];
+    return [entry, ...entry.rowIndices.map((rowIndex) => ({ kind: 'row' as const, key: `${entry.key}:row:${rowIndex}`, rowIndex, parentKey: entry.key }))];
+  }), [collapsedParentKeys, previewEntries]);
+  const allParentsExpanded = groupedParents.length > 0 && groupedParents.every((entry) => !collapsedParentKeys.has(entry.key));
+  const allParentsCollapsed = groupedParents.length > 0 && groupedParents.every((entry) => collapsedParentKeys.has(entry.key));
+  const variantCount = groupedParents.reduce((sum, entry) => sum + entry.variantKeys.length, 0);
+
+  const toggleParent = (key: string) => {
+    setCollapsedParentKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const setAllParentsExpanded = (expanded: boolean) => {
+    setCollapsedParentKeys(expanded ? new Set() : new Set(groupedParents.map((entry) => entry.key)));
   };
   const imageCodesInPreview = new Set(
     preview.rows
@@ -704,13 +786,28 @@ function PreviewPanel({
       {row.issues.length ? 'Error' : statusLabels[row.status] || row.status}
     </Badge>
   );
-  const renderDesktopRow = (index: number) => {
+  const renderDesktopParent = (entry: Extract<ManagerImportPreviewEntry, { kind: 'parent' }>) => {
+    const expanded = !collapsedParentKeys.has(entry.key);
+    return <div className="h-[76px] min-h-[76px] min-w-[2340px] border-t border-t-primary/20 border-b-2 border-b-background bg-primary/5 px-4 py-3">
+      <button type="button" className="flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-expanded={expanded} aria-label={`${expanded ? 'Contraer' : 'Expandir'} producto padre ${entry.parentName}`} onClick={() => toggleParent(entry.key)}>
+        <ChevronRight className={`size-5 shrink-0 text-primary transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" />
+        <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Producto padre</span><span className="break-words font-mono text-xs font-bold">{entry.parentCode || 'Sin código'}</span><Badge variant="outline" className="border-primary/25 bg-background text-[10px] font-black text-primary">{entry.variantKeys.length} variantes</Badge><span className="text-[10px] font-bold text-muted-foreground">{entry.rowIndices.length} distribución(es) · {formatNumber(entry.totalStock)} uds.</span></span><span className="mt-1 block break-words text-sm font-black">{entry.parentName}</span></span>
+        <span className="shrink-0 text-[10px] font-bold text-primary">{expanded ? 'Contraer' : 'Expandir'}</span>
+      </button>
+    </div>;
+  };
+
+  const renderDesktopRow = (index: number, nested = false) => {
     const row = preview.rows[index];
     const category = String(valueFor(row, 'category', '') || '');
-    return <div className="grid min-w-[2340px] grid-cols-[3.5rem_8rem_9rem_14rem_11rem_7rem_8rem_14rem_7rem_7rem_8rem_7rem_7rem_15rem_20rem] items-start border-t border-border/50 align-top text-xs">
+    const sourceRow = row as any;
+    const variantSku = String(valueFor(row, 'variantSku', sourceRow.variantSku || '') || '').trim();
+    const variantName = String(valueFor(row, 'variantName', sourceRow.variantName || '') || '').trim();
+    const attributes = parseVariantAttributes(valueFor(row, 'variantAttributes', sourceRow.variantAttributes || []));
+    return <div className={`grid min-w-[2340px] grid-cols-[3.5rem_8rem_9rem_14rem_11rem_7rem_8rem_14rem_7rem_7rem_8rem_7rem_7rem_15rem_20rem] items-start border-t align-top text-xs ${nested ? 'border-primary/15 border-l-4 bg-primary/[0.025] pl-2' : 'border-border/50'}`}>
       <div className="px-2 py-2 text-muted-foreground">{row.rowNumber}</div>
       <div className="p-1"><Input value={String(valueFor(row, 'code', row.code) || '')} onChange={(event) => onRowUpdate(row, 'code', event.target.value)} className={`${inputClass} font-mono`} /></div>
-      <div className="p-1"><Input value={String(valueFor(row, 'variantSku', row.variantSku || '') || '')} onChange={(event) => onRowUpdate(row, 'variantSku', event.target.value)} className={`${inputClass} font-mono`} /></div>
+      <div className="p-1"><Input value={variantSku} onChange={(event) => onRowUpdate(row, 'variantSku', event.target.value)} className={`${inputClass} font-mono`} />{(variantName || attributes.length > 0) && <div className="mt-1 flex min-w-0 flex-wrap gap-1">{variantName && <span className="text-[10px] font-bold text-primary">{variantName}</span>}{attributes.map((attribute) => <Badge key={`${attribute.attributeName}-${attribute.value}`} variant="secondary" className="max-w-full break-words text-[9px]">{attribute.attributeName}: {attribute.value}</Badge>)}</div>}</div>
       <div className="p-1"><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></div>
       <div className="p-1"><div className="flex min-w-0 items-center gap-1"><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={`${inputClass} ${categoryIsNew(row) ? 'border-amber-500/60' : ''}`} />{categoryIsNew(row) && <Button type="button" variant="ghost" size="icon" className={`size-8 shrink-0 rounded-lg ${categoryIsPrepared(row) ? 'text-emerald-600' : 'text-amber-600'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-4" /> : <Plus className="size-4" />}</Button>}</div></div>
       <div className="p-1"><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></div>
@@ -725,11 +822,25 @@ function PreviewPanel({
       <div className="w-80 px-2 py-2"><div className="min-w-0">{renderStatus(row)}</div><p className={`mt-1 break-words whitespace-normal ${row.issues.length ? 'text-destructive' : 'text-muted-foreground'}`}>{row.issues.join(' · ') || 'Sin observaciones'}</p></div>
     </div>;
   };
-  const renderMobileRow = (index: number) => {
+  const renderMobileParent = (entry: Extract<ManagerImportPreviewEntry, { kind: 'parent' }>) => {
+    const expanded = !collapsedParentKeys.has(entry.key);
+    return <article className="mb-2 min-w-0 rounded-2xl border-2 border-primary/25 bg-primary/5 p-3 pb-3 shadow-sm">
+      <button type="button" className="flex w-full min-w-0 items-start gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-expanded={expanded} aria-label={`${expanded ? 'Contraer' : 'Expandir'} producto padre ${entry.parentName}`} onClick={() => toggleParent(entry.key)}>
+        <ChevronRight className={`mt-0.5 size-5 shrink-0 text-primary transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" />
+        <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="text-[9px] font-black uppercase tracking-[0.16em] text-primary">Producto padre</span><Badge variant="outline" className="border-primary/25 bg-background text-[9px] font-black text-primary">{entry.variantKeys.length} variantes</Badge></span><span className="mt-1 block break-words text-sm font-black">{entry.parentName}</span><span className="mt-1 block break-words font-mono text-[10px] text-muted-foreground">{entry.parentCode || 'Sin código'} · {entry.rowIndices.length} distribución(es) · {formatNumber(entry.totalStock)} uds.</span></span>
+        <span className="shrink-0 text-[10px] font-bold text-primary">{expanded ? 'Contraer' : 'Expandir'}</span>
+      </button>
+    </article>;
+  };
+  const renderMobileRow = (index: number, nested = false) => {
     const row = preview.rows[index];
     const category = String(valueFor(row, 'category', '') || '');
-    return <div className={`rounded-2xl border bg-card p-3 shadow-sm ${row.issues.length ? 'border-destructive/40 bg-destructive/[0.03]' : 'border-border/60'}`}>
-      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-sm font-black">{String(valueFor(row, 'code', row.code) || 'Sin código')}</p><p className="text-xs text-muted-foreground">SKU variante: {String(valueFor(row, 'variantSku', row.variantSku || '') || '—')} · Fila {row.rowNumber} · {row.locationLabel || 'Destino por resolver'}</p></div>{renderStatus(row)}</div>
+    const sourceRow = row as any;
+    const variantSku = String(valueFor(row, 'variantSku', sourceRow.variantSku || '') || '').trim();
+    const variantName = String(valueFor(row, 'variantName', sourceRow.variantName || '') || '').trim();
+    const attributes = parseVariantAttributes(valueFor(row, 'variantAttributes', sourceRow.variantAttributes || []));
+    return <div className={`rounded-2xl border bg-card p-3 shadow-sm ${nested ? 'ml-2 border-l-4 border-primary/25' : ''} ${row.issues.length ? 'border-destructive/40 bg-destructive/[0.03]' : 'border-border/60'}`}>
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-sm font-black">{String(valueFor(row, 'code', row.code) || 'Sin código')}</p><p className="break-words text-xs text-muted-foreground">SKU variante: {variantSku || '—'} · Fila {row.rowNumber} · {row.locationLabel || 'Destino por resolver'}</p>{variantName && <p className="mt-1 text-[10px] font-bold text-primary">{variantName}</p>}{attributes.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{attributes.map((attribute) => <Badge key={`${attribute.attributeName}-${attribute.value}`} variant="secondary" className="text-[9px]">{attribute.attributeName}: {attribute.value}</Badge>)}</div>}</div>{renderStatus(row)}</div>
       <div className="mt-2">{renderImageStatus(row)}</div>
       <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">SKU variante</span><Input value={String(valueFor(row, 'variantSku', row.variantSku || '') || '')} onChange={(event) => onRowUpdate(row, 'variantSku', event.target.value)} className={`${inputClass} font-mono`} /></label>
@@ -769,6 +880,14 @@ function PreviewPanel({
       <Summary label={`Valor ${preview.currency}`} value={preview.summary.value} />
     </div>
 
+    {groupedParents.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs">
+      <p className="min-w-0 flex-1 text-muted-foreground"><span className="font-black text-foreground">Catálogo agrupado:</span> {groupedParents.length} producto(s) padre · {variantCount} variante(s) · {preview.rows.length} distribución(es). Los atributos se conservan por SKU variante.</p>
+      <div className="flex shrink-0 gap-2">
+        <Button type="button" variant="outline" size="sm" className="h-8 text-[11px]" onClick={() => setAllParentsExpanded(true)} disabled={allParentsExpanded}>Expandir todos</Button>
+        <Button type="button" variant="outline" size="sm" className="h-8 text-[11px]" onClick={() => setAllParentsExpanded(false)} disabled={allParentsCollapsed}>Contraer todos</Button>
+      </div>
+    </div>}
+
     <div className="flex min-w-0 items-start gap-3 rounded-xl border border-primary/20 bg-primary/[0.05] p-3 text-xs">
       <ImageIcon className="mt-0.5 size-4 shrink-0 text-primary" />
       <div className="min-w-0">
@@ -806,13 +925,13 @@ function PreviewPanel({
         </thead>
         <tbody />
       </table>
-      <VirtualizedImportList count={preview.rows.length} estimateSize={86} className="h-[min(60vh,42rem)] min-w-[2340px]" renderItem={renderDesktopRow} />
+      <VirtualizedImportList count={visiblePreviewEntries.length} estimateSize={104} className="h-[min(60vh,42rem)] min-w-[2340px]" renderItem={(entryIndex) => { const entry = visiblePreviewEntries[entryIndex]; return entry.kind === 'parent' ? renderDesktopParent(entry) : renderDesktopRow(entry.rowIndex, Boolean(entry.parentKey)); }} />
       <p className="px-3 py-2 text-xs text-muted-foreground">Mostrando las {preview.rows.length} filas; solo se dibujan las visibles para mantener fluida la previsualización.</p>
     </div>
 
     <datalist id="manager-import-categories">{categoryOptions.map((category) => <option key={category.id} value={category.name} />)}</datalist>
     <div className="min-w-0 max-w-full lg:hidden">
-      <VirtualizedImportList count={preview.rows.length} estimateSize={430} className="h-[min(70vh,48rem)] min-w-0 max-w-full space-y-3" renderItem={renderMobileRow} />
+      <VirtualizedImportList count={visiblePreviewEntries.length} estimateSize={430} className="h-[min(70vh,48rem)] min-w-0 max-w-full space-y-3" renderItem={(entryIndex) => { const entry = visiblePreviewEntries[entryIndex]; return entry.kind === 'parent' ? renderMobileParent(entry) : renderMobileRow(entry.rowIndex, Boolean(entry.parentKey)); }} />
       <p className="text-xs text-muted-foreground">Mostrando las {preview.rows.length} filas; solo se dibujan las visibles para mantener fluida la previsualización.</p>
     </div>
   </div>;

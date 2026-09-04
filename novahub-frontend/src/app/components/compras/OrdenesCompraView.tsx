@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, Pencil, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
+  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, ChevronRight, Pencil, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent } from '../ui/card';
@@ -103,8 +103,26 @@ type PurchaseImportRow = {
   _warningMessage?: string;
   _skuStatus?: 'found' | 'missing' | 'duplicate';
   _skuMessage?: string;
+  variantLabel?: string;
+  parentProductCode?: string;
   _advanced?: boolean;
 };
+
+type PurchaseImportPreviewEntry =
+  | {
+      kind: 'parent';
+      key: string;
+      parentCode: string;
+      parentName: string;
+      variantIndices: number[];
+      totalQuantity: number;
+    }
+  | {
+      kind: 'row';
+      key: string;
+      rowIndex: number;
+      parentKey?: string;
+    };
 
 type ImportCatalogOption = {
   id?: string;
@@ -161,6 +179,12 @@ const FALLBACK_IMPORT_WITHHOLDING_OPTIONS: ImportCatalogOption[] = [
   { code: 'IVA_RET_5', name: 'IVA retención 5%', rate: 5 },
 ];
 
+const FALLBACK_PURCHASE_PRICE_LISTS = [
+  { code: 'RETAIL', name: 'Minorista' },
+  { code: 'WHOLESALE', name: 'Mayorista' },
+  { code: 'DISTRIBUTOR', name: 'Distribuidor' },
+];
+
 interface PurchaseImportPreviewProps {
   rows: PurchaseImportRow[];
   fileName: string;
@@ -199,8 +223,77 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
   const [creatingCategory, setCreatingCategory] = useState(false);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
-  const gridTemplate = '32px 144px 300px 250px 180px 160px 96px 112px 128px 160px 112px 96px 112px 160px 112px 96px 128px';
-  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 72, { overscan: 2 });
+  const [collapsedParentKeys, setCollapsedParentKeys] = useState<Set<string>>(() => new Set());
+  const gridTemplate = '32px 220px 300px 250px 180px 160px 96px 112px 128px 160px 112px 96px 112px 160px 112px 96px 128px';
+  const previewEntries = useMemo<PurchaseImportPreviewEntry[]>(() => {
+    const entries: PurchaseImportPreviewEntry[] = [];
+    const parentEntries = new Map<string, Extract<PurchaseImportPreviewEntry, { kind: 'parent' }>>();
+
+    rows.forEach((row, rowIndex) => {
+      const parentCode = String(row.parentProductCode || '').trim();
+      const variantLabel = String(row.variantLabel || '').trim();
+      if (!row._advanced || !variantLabel) {
+        entries.push({ kind: 'row', key: `row:${rowIndex}`, rowIndex });
+        return;
+      }
+
+      const suffix = ` · ${variantLabel}`;
+      const parentName = String(row.description || '').endsWith(suffix)
+        ? String(row.description || '').slice(0, -suffix.length).trim()
+        : String(row.description || '').trim() || parentCode || 'Producto padre';
+      const groupKey = `parent:${(parentCode || parentName).toLowerCase()}`;
+      let parent = parentEntries.get(groupKey);
+      if (!parent) {
+        parent = {
+          kind: 'parent',
+          key: groupKey,
+          parentCode,
+          parentName,
+          variantIndices: [],
+          totalQuantity: 0,
+        };
+        parentEntries.set(groupKey, parent);
+        entries.push(parent);
+      }
+      parent.variantIndices.push(rowIndex);
+      parent.totalQuantity += Math.max(0, Number(row.quantity) || 0);
+    });
+
+    return entries;
+  }, [rows]);
+  const groupedParents = previewEntries.filter((entry): entry is Extract<PurchaseImportPreviewEntry, { kind: 'parent' }> => entry.kind === 'parent');
+  const visiblePreviewEntries = useMemo(() => previewEntries.flatMap((entry) => {
+    if (entry.kind === 'row') return [entry];
+    if (collapsedParentKeys.has(entry.key)) return [entry];
+    return [entry, ...entry.variantIndices.map((rowIndex) => ({
+      kind: 'row' as const,
+      key: `${entry.key}:row:${rowIndex}`,
+      rowIndex,
+      parentKey: entry.key,
+    }))];
+  }), [collapsedParentKeys, previewEntries]);
+  const hasGroupedVariants = groupedParents.length > 0;
+  const allParentsExpanded = hasGroupedVariants && groupedParents.every((entry) => !collapsedParentKeys.has(entry.key));
+  const allParentsCollapsed = hasGroupedVariants && groupedParents.every((entry) => collapsedParentKeys.has(entry.key));
+  const tableVirtualizer = useVirtualizedImportRows(visiblePreviewEntries.length, tableScrollRef, 78, { overscan: 2 });
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => tableVirtualizer.measure());
+    return () => window.cancelAnimationFrame(frame);
+  }, [tableVirtualizer, visiblePreviewEntries]);
+
+  const toggleParent = (key: string) => {
+    setCollapsedParentKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const setAllParentsExpanded = (expanded: boolean) => {
+    setCollapsedParentKeys(expanded ? new Set() : new Set(groupedParents.map((entry) => entry.key)));
+  };
 
   const openCategoryDialog = (index: number, initialName: string) => {
     setCategoryRowIndex(index);
@@ -233,6 +326,34 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
     }
   };
 
+  const renderMobileParent = (entry: Extract<PurchaseImportPreviewEntry, { kind: 'parent' }>) => {
+    const expanded = !collapsedParentKeys.has(entry.key);
+    return (
+      <article className="mb-2 min-w-0 rounded-2xl border-2 border-primary/25 bg-primary/5 p-3 pb-4 shadow-sm">
+        <button
+          type="button"
+          className="flex w-full min-w-0 items-start gap-3 text-left"
+          aria-expanded={expanded}
+          aria-label={`${expanded ? 'Contraer' : 'Expandir'} producto padre ${entry.parentName}`}
+          onClick={() => toggleParent(entry.key)}
+          disabled={importing}
+        >
+          <ChevronRight className={cn('mt-0.5 size-5 shrink-0 text-primary transition-transform', expanded && 'rotate-90')} aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-primary">Producto padre</span>
+              <Badge variant="outline" className="border-primary/25 bg-background text-[9px] font-black text-primary">{entry.variantIndices.length} variantes</Badge>
+            </span>
+            <span className="mt-1 block break-words text-sm font-black text-foreground">{entry.parentName}</span>
+            <span className="mt-1 block break-words font-mono text-[10px] text-muted-foreground">{entry.parentCode || 'Código padre no indicado'} · {entry.totalQuantity} unidades solicitadas</span>
+          </span>
+          <span className="shrink-0 text-[10px] font-bold text-primary">{expanded ? 'Contraer' : 'Expandir'}</span>
+        </button>
+        {expanded && <p className="mt-3 border-t border-primary/15 pt-3 pl-8 text-[11px] text-muted-foreground">Las variantes de este producto se muestran debajo como líneas de compra. El padre solo organiza la vista y no se agregará como una línea adicional.</p>}
+      </article>
+    );
+  };
+
   const renderMobileCard = (row: PurchaseImportRow, index: number) => {
     const tax = calcItemTax(row);
     const withholding = calcItemWithholding(row);
@@ -241,10 +362,10 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
     const matchingCategory = categoryOptions.find((category: any) => String(category.id) === String(row.categoryId)) || categoryOptions.find((category: any) => String(category.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase());
     const categoryValue = row.categoryId || matchingCategory?.id || '__none__';
     const skuLinked = row._skuStatus === 'found' && row.skuResolution !== 'MANUAL';
-    return (
+    const card = (
       <ImportPreviewMobileCard index={index} title={row.description || row.sku} error={row._hasError ? row._errorMessage || row._skuMessage || 'Fila con errores' : undefined} warning={row._hasWarning ? row._warningMessage || 'Revisar fila' : undefined}>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <ImportPreviewField label="SKU"><Input value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`${importPreviewFieldClass} font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="SKU / variante"><div className="space-y-1"><Input title={row.sku} value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`${importPreviewFieldClass} font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} disabled={importing} />{row.variantLabel && <p className="break-words text-[10px] font-bold leading-4 text-primary" title={`Producto padre: ${row.parentProductCode || '—'}`}>Variante: {row.variantLabel}</p>}</div></ImportPreviewField>
           <ImportPreviewField label="Stock actual"><div className="flex h-9 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-black text-primary">{row.currentStock ?? '—'}</div></ImportPreviewField>
           <ImportPreviewField label="Aviso / vínculo" className="sm:col-span-2"><div className="space-y-2"><p className={`break-words text-xs ${row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}`}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</p>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo</option></select>}</div></ImportPreviewField>
           <ImportPreviewField label="Descripción *" className="sm:col-span-2"><Input value={row.description} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={`${importPreviewFieldClass} ${!row.description ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
@@ -263,6 +384,9 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         </div>
       </ImportPreviewMobileCard>
     );
+    return row.variantLabel
+      ? <div className="ml-2 min-w-0 border-l-2 border-primary/25 pl-3"><p className="mb-2 break-words text-[10px] font-black uppercase tracking-[0.12em] text-primary">Variante de {row.parentProductCode || 'producto padre'}</p>{card}</div>
+      : card;
   };
 
   return (
@@ -307,15 +431,25 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           </Button>
         </div>
 
-        <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="productos" />
+        <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel={hasGroupedVariants ? 'variantes (líneas)' : 'productos'} />
+
+        {hasGroupedVariants && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs">
+            <p className="min-w-0 flex-1 text-muted-foreground"><span className="font-black text-foreground">Catálogo agrupado:</span> {groupedParents.length} producto(s) padre · {rows.filter((row) => row._advanced && row.variantLabel).length} variante(s). El padre es informativo; solo sus variantes se agregarán a la orden.</p>
+            <div className="flex shrink-0 gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-8 text-[11px]" onClick={() => setAllParentsExpanded(true)} disabled={importing || allParentsExpanded}>Expandir todos</Button>
+              <Button type="button" variant="outline" size="sm" className="h-8 text-[11px]" onClick={() => setAllParentsExpanded(false)} disabled={importing || allParentsCollapsed}>Contraer todos</Button>
+            </div>
+          </div>
+        )}
 
         <div className="hidden min-h-0 min-w-0 flex-1 sm:flex">
-        <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="h-[clamp(500px,65vh,760px)] min-h-[500px] min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
+        <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
           <Table containerClassName="!max-w-none !overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="block w-[2500px] min-w-[2500px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
-                <TableHead className="w-36 text-[10px] uppercase">SKU</TableHead>
+                <TableHead className="w-56 text-[10px] uppercase">SKU / variante</TableHead>
                 <TableHead className="min-w-[300px] text-[10px] uppercase">Aviso / vínculo</TableHead>
                 <TableHead className="min-w-[240px] text-[10px] uppercase">Descripción</TableHead>
                 <TableHead className="w-44 text-[10px] uppercase">Notas</TableHead>
@@ -335,8 +469,34 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
             </TableHeader>
             <TableBody style={{ display: 'block', position: 'relative', height: tableVirtualizer.getTotalSize() }}>
               {tableVirtualizer.getVirtualItems().map((virtualRow) => {
-                const index = virtualRow.index;
+                const entry = visiblePreviewEntries[virtualRow.index];
+                if (!entry) return null;
+                if (entry.kind === 'parent') {
+                  const expanded = !collapsedParentKeys.has(entry.key);
+                  return (
+                    <TableRow key={entry.key} ref={tableVirtualizer.measureElement} data-index={virtualRow.index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', height: '76px', boxSizing: 'border-box', transform: `translateY(${virtualRow.start}px)` }} className="border-b-2 border-background bg-primary/5">
+                      <TableCell colSpan={17} style={{ gridColumn: '1 / -1', width: '100%' }} className="p-0 whitespace-normal">
+                        <button type="button" className="grid h-[72px] w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-expanded={expanded} aria-label={`${expanded ? 'Contraer' : 'Expandir'} producto padre ${entry.parentName}`} onClick={() => toggleParent(entry.key)} disabled={importing}>
+                          <ChevronRight className={cn('size-5 shrink-0 text-primary transition-transform', expanded && 'rotate-90')} aria-hidden="true" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <span className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Producto padre</span>
+                              <span className="break-words font-mono text-xs font-bold text-foreground">{entry.parentCode || 'Código padre no indicado'}</span>
+                              <Badge variant="outline" className="border-primary/25 bg-background text-[10px] font-black text-primary">{entry.variantIndices.length} variantes</Badge>
+                              <span className="text-[10px] font-bold text-muted-foreground">{entry.totalQuantity} unidades solicitadas</span>
+                            </span>
+                            <span className="mt-1 block break-words text-sm font-black text-foreground">{entry.parentName}</span>
+                          </span>
+                          <span className="shrink-0 text-[10px] font-bold text-primary">{expanded ? 'Contraer' : 'Expandir'}</span>
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+
+                const index = entry.rowIndex;
                 const row = rows[index];
+                if (!row) return null;
                 const tax = calcItemTax(row);
                 const withholding = calcItemWithholding(row);
                 const taxValue = String(row.taxType || 'GRAVADO').toUpperCase();
@@ -350,9 +510,9 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                 const categoryValue = row.categoryId || matchingCategory?.id || '__none__';
 
                 return (
-                <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={cn('border-b-2 border-border/70 transition-colors hover:bg-muted/20', row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : 'bg-background')}>
-                  <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
-                  <TableCell className="p-1"><Input value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`h-8 text-xs font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} /></TableCell>
+                <TableRow key={entry.key} ref={tableVirtualizer.measureElement} data-index={virtualRow.index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', height: entry.parentKey ? '78px' : undefined, boxSizing: 'border-box', transform: `translateY(${virtualRow.start}px)` }} className={cn('border-b-2 border-border/70 transition-colors hover:bg-muted/20', row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : 'bg-background')}>
+                  <TableCell className={entry.parentKey ? 'border-l-2 border-primary/30 pl-3' : ''}>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
+                  <TableCell className="p-1 align-top"><div className="flex min-w-[220px] flex-col gap-1"><Input title={row.sku} value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`h-8 text-xs font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} />{row.variantLabel && <span className="break-words text-[10px] font-bold leading-4 text-primary" title={`Producto padre: ${row.parentProductCode || '—'}`}>Variante: {row.variantLabel}</span>}</div></TableCell>
                   <TableCell className="p-1 align-top text-xs"><div className="flex min-w-[280px] flex-col gap-1"><span className={row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</span>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs"><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo (requiere SKU libre)</option></select>}</div></TableCell>
                   <TableCell className="min-w-[240px] p-1"><Input value={row.description} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={`h-8 w-full text-xs ${!row.description ? 'border-red-500' : ''}`} /></TableCell>
                   <TableCell className="p-1"><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className="h-8 w-full text-xs" title={row.commercialNoteSnapshot || undefined} /></TableCell>
@@ -393,15 +553,15 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         <section data-import-preview-mobile-section="true" className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Productos de la orden para revisar">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un producto por tarjeta</p></div>
-            <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
+            <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} variantes{hasGroupedVariants ? ` · ${groupedParents.length} padres` : ''}</Badge>
           </div>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={520} overscan={2} className="min-w-0 max-w-full space-y-3 pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(rows[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+            {visiblePreviewEntries.length ? <VirtualizedImportList count={visiblePreviewEntries.length} scrollRef={mobileScrollRef} estimateSize={520} overscan={2} className="min-w-0 max-w-full space-y-3 pt-3 pr-1" renderItem={(entryIndex) => { const entry = visiblePreviewEntries[entryIndex]; return <div className="pb-3">{entry.kind === 'parent' ? renderMobileParent(entry) : renderMobileCard(rows[entry.rowIndex], entry.rowIndex)}</div>; }} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
         </section>
 
         {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} /></div>}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/50 bg-background pt-3">
           <Button variant="outline" onClick={onBack} disabled={importing}><ChevronLeft className="mr-2 size-4" />Volver a la carga</Button>
           <Button onClick={onConfirm} disabled={importing || validRows === 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Agregando... ${progress}%` : `Agregar ${validRows} válidos · omitir ${errorRows}`}</Button>
         </div>
@@ -590,6 +750,8 @@ const buildPurchaseImportRowsFromAdvancedCatalog = (catalog: VariantImportCatalo
       return {
         sku: String(sku || '').trim(),
         description: `${product.name || product.code}${variantLabel ? ` · ${variantLabel}` : ''}`.trim(),
+        variantLabel: variant ? variantLabel : undefined,
+        parentProductCode: variant ? String(product.code || '').trim() : undefined,
         commercialNoteSnapshot: product.commercialNote || null,
         category: product.category || '',
         quantity: requestedQuantity,
@@ -604,6 +766,68 @@ const buildPurchaseImportRowsFromAdvancedCatalog = (catalog: VariantImportCatalo
       } as PurchaseImportRow;
     });
   });
+};
+
+/**
+ * Conserva en la línea de compra la definición necesaria para materializar
+ * el catálogo al recepcionar. No contiene stock ni precios de venta.
+ */
+const buildPendingPurchaseCatalog = (catalog: VariantImportCatalog, row: PurchaseImportRow) => {
+  const parentCode = String(row.parentProductCode || row.sku || '').trim().toLowerCase();
+  const product = (catalog.products || []).find((candidate) => String(candidate.code || '').trim().toLowerCase() === parentCode);
+  if (!product) return undefined;
+
+  const variant = (catalog.variants || []).find((candidate) => (
+    String(candidate.sku || '').trim().toLowerCase() === String(row.sku || '').trim().toLowerCase()
+    && String(candidate.productCode || '').trim().toLowerCase() === String(product.code || '').trim().toLowerCase()
+  ));
+  const stockCost = (catalog.stock || [])
+    .filter((stock) => String(stock.variantSku || stock.productCode || '').trim().toLowerCase() === String(row.sku || '').trim().toLowerCase())
+    .map((stock) => Number(stock.unitCost))
+    .find((cost) => Number.isFinite(cost) && cost >= 0);
+  const productCost = Number(product.costPrice);
+  const rowCost = Number(row.unitPrice);
+
+  return {
+    format: 'NOVAHUB_PURCHASE_PENDING_V1',
+    product: {
+      code: product.code,
+      name: product.name,
+      category: row.category || product.category,
+      categoryId: row.categoryId || undefined,
+      description: product.description,
+      commercialNote: product.commercialNote,
+      unit: product.unit,
+      costPrice: Number.isFinite(productCost) ? productCost : (!variant && Number.isFinite(rowCost) ? rowCost : undefined),
+      taxRate: product.taxRate,
+      trackInventory: product.trackInventory,
+      trackBatch: product.trackBatch,
+      trackSeries: product.trackSeries,
+      barcode: product.barcode,
+      brand: product.brand,
+      model: product.model,
+      color: product.color,
+      weight: product.weight,
+      weightUnit: product.weightUnit,
+      dimensions: product.dimensions,
+      width: product.width,
+      height: product.height,
+      depth: product.depth,
+      dimensionUnit: product.dimensionUnit,
+      warranty: product.warranty,
+      lastPurchasePrice: product.lastPurchasePrice,
+      imageUrl: product.imageUrl,
+      isActive: product.isActive,
+    },
+    variant: variant ? {
+      productCode: variant.productCode,
+      sku: variant.sku,
+      name: variant.name,
+      barcode: variant.barcode,
+      costPrice: variant.costPrice ?? stockCost ?? (Number.isFinite(rowCost) ? rowCost : undefined),
+      attributes: Array.isArray(variant.attributes) ? variant.attributes : [],
+    } : null,
+  };
 };
 
 export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
@@ -779,10 +1003,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         !validWithholdingCodes.has(withholdingType) ? 'Retención inválida; selecciona una opción del catálogo' : '',
       ].filter(Boolean);
       const warningParts = [
-        sku && !product && !forceManualSku ? 'SKU no encontrado en inventario; se agregará como producto nuevo al recepcionar' : '',
+        sku && !product && !forceManualSku
+          ? row._advanced && row.variantLabel
+            ? `Variante nueva de ${row.parentProductCode || 'producto padre'}; queda pendiente y se creará al recepcionar`
+            : 'SKU no encontrado en inventario; se agregará como producto nuevo al recepcionar'
+          : '',
         sku && !product && forceManualSku ? 'SKU libre; se agregará como producto nuevo al recepcionar' : '',
         sku && product && forceManualSku ? 'SKU coincide con inventario; escribe otro SKU para crear un producto nuevo' : '',
-        canCreateCategoryOnImport && !resolvedCategoryId ? `La categoría "${categoryName}" se creará al confirmar` : '',
+        canCreateCategoryOnImport && !resolvedCategoryId ? `La categoría "${categoryName}" se creará al recepcionar` : '',
       ].filter(Boolean);
 
       // Si el archivo trae una nota explícita, prevalece sobre la nota del
@@ -827,7 +1055,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         _hasWarning: warningParts.length > 0,
         _warningMessage: warningParts.join(' · '),
         _skuStatus: (skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : product ? 'found' : sku ? 'missing' : undefined) as PurchaseImportRow['_skuStatus'],
-        _skuMessage: product ? (forceManualSku ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${linkedName || product.code || sku}`) : sku ? 'SKU no encontrado en inventario · se agregará como producto nuevo al recepcionar' : '',
+        _skuMessage: product
+          ? (forceManualSku ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${linkedName || product.code || sku}`)
+          : sku
+            ? row._advanced && row.variantLabel
+              ? `Variante pendiente · producto padre: ${row.parentProductCode || '—'}`
+              : 'SKU no encontrado en inventario · se agregará como producto nuevo al recepcionar'
+            : '',
       };
     });
   }, [categories, localDoc?.items, products, taxOptions, withholdingOptions]);
@@ -936,7 +1170,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           const hasAdvancedSheets = normalizedSheetNames.includes('productos')
             && normalizedSheetNames.some((name) => ['variantes', 'atributos', 'precios', 'inventario'].includes(name));
           if (hasAdvancedSheets && sheets) {
-            const catalog = parseVariantImportWorkbook(sheets, []);
+            const catalog = parseVariantImportWorkbook(
+              sheets,
+              purchasePriceLists.length > 0 ? purchasePriceLists : FALLBACK_PURCHASE_PRICE_LISTS,
+            );
             const advancedRows = buildPurchaseImportRowsFromAdvancedCatalog(catalog);
             if (!advancedRows.length) throw new Error('La plantilla avanzada no contiene productos o variantes utilizables');
             setAdvancedImportCatalog(catalog);
@@ -1012,7 +1249,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       setPreviewLoading(false);
       setPreviewProgress(0);
     }
-  }, [importCurrency, resolveImportProducts, taxOptions, validateImportRows, withholdingOptions]);
+  }, [importCurrency, purchasePriceLists, resolveImportProducts, taxOptions, validateImportRows, withholdingOptions]);
 
   const handleOpenPurchaseImportPreview = useCallback(() => {
     if (previewLoading || importProcessing || importing || importData.length === 0) return;
@@ -1151,73 +1388,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setImportProgress(15);
     let rowsToImport = validRows;
     try {
-      // Cuando la fuente es la plantilla avanzada de Inventario, primero se
-      // registra el catálogo padre/variantes sin stock inicial. El stock de
-      // esa plantilla se usa como cantidad solicitada de la orden, no como
-      // existencia ya disponible. Así la recepción futura será la que cree
-      // los movimientos y el costo ponderado por SKU.
-      if (advancedImportCatalog) {
-        const categoryByName = new Map(categories.map((category: any) => [String(category.name || '').trim().toLowerCase(), category]));
-        const knownProductCodes = new Set(products.map((product: any) => String(product.code || '').trim().toLowerCase()));
-        const knownVariantSkus = new Set(products.flatMap((product: any) => Array.isArray(product.variants) ? product.variants : [])
-          .map((variant: any) => String(variant.sku || '').trim().toLowerCase())
-          .filter(Boolean));
-        const newProductCodes = new Set(advancedImportCatalog.products
-          .filter((product) => !knownProductCodes.has(String(product.code || '').trim().toLowerCase()))
-          .map((product) => String(product.code || '').trim().toLowerCase()));
-        const extensionProductCodes = new Set(advancedImportCatalog.variants
-          .filter((variant) => !knownVariantSkus.has(String(variant.sku || '').trim().toLowerCase()))
-          .map((variant) => String(variant.productCode || '').trim().toLowerCase())
-          .filter((code) => knownProductCodes.has(code)));
-        const catalogProductCodes = new Set([...newProductCodes, ...extensionProductCodes]);
-        if (catalogProductCodes.size > 0) {
-          const catalogProducts = advancedImportCatalog.products
-            .filter((product) => catalogProductCodes.has(String(product.code || '').trim().toLowerCase()))
-            .map((product) => {
-              const parentKey = String(product.code || '').trim().toLowerCase();
-              const fallbackCost = (advancedImportCatalog.stock || [])
-                .filter((stock) => String(stock.productCode || '').trim().toLowerCase() === parentKey)
-                .map((stock) => Number(stock.unitCost))
-                .find((cost) => Number.isFinite(cost) && cost >= 0);
-              return {
-                ...product,
-                categoryId: categoryByName.get(String(product.category || '').trim().toLowerCase())?.id,
-                itemType: 'PRODUCT',
-                costPrice: product.costPrice ?? fallbackCost ?? 0,
-              };
-            });
-          const catalogPayload = {
-            ...advancedImportCatalog,
-            products: catalogProducts,
-            variants: advancedImportCatalog.variants.filter((variant) => {
-              const productKey = String(variant.productCode || '').trim().toLowerCase();
-              const skuKey = String(variant.sku || '').trim().toLowerCase();
-              return catalogProductCodes.has(productKey) && !knownVariantSkus.has(skuKey);
-            }),
-            prices: advancedImportCatalog.prices.filter((price) => {
-              const productKey = String(price.productCode || '').trim().toLowerCase();
-              const variantKey = String(price.variantSku || '').trim().toLowerCase();
-              return newProductCodes.has(productKey)
-                || (extensionProductCodes.has(productKey) && String(price.scope || '').toUpperCase() === 'VARIANT' && !knownVariantSkus.has(variantKey));
-            }),
-            // No se duplica stock: Inventario ya se convirtió en cantidad de
-            // compra y entrará únicamente al aprobar/recibir la orden.
-            stock: [],
-          };
-          setImportProgress(30);
-          await inventoryService.importInitialCatalog({
-            catalog: catalogPayload,
-            currency: importDataCurrency,
-            exchangeRate: importDataCurrency === 'USD' ? Number(localDoc.exchangeRate || globalRate || 1) : 1,
-            createMissingAttributes: true,
-            allowExistingParentVariantExtension: true,
-            confirmText: 'IMPORTAR',
-          });
-          const refreshedCatalog = await resolveImportProducts(validRows);
-          rowsToImport = validateImportRows(validRows, refreshedCatalog).filter((row) => !row._hasError);
-          if (rowsToImport.length === 0) throw new Error('Los productos/variantes creados no pudieron vincularse a la orden');
-        }
-      }
+      // La importación solo agrega líneas a la orden. Para SKU nuevos se
+      // conserva un snapshot pendiente; el catálogo y sus variantes se crean
+      // dentro de la transacción de recepción, cuando la cantidad realmente
+      // entra al inventario.
+      setImportProgress(35);
 
       const importedItems = rowsToImport.map((row) => {
       const tax = calcItemTax(row);
@@ -1249,6 +1424,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         withholdingBase: Number(withholding.withholdingBase.toFixed(2)),
         withholdingTotal: Number(withholding.withholdingTotal.toFixed(2)),
         total: Number((quantity * unitPrice).toFixed(2)),
+        pendingCatalog: advancedImportCatalog ? buildPendingPurchaseCatalog(advancedImportCatalog, row) : undefined,
       };
       });
       const currentItems = (localDoc.items || []) as any[];
@@ -1948,7 +2124,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           <DialogContent className="max-w-md rounded-2xl">
             <DialogHeader>
               <DialogTitle>Agregar productos a la orden</DialogTitle>
-              <DialogDescription>Los productos válidos se agregarán a la orden actual. Después pulsa Guardar para persistir la orden. Escribe IMPORTAR para confirmar.</DialogDescription>
+              <DialogDescription>Las líneas válidas se agregarán a la orden actual. Los productos y variantes nuevos quedan pendientes y se crearán únicamente al recepcionar. Después pulsa Guardar para persistir la orden. Escribe IMPORTAR para confirmar.</DialogDescription>
             </DialogHeader>
             <Input value={importConfirmText} onChange={(event) => setImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
             <DialogFooter>
@@ -2542,7 +2718,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           <DialogContent className="max-w-md rounded-2xl">
             <DialogHeader>
               <DialogTitle>Agregar productos a la orden</DialogTitle>
-              <DialogDescription>Los productos válidos se agregarán a la orden actual. Después pulsa Guardar para persistir la orden. Escribe IMPORTAR para confirmar.</DialogDescription>
+              <DialogDescription>Las líneas válidas se agregarán a la orden actual. Los productos y variantes nuevos quedan pendientes y se crearán únicamente al recepcionar. Después pulsa Guardar para persistir la orden. Escribe IMPORTAR para confirmar.</DialogDescription>
             </DialogHeader>
             <Input value={importConfirmText} onChange={(event) => setImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
             <DialogFooter>

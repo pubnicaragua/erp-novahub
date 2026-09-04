@@ -67,6 +67,7 @@ import { storageService } from '../services/storage.service';
 import { optimizeImageFile } from '../utils/image-optimization';
 import { authService } from '../services/auth.service';
 import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
+import { PasswordRequirements } from './PasswordRequirements';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 
@@ -719,6 +720,7 @@ export function SuscripcionesPage() {
                         value={tenantForm.adminPassword}
                         onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})}
                       />
+                      <PasswordRequirements value={tenantForm.adminPassword} />
                       {getPasswordError(tenantForm.adminPassword) && <p className="text-xs text-destructive">{getPasswordError(tenantForm.adminPassword)}</p>}
                     </div>
                   )}
@@ -1223,6 +1225,7 @@ export function SuscripcionesPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               className={cn("bg-muted/10 border-border/50 h-11 rounded-xl", getPasswordError(newPassword) && 'border-destructive')}
             />
+            <PasswordRequirements value={newPassword} />
             {getPasswordError(newPassword) && <p className="text-xs text-destructive">{getPasswordError(newPassword)}</p>}
           </div>
           <DialogFooter className="gap-3">

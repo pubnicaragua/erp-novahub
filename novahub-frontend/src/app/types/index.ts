@@ -664,6 +664,7 @@ export interface PurchaseOrderItem {
   variantId?: string;
   description?: string;
   commercialNoteSnapshot?: string | null;
+  pendingCatalog?: Record<string, any>;
   code?: string;
   name?: string;
   category?: string;
@@ -768,6 +769,7 @@ export interface PurchaseReceiptItem {
   warehouseId?: string;
   description: string;
   commercialNoteSnapshot?: string | null;
+  pendingCatalog?: Record<string, any>;
   category?: string;
   categoryId?: string;
   stockApplies?: boolean;

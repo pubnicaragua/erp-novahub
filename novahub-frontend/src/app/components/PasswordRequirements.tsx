@@ -5,12 +5,14 @@ import { cn } from "./ui/utils";
 type PasswordRequirementsProps = {
   value: string;
   className?: string;
+  required?: boolean;
 };
 
-export function PasswordRequirements({ value, className }: PasswordRequirementsProps) {
+export function PasswordRequirements({ value, className, required = true }: PasswordRequirementsProps) {
   const normalizedValue = String(value ?? "");
   const completed = passwordRules.filter((rule) => rule.test(normalizedValue)).length;
   const isComplete = completed === passwordRules.length;
+  const isOptionalEmpty = !required && normalizedValue.length === 0;
 
   return (
     <div
@@ -22,7 +24,7 @@ export function PasswordRequirements({ value, className }: PasswordRequirementsP
     >
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
-          Requisitos de seguridad
+          Requisitos de seguridad{required ? "" : " (si la cambias)"}
         </p>
         <span
           className={cn(
@@ -30,7 +32,7 @@ export function PasswordRequirements({ value, className }: PasswordRequirementsP
             isComplete ? "text-emerald-600" : "text-muted-foreground",
           )}
         >
-          {completed}/{passwordRules.length} cumplidos
+          {isOptionalEmpty ? "Sin cambios" : `${completed}/${passwordRules.length} cumplidos`}
         </span>
       </div>
       <div className="grid gap-1.5 sm:grid-cols-2">

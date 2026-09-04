@@ -479,7 +479,7 @@ function AppContent() {
   const { isImpersonating, branch } = useImpersonation();
   const location = useLocation();
   const [trialExpired, setTrialExpired] = useState(false);
-  const [sessionClosed, setSessionClosed] = useState(false);
+  const [sessionClosed, setSessionClosed] = useState<'closed' | 'expired' | 'invalid' | null>(null);
   const [showingSessionBranding, setShowingSessionBranding] = useState(false);
   const lastSessionStartVersion = useRef(0);
   useResponsiveNativeTables();
@@ -511,7 +511,7 @@ function AppContent() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setTrialExpired(false);
-      setSessionClosed(false);
+      setSessionClosed(null);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [sessionStartVersion, user?.id, user?.clientTenantId, user?.userType]);
@@ -538,9 +538,10 @@ function AppContent() {
   // Un 401/403 de sesión inválida también debe expulsar de la UI (no dejar la
   // interfaz "operativa" con un token muerto). Solo aplica fuera de rutas públicas.
   useEffect(() => {
-    const handler = () => {
+    const handler = (event: Event) => {
       if (location.pathname === '/register' || location.pathname.startsWith('/public/')) return;
-      setSessionClosed(true);
+      const code = (event as CustomEvent).detail?.code;
+      setSessionClosed(code === 'SESSION_CLOSED' ? 'closed' : code === 'SESSION_EXPIRED' ? 'expired' : 'invalid');
     };
     window.addEventListener('session-closed', handler);
     return () => window.removeEventListener('session-closed', handler);
@@ -627,7 +628,7 @@ function AppContent() {
   if (sessionClosed) {
     return (
       <>
-        <SessionClosedPage onLogout={handleGuardLogout} />
+        <SessionClosedPage mode={sessionClosed} onLogout={handleGuardLogout} />
         <SessionMonitor />
         <Toaster position="top-right" />
       </>

@@ -19,6 +19,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ConfirmDialog } from './ui/ConfirmDialog';
+import { PasswordRequirements } from './PasswordRequirements';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
 
 const AVAILABLE_MODULES = [
@@ -506,8 +507,9 @@ export function SuscripcionesPageFinal() {
                       <Input type="email" value={tenantForm.adminEmail} onChange={e => setTenantForm({...tenantForm, adminEmail: e.target.value})} />
                     </div>
                     <div className="space-y-2">
-                      <Label>Contraseña (opcional)</Label>
-                      <Input type="password" value={tenantForm.adminPassword} onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})} placeholder="8 caracteres, mayúscula, número y símbolo" />
+                      <Label>Contraseña inicial *</Label>
+                      <Input type="password" value={tenantForm.adminPassword} onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})} placeholder="Contraseña segura" />
+                      <PasswordRequirements value={tenantForm.adminPassword} />
                     </div>
                   </div>
                 </div>
@@ -584,7 +586,8 @@ export function SuscripcionesPageFinal() {
               <div className="space-y-3">
                 <Input placeholder="Nombre completo" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
                 <Input type="email" placeholder="Email" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
-                <Input type="password" placeholder="8 caracteres, mayúscula, número y símbolo" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} />
+                <Input type="password" placeholder="Contraseña segura" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} />
+                <PasswordRequirements value={userForm.password} />
                 <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>

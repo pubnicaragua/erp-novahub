@@ -4,6 +4,7 @@ import { getPasswordError, isValidEmail } from '../../utils/accountValidation';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { PasswordRequirements } from '../PasswordRequirements';
 
 type ManagerUserEditorDialogProps = {
   user: any | null;
@@ -66,6 +67,7 @@ export function ManagerUserEditorDialog({ user, open, saving = false, onOpenChan
               {!isProtectedAdmin ? <label className="min-w-0 space-y-2 text-sm font-semibold sm:col-span-2">
                 <span>Nueva contraseña <span className="font-normal text-muted-foreground">(opcional)</span></span>
                 <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Déjala vacía para conservarla" className="h-11 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal outline-none focus:border-primary" />
+                <PasswordRequirements value={password} required={false} />
                 {passwordError && <span className="block text-xs font-normal text-destructive">{passwordError}</span>}
               </label> : <p className="text-xs font-normal text-muted-foreground sm:col-span-2">La contraseña de los administradores de sucursal solo la puede cambiar el administrador principal de esa sucursal.</p>}
             </div>

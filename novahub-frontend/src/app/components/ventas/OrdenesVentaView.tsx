@@ -165,10 +165,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   };
   const showVariantColumn = (localDoc?.items || []).some((item: any) => {
     const product = findProductForItem(item);
-    return (product?.variants || []).filter((variant: any) => variant.isActive !== false).length > 1;
+    return String(resolveItemType(item)).toUpperCase() !== 'SERVICE'
+      && (product?.variants || []).filter((variant: any) => variant.isActive !== false).length > 1;
   });
   const showPriceTypeColumn = (localDoc?.items || []).some((item: any) => (
-    Boolean(item.productId) && resolveItemType(item) !== 'SERVICE'
+    Boolean(item.productId) && String(resolveItemType(item)).toUpperCase() !== 'SERVICE'
   ));
   const productHeaderColumnClass = showVariantColumn && showPriceTypeColumn
     ? undefined
@@ -1172,55 +1173,59 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           disabled={!localDoc?.customerId}
                         />
                       </div>
-                      <SalesVariantSelect
-                        className="sales-line-variant"
-                        product={products.find((product) => product.id === item.productId)}
-                        value={item.variantId}
-                        onChange={(variantId, variant) => setLocalDoc({
-                          ...localDoc,
-                          items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx
-                            ? { ...line, variantId, variantSku: variant?.sku || null, variantName: variant?.name || null, variantAttributes: variant?.attributes || null }
-                            : line),
-                        } as any)}
-                      />
-                      <SalesLinePriceListSelect
-                        className="sales-line-price-list"
-                        labelLayout="stacked"
-                        productId={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || item.productId} 
-                        variantId={item.variantId}
-                        productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code} 
-                        itemType={item.itemType}
-                        value={item.priceListId} 
-                         defaultPriceListId={localDoc?.priceListId}
-                         lineItems={localDoc?.items || []}
-                         lineIndex={idx}
-                        currency={localDoc?.currency} 
-                        exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} 
-                        onChange={(priceListId, result) => { 
-                          const currentItem = localDoc?.items?.[idx];
-                          // Guarda de idempotencia: no actualizar si el precio ya está aplicado
-                          if (
-                            currentItem &&
-                            currentItem.priceListId === priceListId &&
-                            Math.abs(Number(currentItem.unitPrice || 0) - Number(result.unitPrice || 0)) < 0.01 &&
-                            !!currentItem.priceMissing === !!result.priceMissing
-                          ) return;
-                          const nextItems = [...(localDoc.items || [])] as any[]; 
-                          nextItems[idx] = { 
-                            ...nextItems[idx],
-                            productId: (productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || nextItems[idx].productId,
-                            priceListId, 
-                            unitPrice: result.unitPrice ?? 0, 
-                            total: Number(nextItems[idx].quantity || 1) * Number(result.unitPrice ?? 0),
-                            priceMissing: result.priceMissing 
-                          }; 
-                          const next = pricingMode === 'individual' ? recalculateIndividualPricing(nextItems) : recalculateGlobalPricing(nextItems); 
-                          // Solo actualiza estado local — sin handleUpdate para evitar el loop
-                          // PATCH → onRefresh → deleteMany+create → IDs cambian → re-mount → loop
-                          // El precio se persiste en el próximo save explícito (cantidad, guardar borrador, etc.)
-                          setLocalDoc({ ...localDoc, ...next } as any); 
-                        }} 
-                      />
+                      {String(resolveItemType(item)).toUpperCase() !== 'SERVICE' && (
+                        <SalesVariantSelect
+                          className="sales-line-variant"
+                          product={products.find((product) => product.id === item.productId)}
+                          value={item.variantId}
+                          onChange={(variantId, variant) => setLocalDoc({
+                            ...localDoc,
+                            items: (localDoc.items || []).map((line: any, lineIndex: number) => lineIndex === idx
+                              ? { ...line, variantId, variantSku: variant?.sku || null, variantName: variant?.name || null, variantAttributes: variant?.attributes || null }
+                              : line),
+                          } as any)}
+                        />
+                      )}
+                      {item.productId && String(resolveItemType(item)).toUpperCase() !== 'SERVICE' && (
+                        <SalesLinePriceListSelect
+                          className="sales-line-price-list"
+                          labelLayout="stacked"
+                          productId={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || item.productId}
+                          variantId={item.variantId}
+                          productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code}
+                          itemType={item.itemType}
+                          value={item.priceListId}
+                          defaultPriceListId={localDoc?.priceListId}
+                          lineItems={localDoc?.items || []}
+                          lineIndex={idx}
+                          currency={localDoc?.currency}
+                          exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
+                          onChange={(priceListId, result) => {
+                            const currentItem = localDoc?.items?.[idx];
+                            // Guarda de idempotencia: no actualizar si el precio ya está aplicado
+                            if (
+                              currentItem &&
+                              currentItem.priceListId === priceListId &&
+                              Math.abs(Number(currentItem.unitPrice || 0) - Number(result.unitPrice || 0)) < 0.01 &&
+                              !!currentItem.priceMissing === !!result.priceMissing
+                            ) return;
+                            const nextItems = [...(localDoc.items || [])] as any[];
+                            nextItems[idx] = {
+                              ...nextItems[idx],
+                              productId: (productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || nextItems[idx].productId,
+                              priceListId,
+                              unitPrice: result.unitPrice ?? 0,
+                              total: Number(nextItems[idx].quantity || 1) * Number(result.unitPrice ?? 0),
+                              priceMissing: result.priceMissing
+                            };
+                            const next = pricingMode === 'individual' ? recalculateIndividualPricing(nextItems) : recalculateGlobalPricing(nextItems);
+                            // Solo actualiza estado local — sin handleUpdate para evitar el loop
+                            // PATCH → onRefresh → deleteMany+create → IDs cambian → re-mount → loop
+                            // El precio se persiste en el próximo save explícito (cantidad, guardar borrador, etc.)
+                            setLocalDoc({ ...localDoc, ...next } as any);
+                          }}
+                        />
+                      )}
                     </div>
 
                     {item.productId && (

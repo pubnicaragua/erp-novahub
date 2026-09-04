@@ -33,6 +33,7 @@ import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../../utils/accountValidation';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { pendingUserCreate, clearPendingUserCreate } from '../../utils/pendingUserCreate';
+import { PasswordRequirements } from '../PasswordRequirements';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -776,7 +777,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                         fetchUsers();
                       } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
                     }} disabled={!canEditUsers}>
-                      <SelectTrigger className="h-8 w-[122px] bg-primary/5 text-[10px] font-bold uppercase"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 w-full min-w-[10rem] max-w-full bg-primary/5 text-[10px] font-bold uppercase sm:w-[10rem]"><SelectValue /></SelectTrigger>
                       <SelectContent>{SYSTEM_ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value} className="text-[10px] font-bold uppercase">{r.label}</SelectItem>)}</SelectContent>
                      </Select>
                    </div>}
@@ -784,13 +785,12 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                    {canManageRoles && isCollaborator && <div className="flex items-center gap-1.5">
                     <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rol</span>
                     <Select value={u.customRoleId || 'none'} onValueChange={(val) => handleUpdateCustomRole(u.id, val)}>
-                      <SelectTrigger className="h-8 w-[132px] bg-purple-500/5 text-[10px] font-bold uppercase text-purple-600"><SelectValue placeholder="Ninguno" /></SelectTrigger>
+                      <SelectTrigger className="h-8 w-full min-w-[10rem] max-w-full bg-purple-500/5 text-[10px] font-bold uppercase text-purple-600 sm:w-[10rem]"><SelectValue placeholder="Ninguno" /></SelectTrigger>
                       <SelectContent><SelectItem value="none" className="text-[10px] font-bold uppercase">Ninguno</SelectItem>{customRoles.map(r => <SelectItem key={r.id} value={r.id} className="text-[10px] font-bold uppercase">{r.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>}
 
                    {canChangeThisPassword && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
-                   {canEditUsers && !isCurrentUser && isAdmin && !isCurrentUserPrincipalAdmin && <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground" title="Solo el administrador principal puede cambiar esta contraseña">Solo Admin principal</span>}
                   {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
                   {(canViewUsers || canViewRoles) && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>}
                   {canDeactivateUsers && <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
@@ -991,6 +991,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 onChange={e => setUserForm({ ...userForm, password: e.target.value })}
                 className={cn('bg-muted/10 h-11', getPasswordError(userForm.password) && 'border-destructive')}
               />
+              <PasswordRequirements value={userForm.password} />
               {getPasswordError(userForm.password) && <p className="text-xs text-destructive">{getPasswordError(userForm.password)}</p>}
             </div>
           </div>
@@ -1079,6 +1080,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 onChange={(e) => setNewPasswordForUser(e.target.value)}
                 className={cn('bg-muted/10 h-11', getPasswordError(newPasswordForUser) && 'border-destructive')}
               />
+              <PasswordRequirements value={newPasswordForUser} />
               {getPasswordError(newPasswordForUser) && <p className="text-xs text-destructive">{getPasswordError(newPasswordForUser)}</p>}
             </div>
           </div>

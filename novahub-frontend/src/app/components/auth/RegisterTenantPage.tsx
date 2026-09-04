@@ -8,7 +8,7 @@ import { safeSetItem } from '../../services/safe-storage';
 import {
   Package, Mail, Lock, User, Building2, CheckCircle2, ArrowRight, ArrowLeft,
   Sparkles, Loader2, Store, Laptop, Wrench, Factory, HardHat, UtensilsCrossed,
-  Stethoscope, GraduationCap, Briefcase, Building, Upload, Eye, EyeOff, Circle,
+  Stethoscope, GraduationCap, Briefcase, Building, Upload, Eye, EyeOff,
   Phone,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -19,7 +19,8 @@ import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { authService, type ModuleRecommendationsResponse } from '../../services/auth.service';
 import { useAuth } from '../../contexts/AuthContext';
-import { normalizeEmail, passwordRules } from '../../utils/accountValidation';
+import { normalizeEmail } from '../../utils/accountValidation';
+import { PasswordRequirements } from '../PasswordRequirements';
 import { TechnicalSheetStep } from './TechnicalSheetStep';
 
 const WA_NUMBER = '50588241003';
@@ -663,19 +664,7 @@ export function RegisterTenantPage() {
           </button>
         </div>
         {errors.password && <p className="text-xs text-destructive ml-1">{errors.password.message}</p>}
-        {passwordValue && (
-          <div className="ml-1 space-y-0.5">
-            {passwordRules.map((rule) => {
-              const passed = rule.test(passwordValue);
-              return (
-                <p key={rule.label} className={cn('flex items-center gap-1.5 text-[11px] transition-colors', passed ? 'text-emerald-500' : 'text-muted-foreground')}>
-                  {passed ? <CheckCircle2 className="size-3" /> : <Circle className="size-3" />}
-                  {rule.label}
-                </p>
-              );
-            })}
-          </div>
-        )}
+        <PasswordRequirements value={passwordValue} className="ml-1" />
       </div>
       <div className="space-y-1.5 pt-1">
         <label className="flex items-start gap-2.5 cursor-pointer">

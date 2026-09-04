@@ -49,6 +49,7 @@ import { usersService } from '../services/users.service';
 import { Lock } from 'lucide-react';
 import { TrialCountdownBanner } from './auth/TrialCountdownBanner';
 import { getPasswordError } from '../utils/accountValidation';
+import { PasswordRequirements } from './PasswordRequirements';
 import { useImpersonation } from '../contexts/ImpersonationContext';
 import { tenantsService, type TenantBillingInvoice } from '../services/tenants.service';
 
@@ -906,6 +907,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 onChange={(e) => setNewPassword(e.target.value)}
                 className={`rounded-xl ${getPasswordError(newPassword) ? 'border-destructive' : ''}`}
               />
+              <PasswordRequirements value={newPassword} />
               {getPasswordError(newPassword) && <p className="text-xs text-destructive">{getPasswordError(newPassword)}</p>}
             </div>
           </div>
