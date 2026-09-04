@@ -2,7 +2,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
-import { createDefaultTemplateDefinition, PDF_DEFAULT_FONT_SCALE, resolveTemplateToken, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode } from '../services/pdf-template-definition';
+import { createDefaultTemplateDefinition, PDF_DEFAULT_FONT_SCALE, resolveTemplateToken, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { getBase64Image, safeHtml2CanvasColor, sanitizeHtml2CanvasOklch } from './export-utils';
 import { pdfStatusLabel } from './pdfStatus';
 
@@ -73,6 +73,40 @@ function applyRuntimeTableColumns(definition: PdfTemplateDefinition, data: PdfTe
     ...definition,
     nodes: definition.nodes.map(node => node.type === 'table' ? { ...node, columns } : node),
   };
+}
+
+function reportSectionGroups(sections: PdfTemplateReportSection[]) {
+  const groups: PdfTemplateReportSection[][] = [];
+  let current: PdfTemplateReportSection[] = [];
+  let used = 0;
+  let pageIndex = 0;
+  const capacity = () => pageIndex === 0 ? 11 : 20;
+  const flush = () => {
+    if (!current.length) return;
+    groups.push(current);
+    current = [];
+    used = 0;
+    pageIndex += 1;
+  };
+
+  sections.forEach(section => {
+    const rows = Array.isArray(section.rows) ? section.rows : [];
+    let offset = 0;
+    do {
+      const remaining = capacity() - used;
+      const rowBudget = Math.floor((remaining - 2.5) / 1.15);
+      if (rowBudget <= 0 && current.length) flush();
+      const availableRows = Math.max(1, Math.floor((capacity() - used - 2.5) / 1.15));
+      const take = rows.length ? Math.min(rows.length - offset, availableRows) : 0;
+      const chunk = rows.length ? rows.slice(offset, offset + Math.max(1, take)) : [];
+      current.push({ ...section, rows: chunk });
+      offset += chunk.length;
+      used += 2.5 + Math.max(1, chunk.length) * 1.15;
+      if (offset < rows.length || used >= capacity() - 1) flush();
+    } while (offset < rows.length || (!rows.length && current.length === 0));
+  });
+  flush();
+  return groups;
 }
 
 function normalizeData(data: PdfTemplateData | undefined, settings: PdfTemplateRenderSettings, targetKey: string, pageNumber: number, pageCount: number): PdfTemplateData {
@@ -281,7 +315,7 @@ function setBaseNodeStyle(element: HTMLDivElement, node: PdfTemplateNode, settin
   const verticalPadding = Math.min(1.25, padding * 0.45);
   const horizontalPadding = Math.min(2.2, padding);
   const textualNode = node.type === 'text' || node.type === 'field' || node.type === 'section';
-  const borderStyle = node.borderStyle || (node.type === 'table' || node.type === 'divider' ? 'solid' : 'none');
+  const borderStyle = node.borderStyle || (node.type === 'table' || node.type === 'report-sections' || node.type === 'divider' ? 'solid' : 'none');
   Object.assign(element.style, {
     position: 'absolute', left: `${node.x}%`, top: `${node.y}%`, width: `${node.width}%`, height: `${node.height}%`, boxSizing: 'border-box',
     padding: `${verticalPadding}% ${horizontalPadding}%`, color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155'), backgroundColor: safeHtml2CanvasColor(node.backgroundColor, 'transparent'),
@@ -360,16 +394,91 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const primaryColor = safeHtml2CanvasColor(settings.primaryColor, '#10b981');
   const textColor = safeHtml2CanvasColor(settings.textColor, '#334155');
   const lineColor = safeHtml2CanvasColor(settings.lineColor, '#e2e8f0');
-  const headerBackground = tableLayout === 'minimal' || tableLayout === 'ledger' ? '#ffffff' : primaryColor;
-  const headerColor = tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff';
-  const rowBackground = tableLayout === 'striped' || tableLayout === 'standard' || tableLayout === 'accent' ? '#f8fafc' : 'transparent';
-  columns.forEach(column => { const cell = head.insertCell(); cell.textContent = column.label; cell.style.width = `${column.width || 25}%`; cell.style.textAlign = column.align || 'left'; cell.style.padding = compact ? '4px 4px' : '7px 8px'; cell.style.backgroundColor = headerBackground; cell.style.color = headerColor; cell.style.fontWeight = '700'; cell.style.fontSize = pdfPointsToCss(Math.max(compact ? 6.2 : 7, (node.fontSize || settings.fontSize || 9) - (compact ? 2.5 : 1.5))); cell.style.letterSpacing = compact ? '0' : '0.15px'; cell.style.textTransform = 'uppercase'; cell.style.borderBottom = `${compact ? 1 : 2}px solid ${primaryColor}`; });
+  const headerBackground = node.tableHeaderColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? '#ffffff' : primaryColor);
+  const headerColor = node.tableHeaderTextColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff');
+  const rowBackground = node.tableStripeColor || (tableLayout === 'striped' || tableLayout === 'standard' || tableLayout === 'accent' ? '#f8fafc' : 'transparent');
+  columns.forEach(column => { const cell = head.insertCell(); cell.textContent = column.label; cell.style.width = `${column.width || 25}%`; cell.style.textAlign = column.align || 'left'; cell.style.padding = compact ? '4px 4px' : '7px 8px'; cell.style.backgroundColor = safeHtml2CanvasColor(column.backgroundColor || headerBackground, headerBackground); cell.style.color = safeHtml2CanvasColor(column.color || headerColor, headerColor); cell.style.fontWeight = '700'; cell.style.fontSize = pdfPointsToCss(Math.max(compact ? 6.2 : 7, (node.fontSize || settings.fontSize || 9) - (compact ? 2.5 : 1.5))); cell.style.letterSpacing = compact ? '0' : '0.15px'; cell.style.textTransform = 'uppercase'; cell.style.borderBottom = `${compact ? 1 : 2}px solid ${primaryColor}`; });
   const body = table.createTBody();
   asRows(data).slice(0, 30).forEach((row, rowIndex) => {
     const tr = body.insertRow();
-    columns.forEach(column => { const cell = tr.insertCell(); const rawValue = row[column.token] ?? row[column.id]; cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue); cell.style.padding = compact ? '3px 4px' : tableLayout === 'compact' ? '4px 6px' : '6px 8px'; cell.style.borderTop = `1px solid ${lineColor}`; cell.style.textAlign = column.align || 'left'; const isDescription = column.token === 'description' || column.id === 'description' || /descrip|concepto|detalle/i.test(`${column.label || ''} ${column.token || ''} ${column.id || ''}`) || String(rawValue ?? '').includes('\n'); cell.style.verticalAlign = isDescription ? 'top' : 'middle'; cell.style.lineHeight = compact ? '1.12' : '1.25'; cell.style.whiteSpace = isDescription ? 'pre-wrap' : 'normal'; cell.style.overflowWrap = 'anywhere'; if (rowIndex % 2 && rowBackground !== 'transparent') cell.style.backgroundColor = rowBackground; if (tableLayout === 'boxed' || tableLayout === 'cards') cell.style.borderLeft = `1px solid ${lineColor}`; });
+    columns.forEach(column => { const cell = tr.insertCell(); const rawValue = row[column.token] ?? row[column.id]; cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue); cell.style.padding = compact ? '3px 4px' : tableLayout === 'compact' ? '4px 6px' : '6px 8px'; cell.style.borderTop = `1px solid ${lineColor}`; cell.style.textAlign = column.align || 'left'; const isDescription = column.token === 'description' || column.id === 'description' || /descrip|concepto|detalle/i.test(`${column.label || ''} ${column.token || ''} ${column.id || ''}`) || String(rawValue ?? '').includes('\n'); cell.style.verticalAlign = isDescription ? 'top' : 'middle'; cell.style.lineHeight = compact ? '1.12' : '1.25'; cell.style.whiteSpace = isDescription ? 'pre-wrap' : 'normal'; cell.style.overflowWrap = 'anywhere'; if (node.tableRowColor) cell.style.backgroundColor = safeHtml2CanvasColor(node.tableRowColor, '#ffffff'); else if (rowIndex % 2 && rowBackground !== 'transparent') cell.style.backgroundColor = safeHtml2CanvasColor(rowBackground, '#f8fafc'); if (tableLayout === 'boxed' || tableLayout === 'cards') cell.style.borderLeft = `1px solid ${lineColor}`; });
   });
   element.appendChild(table);
+  return element;
+}
+
+function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings) {
+  const element = document.createElement('div');
+  setBaseNodeStyle(element, node, settings);
+  const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.number || 1);
+  if (pageNumber > 1) {
+    if (Number.isFinite(Number(node.subsequentY))) element.style.top = `${Number(node.subsequentY)}%`;
+    if (Number.isFinite(Number(node.subsequentHeight))) element.style.height = `${Number(node.subsequentHeight)}%`;
+  }
+  // Las secciones tienen una cantidad de filas variable. Mantener la altura
+  // fija de la caja deja grandes espacios en blanco y puede recortar el título
+  // de la siguiente sección. La caja debe crecer con sus tablas renderizadas.
+  element.style.height = 'auto';
+  element.style.minHeight = '0';
+  element.style.padding = '0';
+  element.style.borderStyle = 'solid';
+  element.style.borderWidth = '1px';
+  element.style.overflow = 'hidden';
+
+  const sections = Array.isArray(data.reportSections) ? data.reportSections : [];
+  const content = document.createElement('div');
+  Object.assign(content.style, { width: '100%', height: 'auto', minHeight: '0', overflow: 'visible', padding: '5px 7px', boxSizing: 'border-box' });
+  const tableLayout = settings.tableLayout || 'standard';
+  const primaryColor = safeHtml2CanvasColor(settings.primaryColor, '#10b981');
+  const textColor = safeHtml2CanvasColor(settings.textColor, '#334155');
+  const lineColor = safeHtml2CanvasColor(settings.lineColor, '#e2e8f0');
+  const headerBackground = node.tableHeaderColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? '#ffffff' : primaryColor);
+  const headerColor = node.tableHeaderTextColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff');
+  const rowBackground = node.tableStripeColor || '#f8fafc';
+  const compact = tableLayout === 'compact' || sections.some(section => section.columns.length >= 6);
+
+  sections.forEach((section, sectionIndex) => {
+    const styleIndex = section.templateIndex ?? sectionIndex;
+    const sectionStyle = node.reportSectionStyles?.[String(styleIndex)] || {};
+    const sectionElement = document.createElement('div');
+    Object.assign(sectionElement.style, { width: '100%', marginBottom: sectionIndex === sections.length - 1 ? '0' : compact ? '6px' : '9px', overflow: 'visible' });
+    const title = document.createElement('div');
+    title.textContent = section.title;
+    Object.assign(title.style, { display: 'block', boxSizing: 'border-box', height: 'auto', minHeight: pdfPointsToCss(compact ? 9 : 11), color: textColor, fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(compact ? 9 : 11), fontWeight: '700', lineHeight: '1.25', padding: '2px 0 1px', marginBottom: compact ? '3px' : '5px', whiteSpace: 'normal', overflow: 'visible', overflowWrap: 'anywhere' });
+    sectionElement.appendChild(title);
+
+    const table = document.createElement('table');
+    Object.assign(table.style, { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(compact ? 6.5 : 7.5), lineHeight: compact ? '1.1' : '1.2' });
+    table.setAttribute('data-responsive-cards', 'false');
+    const head = table.createTHead().insertRow();
+    Object.assign(head.style, { backgroundColor: safeHtml2CanvasColor(sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(sectionStyle.headerTextColor || headerColor, headerColor) });
+    section.columns.forEach((column, columnIndex) => {
+      const cell = head.insertCell();
+      cell.textContent = column.label;
+      const configuredColumn = node.columns?.[columnIndex];
+      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, textAlign: column.align || 'left', padding: compact ? '3px 4px' : '5px 6px', backgroundColor: safeHtml2CanvasColor(column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || configuredColumn?.backgroundColor || sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || configuredColumn?.color || sectionStyle.headerTextColor || headerColor, headerColor), fontWeight: '700', fontSize: pdfPointsToCss(compact ? 6.2 : 7), textTransform: 'uppercase', borderBottom: `2px solid ${sectionStyle.headerColor || primaryColor}`, overflowWrap: 'anywhere' });
+    });
+    const body = table.createTBody();
+    const rows = section.rows;
+    rows.forEach((row, rowIndex) => {
+      const tr = body.insertRow();
+      section.columns.forEach(column => {
+        const cell = tr.insertCell();
+        const rawValue = row[column.token] ?? row[column.id];
+        cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue ?? '—');
+        Object.assign(cell.style, { padding: compact ? '3px 4px' : '5px 6px', color: textColor, borderTop: `1px solid ${lineColor}`, textAlign: column.align || 'left', verticalAlign: 'top', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', backgroundColor: sectionStyle.rowColor || node.tableRowColor ? safeHtml2CanvasColor(sectionStyle.rowColor || node.tableRowColor, '#ffffff') : rowIndex % 2 === 1 && ['standard', 'striped', 'accent'].includes(tableLayout) ? safeHtml2CanvasColor(sectionStyle.stripeColor || rowBackground, '#f8fafc') : 'transparent' });
+      });
+    });
+    sectionElement.appendChild(table);
+    content.appendChild(sectionElement);
+  });
+  if (!sections.length) {
+    const empty = document.createElement('div');
+    empty.textContent = 'Sin secciones para el período';
+    Object.assign(empty.style, { padding: '10px', color: '#64748b', fontSize: pdfPointsToCss(8) });
+    content.appendChild(empty);
+  }
+  element.appendChild(content);
   return element;
 }
 
@@ -422,6 +531,7 @@ function createBarcodeNode(node: PdfTemplateNode, data: PdfTemplateData, setting
 
 function createNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings) {
   if (node.type === 'table') return createTableNode(node, data, settings);
+  if (node.type === 'report-sections') return createReportSectionsNode(node, data, settings);
   if (node.type === 'totals') return createTotalsNode(node, data, settings);
   if (node.type === 'barcode') return createBarcodeNode(node, data, settings);
   if (node.type === 'image') {
@@ -453,12 +563,20 @@ function createNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfT
 function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRenderSettings, data: PdfTemplateData, width: number, height: number) {
   const page = document.createElement('div');
   Object.assign(page.style, { position: 'relative', width: `${width}mm`, height: `${height}mm`, overflow: 'hidden', background: safeHtml2CanvasColor(definition.page.background, '#ffffff'), color: safeHtml2CanvasColor(settings.textColor, '#334155'), boxSizing: 'border-box' });
+  const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.number || 1);
+  const hasRepeatableReportHeader = pageNumber > 1 && definition.nodes.some(item => item.enabled !== false && item.type !== 'report-sections' && !item.firstPageOnly && Number(item.y || 0) < 30);
   const hasParty = definition.nodes.some(node => partyField(node) && hasRenderablePartyValue(node, data));
   definition.nodes
     .filter(node => node.enabled !== false && (node.page || 1) === 1)
+    .filter(node => !node.firstPageOnly || Number((data.page as Record<string, unknown> | undefined)?.number || 1) === 1)
     .filter(node => node.id !== 'party-section' || hasParty)
     .filter(node => !partyField(node) || hasRenderablePartyValue(node, data))
-    .forEach(node => page.appendChild(createNode(node, data, settings)));
+    .forEach(node => {
+      const continuationNode = node.type === 'report-sections' && pageNumber > 1 && !hasRepeatableReportHeader
+        ? { ...node, subsequentY: 8, subsequentHeight: 86 }
+        : node;
+      page.appendChild(createNode(continuationNode, data, settings));
+    });
   if (settings.watermark?.trim()) { const watermark = document.createElement('div'); Object.assign(watermark.style, { position: 'absolute', inset: '38% 0 auto', textAlign: 'center', transform: 'rotate(-28deg)', color: safeHtml2CanvasColor(settings.primaryColor, '#10b981'), opacity: String((settings.watermarkOpacity || 12) / 100), fontSize: '42px', fontWeight: '800' }); watermark.textContent = settings.watermark; page.appendChild(watermark); }
   return page;
 }
@@ -484,33 +602,73 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
   const baseDefinition = safeLogo && definition.metadata?.preset === 'system-default'
     ? createDefaultTemplateDefinition(targetKey, { ...settings, logoUrl: safeLogo })
     : definition;
-  const effectiveDefinition = applyRuntimeTableColumns(baseDefinition, renderData);
   const [baseWidth, baseHeight] = pageDimensions(settings.paperSize);
   const width = settings.orientation === 'landscape' ? baseHeight : baseWidth;
   const height = settings.orientation === 'landscape' ? baseWidth : baseHeight;
-  const rows = asRows(data || {});
-  const tableNode = effectiveDefinition.nodes.find(node => node.type === 'table');
   const isRepeatedLabel = getPdfTemplateTarget(targetKey).key === 'inventario.product-labels';
-  // La escala tipográfica hace que las tablas de reportes (normalmente con
-  // seis o más columnas) necesiten menos filas por página para que correos,
-  // direcciones e identificaciones no queden recortados por la caja fija.
-  const denseTable = Boolean(tableNode && (tableNode.columns?.length || 0) >= 6);
-  const chunkSize = tableNode && denseTable ? 9 : tableNode && rows.length > 14 ? 14 : Math.max(rows.length, 1);
-  const chunks = tableNode && rows.length ? Array.from({ length: Math.ceil(rows.length / chunkSize) }, (_, index) => rows.slice(index * chunkSize, (index + 1) * chunkSize)) : [[]];
-  const renderChunks = isRepeatedLabel && rows.length ? rows.map(row => [row]) : chunks;
+  const reportSections = Array.isArray(renderData.reportSections)
+    ? renderData.reportSections.filter(section => section && Array.isArray(section.columns) && Array.isArray(section.rows))
+    : [];
+  const reportNode = baseDefinition.nodes.find(node => node.type === 'report-sections' && node.enabled !== false);
+  const indexedReportSections = reportSections.map((section, sectionIndex) => ({ ...section, templateIndex: sectionIndex }));
+  const visibleReportSections = reportNode
+    ? indexedReportSections.filter(section => reportNode.reportSectionVisibility?.[String(section.templateIndex)] !== false)
+    : indexedReportSections;
+  const sectionGroups: Array<PdfTemplateReportSection[] | null> = reportNode
+    ? (visibleReportSections.length ? reportSectionGroups(visibleReportSections) : [[]])
+    : visibleReportSections.length
+      ? visibleReportSections.map(section => [section])
+      : [null];
+  const renderJobs: Array<{ definition: PdfTemplateDefinition; data: PdfTemplateData }> = [];
+
+  sectionGroups.forEach(sectionGroup => {
+    const section = sectionGroup?.[0];
+    const reportMode = Boolean(reportNode && sectionGroup);
+    const sectionData: PdfTemplateData = sectionGroup
+      ? {
+        ...renderData,
+        document: {
+          ...(renderData.document || {}),
+          title: (renderData.document?.title as string) || getPdfTemplateTarget(targetKey).label,
+        },
+        reportSections: reportMode ? sectionGroup : renderData.reportSections,
+        items: section?.rows || [],
+        rows: section?.rows || [],
+        tableColumns: section?.columns,
+      }
+      : renderData;
+    const effectiveDefinition = reportMode ? baseDefinition : applyRuntimeTableColumns(baseDefinition, sectionData);
+    const rows = asRows(sectionData);
+    const tableNode = effectiveDefinition.nodes.find(node => node.type === 'table' && node.enabled !== false);
+    if (reportMode && sectionGroup) {
+      renderJobs.push({ definition: effectiveDefinition, data: { ...sectionData, reportSections: sectionGroup } });
+      return;
+    }
+    // La escala tipográfica hace que las tablas de reportes (normalmente con
+    // seis o más columnas) necesiten menos filas por página para que correos,
+    // direcciones e identificaciones no queden recortados por la caja fija.
+    const denseTable = Boolean(tableNode && (tableNode.columns?.length || 0) >= 6);
+    const chunkSize = tableNode && denseTable ? 9 : tableNode && rows.length > 14 ? 14 : Math.max(rows.length, 1);
+    const chunks = tableNode && rows.length ? Array.from({ length: Math.ceil(rows.length / chunkSize) }, (_, index) => rows.slice(index * chunkSize, (index + 1) * chunkSize)) : [[]];
+    const renderChunks = isRepeatedLabel && rows.length ? rows.map(row => [row]) : chunks;
+    renderChunks.forEach(currentChunk => renderJobs.push({
+      definition: effectiveDefinition,
+      data: { ...sectionData, ...(tableNode || isRepeatedLabel ? { items: currentChunk, rows: currentChunk } : {}) },
+    }));
+  });
   const pdf = new jsPDF({ orientation: settings.orientation, unit: 'mm', format: [width, height], compress: true });
   const wrapper = document.createElement('div');
   Object.assign(wrapper.style, { position: 'fixed', left: '-100000px', top: '0', width: '1px', height: '1px', overflow: 'visible', opacity: '1', pointerEvents: 'none' });
   document.body.appendChild(wrapper);
   try {
-    for (let index = 0; index < renderChunks.length; index += 1) {
-      const currentChunk = renderChunks[index];
-      const pageData = normalizeData({ ...renderData, ...(tableNode || isRepeatedLabel ? { items: currentChunk, rows: currentChunk } : {}) }, settings, targetKey, index + 1, renderChunks.length);
-      const page = renderPage(effectiveDefinition, settings, pageData, width, height);
+    for (let index = 0; index < renderJobs.length; index += 1) {
+      const job = renderJobs[index];
+      const pageData = normalizeData(job.data, settings, targetKey, index + 1, renderJobs.length);
+      const page = renderPage(job.definition, settings, pageData, width, height);
       page.id = `pdf-template-page-${index}`;
       wrapper.appendChild(page);
       await waitForImages(page);
-      const canvas = await html2canvas(page, { scale: 2, backgroundColor: safeHtml2CanvasColor(effectiveDefinition.page.background, '#ffffff'), logging: false, useCORS: true, allowTaint: false, onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(page.id, clonedDoc, safeHtml2CanvasColor(settings.primaryColor, '#10b981')) });
+      const canvas = await html2canvas(page, { scale: 2, backgroundColor: safeHtml2CanvasColor(job.definition.page.background, '#ffffff'), logging: false, useCORS: true, allowTaint: false, onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(page.id, clonedDoc, safeHtml2CanvasColor(settings.primaryColor, '#10b981')) });
       if (index > 0) pdf.addPage([width, height], settings.orientation === 'landscape' ? 'l' : 'p');
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, width, height, undefined, 'FAST');
       page.remove();

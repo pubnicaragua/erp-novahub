@@ -32,3 +32,29 @@ export function useTenantQuery<TData>(
 
 export const asList = (response: any): any[] =>
   Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+
+/**
+ * Carga todas las páginas de un listado usado por un reporte.
+ * Las pantallas operativas conservan su paginación; los reportes necesitan
+ * consolidar el total de registros antes de construir sus tablas y métricas.
+ */
+export async function fetchAllReportPages<T = any>(
+  fetchPage: (filters: Record<string, any>) => Promise<any>,
+  filters: Record<string, any> = {},
+): Promise<T[]> {
+  const firstResponse = await fetchPage({ ...filters, page: 1 });
+  const firstRows = asList(firstResponse);
+  const meta = firstResponse?.meta || firstResponse?.data?.meta || firstResponse?.data?.data?.meta || {};
+  const pageSize = Math.max(1, Number(meta.pageSize || filters.pageSize || firstRows.length || 1));
+  const total = Math.max(firstRows.length, Number(meta.total || firstRows.length));
+  const totalPages = Math.max(1, Number(meta.totalPages) || Math.ceil(total / pageSize));
+
+  if (totalPages === 1) return firstRows as T[];
+
+  const remaining = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) =>
+      fetchPage({ ...filters, page: index + 2 }),
+    ),
+  );
+  return firstRows.concat(remaining.flatMap(asList)) as T[];
+}

@@ -16,9 +16,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Warehouse, Tag, ShieldAlert, Gauge, Layers, CalendarClock } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
@@ -183,29 +183,15 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'inventory'], async (signal) => {
-    const filters = { page: 1, pageSize: 5000, report: true } as const;
-    const getAllReportProducts = async () => {
-      const firstPage = await inventoryService.getProducts(filters, signal);
-      const firstRows = asList(firstPage);
-      const total = Number((firstPage as any)?.meta?.total ?? (firstPage as any)?.total ?? firstRows.length);
-      const pageSize = Number((firstPage as any)?.meta?.pageSize ?? filters.pageSize);
-      const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
-      if (totalPages === 1) return firstRows;
-      const remainingPages = await Promise.all(
-        Array.from({ length: totalPages - 1 }, (_, index) =>
-          inventoryService.getProducts({ ...filters, page: index + 2 }, signal),
-        ),
-      );
-      return firstRows.concat(remainingPages.flatMap(asList));
-    };
+    const filters = { pageSize: 5000, report: true };
     const [prodRes, movRes, adjRes, trfRes, replRes] = await Promise.all([
-      getAllReportProducts(),
-      inventoryService.getMovements(filters, signal),
-      inventoryService.getAdjustments(filters, signal),
-      inventoryService.getTransfers(filters, signal),
+      fetchAllReportPages((pageFilters) => inventoryService.getProducts(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => inventoryService.getMovements(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => inventoryService.getAdjustments(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => inventoryService.getTransfers(pageFilters, signal), filters),
       inventoryService.getReplenishmentReport('monthly', signal),
     ]);
-    return { products: asList(prodRes), movements: asList(movRes), adjustments: asList(adjRes), transfers: asList(trfRes), replenishment: replRes };
+    return { products: prodRes, movements: movRes, adjustments: adjRes, transfers: trfRes, replenishment: replRes };
   }, { enabled: canViewInventory, onError: (e) => toast.error(e.message || 'Error cargando inventario') });
   const products = reportData?.products || [];
   const movements = reportData?.movements || [];
@@ -684,16 +670,6 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const exportRows = effectiveRows.map((row) => ({
-          ...row,
-          category: row.categoryName,
-          categoryName: row.categoryName,
-          warehouseName: row.mainWarehouse,
-          value: row.qty * row.costPrice,
-          stockValue: row.qty * row.costPrice,
-        }));
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.inventory', title: 'Reporte de inventario', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: exportRows, columns: [{ header: 'Producto', value: row => row.name || row.product?.name || '—' }, { header: 'Código', value: row => row.code || row.sku || '—' }, { header: 'Categoría', value: row => row.category?.name || row.category || '—' }, { header: 'Bodega', value: row => row.warehouse?.name || row.warehouseName || '—' }, { header: 'Existencia', value: row => row.qty ?? row.quantity ?? 0, align: 'right' }, { header: 'Valor', value: row => row.value ?? row.stockValue ?? 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange) });
-        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -702,6 +678,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
+        const reportSections: ConfiguredReportSectionInput[] = [];
 
         const checkPage = (needed: number) => {
           if (currentY + needed > pageHeight - 15) {
@@ -765,25 +742,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         });
         currentY += boxH + 10;
 
-        const capture = async (elementId: string, height: number) => {
-          const el = document.getElementById(elementId);
-          if (!el) return;
-          checkPage(height + 15);
-          try {
-            const canvas = await html2canvas(el, {
-              scale: 1,
-              backgroundColor: '#ffffff',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex),
-            });
-            doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
-            currentY += height + 5;
-          } catch { /* intentionally empty */ }
-        };
-
-        await capture('inventory-dynamics-chart', 80);
-        await capture('inventory-distribution-chart', 70);
-
         const renderTable = (title: string, headers: string[], rows: any[][], accent: [number, number, number]) => {
+          reportSections.push({ title, headers, rows });
           checkPage(rows.length * 7 + 30);
           doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
           doc.text(title, marginX, currentY); currentY += 7;
@@ -808,6 +768,91 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         renderTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name.substring(0, 32), fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']), [59, 130, 246]);
 
         renderTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [String(i.productName || '').substring(0, 32), i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), pdfStatusLabel(i.status, '-')]), [245, 158, 11]);
+
+        const distributionLabel = (mode: 'categoria' | 'bodega' | 'marca' | 'rotacion') => mode === 'categoria' ? 'Categoría' : mode === 'bodega' ? 'Bodega' : mode === 'marca' ? 'Marca' : 'Rotación';
+        const buildDistributionRows = (mode: 'categoria' | 'bodega' | 'marca' | 'rotacion') => {
+          const segments = new Map<string, { value: number; units: number; products: Set<string> }>();
+          const addSegment = (name: string, value: number, units: number, productId: string) => {
+            const segment = segments.get(name) || { value: 0, units: 0, products: new Set<string>() };
+            segment.value += value;
+            segment.units += units;
+            segment.products.add(productId);
+            segments.set(name, segment);
+          };
+          valuation.withStock.forEach((product) => {
+            if (mode === 'bodega') {
+              const totalByWarehouse = product.levels.reduce((sum, level) => sum + level.quantity, 0);
+              const factor = totalByWarehouse > 0 ? product.qty / totalByWarehouse : 0;
+              product.levels.forEach((level) => {
+                if (level.quantity <= 0) return;
+                const units = level.quantity * factor;
+                addSegment(level.warehouseName, units * product.costPrice, units, product.id);
+              });
+              return;
+            }
+            if (mode === 'marca') {
+              addSegment(product.brand || 'Sin marca', product.qty * product.costPrice, product.qty, product.id);
+              return;
+            }
+            if (mode === 'rotacion') {
+              const metrics = productMetrics.get(product.id)!;
+              const turnover = metrics.outs > 0 && metrics.avgQty > 0 ? metrics.outs / metrics.avgQty : 0;
+              const name = turnover === 0 ? 'Sin movimiento' : turnover >= 6 ? 'Alta rotación' : turnover >= 2 ? 'Rotación media' : 'Baja rotación';
+              addSegment(name, product.qty * product.costPrice, product.qty, product.id);
+              return;
+            }
+            addSegment(product.categoryName || 'Sin categoría', product.qty * product.costPrice, product.qty, product.id);
+          });
+          return [...segments.entries()].map(([name, segment]) => ({
+            name,
+            value: segment.value,
+            units: segment.units,
+            products: segment.products.size,
+            pct: valuation.totalValue > 0 ? (segment.value / valuation.totalValue) * 100 : 0,
+          })).sort((a, b) => b.value - a.value);
+        };
+        (['categoria', 'bodega', 'marca', 'rotacion'] as const).forEach((mode) => {
+          renderTable(`Distribución del valor del inventario · ${distributionLabel(mode)}`, ['Segmento', 'Valor', 'Participación', 'Unidades', 'Productos'], buildDistributionRows(mode).map((segment) => [segment.name, formatConvertedAmount(segment.value, 'NIO'), `${segment.pct.toFixed(1)}%`, fmtQty(segment.units), segment.products]), [16, 185, 129]);
+        });
+
+        renderTable('Entradas, salidas y ajustes', ['Período', 'Entradas', 'Salidas', 'Ajustes positivos', 'Ajustes negativos'], chartData.slice(-24).map((point) => [point.label, fmtQty(point.entradas), fmtQty(point.salidas), fmtQty(point.ajustesPos), fmtQty(point.ajustesNeg)]), [59, 130, 246]);
+
+        renderTable('Ajustes y mermas', ['Número', 'Fecha', 'Motivo', 'Bodega', 'Unidades', 'Estado'], periodAdjustments.slice(0, 24).map((adjustment: any) => {
+          const units = (adjustment.items || []).reduce((acc: number, item: any) => acc + Math.abs(Number(item.actualStock || 0) - Number(item.currentStock || 0)), 0);
+          return [adjustment.number || '—', toDate(adjustment.date || adjustment.createdAt)?.toLocaleDateString('es-NI') || '—', inventoryReasonLabel(adjustment.reason), adjustment.warehouse?.name || '—', fmtQty(units), pdfStatusLabel(adjustment.status, 'Pendiente')];
+        }), [139, 92, 246]);
+
+        renderTable('Transferencias', ['Número', 'Fecha', 'Origen', 'Destino', 'Líneas', 'Estado'], periodTransfers.slice(0, 24).map((transfer: any) => [transfer.number || '—', toDate(transfer.date || transfer.createdAt)?.toLocaleDateString('es-NI') || '—', transfer.from?.name || '—', transfer.to?.name || '—', (transfer.items || []).length, pdfStatusLabel(transfer.status, 'Pendiente')]), [99, 102, 241]);
+
+        renderTable('Indicadores de riesgo y abastecimiento', ['Indicador', 'Productos', 'Detalle'], [
+          ['Con existencia', risk.conExistencia.length, 'Productos con unidades disponibles'],
+          ['Bajo mínimo', risk.bajoMinimo.length, 'Existencia por debajo del mínimo configurado'],
+          ['Sin existencia', risk.sinExistencia.length, 'Cantidad igual a cero'],
+          ['Inventario negativo', risk.negativo.length, 'Salidas sin stock o inconsistencias'],
+          ['Sobrestock', risk.sobrestock.length, 'Existencia sobre el máximo configurado'],
+          ['Sin costo', risk.sinCosto.length, 'No afecta correctamente la valorización'],
+          ['Sin precio de venta', risk.sinPrecio.length, 'No permite calcular valor potencial'],
+          ['Sin bodega', risk.sinBodega.length, 'Producto sin ubicación asignada'],
+          ['Lento movimiento', risk.lento90, `${formatConvertedAmount(slowBuckets[2]?.value || 0, 'NIO')} inmovilizado`],
+        ], [244, 63, 94]);
+
+        renderTable('Antigüedad y valor inmovilizado', ['Rango', 'Productos', 'Valor'], slowBuckets.map((bucket) => [bucket.label, bucket.count, formatConvertedAmount(bucket.value, 'NIO')]), [245, 158, 11]);
+        renderTable('Productos con mayor antigüedad', ['Producto', 'Unidades', 'Valor', 'Días sin movimiento', 'Bodega'], [...topAging, ...topNeverMoved].slice(0, 16).map((product) => [product.name.substring(0, 32), fmtQty(product.qty), formatConvertedAmount(product.value, 'NIO'), product.daysSince === null ? 'Sin salidas' : fmtQty(product.daysSince), product.mainWarehouse]), [245, 158, 11]);
+        renderTable('Sobrestock', ['Producto', 'Actual', 'Máximo', 'Valor', 'Bodega'], topOverstock.map((product) => {
+          const level = product.levels.find((item: any) => item.maxStock != null && item.quantity > item.maxStock);
+          return [product.name.substring(0, 32), fmtQty(product.qty), level ? fmtQty(level.maxStock) : '—', formatConvertedAmount(product.value, 'NIO'), level?.warehouseName || product.mainWarehouse];
+        }), [139, 92, 241]);
+        renderTable('Menor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], leastRotated.map((product) => [product.name.substring(0, 32), fmtQty(product.outs), fmtQty(product.avgQty), product.rotation !== null ? `${product.rotation.toFixed(1)}x` : 'N/D', fmtQty(product.qty), product.coverage !== null ? `${Math.round(product.coverage)} días` : 'N/D']), [245, 158, 11]);
+        renderTable('Menor cobertura', ['Producto', 'Stock actual', 'Cobertura', 'Consumo diario', 'Rotación'], leastCoverage.map((product) => {
+          const metrics = productMetrics.get(product.id)!;
+          return [product.name.substring(0, 32), fmtQty(product.qty), product.coverage !== null ? `${Math.round(product.coverage)} días` : 'N/D', `${fmtQty(metrics.outs / durationDays)} ud/día`, product.rotation !== null ? `${product.rotation.toFixed(1)}x` : 'N/D'];
+        }), [244, 63, 94]);
+
+        const configured = await generateConfiguredReportSectionsPDF({
+          targetKey: 'reportes.inventory', title: 'Reporte de Inventario', tenantName: companyName, tenantLogo: themeConfig.logo,
+          sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange), periodLabel: rangeLabel,
+        });
+        if (configured) { toast.success("PDF generado exitosamente"); return; }
 
         doc.save(buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");

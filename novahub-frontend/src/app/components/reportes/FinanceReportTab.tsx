@@ -28,8 +28,8 @@ import {
   buildCajaInfo, isPeriodClosed, buildBreakEven, buildIndicadores, isTransfer, isPurchaseDerived, isValidExpense, isPendingDoc, isActivePayment,
 } from './financialAnalytics';
 import type { FinancialData, BreakEvenConfig, BreakEvenResult, CostBehavior } from './financialAnalytics';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
+import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -141,16 +141,16 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
       ? endOfDay(shiftYearClamped(basePrevEnd, 1))
       : basePrevEnd;
     const now = new Date();
-    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const filters = { pageSize: 5000, report: true };
     const [invR, payR, bilR, ppayR, incR, expR, rincR, rexpR, plR, plPrevR, bsR, bsStartR, tbR, bdR, accR, perR, recR, jR, regR, sesR] = await Promise.all([
-      canViewSales ? invoicesService.getAll(filters, signal) : Promise.resolve([]),
-      canViewSales ? paymentsService.getAll(filters, signal) : Promise.resolve([]),
-      canViewPurchases ? billsService.getAll(filters, signal) : Promise.resolve([]),
-      canViewPurchases ? paymentsMadeService.getAll(filters, signal) : Promise.resolve([]),
-      canViewFinancial ? incomeService.getAll(filters, signal) : Promise.resolve([]),
-      canViewFinancial ? expensesService.getAll(filters, signal) : Promise.resolve([]),
-      canViewFinancial ? recurringIncomesService.getAll(filters, signal) : Promise.resolve([]),
-      canViewFinancial ? recurringExpensesService.getAll(filters, signal) : Promise.resolve([]),
+      canViewSales ? fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
+      canViewSales ? fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
+      canViewPurchases ? fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
+      canViewPurchases ? fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
+      canViewFinancial ? fetchAllReportPages((pageFilters) => incomeService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
+      canViewFinancial ? fetchAllReportPages((pageFilters) => expensesService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
+      canViewFinancial ? fetchAllReportPages((pageFilters) => recurringIncomesService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
+      canViewFinancial ? fetchAllReportPages((pageFilters) => recurringExpensesService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
       canViewAccounting ? contabilidadService.getProfitLoss({ dateFrom: toIso(start), dateTo: toIso(now) }, signal) : Promise.resolve(null),
       canViewAccounting && comparisonStart && comparisonEnd ? contabilidadService.getProfitLoss({ dateFrom: toIso(comparisonStart), dateTo: toIso(comparisonEnd) }, signal) : Promise.resolve(null),
       canViewAccounting ? contabilidadService.getBalanceSheet({ date: toIso(now) }, signal) : Promise.resolve(null),
@@ -160,7 +160,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
       canViewAccounting ? contabilidadService.getChartOfAccounts(false, signal) : Promise.resolve([]),
       canViewAccounting ? contabilidadService.getPeriods(signal) : Promise.resolve([]),
       canViewAccounting ? contabilidadService.getReconciliations(signal) : Promise.resolve([]),
-      canViewAccounting ? contabilidadService.getJournals({ page: 1, pageSize: 5000 }, signal) : Promise.resolve([]),
+      canViewAccounting ? fetchAllReportPages((pageFilters) => contabilidadService.getJournals(pageFilters, signal), { pageSize: 200 }) : Promise.resolve([]),
       canViewPos ? cajaService.getRegisters(true, signal) : Promise.resolve([]),
       canViewPos ? cajaService.getSessionHistory(undefined, 1, signal) : Promise.resolve([]),
     ]);
@@ -510,9 +510,6 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const trialBalanceRows = trialRows.map(normalizeTrialBalanceRow);
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.finance', title: 'Reporte financiero', tenantName: companyName, tenantLogo: logoUrl, rows: trialBalanceRows, columns: [{ header: 'Código', value: row => row.code }, { header: 'Cuenta', value: row => row.name }, { header: 'Tipo', value: row => row.type }, { header: 'Debe', value: row => formatConvertedAmount(row.debit, 'NIO'), align: 'right' }, { header: 'Haber', value: row => formatConvertedAmount(row.credit, 'NIO'), align: 'right' }, { header: 'Saldo', value: row => formatConvertedAmount(row.balance, 'NIO'), align: 'right' }], fileName: buildReportDownloadFileName(['reporte_financiero'], 'pdf', dateRange) });
-        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') 
@@ -521,6 +518,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
+        const reportSections: ConfiguredReportSectionInput[] = [];
 
         const checkPage = (needed: number) => {
           if (currentY + needed > pageHeight - 15) { doc.addPage(); currentY = 20; }
@@ -587,25 +585,8 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         });
         currentY += boxH + 10;
 
-        const exportIds = ['finance-monthly-chart', 'finance-trend-chart', 'finance-income-composition', 'finance-payment-composition', 'finance-position'];
-        const capture = async (elementId: string, height: number) => {
-          const el = document.getElementById(elementId);
-          if (!el) return;
-          checkPage(height + 15);
-          try {
-            const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex) });
-            doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
-            currentY += height + 5;
-          } catch { /* intentionally empty */ }
-        };
-
-        await capture('finance-monthly-chart', 80);
-        await capture('finance-trend-chart', 75);
-        await capture('finance-income-composition', 70);
-        await capture('finance-payment-composition', 70);
-        await capture('finance-position', 70);
-
         const renderTable = (title: string, header: string[], rows: (string | number)[][], color: number[]) => {
+          reportSections.push({ title, headers: header, rows });
           checkPage(rows.length * 6 + 30);
           doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
           doc.text(title, marginX, currentY); currentY += 7;
@@ -626,10 +607,69 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
 
         const fmt = (v: number) => formatConvertedAmount(Number(v || 0), 'NIO');
         renderTable('Rentabilidad (Estado de Resultados)', ['Concepto', 'Período actual', 'Período anterior'], profitability.rows.map(r => [r.label, fmt(r.monto ?? 0), r.prev === null ? 'N/D' : fmt(r.prev)]), [59, 130, 246]);
+        renderTable('Flujo de Caja por Período', ['Período', 'Ingresos', 'Pagos', 'Flujo neto', 'Ingresos acum.', 'Pagos acum.'], serie.points.slice(-24).map(point => [point.label, fmt(point.ingresos), fmt(point.pagos), fmt(point.flujo), fmt(point.acumIngresos), fmt(point.acumPagos)]), [16, 185, 129]);
+        renderTable('Flujo de Caja Acumulado y Proyectado', ['Escenario', 'Período / fecha', 'Saldo', 'Entradas', 'Salidas'], [
+          ...history.slice(-12).map(point => ['Histórico', point.label, fmt(point.saldo), '—', '—']),
+          ...(forecast?.puntos || []).map(point => ['Proyección', point.label, fmt(point.saldo), fmt(point.entradas), fmt(point.salidas)]),
+        ], [59, 130, 246]);
         renderTable('Ingresos por Origen', ['Origen', 'Monto', 'Participación'], ingComposition.rows.slice(0, 8).map(r => [r.nombre, fmt(r.monto), `${r.pct.toFixed(1)}%`]), [16, 185, 129]);
+        renderTable('Composición de Ingresos · Antigüedad de CxC', ['Rango', 'Saldo pendiente', 'Facturas', 'Participación'], cxcAging.buckets.map(b => [b.label, fmt(b.monto), String(b.facturas), `${b.pct.toFixed(1)}%`]), [16, 185, 129]);
         renderTable('Pagos por Categoría', ['Categoría', 'Monto', 'Participación'], pagComposition.rows.slice(0, 8).map(r => [r.nombre, fmt(r.monto), `${r.pct.toFixed(1)}%`]), [244, 63, 94]);
-        renderTable('Antigüedad de Cuentas por Pagar', ['Rango', 'Monto', 'Facturas'], cxpAging.buckets.map(b => [b.label, fmt(b.monto), String(b.facturas)]), [249, 115, 22]);
+        renderTable('Composición de Pagos · Antigüedad de CxP', ['Rango', 'Saldo pendiente', 'Facturas', 'Participación'], cxpAging.buckets.map(b => [b.label, fmt(b.monto), String(b.facturas), `${b.pct.toFixed(1)}%`]), [249, 115, 22]);
+        renderTable('Movimientos de Ingresos', ['Fecha', 'Concepto', 'Origen', 'Documento', 'Monto', 'Estado'], ingComposition.movimientos.slice(0, 12).map(m => [m.fecha ? m.fecha.toLocaleDateString('es-NI') : '—', m.concepto, m.origen, m.documento, fmt(m.monto), m.estado]), [16, 185, 129]);
+        renderTable('Movimientos de Pagos', ['Fecha', 'Concepto', 'Origen', 'Documento', 'Monto', 'Estado'], pagComposition.movimientos.slice(0, 12).map(m => [m.fecha ? m.fecha.toLocaleDateString('es-NI') : '—', m.concepto, m.origen, m.documento, fmt(m.monto), m.estado]), [244, 63, 94]);
+        renderTable('Posición Financiera y Liquidez', ['Indicador', 'Valor', 'Detalle'], [
+          ['Efectivo disponible', fmt(cashInfo.total), 'Cajas y bancos'],
+          ['Cuentas por cobrar', fmt(position.cxc.total), `${position.cxc.facturas} factura(s) · vencido: ${fmt(position.cxc.vencido)}`],
+          ['Cuentas por pagar', fmt(position.cxp.total), `${position.cxp.facturas} factura(s) · vencido: ${fmt(position.cxp.vencido)}`],
+          ['Capital de trabajo', fmt(liquidez.capitalTrabajo), 'Efectivo + CxC − CxP'],
+          ['Razón corriente', liquidez.razonCorriente === null ? 'N/D' : liquidez.razonCorriente.toFixed(2), 'Activo corriente ÷ pasivo corriente'],
+          ['Prueba ácida', liquidez.pruebaAcida === null ? 'N/D' : liquidez.pruebaAcida.toFixed(2), 'Efectivo + CxC ÷ pasivo corriente'],
+          ['Pagos previstos a 30 días', fmt(position.compromisos.d30.monto), `${position.compromisos.d30.count} compromiso(s)`],
+        ], [59, 130, 246]);
+        renderTable('Caja y Conciliación', ['Indicador', 'Valor', 'Detalle'], [
+          ['Cajas abiertas', cajaInfo.cajasAbiertas.length, cajaInfo.cajasAbiertas.map((c: any) => c.name || 'Caja').join(', ') || 'Sin cajas abiertas'],
+          ['Bancos conciliados', cajaInfo.bancosConciliados, fmt(cajaInfo.montoConciliado)],
+          ['Conciliaciones pendientes', cajaInfo.pendientesConciliacion, cajaInfo.ultimaConciliacion ? `Última: ${cajaInfo.ultimaConciliacion.toLocaleDateString('es-NI')}` : 'Sin conciliaciones'],
+          ['Diferencia de arqueo', fmt(cajaInfo.diferenciaArqueo), 'Cajas'],
+        ], [59, 130, 246]);
+        renderTable('Presupuesto y Recurrentes', ['Indicador', 'Valor', 'Detalle'], [
+          ['Presupuesto del período', fmt(budget.presupuesto), `${budget.count} partida(s)`],
+          ['Ejecutado', fmt(budget.ejecutado), `${budget.pct.toFixed(1)}% del presupuesto`],
+          ['Disponible', fmt(budget.disponible), budget.desviacion > 0 ? `Sobre ejecutado: ${fmt(budget.desviacion)}` : 'Dentro del presupuesto'],
+          ['Ingresos recurrentes activos', recurrentes.ingresos, `Mensual: ${fmt(recurrentes.ingMensual)}`],
+          ['Gastos recurrentes activos', recurrentes.gastos, `Mensual: ${fmt(recurrentes.expMensual)}`],
+          ['Impacto neto recurrente mensual', fmt(recurrentes.impactoNeto), recurrentes.nextExp?.fecha ? `Próximo pago: ${recurrentes.nextExp.fecha.toLocaleDateString('es-NI')}` : 'Sin próximo pago'],
+        ], [245, 158, 11]);
+        const breakEvenStatus: Record<string, string> = {
+          MISSING_COST_CLASSIFICATION: 'Falta clasificar costos',
+          NO_SALES: 'Sin ventas',
+          NON_POSITIVE_CONTRIBUTION_MARGIN: 'Margen de contribución no positivo',
+          AVAILABLE: 'Disponible',
+        };
+        renderTable('Punto de Equilibrio', ['Indicador', 'Valor', 'Detalle'], [
+          ['Estado del cálculo', breakEvenStatus[breakEven.estado] || breakEven.estado, `${breakEven.configurados} de ${breakEven.totalCuentas} cuenta(s) clasificadas`],
+          ['Ventas netas', fmt(breakEven.ventasNetas), 'Ventas del período'],
+          ['Costos fijos', breakEven.costosFijos === undefined ? 'N/D' : fmt(breakEven.costosFijos), 'Según clasificación configurada'],
+          ['Costos variables', breakEven.costosVariables === undefined ? 'N/D' : fmt(breakEven.costosVariables), 'Según clasificación configurada'],
+          ['Margen de contribución', breakEven.margenContribucion === undefined ? 'N/D' : fmt(breakEven.margenContribucion), breakEven.margenContribucionPct === undefined ? 'N/D' : `${breakEven.margenContribucionPct.toFixed(1)}%`],
+          ['Punto de equilibrio', breakEven.puntoEquilibrio === undefined ? 'N/D' : fmt(breakEven.puntoEquilibrio), 'Ventas necesarias para cubrir costos fijos'],
+          ['Ventas faltantes', breakEven.ventasFaltantes === undefined ? 'N/D' : fmt(breakEven.ventasFaltantes), 'Para alcanzar el equilibrio'],
+          ['Margen de seguridad', breakEven.margenSeguridad === undefined ? 'N/D' : fmt(breakEven.margenSeguridad), breakEven.margenSeguridadPct === null || breakEven.margenSeguridadPct === undefined ? 'N/D' : `${breakEven.margenSeguridadPct.toFixed(1)}%`],
+        ], [59, 130, 246]);
+        renderTable('Indicadores Financieros', ['Indicador', 'Valor', 'Fórmula / interpretación'], indicadores.indicadores.map(indicator => [
+          indicator.label,
+          indicator.value === null ? 'N/D' : (/Razón|Prueba|Rotación|Cobertura/.test(indicator.label) ? `${indicator.value.toFixed(2)}x` : `${indicator.value.toFixed(1)}%`),
+          `${indicator.formula} · ${indicator.interpretacion}`,
+        ]), [42, 30, 118]);
+        renderTable('Compromisos próximos 30 días', ['Fecha', 'Monto', 'Detalle'], orderedCompromisos.slice(0, 12).map(item => [item.fecha ? item.fecha.toLocaleDateString('es-NI') : '—', fmt(item.monto), item.detalle]), [244, 63, 94]);
         renderTable('Balance de comprobación', ['Código', 'Cuenta', 'Tipo', 'Debe', 'Haber', 'Saldo'], trialBalanceRows.slice(0, 120).map(row => [row.code, row.name, row.type, fmt(row.debit), fmt(row.credit), fmt(row.balance)]), [59, 130, 246]);
+
+        const configured = await generateConfiguredReportSectionsPDF({
+          targetKey: 'reportes.finance', title: 'Reporte Financiero de Negocio', tenantName: companyName, tenantLogo: logoUrl,
+          sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_finanzas'], 'pdf', dateRange), periodLabel: rangeLabel,
+        });
+        if (configured) { toast.success("PDF generado exitosamente"); return; }
 
         const pageCount = (doc as any).internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {

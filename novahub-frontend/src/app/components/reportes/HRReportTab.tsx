@@ -15,9 +15,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -229,12 +229,16 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'hr'], async (signal) => {
-    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const filters = { pageSize: 5000, report: true };
     const [empRes, payRes, toRes, attRes, vacRes, revRes, traRes, benRes, docRes, kpiRes] = await Promise.all([
-      employeesService.getAll(filters, signal), payrollService.getAll(filters, signal), timeOffService.getAll(filters, signal),
-      hrService.getAttendanceRecords(filters, signal), hrService.getVacationBalances(undefined, signal),
-      hrService.getPerformanceReviews(undefined, signal, filters), hrService.getTrainings(filters, signal),
-      hrService.getBenefits(filters, signal), hrService.getDocuments(undefined, signal, filters), hrService.getKpiResults(undefined, undefined, signal),
+      fetchAllReportPages((pageFilters) => employeesService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => payrollService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => timeOffService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => hrService.getAttendanceRecords(pageFilters, signal), filters), hrService.getVacationBalances(undefined, signal),
+      fetchAllReportPages((pageFilters) => hrService.getPerformanceReviews(undefined, signal, pageFilters), filters),
+      fetchAllReportPages((pageFilters) => hrService.getTrainings(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => hrService.getBenefits(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => hrService.getDocuments(undefined, signal, pageFilters), filters), hrService.getKpiResults(undefined, undefined, signal),
     ]);
     return {
       employees: asList(empRes), payrolls: asList(payRes), leaves: asList(toRes), attendances: asList(attRes),
@@ -981,8 +985,6 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.hr', title: 'Reporte de capital humano', tenantName: companyName, tenantLogo: themeConfig.logo || '', rows: fEmployees, columns: [{ header: 'Colaborador', value: row => empName(row) }, { header: 'Identificación', value: row => empIdentification(row) }, { header: 'Cargo', value: row => empPos(row) }, { header: 'Departamento', value: row => empDept(row) }, { header: 'Estado', value: row => STATUS_LABELS[empStatus(row)] || recordLabel(empStatus(row), 'Activo') }, { header: 'Ingreso', value: row => row.hireDate || '—' }], fileName: buildReportDownloadFileName(['reporte_rrhh'], 'pdf', dateRange) });
-        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -991,6 +993,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
+        const reportSections: ConfiguredReportSectionInput[] = [];
 
         const checkPage = (needed: number) => {
           if (currentY + needed > pageHeight - 15) {
@@ -1055,29 +1058,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         });
         currentY += boxH + 10;
 
-        const exportIds = ['hr-evolution-chart', 'hr-movements-chart', 'hr-distribution-chart'];
-        const capture = async (elementId: string, height: number) => {
-          const el = document.getElementById(elementId);
-          if (!el) return;
-          checkPage(height + 15);
-          try {
-            const canvas = await html2canvas(el, {
-              scale: 2,
-              backgroundColor: '#09090b',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
-            });
-            doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
-            currentY += height + 5;
-          } catch {
-            // El gráfico es opcional para la exportación; conserva el resto del reporte.
-          }
-        };
-
-        await capture('hr-evolution-chart', 80);
-        await capture('hr-movements-chart', 70);
-        await capture('hr-distribution-chart', 75);
-
         const renderTable = (title: string, headers: string[], rows: (string | number)[][], widths: number[]) => {
+          reportSections.push({ title, headers, rows });
           checkPage(40);
           doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
           doc.text(title, marginX, currentY); currentY += 7;
@@ -1104,6 +1086,11 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           currentY += 10;
         };
 
+        renderTable('Directorio de Colaboradores',
+          ['Colaborador', 'Identificación', 'Cargo', 'Departamento', 'Estado', 'Ingreso'],
+          fEmployees.map(employee => [empName(employee), empIdentification(employee), empPos(employee), empDept(employee), STATUS_LABELS[empStatus(employee)] || recordLabel(empStatus(employee), 'Activo'), toDate(employee.hireDate)?.toLocaleDateString('es-NI') || '—']),
+          [36, 32, 34, 32, 30, 30]);
+
         renderTable('Mayor Antigüedad',
           ['Colaborador', 'Ingreso', 'Antigüedad', 'Departamento', 'Cargo'],
           antiquity.list.slice(0, 8).map(r => [r.name, r.hireDate ? r.hireDate.toLocaleDateString('es-NI') : '—', fmtTenure(r.months), r.dept, r.pos]),
@@ -1113,6 +1100,121 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           ['Colaborador', 'Días pendientes', '', ''],
           vacStats.topSaldo.map(v => [v.name, `${v.remaining}`, '', '']),
           [80, 40, 20, 20]);
+
+        const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
+        const percent = (value: unknown) => `${Number(value || 0).toFixed(1)}%`;
+        const employeeDistributionLabel = (key: 'departamento' | 'cargo' | 'contrato' | 'sucursal') => key === 'departamento' ? 'Departamento' : key === 'cargo' ? 'Cargo' : key === 'contrato' ? 'Tipo de contrato' : 'Sucursal';
+        const costByEmployee = new Map<string, number>();
+        fPay.forEach(payroll => {
+          const employeeId = payroll.employeeId || payroll.employee?.id;
+          if (employeeId) costByEmployee.set(employeeId, (costByEmployee.get(employeeId) || 0) + employerCost(payroll));
+        });
+        (['departamento', 'cargo', 'contrato', 'sucursal'] as const).forEach((key) => {
+          const segments = new Map<string, { count: number; cost: number }>();
+          activeEmployees.forEach(employee => {
+            const name = key === 'departamento' ? empDept(employee) : key === 'cargo' ? empPos(employee) : key === 'contrato' ? empContract(employee) : empSuc(employee) || 'Sin sucursal';
+            const segment = segments.get(name) || { count: 0, cost: 0 };
+            segment.count += 1;
+            segment.cost += costByEmployee.get(employee.id) || 0;
+            segments.set(name, segment);
+          });
+          renderTable(`Distribución de la plantilla · ${employeeDistributionLabel(key)}`,
+            ['Segmento', 'Colaboradores', 'Participación', 'Costo nómina', 'Participación costo'],
+            [...segments.entries()].sort((a, b) => b[1].count - a[1].count).map(([name, segment]) => [name, segment.count, percent(activeEmployees.length > 0 ? (segment.count / activeEmployees.length) * 100 : 0), money(segment.cost), percent(payrollTotals.total > 0 ? (segment.cost / payrollTotals.total) * 100 : 0)]),
+            [42, 32, 32, 38, 38]);
+        });
+        renderTable('Evolución del costo de nómina',
+          ['Período', 'Salario', 'Variables', 'Cargas', 'Costo total'],
+          evoBuckets.slice(-24).map(point => [point.label, money(point.salario), money(point.variables), money(point.cargas), money(point.total)]),
+          [38, 36, 36, 36, 36]);
+
+        renderTable('Movimientos y estabilidad',
+          ['Período', 'Altas', 'Bajas', 'Plantilla'],
+          movBuckets.slice(-24).map(point => [point.label, point.altas, point.bajas, point.plantilla]),
+          [54, 42, 42, 44]);
+
+        renderTable('Asistencia y ausentismo',
+          ['Período', 'Presentes', 'Ausentes', 'Tardanzas'],
+          attBuckets.slice(-24).map(point => [point.label, point.present, point.absent, point.late]),
+          [54, 42, 42, 44]);
+
+        renderTable('Rotación por departamento',
+          ['Departamento', 'Bajas', 'Promedio plantilla', 'Rotación'],
+          rotacionPorDept.map(item => [item.name, item.bajas, item.promedio.toFixed(1), percent(item.tasa)]),
+          [54, 36, 48, 44]);
+
+        renderTable('Costo por departamento',
+          ['Departamento', 'Costo', 'Participación', 'Período anterior'],
+          costByDept.map(item => [item.name, money(item.total), percent(item.pct), item.prev > 0 ? money(item.prev) : 'N/D']),
+          [54, 42, 42, 44]);
+
+        renderTable('Costo por colaborador',
+          ['Colaborador', 'Departamento', 'Costo'],
+          costoPorEmp.map(item => [item.name, item.dept, money(item.total)]),
+          [76, 58, 48]);
+
+        renderTable('Ausentismo por tipo',
+          ['Tipo de ausencia', 'Días', 'Participación'],
+          Object.entries(ausentismoPorTipo).map(([type, days]) => [type, days, percent(ausentismoDias > 0 ? (Number(days) / ausentismoDias) * 100 : 0)]),
+          [76, 52, 54]);
+
+        renderTable('Próximas vacaciones aprobadas',
+          ['Colaborador', 'Inicio', 'Fin', 'Días'],
+          vacProximas.slice(0, 12).map(vacation => [empName(vacation.employee), toDate(vacation.startDate)?.toLocaleDateString('es-NI') || '—', toDate(vacation.endDate)?.toLocaleDateString('es-NI') || '—', vacation.days || '—']),
+          [76, 40, 40, 26]);
+
+        renderTable('Próximos aniversarios',
+          ['Colaborador', 'Departamento', 'Antigüedad', 'Aniversario'],
+          antiquity.list.filter(item => item.anni).slice().sort((a, b) => (a.anni as Date).getTime() - (b.anni as Date).getTime()).slice(0, 12).map(item => [item.name, item.dept, fmtTenure(item.months), (item.anni as Date).toLocaleDateString('es-NI')]),
+          [76, 46, 34, 26]);
+
+        renderTable('Desempeño',
+          ['Indicador', 'Valor', 'Detalle'],
+          [
+            ['Evaluaciones completadas', perfStats.completed, `de ${perfStats.total} en total`],
+            ['Evaluaciones pendientes', perfStats.pending, 'Requieren seguimiento'],
+            ['Puntaje promedio', perfStats.avg > 0 ? perfStats.avg.toFixed(1) : 'N/D', 'Sobre evaluaciones completadas'],
+            ['Cumplimiento de KPI', perfStats.cumplimiento === null ? 'N/D' : percent(perfStats.cumplimiento), 'Resultados contra objetivo'],
+            ...perfStats.destacados.map(review => [empName(review.employee), Number(review.overallRating || 0).toFixed(1), 'Colaborador destacado'] as (string | number)[]),
+          ],
+          [72, 42, 68]);
+
+        renderTable('Capacitación',
+          ['Indicador', 'Valor', 'Detalle'],
+          [
+            ['Capacitaciones activas', trainStats.activas, `${trainStats.pendientes} inscripciones pendientes`],
+            ['Participantes', trainStats.participantes, 'Colaboradores únicos inscritos'],
+            ['Tasa de finalización', percent(trainStats.rate), `${trainStats.horas} horas estimadas`],
+            ['Costo de capacitaciones', money(trainStats.costo), `${trainStats.vencidas} vencida(s)`],
+          ],
+          [72, 42, 68]);
+
+        renderTable('Documentación',
+          ['Indicador', 'Cantidad', 'Detalle'],
+          [
+            ['Expedientes completos', docStats.completa, `${activeEmployees.length} colaboradores`],
+            ['Sin expediente', docStats.pendiente, 'Colaboradores sin documentos'],
+            ['Próximos a vencer', docStats.proximos, 'En los próximos 60 días'],
+            ['Documentos vencidos', docStats.vencidos, 'Requieren renovación'],
+          ],
+          [72, 42, 68]);
+
+        renderTable('Beneficios',
+          ['Indicador', 'Valor', 'Detalle'],
+          [
+            ['Beneficios activos', benStats.activos, 'Registrados en el sistema'],
+            ['Colaboradores cubiertos', benStats.beneficiados, 'Con al menos un beneficio'],
+            ['Costo mensual', money(benStats.costo), 'Suma de costos por beneficio'],
+            ['Beneficios sin asignación', benStats.sinAsignacion, 'Requieren asignación'],
+            ...benStats.byType.map(([type, count]) => [type, count, 'Asignaciones'] as (string | number)[]),
+          ],
+          [72, 42, 68]);
+
+        const configured = await generateConfiguredReportSectionsPDF({
+          targetKey: 'reportes.hr', title: 'Reporte de Recursos Humanos', tenantName: companyName, tenantLogo: themeConfig.logo,
+          sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_recursos_humanos'], 'pdf', dateRange), periodLabel: dateRange,
+        });
+        if (configured) { toast.success("PDF generado exitosamente"); return; }
 
         doc.save(buildReportDownloadFileName(['reporte_recursos_humanos'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");

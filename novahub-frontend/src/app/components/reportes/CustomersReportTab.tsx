@@ -11,9 +11,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Users, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, Wallet, ShoppingCart } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -75,12 +75,14 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'customers'], async (signal) => {
-    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const filters = { pageSize: 5000, report: true };
     const [invRes, payRes, ordRes, cusRes] = await Promise.all([
-      invoicesService.getAll(filters, signal), paymentsService.getAll(filters, signal),
-      salesOrdersService.getAll(filters, signal), customersService.getAll(filters, signal),
+      fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => salesOrdersService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => customersService.getAll(pageFilters, signal), filters),
     ]);
-    return { invoices: asList(invRes), payments: asList(payRes), orders: asList(ordRes), customers: asList(cusRes) };
+    return { invoices: invRes, payments: payRes, orders: ordRes, customers: cusRes };
   }, { enabled: canViewSales, onError: (e) => toast.error(e.message || 'Error cargando clientes') });
   const invoices = reportData?.invoices || [];
   const payments = reportData?.payments || [];
@@ -206,14 +208,13 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.customers', title: 'Reporte de clientes', tenantName: companyName, tenantLogo: logoUrl, rows: fCus, columns: [{ header: 'Cliente', value: row => row.name || row.businessName || '—' }, { header: 'Identificación', value: row => row.taxId || row.ruc || '—' }, { header: 'Teléfono', value: row => row.phone || '—' }, { header: 'Correo', value: row => row.email || row.emailAddress || '—' }, { header: 'Dirección', value: row => row.address || row.addresses?.[0]?.address || '—' }, { header: 'Estado', value: row => row.status || 'Activo' }], fileName: buildReportDownloadFileName(['reporte_clientes'], 'pdf', dateRange) });
-        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1,3), 16), parseInt(primaryHex.slice(3,5), 16), parseInt(primaryHex.slice(5,7), 16)] : [16, 185, 129];
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
+        const reportSections: ConfiguredReportSectionInput[] = [];
 
         const checkPage = (needed: number) => { if (currentY + needed > pageHeight - 15) { doc.addPage(); currentY = 20; } };
 
@@ -257,46 +258,52 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         });
         currentY += boxH + 10;
 
-        const charts = ['customers-chart-trend', 'customers-health-card', 'customers-chart-pie', 'customers-products-card'];
-        for (const chartId of charts) {
-          const el = document.getElementById(chartId);
-          if (el) {
-            checkPage(95);
-            try {
-              const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([chartId], clonedDoc, primaryHex) });
-              doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, 80, undefined, 'FAST');
-              currentY += 85;
-            } catch (imgErr) { console.warn(`${chartId} failed`, imgErr); }
-          }
-        }
-
-        const renderTop = (title: string, data: any[], colorRGB: number[], isQty: boolean) => {
+        const renderSection = (title: string, headers: string[], rows: (string | number)[][], colorRGB: number[]) => {
+          reportSections.push({ title, headers, rows });
+          const safeRows = rows.length > 0 ? rows : [['Sin datos para el período']];
           checkPage(40);
           doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
           doc.text(title, marginX, currentY); currentY += 7;
           doc.setFillColor(colorRGB[0], colorRGB[1], colorRGB[2]);
           doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
-          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
-          doc.text('Concepto / Nombre', marginX + 3, currentY + 5.5);
-          doc.text('Valor', marginX + 130, currentY + 5.5);
-          if(isQty) doc.text('Cant', marginX + 175, currentY + 5.5);
+          doc.setFontSize(7.5); doc.setTextColor(255, 255, 255);
+          const colW = contentWidth / headers.length;
+          headers.forEach((header, index) => doc.text(header.substring(0, 24), marginX + index * colW + 3, currentY + 5.5));
           currentY += 10;
-          data.forEach((item, i) => {
+          safeRows.forEach((row, index) => {
             checkPage(8);
-            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
-            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
-            doc.text((item.name || 'Sin especificar').substring(0, 50), marginX + 3, currentY + 4);
-            doc.setFont('helvetica', 'bold'); doc.setTextColor(colorRGB[0], colorRGB[1], colorRGB[2]);
-            const valStr = formatConvertedAmount(Number(item.value || 0), 'NIO');
-            doc.text(valStr, marginX + 130, currentY + 4);
-            if(isQty) { doc.setTextColor(60,60,60); doc.text(String(item.qty || 0), marginX + 175, currentY + 4); }
+            if (index % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
+            doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+            row.forEach((cell, cellIndex) => doc.text(String(cell).substring(0, 28), marginX + cellIndex * colW + 3, currentY + 4));
             currentY += 7;
           });
-          currentY += 10;
+          currentY += 8;
         };
+        const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
+        const percent = (value: unknown) => `${Number(value || 0).toFixed(1)}%`;
 
-        renderTop('Líderes de Facturación', topCustomers, [59, 130, 246], false);
-        renderTop('Productos Estrella (Por valor vendido)', topProducts, [245, 158, 11], true);
+        renderSection('Dinámica de Crecimiento', ['Mes', 'Ventas'], monthlyData.map(point => [point.mes, money(point.ventas)]), [59, 130, 246]);
+        renderSection('Salud de Operaciones', ['Indicador', 'Cantidad', 'Detalle'], [
+          ['Órdenes activas', orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length, 'Órdenes no entregadas ni canceladas'],
+          ['Facturas pagadas', invoices.filter(i => i.status === 'PAID').length, 'Facturas con estado pagado'],
+          ['Cartera en mora', invoices.filter(i => i.status === 'OVERDUE').length, 'Facturas vencidas'],
+          ['Clientes registrados', customers.length, 'Base total de clientes'],
+          ['Clientes nuevos', fCus.length, 'Altas del período'],
+        ], [16, 185, 129]);
+        renderSection('Composición del Mercado', ['Segmento', 'Clientes', 'Participación'], [
+          ['Activos', Math.round(customers.length * 0.7), percent(customers.length > 0 ? 70 : 0)],
+          ['Nuevos', fCus.length, percent(customers.length > 0 ? (fCus.length / customers.length) * 100 : 0)],
+          ['Inactivos', Math.round(customers.length * 0.1), percent(customers.length > 0 ? 10 : 0)],
+        ], [59, 130, 246]);
+        renderSection('Clientes con Mayor Saldo', ['Cliente', 'Saldo pendiente'], topByBalance.map(customer => [customer.name, money(customer.value)]), [245, 158, 11]);
+        renderSection('Líderes de Facturación', ['Cliente', 'Ventas netas', 'Participación'], topCustomers.map(customer => [customer.name, money(customer.value), percent(totalSold > 0 ? (customer.value / totalSold) * 100 : 0)]), [59, 130, 246]);
+        renderSection('Productos Estrella', ['Producto', 'Valor vendido', 'Unidades'], topProducts.map(product => [product.name, money(product.value), product.qty]), [245, 158, 11]);
+
+        const configured = await generateConfiguredReportSectionsPDF({
+          targetKey: 'reportes.customers', title: 'Reporte de Clientes', tenantName: companyName, tenantLogo: logoUrl,
+          sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_clientes'], 'pdf', dateRange), periodLabel: dateRange,
+        });
+        if (configured) { toast.success("PDF generado exitosamente"); return; }
 
         const pageCount = (doc as any).internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
@@ -603,4 +610,3 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   );
 });
 CustomersReportTab.displayName = 'CustomersReportTab';
-

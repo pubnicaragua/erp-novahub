@@ -13,10 +13,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Eye, Clock, DollarSign, Percent, Target, CalendarDays, AlertTriangle, Package, CreditCard, Receipt, Info } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -196,12 +196,14 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'sales'], async (signal) => {
-    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const filters = { pageSize: 5000, report: true };
     const [invRes, payRes, retRes, cnRes] = await Promise.all([
-      invoicesService.getAll(filters, signal), paymentsService.getAll(filters, signal),
-      salesReturnsService.getAll(filters, signal), creditNotesService.getAll(filters, signal),
+      fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => salesReturnsService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => creditNotesService.getAll(pageFilters, signal), filters),
     ]);
-    return { invoices: asList(invRes), payments: asList(payRes), returns: asList(retRes), creditNotes: asList(cnRes) };
+    return { invoices: invRes, payments: payRes, returns: retRes, creditNotes: cnRes };
   }, { enabled: canViewSales, onError: (e) => toast.error(e.message || 'Error cargando ventas') });
   const invoices = reportData?.invoices || [];
   const payments = reportData?.payments || [];
@@ -691,14 +693,13 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: 'Reporte de ventas', tenantName: companyName, tenantLogo: logoUrl, rows: sortedInvoices, columns: [{ header: 'Documento', value: row => row.number || row.id || '—' }, { header: 'Cliente', value: row => row.customer?.name || row.client?.name || '—' }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Vencimiento', value: row => row.dueDate || row.validUntil || '—' }, { header: 'Estado', value: row => row.status || '—' }, { header: 'Total', value: row => row.total || 0, align: 'right' }, { header: 'Saldo', value: row => row.balance ?? row.balanceDue ?? '—', align: 'right' }], fileName: buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange) });
-        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)] : [16, 185, 129];
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
+        const reportSections: ConfiguredReportSectionInput[] = [];
 
         const checkPage = (needed: number) => { if (currentY + needed > pageHeight - 15) { doc.addPage(); currentY = 20; } };
 
@@ -743,44 +744,77 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         });
         currentY += boxH + 10;
 
-        const charts = ['sales-chart-projection', 'sales-chart-pie', 'sales-chart-trend', 'sales-chart-bar', 'sales-health-card'];
-        for (const chartId of charts) {
-          const el = document.getElementById(chartId);
-          if (el) {
-            checkPage(95);
-            try {
-              const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([chartId], clonedDoc, primaryHex) });
-              doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, 80, undefined, 'FAST');
-              currentY += 85;
-            } catch (imgErr) { console.warn(`${chartId} failed`, imgErr); }
-          }
-        }
-
-        const renderTop = (title: string, data: any[], colorRGB: number[], isMargin: boolean) => {
+        const renderSection = (title: string, headers: string[], rows: (string | number)[][], colorRGB: number[]) => {
+          reportSections.push({ title, headers, rows });
+          const safeRows = rows.length > 0 ? rows : [['Sin datos para el período']];
           checkPage(40);
           doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
           doc.text(title, marginX, currentY); currentY += 7;
           doc.setFillColor(colorRGB[0], colorRGB[1], colorRGB[2]);
           doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
-          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
-          doc.text('Concepto / Nombre', marginX + 3, currentY + 5.5);
-          doc.text('Valor', marginX + 130, currentY + 5.5);
+          doc.setFontSize(7.5); doc.setTextColor(255, 255, 255);
+          const colW = contentWidth / headers.length;
+          headers.forEach((header, index) => doc.text(header.substring(0, 24), marginX + index * colW + 3, currentY + 5.5));
           currentY += 10;
-          data.forEach((item, i) => {
+          safeRows.forEach((row, index) => {
             checkPage(8);
-            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
-            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
-            doc.text((item.name || 'Sin especificar').substring(0, 50), marginX + 3, currentY + 4);
-            doc.setFont('helvetica', 'bold'); doc.setTextColor(colorRGB[0], colorRGB[1], colorRGB[2]);
-            const valStr = isMargin ? formatConvertedAmount(Number(item.profit ?? item.margin ?? 0), 'NIO') : formatConvertedAmount(Number(item.ventas ?? item.value ?? 0), 'NIO');
-            doc.text(valStr, marginX + 130, currentY + 4);
+            if (index % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
+            doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+            row.forEach((cell, cellIndex) => doc.text(String(cell).substring(0, 28), marginX + cellIndex * colW + 3, currentY + 4));
             currentY += 7;
           });
-          currentY += 10;
+          currentY += 8;
         };
+        const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
+        const percent = (value: unknown) => `${Number(value || 0).toFixed(1)}%`;
 
-        renderTop('Principales Clientes por Ventas Netas', topCustomers.list.slice(0, 5), [59, 130, 246], false);
-        renderTop('Productos con Mayor Contribución', visibleProducts.slice(0, 5), [168, 85, 247], true);
+        renderSection('Proyección de Cierre de Ventas', ['Indicador', 'Valor', 'Detalle'], projection ? [
+          ['Cierre proyectado', money(projection.projectedClose), `${projection.elapsedDays} días transcurridos`],
+          ['Ritmo promedio diario', money(projection.rate), `Confianza ${projection.confidence}`],
+          ['Días restantes', projection.remainingDays, `de ${projection.totalDays} días`],
+        ] : [['Proyección', 'N/D', 'Seleccione un período con duración definida']], [16, 185, 129]);
+
+        renderSection('Distribución de Ventas por Categoría', ['Categoría', 'Ventas netas', 'Participación', 'Unidades', 'Productos'], catComposition.data.map(category => [
+          category.name, money(category.value), percent(catComposition.total > 0 ? (category.value / catComposition.total) * 100 : 0), category.unidades, category.productos,
+        ]), [59, 130, 246]);
+
+        renderSection('Evolución de Ventas', ['Período', 'Ventas netas', 'Cobros totales', 'Cobros del período', 'Acumulado'], serie.points.slice(-24).map(point => [
+          point.label, money(point.ventas), money(point.cobrado), money(point.cobradoPeriodo), money(point.acumulado),
+        ]), [16, 185, 129]);
+
+        renderSection('Antigüedad de CxC', ['Rango', 'Saldo pendiente', 'Facturas', 'Participación'], cxcAging.map(bucket => [
+          bucket.label, money(bucket.monto), bucket.facturas, percent(bucket.pct),
+        ]), [245, 158, 11]);
+
+        renderSection('Ventas Facturadas y Cobros Recibidos', ['Indicador', 'Monto', 'Movimientos', 'Alcance'], [
+          ['Ventas netas facturadas', money(ventasNetas), facturasValidas, rangeLabel],
+          ['Cobros totales recibidos', money(totalPaid), pagosDelPeriodo, 'Todos los cobros del período'],
+          ['Cobros de facturas del período', money(cobrosDeFacturasDelPeriodo), pagosDelPeriodo, 'Solo facturas emitidas en el período'],
+          ['Saldo pendiente por cobrar', money(totalPending), pendingCount, 'Facturas pendientes'],
+          ['Conversión de facturación en efectivo', conversionPct === null ? 'N/D' : percent(conversionPct), facturasValidas, 'Cobros de facturas del período'],
+        ], [59, 130, 246]);
+
+        renderSection('Resumen Operativo de Ventas', ['Indicador', 'Monto', 'Detalle'], [
+          ['Ventas brutas', money(ventasBrutas), `${facturasValidas} facturas válidas`],
+          ['Descuentos', money(descuentos), 'Ajuste comercial'],
+          ['Devoluciones', money(devoluciones), `${fRet.length} devolución(es)`],
+          ['Notas de crédito', money(notasCredito), `${fCN.length} nota(s)`],
+          ['Ventas netas', money(ventasNetas), 'Brutas − ajustes'],
+        ], [168, 85, 247]);
+
+        renderSection('Principales Clientes por Ventas Netas', ['Cliente', 'Ventas netas', 'Facturas', 'Saldo', 'Participación'], topCustomers.list.slice(0, 8).map(customer => [
+          customer.name, money(customer.ventas), customer.facturas, money(customer.saldo), percent(customer.pct),
+        ]), [59, 130, 246]);
+
+        renderSection('Productos con Mayor Contribución', ['Producto', 'Ventas netas', 'Unidades', 'Utilidad', 'Margen'], visibleProducts.slice(0, 8).map(product => [
+          product.name, money(product.revenue), product.qty, money(product.profit), product.margin === null ? 'N/D' : percent(product.margin),
+        ]), [168, 85, 247]);
+
+        const configured = await generateConfiguredReportSectionsPDF({
+          targetKey: 'reportes.sales', title: 'Reporte de Ventas', tenantName: companyName, tenantLogo: logoUrl,
+          sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange), periodLabel: rangeLabel,
+        });
+        if (configured) { toast.success("PDF generado exitosamente"); return; }
 
         const pageCount = (doc as any).internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {

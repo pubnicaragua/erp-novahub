@@ -14,9 +14,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { CreditCard, Wallet, Activity, Truck, TrendingUp, Package, PieChart as PieChartIcon, AlertTriangle, Clock, Receipt, Target, CalendarDays, ArrowUpRight, Percent, BarChart3, ClipboardList, FileWarning } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { cn } from '../ui/utils';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -211,13 +211,16 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'purchases'], async (signal) => {
-    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const filters = { pageSize: 5000, report: true };
     const [billRes, payRes, credRes, ordRes, recRes, reqRes] = await Promise.all([
-      billsService.getAll(filters, signal), paymentsMadeService.getAll(filters, signal),
-      supplierCreditsService.getAll(filters, signal), purchaseOrdersService.getAll(filters, signal),
-      purchaseReceiptsService.getAll(filters, signal), purchaseRequestsService.getAll(filters, signal),
+      fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => supplierCreditsService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => purchaseOrdersService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => purchaseReceiptsService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => purchaseRequestsService.getAll(pageFilters, signal), filters),
     ]);
-    return { bills: asList(billRes), payments: asList(payRes), credits: asList(credRes), orders: asList(ordRes), receipts: asList(recRes), requests: asList(reqRes) };
+    return { bills: billRes, payments: payRes, credits: credRes, orders: ordRes, receipts: recRes, requests: reqRes };
   }, { enabled: canViewPurchases, onError: (e) => toast.error(e.message || 'Error cargando compras') });
   const bills = reportData?.bills || [];
   const payments = reportData?.payments || [];
@@ -935,16 +938,14 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.purchases', title: 'Reporte de compras', tenantName: companyName, tenantLogo: logoUrl, rows: fBills, columns: [{ header: 'Documento', value: row => row.number || row.id || '—' }, { header: 'Proveedor', value: row => row.supplier?.name || row.provider?.name || '—' }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Vencimiento', value: row => row.dueDate || '—' }, { header: 'Estado', value: row => row.status || '—' }, { header: 'Total', value: row => row.total || 0, align: 'right' }, { header: 'Saldo', value: row => row.balance ?? row.pendingAmount ?? '—', align: 'right' }], fileName: buildReportDownloadFileName(['reporte_compras'], 'pdf', dateRange) });
-        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
-        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
-        const rgbPrimary = primaryHex.startsWith('#')
-          ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)]
+        const rgbPrimary = primaryColor.startsWith('#')
+          ? [parseInt(primaryColor.slice(1, 3), 16), parseInt(primaryColor.slice(3, 5), 16), parseInt(primaryColor.slice(5, 7), 16)]
           : [249, 115, 22];
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
+        const reportSections: ConfiguredReportSectionInput[] = [];
 
         const checkPage = (needed: number) => {
           if (currentY + needed > pageHeight - 15) {
@@ -1017,55 +1018,103 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         });
         currentY += boxH + 10;
 
-        const exportIds = ['purchases-monthly-chart', 'purchases-dynamics-chart', 'purchases-distribution-chart', 'purchases-pie-chart'];
-        const capture = async (elementId: string, height: number) => {
-          const el = document.getElementById(elementId);
-          if (!el) return;
-          checkPage(height + 15);
-          try {
-            const canvas = await html2canvas(el, {
-              scale: 2,
-              backgroundColor: '#ffffff',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
-            });
-            doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
-            currentY += height + 5;
-          } catch { /* ignore */ }
-        };
-
-        await capture('purchases-monthly-chart', 85);
-        await capture('purchases-distribution-chart', 75);
-        await capture('purchases-dynamics-chart', 75);
-        await capture('purchases-pie-chart', 75);
-
-        const renderTop = (title: string, rows: { name: string; value: number; detail: string }[], color: number[]) => {
-          checkPage(40);
+        const renderSection = (title: string, headers: string[], rows: (string | number)[][], color: number[]) => {
+          reportSections.push({ title, headers, rows });
+          const safeRows = rows.length > 0 ? rows : [['Sin datos', ...Array(Math.max(0, headers.length - 1)).fill('—')]];
+          checkPage(safeRows.length * 8 + 32);
           doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
           doc.text(title, marginX, currentY); currentY += 7;
           doc.setFillColor(color[0], color[1], color[2]);
           doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
-          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
-          doc.text('Nombre', marginX + 3, currentY + 5.5);
-          doc.text('Detalle', marginX + 80, currentY + 5.5);
-          doc.text('Monto', marginX + 155, currentY + 5.5);
+          const colW = contentWidth / headers.length;
+          doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+          headers.forEach((header, index) => doc.text(header.substring(0, 24), marginX + index * colW + 2, currentY + 5.5));
           currentY += 10;
-          rows.forEach((item, i) => {
-            checkPage(12);
-            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
-            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
-            doc.text(item.name.substring(0, 40), marginX + 3, currentY + 4);
-            doc.text(item.detail.substring(0, 55), marginX + 80, currentY + 4);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(color[0], color[1], color[2]);
-            doc.text(formatConvertedAmount(Number(item.value), 'NIO'), marginX + 155, currentY + 4);
+          safeRows.forEach((row, rowIndex) => {
+            checkPage(9);
+            if (rowIndex % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
+            doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+            row.forEach((cell, index) => doc.text(String(cell ?? '—').substring(0, 28), marginX + index * colW + 2, currentY + 4));
             currentY += 7;
           });
-          currentY += 10;
+          currentY += 9;
         };
+        const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
+        const pct = (value: unknown) => `${Number(value || 0).toFixed(1)}%`;
 
-        renderTop('Top Proveedores (Compras netas)', suppliersPerf.list.slice(0, 5).map(s => ({ name: s.name, value: s.compras, detail: `${s.facturas} facturas · ${s.pct.toFixed(1)}% participación` })), [249, 115, 22]);
-        renderTop('Productos con Mayor Inversión', visibleProducts.filter(p => p.monto > 0).slice(0, 5).map(p => ({ name: p.name, value: p.monto, detail: `${p.qty} unidades · precio prom. ${fmtShort(p.priceAvg)}` })), [59, 130, 246]);
-        renderTop('Retenciones Registradas', retenciones.list.slice(0, 5).map(r => ({ name: r.proveedor, value: r.monto, detail: `${r.factura} · ${r.tipo} · ${pdfStatusLabel(r.estado, '-')}` })), [245, 158, 11]);
+        const productByAmount = [...products.list].filter(p => p.monto > 0).sort((a, b) => b.monto - a.monto).slice(0, 5);
+        const productByUnits = [...products.list].sort((a, b) => b.qty - a.qty).slice(0, 5);
+        const productByVariation = [...products.list].filter(p => p.priceTrend !== null).sort((a, b) => (b.priceTrend ?? 0) - (a.priceTrend ?? 0)).slice(0, 5);
+        renderSection('Productos con Mayor Inversión de Compra · Monto', ['Producto', 'Monto', 'Unidades', 'Precio promedio'], productByAmount.map(p => [p.name, money(p.monto), p.qty, money(p.priceAvg)]), [59, 130, 246]);
+        renderSection('Productos con Mayor Inversión de Compra · Unidades', ['Producto', 'Unidades', 'Monto', 'Precio promedio'], productByUnits.map(p => [p.name, p.qty, money(p.monto), money(p.priceAvg)]), [59, 130, 246]);
+        renderSection('Productos con Mayor Inversión de Compra · Variación de precio', ['Producto', 'Variación', 'Precio anterior', 'Precio actual'], productByVariation.map(p => [p.name, `${p.priceTrend! >= 0 ? '+' : ''}${p.priceTrend!.toFixed(1)}%`, p.prevPrice === null ? 'N/D' : money(p.prevPrice), money(p.priceAvg)]), [59, 130, 246]);
+
+        renderSection('Desempeño de Proveedores', ['Proveedor', 'Compras', 'Desempeño', 'Entrega / incidencias'], suppliersPerf.list.slice(0, 8).map(s => [s.name, money(s.compras), s.score === null ? 'N/D' : `${Math.round(s.score)}/100`, `${s.avgLead === null ? 'Entrega N/D' : `${Math.round(s.avgLead)} días`} · ${s.incidencias} incidencias`]), [249, 115, 22]);
+        renderSection('Concentración de Compras por Proveedor', ['Proveedor', 'Monto', 'Participación', 'Saldo'], supplierComposition.data.map(s => [s.name, money(s.compras), pct(s.pct), money(s.saldo)]), [245, 158, 11]);
+
+        renderSection('Evolución de Compras Netas', ['Período', 'Compra neta', 'Acumulado', 'Período anterior'], evolucionData.slice(-24).map(point => [point.label, money(point.compras), money(point.acumulado), point.prev === null ? 'N/D' : money(point.prev)]), [249, 115, 22]);
+        renderSection('Antigüedad de CxP', ['Rango', 'Saldo', 'Facturas', 'Proveedores'], agingBuckets.map(bucket => [bucket.label, money(bucket.monto), bucket.facturas, bucket.proveedores]), [244, 63, 94]);
+
+        const pagosPeriodoCount = fPay.filter(payment => {
+          const invoiceDate = payment.supplierInvoiceId ? invoiceDateById.get(payment.supplierInvoiceId) : null;
+          return !!invoiceDate && invoiceDate.getTime() >= currentStart.getTime();
+        }).length;
+        const pagosTotales = serie.points.reduce((sum, point) => sum + point.pagos, 0);
+        renderSection('Compras Facturadas y Pagos Realizados', ['Indicador', 'Monto', 'Movimientos', 'Alcance'], [
+          ['Compras netas facturadas', money(comprasNetas), facturasValidas, 'Solo del período'],
+          ['Pagos totales realizados', money(pagosTotales), pagosCount, 'Pagos fechados en el período'],
+          ['Pagos de facturas del período', money(pagosAplicadosPeriodo), pagosPeriodoCount, 'Facturas emitidas en el período'],
+        ], [16, 185, 129]);
+        renderSection('Compras Facturadas y Pagos Realizados por Período', ['Período', 'Compras netas', 'Pagos totales', 'Pagos del período'], serie.points.slice(-24).map(point => [point.label, money(point.compras), money(point.pagos), money(point.pagosPeriodo)]), [16, 185, 129]);
+
+        renderSection('Estado del Ciclo de Compra · Operativo', ['Indicador', 'Cantidad', 'Monto / valor', 'Detalle'], [
+          ['Solicitudes en revisión', stages.requestsInReview, '—', 'Pendientes de aprobación'],
+          ['Órdenes aprobadas', stages.approved, money(stages.totalOrdered), 'Órdenes activas'],
+          ['Pendientes de recepción', stages.pendingReceipt, money(stages.totalPendingReceipt), 'Órdenes sin recepción'],
+          ['Recepciones completas', stages.complete, '—', 'Recepciones cerradas'],
+          ['Facturas pendientes de pago', stages.pendingPay, money(stages.pendingPayMonto), 'Obligaciones abiertas'],
+          ['Facturas vencidas', stages.overdue, money(stages.overdueMonto), 'Obligaciones vencidas'],
+          ['Cumplimiento del período', '—', cumplimientoPeriodo === null ? 'N/D' : pct(cumplimientoPeriodo), 'Pagos ÷ compras netas'],
+          ['Tiempo promedio del ciclo', '—', cicloPromedio.total === null ? 'N/D' : `${cicloPromedio.total.toFixed(1)} días`, 'Solicitud a pago'],
+        ], [16, 185, 129]);
+        renderSection('Estado del Ciclo de Compra · Incidencias', ['Indicador', 'Cantidad', 'Unidades', 'Detalle'], [
+          ['Productos faltantes', incidentSummary.faltantesItems, incidentSummary.faltantesQty, 'Diferencia contra lo ordenado'],
+          ['Productos rechazados', incidentSummary.rechazadosQty, '—', 'Unidades rechazadas'],
+          ['Recepciones parciales', stages.partial, '—', 'Con diferencias o incidencias'],
+          ['Proveedores con incidencias', incidentSummary.suppliers.length, '—', incidentSummary.hasReceipts ? 'Recepciones evaluadas' : 'Sin recepciones'],
+        ], [244, 63, 94]);
+        renderSection('Estado del Ciclo de Compra · Retenciones', ['Indicador', 'Comprobantes', 'Monto', 'Estado'], [
+          ['Total retenido', retenciones.retCount, money(retenciones.retTotal), 'Registrado'],
+          ['Base sujeta a retención', retenciones.retCount, money(retenciones.retBase), 'Base calculada'],
+          ['Retenciones pendientes', '—', money(retenciones.pend), 'Sobre facturas no pagadas'],
+          ['Retenciones anuladas', '—', money(retenciones.anuladas), 'Anuladas'],
+        ], [245, 158, 11]);
+        renderSection('Compromisos de pago próximos', ['Horizonte', 'Monto', 'Facturas'], [
+          ['Próximos 7 días', money(compromisos.d7.monto), compromisos.d7.count],
+          ['Próximos 15 días', money(compromisos.d15.monto), compromisos.d15.count],
+          ['Próximos 30 días', money(compromisos.d30.monto), compromisos.d30.count],
+        ], [245, 158, 11]);
+        renderSection('Presupuesto de Compras', ['Indicador', 'Monto', 'Detalle'], budgetSummary ? [
+          ['Presupuesto', money(budgetSummary.presupuesto), `${budgetSummary.count} partida(s)`],
+          ['Ejecutado', money(budgetSummary.ejecutado), `${budgetSummary.pct.toFixed(1)}%`],
+          ['Disponible', money(budgetSummary.disponible), budgetSummary.desviacion > 0 ? `Sobre ejecutado: ${money(budgetSummary.desviacion)}` : 'Dentro del presupuesto'],
+        ] : [['Presupuesto', 'N/D', 'Sin partidas configuradas']], [249, 115, 22]);
+        renderSection('Desglose del tiempo del ciclo de compra', ['Etapa', 'Promedio', 'Detalle'], cicloPromedio.stages.map(stage => [stage.label, stage.days === null ? 'N/D' : `${stage.days.toFixed(1)} días`, 'Promedio del período']), [59, 130, 246]);
+        renderSection('Desglose del estado del ciclo de compra', ['Etapa', 'Cantidad', 'Monto'], [
+          ['Ordenado (aprobado/enviado)', stages.ordenadoCount, money(stages.totalOrdered)],
+          ['Pendiente de recepción', stages.pendingReceipt, money(stages.totalPendingReceipt)],
+          ['Recibido no facturado', stages.recibidoNoFacturadoCount, money(stages.totalRecibidoNoFacturado)],
+          ['Facturado pendiente de pago', stages.pendingPay, money(stages.pendingPayMonto)],
+          ['Vencido', stages.overdue, money(stages.overdueMonto)],
+        ], [59, 130, 246]);
+        renderSection('Incidencias por proveedor', ['Proveedor', 'Recepciones', 'Diferencias', 'Incidencias'], incidentSummary.suppliers.map(supplier => [supplier.name, supplier.receipts, supplier.partial, supplier.incidents]), [244, 63, 94]);
+        renderSection('Detalle de retenciones', ['Factura', 'Proveedor', 'Tipo', 'Base', 'Monto', 'Estado'], retenciones.list.slice(0, 24).map(retention => [retention.factura || '—', retention.proveedor, retention.tipo, money(retention.base), money(retention.monto), pdfStatusLabel(retention.estado, 'Registrada')]), [245, 158, 11]);
+
+        const configured = await generateConfiguredReportSectionsPDF({
+          targetKey: 'reportes.purchases', title: 'Reporte de Compras', tenantName: companyName, tenantLogo: logoUrl,
+          sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_compras'], 'pdf', dateRange), periodLabel: rangeLabel,
+        });
+        if (configured) { toast.success('PDF generado exitosamente'); return; }
 
         const pageCount = (doc as any).internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {

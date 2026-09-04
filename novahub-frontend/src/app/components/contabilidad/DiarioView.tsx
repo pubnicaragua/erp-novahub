@@ -23,7 +23,7 @@ import type { ChartAccount } from '../../types/accounting';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
-import { REFERENCE_TYPES, referenceTypeLabel } from '../../utils/accountingLabels';
+import { REFERENCE_TYPES, accountingDescriptionLabel, referenceTypeLabel } from '../../utils/accountingLabels';
 import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
@@ -609,7 +609,7 @@ export function DiarioView() {
                     <div key={j.id} className="grid min-w-0 cursor-pointer items-center gap-0 px-3 py-2 transition-colors hover:bg-muted/40" style={{ gridTemplateColumns: journalGridCols }} onClick={() => handleView(j)}>
                       <span className="truncate px-1 font-mono text-xs font-bold">{j.number}</span>
                       <span className="truncate px-1 text-xs">{formatAccountingDate(j.date)}</span>
-                      <span className="min-w-0 truncate px-1 text-xs" title={j.description}>{j.description}</span>
+                      <span className="min-w-0 truncate px-1 text-xs" title={accountingDescriptionLabel(j.description)}>{accountingDescriptionLabel(j.description)}</span>
                       <span className="px-1">
                         <Badge variant={STATUS_COLORS[statusKey] || 'outline'} className="text-[10px] font-black uppercase tracking-wider">
                           {journalStatusLabel(j.status)}
@@ -644,7 +644,7 @@ export function DiarioView() {
                               {journalStatusLabel(j.status)}
                             </Badge>
                           </div>
-                          <p className="mt-1.5 truncate text-sm font-bold" title={j.description}>{j.description}</p>
+                          <p className="mt-1.5 truncate text-sm font-bold" title={accountingDescriptionLabel(j.description)}>{accountingDescriptionLabel(j.description)}</p>
                           <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                             {formatAccountingDate(j.date)}
                           </p>
@@ -708,7 +708,7 @@ export function DiarioView() {
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Asiento contable · #{viewJournal.number}</p>
-                        <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={viewJournal.description}>{viewJournal.description}</h3>
+                        <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={accountingDescriptionLabel(viewJournal.description)}>{accountingDescriptionLabel(viewJournal.description)}</h3>
                       </div>
                       <Badge variant={STATUS_COLORS[viewJournal.status?.toLowerCase()] || 'outline'} className="shrink-0">
                         {journalStatusLabel(viewJournal.status)}
@@ -751,7 +751,7 @@ export function DiarioView() {
 
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Descripción</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm">{viewJournal.description}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm">{accountingDescriptionLabel(viewJournal.description)}</p>
                   </div>
 
                   <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
@@ -814,7 +814,7 @@ export function DiarioView() {
                                     {line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}
                                   </p>
                                 </div>
-                                {line.description && <p className="ml-8 mt-1 truncate text-[10px] text-muted-foreground" title={line.description}>{line.description}</p>}
+                                {line.description && <p className="ml-8 mt-1 truncate text-[10px] text-muted-foreground" title={accountingDescriptionLabel(line.description)}>{accountingDescriptionLabel(line.description)}</p>}
                               </div>
                               <p className="text-right font-mono text-[11px] font-bold tabular-nums text-emerald-600">{line.debit > 0 ? formatCurrency(line.debit) : '—'}</p>
                               <p className="text-right font-mono text-[11px] font-bold tabular-nums text-rose-500">{line.credit > 0 ? formatCurrency(line.credit) : '—'}</p>
