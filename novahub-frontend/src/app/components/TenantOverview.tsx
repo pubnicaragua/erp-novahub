@@ -589,7 +589,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2 relative">
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">Resumen operativo</p>
+          <h1 className="text-3xl font-bold leading-tight text-blue-600 dark:text-blue-400">Resumen operativo</h1>
         </div>
         <div className="flex items-center gap-2 z-10 shrink-0 flex-wrap">
           <Select value={period} onValueChange={(val) => {
@@ -749,7 +749,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <BarChart3 className="size-4 text-primary" />
-                <h2 className="text-base font-black uppercase tracking-tight">Rendimiento de Productos en Caja</h2>
+                <h2 className="text-xl font-semibold">Rendimiento de Productos en Caja</h2>
               </div>
               <p className="text-[10px] text-foreground/70 font-medium mb-3 ml-6">Monitoreo por volumen de ventas, margen de utilidad ganada e inventario sin salida.</p>
               <div className="mb-3 flex items-center gap-2">
@@ -765,7 +765,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                       <div className="size-6 rounded-md bg-emerald-500/10 flex items-center justify-center">
                         <TrendingUp className="size-3 text-emerald-400" />
                       </div>
-                      <span className="text-xs font-black uppercase tracking-wider text-foreground">Más Vendidos</span>
+                      <span className="text-sm font-semibold text-foreground">Más vendidos</span>
                     </div>
                     <span className="text-[9px] font-bold text-foreground/70 uppercase">Unid.</span>
                   </div>
@@ -791,7 +791,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                       <div className="size-6 rounded-md bg-blue-500/10 flex items-center justify-center">
                         <Coins className="size-3 text-blue-400" />
                       </div>
-                      <span className="text-xs font-black uppercase tracking-wider text-foreground">Mayor Utilidad</span>
+                      <span className="text-sm font-semibold text-foreground">Mayor utilidad</span>
                     </div>
                     <span className="text-[9px] font-bold text-foreground/70 uppercase">Ganancia</span>
                   </div>
@@ -817,7 +817,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                       <div className="size-6 rounded-md bg-rose-500/10 flex items-center justify-center">
                         <Clock className="size-3 text-rose-400" />
                       </div>
-                      <span className="text-xs font-black uppercase tracking-wider text-foreground">Sin Venta</span>
+                      <span className="text-sm font-semibold text-foreground">Sin venta</span>
                     </div>
                     <span className="text-[9px] font-bold text-foreground/70 uppercase">Stock Parado</span>
                   </div>
@@ -847,7 +847,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                   <div className="flex items-center gap-2">
                     <Receipt className="size-4 text-primary" />
                     <div>
-                      <CardTitle className="text-sm font-black uppercase tracking-tight">Transacciones Recientes</CardTitle>
+                      <CardTitle className="text-lg font-semibold">Transacciones recientes</CardTitle>
                       <p className="text-[10px] text-foreground/70 font-medium">Últimos movimientos registrados.</p>
                     </div>
                   </div>
@@ -913,7 +913,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
               <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm">
                 <CardHeader className="pb-2 px-5 pt-4">
                   <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
+                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
                       <BarChart3 className="size-4 text-primary" /> Ventas por Cajas
                     </CardTitle>
                     <Button variant="ghost" size="sm" className="h-7 rounded-lg px-2 text-[9px] font-black uppercase tracking-widest" onClick={() => navigateWithTarget('ventas', { subModule: 'control-caja', section: 'history', registerId: 'ALL' })}>
@@ -958,7 +958,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
             {alerts.length > 0 && (
               <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm">
                 <CardHeader className="pb-2 px-5 pt-4">
-                  <CardTitle className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
+                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
                     <Package className="size-4 text-amber-500" /> Alertas de Inventario
                   </CardTitle>
                 </CardHeader>

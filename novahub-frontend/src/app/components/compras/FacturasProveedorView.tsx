@@ -186,7 +186,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     { key: 'number',   header: 'N° Factura',   width: '170px',
       render: (val, row) => {
         const source = getPurchaseInvoiceOriginBadge(row);
-        return <div className="flex min-w-0 flex-col items-start gap-1"><span className="font-black font-mono text-primary text-xs">{val||'-'}</span>{source && <Badge className={cn('border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge>}</div>;
+        return <div className="flex min-w-0 flex-col items-start gap-1"><span className="font-black font-mono text-primary text-xs">{val||'-'}</span>{source && <Badge className={cn('max-w-full rounded-md whitespace-normal break-words text-left leading-tight border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge>}</div>;
       } },
     { key: 'supplier', header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },

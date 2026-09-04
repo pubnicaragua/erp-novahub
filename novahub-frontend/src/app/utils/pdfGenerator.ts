@@ -11,7 +11,7 @@ import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
-import { createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
+import { createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 
@@ -1615,6 +1615,102 @@ export async function generateConfiguredReportTemplate({ targetKey, title, tenan
   return rendered?.doc || null;
 }
 
+export interface ConfiguredReportSectionInput {
+  id?: string;
+  title: string;
+  headers: string[];
+  rows: Array<Array<string | number | null | undefined>>;
+}
+
+export interface ConfiguredReportKpiInput {
+  label: string;
+  value: string;
+  detail: string;
+}
+
+const reportTemplateColumnAlign = (header: string): 'left' | 'center' | 'right' => {
+  if (/monto|valor|saldo|precio|importe|cantidad|unidades|productos|facturas|proveedores|pagos|compras|ventas|cobros|debe|haber|total|participaci[oó]n|porcentaje|d[ií]as|l[ií]neas|incidencias|movimientos|estado/i.test(header)) return 'right';
+  return 'left';
+};
+
+/**
+ * Renderiza los reportes consolidados con la plantilla únicamente cuando
+ * existe un diseño personalizado asignado a una salida del módulo Reportes.
+ * El contenido sigue llegando como secciones separadas para no convertir el
+ * reporte en un listado plano ni perder las variantes de los gráficos.
+ */
+export async function generateConfiguredReportSectionsPDF({ targetKey, title, tenantName, tenantLogo, sections, kpis, fileName, periodLabel, designOverride }: {
+  targetKey: string;
+  title: string;
+  tenantName: string;
+  tenantLogo?: string | null;
+  sections: ConfiguredReportSectionInput[];
+  kpis?: ConfiguredReportKpiInput[];
+  fileName: string;
+  periodLabel?: string;
+  designOverride?: any;
+}) {
+  if (getPdfTemplateTarget(targetKey).module !== 'reportes') return null;
+  const design = designOverride || await getPdfDesign(targetKey);
+  if (!design || (design as any).isSystemDefault || String((design as any).id || '').startsWith('system-default:') || !design.layoutZones?.definition) return null;
+
+  const baseSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
+  const settings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...baseSettings };
+  const definition = sanitizeTemplateDefinition(design.layoutZones.definition, targetKey, settings);
+  if (!definition.nodes.some(node => (node.type === 'table' || node.type === 'report-sections') && node.enabled !== false)) return null;
+
+  const reportSections: PdfTemplateReportSection[] = sections.filter(section => section && section.title && section.headers.length > 0).map((section, sectionIndex) => {
+    const columns = section.headers.map((header, columnIndex) => ({
+      id: `report-${sectionIndex}-column-${columnIndex}`,
+      label: header,
+      token: `report-${sectionIndex}-column-${columnIndex}`,
+      width: 100 / Math.max(section.headers.length, 1),
+      align: reportTemplateColumnAlign(header),
+    }));
+    const rows = section.rows.map(row => Object.fromEntries(columns.map((column, columnIndex) => [column.token, row[columnIndex] ?? '—'])));
+    return { id: section.id || `report-section-${sectionIndex + 1}`, title: section.title, columns, rows };
+  });
+  if (!reportSections.length) return null;
+
+  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : '';
+  const resolvedLogo = configuredLogo || tenantLogo || undefined;
+  // El diseño no debe fabricar indicadores si la vista no los envía. La
+  // plantilla queda limpia y cada reporte conserva sus valores reales.
+  const reportKpis = kpis?.length ? kpis : [];
+  const rendered = await renderPdfTemplateToPdf({
+    definition,
+    settings,
+    targetKey,
+    data: {
+      logo: resolvedLogo,
+      company: {
+        name: settings.companyName || tenantName,
+        fiscalInfo: settings.fiscalInfo,
+        address: settings.address,
+        phone: settings.phone,
+        email: settings.email,
+        slogan: settings.slogan,
+        website: settings.website,
+        logo: resolvedLogo,
+      },
+      document: {
+        title,
+        number: `${reportSections.length} secciones`,
+        meta: `Generado: ${new Date().toLocaleDateString('es-NI')} · Período: ${periodLabel || 'Período seleccionado'} · Moneda: Córdobas (NIO)`,
+        notes: periodLabel || '',
+      },
+      reportKpis,
+      reportSections,
+      items: reportSections[0].rows,
+      rows: reportSections[0].rows,
+      tableColumns: reportSections[0].columns,
+    },
+    fileName,
+    save: true,
+  });
+  return rendered.doc;
+}
+
 /** Genera el balance de comprobación con el diseño específico de Contabilidad. */
 export async function generateTrialBalancePDF({
   rows,
@@ -2533,7 +2629,7 @@ export const generateSessionSummaryPDF = async ({
       doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
       titleY = 38;
       doc.setFontSize(14);
-    } catch (error) {
+    } catch {
       doc.setFontSize(22);
     }
   } else {

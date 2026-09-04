@@ -11,9 +11,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Users, TrendingUp, Package, Activity, CreditCard, DollarSign } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -75,12 +75,14 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'providers'], async (signal) => {
-    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const filters = { pageSize: 5000, report: true };
     const [billRes, payRes, ordRes, suppRes] = await Promise.all([
-      billsService.getAll(filters, signal), paymentsMadeService.getAll(filters, signal),
-      purchaseOrdersService.getAll(filters, signal), suppliersService.getAll(filters, signal),
+      fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => purchaseOrdersService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => suppliersService.getAll(pageFilters, signal), filters),
     ]);
-    return { bills: asList(billRes), payments: asList(payRes), orders: asList(ordRes), suppliers: asList(suppRes) };
+    return { bills: billRes, payments: payRes, orders: ordRes, suppliers: suppRes };
   }, { enabled: canViewPurchases, onError: (e) => toast.error(e.message || 'Error cargando proveedores') });
   const bills = reportData?.bills || [];
   const payments = reportData?.payments || [];
@@ -182,8 +184,6 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.providers', title: 'Reporte de proveedores', tenantName: companyName, tenantLogo: logoUrl, rows: suppliers, columns: [{ header: 'Proveedor', value: row => row.name || row.businessName || '—' }, { header: 'Identificación', value: row => row.taxId || row.ruc || '—' }, { header: 'Teléfono', value: row => row.phone || '—' }, { header: 'Correo', value: row => row.email || row.emailAddress || '—' }, { header: 'Dirección', value: row => row.address || '—' }, { header: 'Estado', value: row => row.status || 'Activo' }], fileName: buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange) });
-        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -192,6 +192,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
+        const reportSections: ConfiguredReportSectionInput[] = [];
 
         const checkPage = (needed: number) => {
           if (currentY + needed > pageHeight - 15) {
@@ -264,54 +265,45 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         });
         currentY += boxH + 10;
 
-        const exportIds = ['providers-monthly-chart', 'providers-efficiency-chart'];
-        const capture = async (elementId: string, height: number) => {
-          const el = document.getElementById(elementId);
-          if (!el) return;
-          checkPage(height + 15);
-          try {
-            const canvas = await html2canvas(el, {
-              scale: 2,
-              backgroundColor: '#ffffff',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
-            });
-            doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
-            currentY += height + 5;
-          } catch {
-          }
-        };
-
-        await capture('providers-monthly-chart', 80);
-        await capture('providers-efficiency-chart', 70);
-
-        // ── Top Lists ──
-        const renderTop = (title: string, data: any[], isSupplier: boolean) => {
+        const renderSection = (title: string, headers: string[], rows: (string | number)[][], colorRGB: number[]) => {
+          reportSections.push({ title, headers, rows });
+          const safeRows = rows.length > 0 ? rows : [['Sin datos para el período']];
           checkPage(40);
           doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
           doc.text(title, marginX, currentY); currentY += 7;
-          doc.setFillColor(isSupplier ? 245 : 59, isSupplier ? 158 : 130, isSupplier ? 11 : 246);
+          doc.setFillColor(colorRGB[0], colorRGB[1], colorRGB[2]);
           doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
-          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
-          doc.text(isSupplier ? 'Socio' : 'Insumo', marginX + 3, currentY + 5.5);
-          doc.text('Detalle', marginX + 80, currentY + 5.5);
-          doc.text('Suma Total', marginX + 155, currentY + 5.5);
+          doc.setFontSize(7.5); doc.setTextColor(255, 255, 255);
+          const colW = contentWidth / headers.length;
+          headers.forEach((header, index) => doc.text(header.substring(0, 24), marginX + index * colW + 3, currentY + 5.5));
           currentY += 10;
-          data.forEach((item, i) => {
-            checkPage(12);
-            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
-            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
-            doc.text(item.name.substring(0, 40), marginX + 3, currentY + 4);
-            doc.text(isSupplier ? 'Clasificación Tier 1' : `${item.qty} unidades recibidas`, marginX + 80, currentY + 4);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(isSupplier ? 245 : 59, isSupplier ? 158 : 130, isSupplier ? 11 : 246);
-            doc.text(formatConvertedAmount(Number(item.value), 'NIO'), marginX + 155, currentY + 4);
+          safeRows.forEach((row, index) => {
+            checkPage(8);
+            if (index % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
+            doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+            row.forEach((cell, cellIndex) => doc.text(String(cell).substring(0, 28), marginX + cellIndex * colW + 3, currentY + 4));
             currentY += 7;
           });
-          currentY += 10;
+          currentY += 8;
         };
+        const money = (value: unknown) => formatConvertedAmount(Number(value || 0), 'NIO');
+        const percent = (value: unknown) => `${Number(value || 0).toFixed(1)}%`;
 
-        renderTop('Socios Estratégicos (Volumen)', topSuppliers, true);
-        renderTop('Insumos con Mayor Gasto', topProducts, false);
+        renderSection('Tendencia de Abastecimiento', ['Mes', 'Compras', 'Participación'], monthlyData.map(point => [point.mes, money(point.compras), percent(totalPurchased > 0 ? (point.compras / totalPurchased) * 100 : 0)]), [245, 158, 11]);
+        renderSection('Eficiencia del Ciclo', ['Indicador', 'Valor', 'Detalle'], [
+          ['Promedio por proveedor', money(avgPurchasePerSupp), `${suppliers.length} proveedores registrados`],
+          ['Facturas en mora', bills.filter(b => b.status === 'OVERDUE').length, 'Facturas vencidas'],
+          ['Cumplimiento de pago', percent(payRatio), 'Pagos realizados ÷ compras'],
+          ['Órdenes pendientes de recepción', orders.filter(o => ['PENDING', 'APPROVED'].includes(String(o.status || '').toUpperCase())).length, 'Órdenes pendientes de entrega'],
+        ], [59, 130, 246]);
+        renderSection('Principales Proveedores', ['Proveedor', 'Compras', 'Participación'], topSuppliers.map(supplier => [supplier.name, money(supplier.value), percent(totalPurchased > 0 ? (supplier.value / totalPurchased) * 100 : 0)]), [245, 158, 11]);
+        renderSection('Insumos con Mayor Gasto', ['Insumo', 'Monto', 'Unidades'], topProducts.map(product => [product.name, money(product.value), product.qty]), [59, 130, 246]);
+
+        const configured = await generateConfiguredReportSectionsPDF({
+          targetKey: 'reportes.providers', title: 'Reporte de Proveedores', tenantName: companyName, tenantLogo: logoUrl,
+          sections: reportSections, kpis: kpis.map(({ label, value, detail }) => ({ label, value, detail })), fileName: buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange), periodLabel: dateRange,
+        });
+        if (configured) { toast.success('PDF generado exitosamente'); return; }
 
         const pageCount = (doc as any).internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
@@ -675,4 +667,3 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   );
 });
 ProvidersReportTab.displayName = 'ProvidersReportTab';
-

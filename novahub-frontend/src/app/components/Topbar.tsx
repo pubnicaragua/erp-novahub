@@ -436,10 +436,10 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
   const getRoleBadge = (role: string) => {
     switch (role?.toLowerCase()) {
-      case 'superadmin': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Super Admin</Badge>;
-      case 'partner': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Partner</Badge>;
-      case 'admin': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Administrador</Badge>;
-      default: return <Badge variant="outline" className="px-1 py-0 text-[10px]">{getRoleLabel(role)}</Badge>;
+      case 'superadmin': return <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Super Admin</Badge>;
+      case 'partner': return <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Partner</Badge>;
+      case 'admin': return <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Administrador</Badge>;
+      default: return <Badge variant="outline" className="rounded-md px-1 py-0 text-[10px]">{getRoleLabel(role)}</Badge>;
     }
   };
 
@@ -493,10 +493,10 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       {/* Search */}
       <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-4">
         {/* Tenancy Indicator: el logo vive únicamente en el Sidebar. */}
-        <div className="hidden min-w-0 items-center gap-2 rounded-full border border-border/50 bg-muted/30 px-3 py-1.5 sm:flex">
+        <div className="hidden min-w-0 items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-1.5 sm:flex">
           <span className="max-w-[150px] truncate text-xs font-medium">{workspaceName}</span>
           {isBranchManagerSession
-            ? <Badge className="border-amber-500/20 bg-amber-500/10 px-1 py-0 text-[10px] text-amber-600 dark:text-amber-400">Modo supervisor</Badge>
+            ? <Badge className="rounded-md border-amber-500/20 bg-amber-500/10 px-1 py-0 text-[10px] text-amber-600 dark:text-amber-400">Modo supervisor</Badge>
             : getRoleBadge(user?.role || '')}
         </div>
 

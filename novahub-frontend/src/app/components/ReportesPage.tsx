@@ -113,26 +113,26 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-center justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <BarChart3 className="size-9 text-primary" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
               Reportes <span className="text-primary">Analíticos</span>
             </h1>
             <div className="flex items-center gap-2 mt-2">
-              <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+              <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                 Resultados y cuadros de mando interactivos
               </Badge>
             </div>
           </div>
         </div>
         
-        <div className="flex flex-wrap gap-2 items-center mt-4 md:mt-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 mt-4 md:mt-0">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-[180px] bg-background">
+            <SelectTrigger className="w-full max-w-full bg-background sm:w-[180px]">
               <SelectValue placeholder="Periodo" />
             </SelectTrigger>
             <SelectContent>

@@ -810,10 +810,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         const total = items.length;
         const rechazados = items.filter(i => Number(i.quantityRejected||0) > 0);
         const faltantes = items.filter(i => Number(i.quantityRejected || 0) <= 0 && Number(i.quantityReceived) < Number(i.quantityOrdered));
-        return <div className="flex items-center gap-2">
+        return <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-black tabular-nums">{total} art.</span>
-          {faltantes.length > 0 && <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full">{faltantes.length} falt.</span>}
-          {rechazados.length > 0 && <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">{rechazados.length} no acept.</span>}
+          {faltantes.length > 0 && <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black text-amber-500">{faltantes.length} falt.</span>}
+          {rechazados.length > 0 && <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black text-amber-600 dark:text-amber-400">{rechazados.length} no acept.</span>}
         </div>;
       } },
     { key: 'status',    header: 'Estado',      width: '130px',

@@ -1387,7 +1387,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
             Configuración <span className="text-primary">Sistema</span>
           </h1>
           <div className="flex items-center gap-2 mt-2">
-            <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+            <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
               {scenario === 'superadmin' ? 'Super Admin Console' : scenario === 'partner' ? 'Partner Panel' : 'Mi Configuración'}
             </Badge>
             <span className="text-muted-foreground/40 text-xs font-medium">

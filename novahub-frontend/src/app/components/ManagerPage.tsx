@@ -494,7 +494,7 @@ function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = tr
               <p className="mt-1 text-sm text-muted-foreground">Recuento visible de sucursales del grupo, sin exponer el detalle operativo.</p>
             </div>
           </div>
-          <Badge variant="outline" className="w-fit rounded-full border-primary/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">Vista Manager · solo lectura</Badge>
+          <Badge variant="outline" className="w-fit rounded-md border-primary/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">Vista Manager · solo lectura</Badge>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
@@ -516,7 +516,7 @@ function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = tr
         <CardHeader className="border-b border-border/50 bg-muted/10 pb-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Building2 className="size-5 text-primary" /> Sucursales del grupo</CardTitle><p className="mt-1 text-sm text-muted-foreground">Consulta rápidamente el estado de cada operación y entra a trabajar cuando necesites operar dentro de ella.</p></div>
-            <Badge variant="outline" className="w-fit rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">{formatNumber(overview?.branches?.length)} visibles</Badge>
+            <Badge variant="outline" className="w-fit rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest">{formatNumber(overview?.branches?.length)} visibles</Badge>
           </div>
         </CardHeader>
         <CardContent className="p-4 sm:p-5">
@@ -533,7 +533,7 @@ function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = tr
                     <BrandLogo src={branch.logo} alt={`Logo de ${branch.name}`} kind="branch" className="size-11 rounded-2xl" imageClassName="rounded-2xl" />
                     <div className="min-w-0"><h3 className="truncate text-base font-black tracking-tight">{branch.name}</h3><p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground"><Sparkles className="size-3 shrink-0 text-primary" />{businessType}</p></div>
                   </div>
-                  <Badge variant={isActive ? 'default' : 'secondary'} className="shrink-0 rounded-full text-[10px]">{isActive ? 'Activa' : 'Inactiva'}</Badge>
+                  <Badge variant={isActive ? 'default' : 'secondary'} className="shrink-0 rounded-md text-[10px]">{isActive ? 'Activa' : 'Inactiva'}</Badge>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-muted/30 p-2.5">
                   <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Usuarios</p><p className="mt-1 text-sm font-black tabular-nums">{formatNumber(branch._count.users)}</p></div>
@@ -739,8 +739,8 @@ function UsersContent({ data, loading, error, activity, activityLoading, activit
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="rounded-full px-3 py-1">{formatNumber(totalActivity)} eventos</Badge>
-          <Badge variant="outline" className="rounded-full px-3 py-1">{activity?.pageSize || 25} por página</Badge>
+          <Badge variant="outline" className="rounded-md px-3 py-1">{formatNumber(totalActivity)} eventos</Badge>
+          <Badge variant="outline" className="rounded-md px-3 py-1">{activity?.pageSize || 25} por página</Badge>
           {totalActivity > 0 && <span className="ml-auto text-xs font-semibold text-muted-foreground">Mostrando {activityStart}–{activityEnd}</span>}
         </div>
 

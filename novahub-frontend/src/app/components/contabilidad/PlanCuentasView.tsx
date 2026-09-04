@@ -6,7 +6,7 @@ import {
   RefreshCw, X, Loader2, FileSpreadsheet, ChevronsDownUp, ChevronsUpDown,
   Info, Activity, ArrowDownLeft, ArrowUpRight,
   ArrowRightLeft,
-  ChevronsLeft, ChevronsRight, Settings2, Check, Ban, CircleCheck, Trash2
+  ChevronsLeft, ChevronsRight, Settings2, Check, Ban, CircleCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -228,8 +228,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   const [pendingStatusAccount, setPendingStatusAccount] = useState<AccountNode | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
-  const [pendingDeleteAccount, setPendingDeleteAccount] = useState<AccountNode | null>(null);
-  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const [mergeSource, setMergeSource] = useState<AccountNode | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState('');
@@ -325,23 +323,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       toast.error(e?.message || 'No se pudo transferir la cuenta');
     } finally {
       setMerging(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!pendingDeleteAccount) return;
-    const account = pendingDeleteAccount;
-    setDeletingAccount(true);
-    try {
-      await contabilidadService.deleteAccount(account.id);
-      setSelectedAccount((current) => current?.id === account.id ? null : current);
-      setPendingDeleteAccount(null);
-      await fetchAccounts(true);
-      toast.success(`Cuenta ${account.code} eliminada`);
-    } catch (e: any) {
-      toast.error(e?.message || 'No se pudo eliminar la cuenta');
-    } finally {
-      setDeletingAccount(false);
     }
   };
 
@@ -985,12 +966,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                           <ArrowDownLeft className="mr-1 size-3.5" /> Transferir
                         </Button>
                       )}
-                      <Button
-                        variant="outline" size="sm" className="flex-1 text-red-600 hover:text-red-700"
-                        onClick={() => setPendingDeleteAccount(selectedAccount)}
-                      >
-                        <Trash2 className="mr-1 size-3.5" /> Eliminar
-                      </Button>
                     </>
                   )}
                 </div>
@@ -1265,19 +1240,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <ConfirmDialog
-        open={pendingDeleteAccount !== null}
-        onOpenChange={(open) => { if (!open && !deletingAccount) setPendingDeleteAccount(null); }}
-        title="¿Eliminar cuenta?"
-        description={pendingDeleteAccount
-          ? `${pendingDeleteAccount.code} · ${pendingDeleteAccount.name}. Esta acción es definitiva y no se puede deshacer. Solo se eliminan cuentas sin hijos ni movimientos.`
-          : ''}
-        confirmLabel="Eliminar cuenta"
-        variant="destructive"
-        loading={deletingAccount}
-        onConfirm={handleDeleteAccount}
-      />
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

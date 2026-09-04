@@ -639,7 +639,7 @@ export function SuscripcionesPage() {
             Control <span className="text-primary">Nova</span>Hub
           </h1>
           <div className="flex items-center gap-2 mt-2">
-            <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+            <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
               Tenancy Master Console
             </Badge>
             <span className="text-muted-foreground text-xs font-medium">

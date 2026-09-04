@@ -1,6 +1,6 @@
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget, type PdfTemplateTarget } from './pdf-document-catalog';
 
-export type PdfTemplateNodeType = 'section' | 'text' | 'field' | 'table' | 'totals' | 'image' | 'barcode' | 'divider' | 'spacer';
+export type PdfTemplateNodeType = 'section' | 'text' | 'field' | 'table' | 'report-sections' | 'totals' | 'image' | 'barcode' | 'divider' | 'spacer';
 export type PdfTemplateHorizontalAlign = 'left' | 'center' | 'right';
 
 export interface PdfTemplateColumn {
@@ -9,6 +9,31 @@ export interface PdfTemplateColumn {
   token: string;
   width?: number;
   align?: PdfTemplateHorizontalAlign;
+  backgroundColor?: string;
+  color?: string;
+}
+
+export interface PdfTemplateReportSection {
+  id: string;
+  title: string;
+  columns: PdfTemplateColumn[];
+  rows: Array<Record<string, unknown>>;
+  templateIndex?: number;
+}
+
+export interface PdfTemplateReportSectionStyle {
+  headerColor?: string;
+  headerTextColor?: string;
+  rowColor?: string;
+  stripeColor?: string;
+  columnColors?: Record<string, string>;
+  columnTextColors?: Record<string, string>;
+}
+
+export interface PdfTemplateKpi {
+  label: string;
+  value: string;
+  detail: string;
 }
 
 export interface PdfTemplateNode {
@@ -46,7 +71,16 @@ export interface PdfTemplateNode {
   align?: PdfTemplateHorizontalAlign;
   padding?: number;
   columns?: PdfTemplateColumn[];
+  tableHeaderColor?: string;
+  tableHeaderTextColor?: string;
+  tableRowColor?: string;
+  tableStripeColor?: string;
+  reportSectionVisibility?: Record<string, boolean>;
+  reportSectionStyles?: Record<string, PdfTemplateReportSectionStyle>;
   repeatHeader?: boolean;
+  firstPageOnly?: boolean;
+  subsequentY?: number;
+  subsequentHeight?: number;
 }
 
 export interface PdfTemplateDefinition {
@@ -67,6 +101,8 @@ export interface PdfTemplateData {
   rows?: Array<Record<string, unknown>>;
   totals?: Record<string, unknown>;
   history?: Array<Record<string, unknown>>;
+  reportSections?: PdfTemplateReportSection[];
+  reportKpis?: PdfTemplateKpi[];
 }
 
 export const TEMPLATE_TOKENS = [
@@ -193,6 +229,26 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     totals: { subtotal: 'C$ 1,000.00', tax: 'C$ 150.00', discount: 'C$ 0.00', total: 'C$ 1,150.00' },
   };
 
+  const reportSection = (
+    id: string,
+    title: string,
+    headers: string[],
+    values: Array<Array<string | number>> = [],
+  ): PdfTemplateReportSection => ({
+    id,
+    title,
+    columns: headers.map((label, index) => ({
+      id: `column-${index}`,
+      label,
+      token: `column-${index}`,
+      width: 100 / headers.length,
+      align: index === 0 ? 'left' : 'right',
+    })),
+    rows: values.map((row) =>
+      Object.fromEntries(row.map((value, index) => [`column-${index}`, value])),
+    ),
+  });
+
   if (target.key === 'ventas.customer-history') {
     const history = [
       { description: 'Factura FAC-000124', quantity: 'Pagada', unitPrice: '15/08/2026', total: 'C$ 1,150.00' },
@@ -204,13 +260,178 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
   if (target.key === 'inventario.product-labels') {
     return { ...base, document: { ...base.document, title: 'ETIQUETA DE PRODUCTO', barcode: '7501234567890', date: '29/08/2026' }, product: { name: 'Producto de muestra', code: 'SKU-0001', barcode: '7501234567890', price: 'C$ 500.00' }, items: [] };
   }
-  if (target.key === 'reportes.customers') {
-    const customers = [
-      { description: 'Cliente de ejemplo', quantity: 'Activo', unitPrice: 'J0310000000000', total: '+505 8888-0000' },
-      { description: 'Comercial del Pacífico', quantity: 'Activo', unitPrice: 'J0310000000042', total: '+505 2277-1144' },
-      { description: 'Servicios del Norte', quantity: 'Inactivo', unitPrice: 'J0310000000088', total: '+505 2233-7788' },
+  if (target.module === 'reportes') {
+    const reportKpisByTarget: Record<string, PdfTemplateKpi[]> = {
+      'reportes.sales': [
+        { label: 'VENTAS NETAS', value: '', detail: '' },
+        { label: 'COBRANZA', value: '', detail: '' },
+        { label: 'UTILIDAD BRUTA', value: '', detail: '' },
+        { label: 'MARGEN BRUTO', value: '', detail: '' },
+        { label: 'SALDO PENDIENTE', value: '', detail: '' },
+      ],
+      'reportes.purchases': [
+        { label: 'COMPRAS NETAS DEL PERÍODO', value: '', detail: '' },
+        { label: 'PAGOS EFECTUADOS', value: '', detail: '' },
+        { label: 'SALDO PENDIENTE POR PAGAR', value: '', detail: '' },
+        { label: 'TICKET PROMEDIO DE COMPRA', value: '', detail: '' },
+      ],
+      'reportes.finance': [
+        { label: 'INGRESOS COBRADOS', value: '', detail: '' },
+        { label: 'PAGOS REALIZADOS', value: '', detail: '' },
+        { label: 'FLUJO NETO DEL PERÍODO', value: '', detail: '' },
+        { label: 'SALDO DISPONIBLE', value: '', detail: '' },
+        { label: 'COBERTURA DE PAGOS', value: '', detail: '' },
+      ],
+      'reportes.inventory': [
+        { label: 'VALOR DEL INVENTARIO A COSTO', value: '', detail: '' },
+        { label: 'PRODUCTOS EN RIESGO', value: '', detail: '' },
+        { label: 'ROTACIÓN DE INVENTARIO', value: '', detail: '' },
+        { label: 'VALOR POTENCIAL A PRECIO DE VENTA', value: '', detail: '' },
+      ],
+      'reportes.customers': [
+        { label: 'CARTERA', value: '', detail: '' },
+        { label: 'ADQUISICIÓN', value: '', detail: '' },
+        { label: 'RATIO PAGO', value: '', detail: '' },
+        { label: 'LTV PROMEDIO', value: '', detail: '' },
+      ],
+      'reportes.providers': [
+        { label: 'SUMINISTRO TOTAL', value: '', detail: '' },
+        { label: 'LOGÍSTICA ACTIVA', value: '', detail: '' },
+        { label: 'CUENTAS POR PAGAR', value: '', detail: '' },
+        { label: 'FLUJO DE PAGO', value: '', detail: '' },
+      ],
+      'reportes.hr': [
+        { label: 'ACTIVOS', value: '', detail: '' },
+        { label: 'COSTO NÓMINA', value: '', detail: '' },
+        { label: 'COSTO / COLAB.', value: '', detail: '' },
+        { label: 'ASISTENCIA', value: '', detail: '' },
+        { label: 'ROTACIÓN', value: '', detail: '' },
+        { label: 'ANTIGÜEDAD', value: '', detail: '' },
+      ],
+    };
+    const reportSectionsByTarget: Record<string, PdfTemplateReportSection[]> = {
+      'reportes.sales': [
+        reportSection('sales-projection', 'Proyección de Cierre de Ventas', ['Indicador', 'Valor', 'Detalle']),
+        reportSection('sales-category', 'Distribución de Ventas por Categoría', ['Categoría', 'Ventas netas', 'Participación', 'Unidades', 'Productos']),
+        reportSection('sales-evolution', 'Evolución de Ventas', ['Período', 'Ventas netas', 'Cobros totales', 'Cobros del período', 'Acumulado']),
+        reportSection('sales-cxc-aging', 'Antigüedad de CxC', ['Rango', 'Saldo pendiente', 'Facturas', 'Participación']),
+        reportSection('sales-billing-collections', 'Ventas Facturadas y Cobros Recibidos', ['Indicador', 'Monto', 'Movimientos', 'Alcance']),
+        reportSection('sales-operational', 'Resumen Operativo de Ventas', ['Indicador', 'Monto', 'Detalle']),
+        reportSection('sales-customers', 'Principales Clientes por Ventas Netas', ['Cliente', 'Ventas netas', 'Facturas', 'Saldo', 'Participación']),
+        reportSection('sales-products', 'Productos con Mayor Contribución', ['Producto', 'Ventas netas', 'Unidades', 'Utilidad', 'Margen']),
+      ],
+      'reportes.purchases': [
+        reportSection('purchases-amount', 'Productos con Mayor Inversión de Compra · Monto', ['Producto', 'Monto', 'Unidades', 'Precio promedio']),
+        reportSection('purchases-units', 'Productos con Mayor Inversión de Compra · Unidades', ['Producto', 'Unidades', 'Monto', 'Precio promedio']),
+        reportSection('purchases-price-variation', 'Productos con Mayor Inversión de Compra · Variación de precio', ['Producto', 'Variación', 'Precio anterior', 'Precio actual']),
+        reportSection('purchases-suppliers-performance', 'Desempeño de Proveedores', ['Proveedor', 'Compras', 'Desempeño', 'Entrega / incidencias']),
+        reportSection('purchases-supplier-concentration', 'Concentración de Compras por Proveedor', ['Proveedor', 'Monto', 'Participación', 'Saldo']),
+        reportSection('purchases-evolution', 'Evolución de Compras Netas', ['Período', 'Compra neta', 'Acumulado', 'Período anterior']),
+        reportSection('purchases-cxp-aging', 'Antigüedad de CxP', ['Rango', 'Saldo', 'Facturas', 'Proveedores']),
+        reportSection('purchases-billing-payments', 'Compras Facturadas y Pagos Realizados', ['Indicador', 'Monto', 'Movimientos', 'Alcance']),
+        reportSection('purchases-period-payments', 'Compras Facturadas y Pagos Realizados por Período', ['Período', 'Compras netas', 'Pagos totales', 'Pagos del período']),
+        reportSection('purchases-cycle-operational', 'Estado del Ciclo de Compra · Operativo', ['Indicador', 'Cantidad', 'Monto / valor', 'Detalle']),
+        reportSection('purchases-cycle-incidents', 'Estado del Ciclo de Compra · Incidencias', ['Indicador', 'Cantidad', 'Unidades', 'Detalle']),
+        reportSection('purchases-cycle-retentions', 'Estado del Ciclo de Compra · Retenciones', ['Indicador', 'Comprobantes', 'Monto', 'Estado']),
+        reportSection('purchases-commitments', 'Compromisos de pago próximos', ['Horizonte', 'Monto', 'Facturas']),
+        reportSection('purchases-budget', 'Presupuesto de Compras', ['Indicador', 'Monto', 'Detalle']),
+        reportSection('purchases-cycle-time', 'Desglose del tiempo del ciclo de compra', ['Etapa', 'Promedio', 'Detalle']),
+        reportSection('purchases-cycle-status', 'Desglose del estado del ciclo de compra', ['Etapa', 'Cantidad', 'Monto']),
+        reportSection('purchases-incidents-suppliers', 'Incidencias por proveedor', ['Proveedor', 'Recepciones', 'Diferencias', 'Incidencias']),
+        reportSection('purchases-retentions-detail', 'Detalle de retenciones', ['Factura', 'Proveedor', 'Tipo', 'Base', 'Monto', 'Estado']),
+      ],
+      'reportes.finance': [
+        reportSection('finance-profitability', 'Rentabilidad (Estado de Resultados)', ['Concepto', 'Período actual', 'Período anterior']),
+        reportSection('finance-cash-flow', 'Flujo de Caja por Período', ['Período', 'Ingresos', 'Pagos', 'Flujo neto', 'Ingresos acum.', 'Pagos acum.']),
+        reportSection('finance-cash-forecast', 'Flujo de Caja Acumulado y Proyectado', ['Escenario', 'Período / fecha', 'Saldo', 'Entradas', 'Salidas']),
+        reportSection('finance-income-origin', 'Ingresos por Origen', ['Origen', 'Monto', 'Participación']),
+        reportSection('finance-cxc-aging', 'Composición de Ingresos · Antigüedad de CxC', ['Rango', 'Saldo pendiente', 'Facturas', 'Participación']),
+        reportSection('finance-payment-category', 'Pagos por Categoría', ['Categoría', 'Monto', 'Participación']),
+        reportSection('finance-cxp-aging', 'Composición de Pagos · Antigüedad de CxP', ['Rango', 'Saldo pendiente', 'Facturas', 'Participación']),
+        reportSection('finance-income-movements', 'Movimientos de Ingresos', ['Fecha', 'Concepto', 'Origen', 'Documento', 'Monto', 'Estado']),
+        reportSection('finance-payment-movements', 'Movimientos de Pagos', ['Fecha', 'Concepto', 'Origen', 'Documento', 'Monto', 'Estado']),
+        reportSection('finance-position', 'Posición Financiera y Liquidez', ['Indicador', 'Valor', 'Detalle']),
+        reportSection('finance-cash-reconciliation', 'Caja y Conciliación', ['Indicador', 'Valor', 'Detalle']),
+        reportSection('finance-budget-recurring', 'Presupuesto y Recurrentes', ['Indicador', 'Valor', 'Detalle']),
+        reportSection('finance-break-even', 'Punto de Equilibrio', ['Indicador', 'Valor', 'Detalle']),
+        reportSection('finance-indicators', 'Indicadores Financieros', ['Indicador', 'Valor', 'Fórmula / interpretación']),
+        reportSection('finance-commitments', 'Compromisos próximos 30 días', ['Fecha', 'Monto', 'Detalle']),
+        reportSection('finance-trial-balance', 'Balance de comprobación', ['Código', 'Cuenta', 'Tipo', 'Debe', 'Haber', 'Saldo']),
+      ],
+      'reportes.inventory': [
+        reportSection('inventory-immobilized', 'Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega']),
+        reportSection('inventory-turnover', 'Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura']),
+        reportSection('inventory-replenishment', 'Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado']),
+        reportSection('inventory-distribution-category', 'Distribución del valor del inventario · Categoría', ['Segmento', 'Valor', 'Participación', 'Unidades', 'Productos']),
+        reportSection('inventory-distribution-warehouse', 'Distribución del valor del inventario · Bodega', ['Segmento', 'Valor', 'Participación', 'Unidades', 'Productos']),
+        reportSection('inventory-distribution-brand', 'Distribución del valor del inventario · Marca', ['Segmento', 'Valor', 'Participación', 'Unidades', 'Productos']),
+        reportSection('inventory-distribution-turnover', 'Distribución del valor del inventario · Rotación', ['Segmento', 'Valor', 'Participación', 'Unidades', 'Productos']),
+        reportSection('inventory-movements', 'Entradas, salidas y ajustes', ['Período', 'Entradas', 'Salidas', 'Ajustes positivos', 'Ajustes negativos']),
+        reportSection('inventory-adjustments', 'Ajustes y mermas', ['Número', 'Fecha', 'Motivo', 'Bodega', 'Unidades', 'Estado']),
+        reportSection('inventory-transfers', 'Transferencias', ['Número', 'Fecha', 'Origen', 'Destino', 'Líneas', 'Estado']),
+        reportSection('inventory-risk', 'Indicadores de riesgo y abastecimiento', ['Indicador', 'Productos', 'Detalle']),
+        reportSection('inventory-aging-value', 'Antigüedad y valor inmovilizado', ['Rango', 'Productos', 'Valor']),
+        reportSection('inventory-oldest', 'Productos con mayor antigüedad', ['Producto', 'Unidades', 'Valor', 'Días sin movimiento', 'Bodega']),
+        reportSection('inventory-overstock', 'Sobrestock', ['Producto', 'Actual', 'Máximo', 'Valor', 'Bodega']),
+        reportSection('inventory-low-turnover', 'Menor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura']),
+        reportSection('inventory-low-coverage', 'Menor cobertura', ['Producto', 'Stock actual', 'Cobertura', 'Consumo diario', 'Rotación']),
+      ],
+      'reportes.customers': [
+        reportSection('customers-growth', 'Dinámica de Crecimiento', ['Mes', 'Ventas']),
+        reportSection('customers-operations', 'Salud de Operaciones', ['Indicador', 'Cantidad', 'Detalle']),
+        reportSection('customers-market', 'Composición del Mercado', ['Segmento', 'Clientes', 'Participación']),
+        reportSection('customers-balance', 'Clientes con Mayor Saldo', ['Cliente', 'Saldo pendiente']),
+        reportSection('customers-billing-leaders', 'Líderes de Facturación', ['Cliente', 'Ventas netas', 'Participación']),
+        reportSection('customers-products', 'Productos Estrella', ['Producto', 'Valor vendido', 'Unidades']),
+      ],
+      'reportes.providers': [
+        reportSection('providers-trend', 'Tendencia de Abastecimiento', ['Mes', 'Compras', 'Participación']),
+        reportSection('providers-cycle', 'Eficiencia del Ciclo', ['Indicador', 'Valor', 'Detalle']),
+        reportSection('providers-top', 'Principales Proveedores', ['Proveedor', 'Compras', 'Participación']),
+        reportSection('providers-products', 'Insumos con Mayor Gasto', ['Insumo', 'Monto', 'Unidades']),
+      ],
+      'reportes.hr': [
+        reportSection('hr-directory', 'Directorio de Colaboradores', ['Colaborador', 'Identificación', 'Cargo', 'Departamento', 'Estado', 'Ingreso']),
+        reportSection('hr-antiquity', 'Mayor Antigüedad', ['Colaborador', 'Ingreso', 'Antigüedad', 'Departamento', 'Cargo']),
+        reportSection('hr-vacations-balance', 'Vacaciones Pendientes', ['Colaborador', 'Días pendientes']),
+        reportSection('hr-distribution-department', 'Distribución de la plantilla · Departamento', ['Segmento', 'Colaboradores', 'Participación', 'Costo nómina', 'Participación costo']),
+        reportSection('hr-distribution-position', 'Distribución de la plantilla · Cargo', ['Segmento', 'Colaboradores', 'Participación', 'Costo nómina', 'Participación costo']),
+        reportSection('hr-distribution-contract', 'Distribución de la plantilla · Tipo de contrato', ['Segmento', 'Colaboradores', 'Participación', 'Costo nómina', 'Participación costo']),
+        reportSection('hr-distribution-branch', 'Distribución de la plantilla · Sucursal', ['Segmento', 'Colaboradores', 'Participación', 'Costo nómina', 'Participación costo']),
+        reportSection('hr-payroll', 'Evolución del costo de nómina', ['Período', 'Salario', 'Variables', 'Cargas', 'Costo total']),
+        reportSection('hr-stability', 'Movimientos y estabilidad', ['Período', 'Altas', 'Bajas', 'Plantilla']),
+        reportSection('hr-attendance', 'Asistencia y ausentismo', ['Período', 'Presentes', 'Ausentes', 'Tardanzas']),
+        reportSection('hr-turnover-department', 'Rotación por departamento', ['Departamento', 'Bajas', 'Promedio plantilla', 'Rotación']),
+        reportSection('hr-cost-department', 'Costo por departamento', ['Departamento', 'Costo', 'Participación', 'Período anterior']),
+        reportSection('hr-cost-employee', 'Costo por colaborador', ['Colaborador', 'Departamento', 'Costo']),
+        reportSection('hr-absence-type', 'Ausentismo por tipo', ['Tipo de ausencia', 'Días', 'Participación']),
+        reportSection('hr-upcoming-vacations', 'Próximas vacaciones aprobadas', ['Colaborador', 'Inicio', 'Fin', 'Días']),
+        reportSection('hr-anniversaries', 'Próximos aniversarios', ['Colaborador', 'Departamento', 'Antigüedad', 'Aniversario']),
+        reportSection('hr-performance', 'Desempeño', ['Indicador', 'Valor', 'Detalle']),
+        reportSection('hr-training', 'Capacitación', ['Indicador', 'Valor', 'Detalle']),
+        reportSection('hr-documentation', 'Documentación', ['Indicador', 'Cantidad', 'Detalle']),
+        reportSection('hr-benefits', 'Beneficios', ['Indicador', 'Valor', 'Detalle']),
+      ],
+    };
+
+    const reportSections = reportSectionsByTarget[target.key] || [
+      reportSection('report-summary', 'Resumen del reporte', ['Indicador', 'Valor', 'Detalle']),
     ];
-    return { ...base, party: customer, document: { ...base.document, title: 'REPORTE DE CLIENTES', number: 'CLI-0001' }, items: customers };
+
+    return {
+      ...base,
+      company: {},
+      customer: {},
+      supplier: {},
+      party: undefined,
+      document: { title: target.label.toUpperCase(), number: '', date: '', status: '', notes: '', terms: '', meta: '' },
+      totals: {},
+      history: [],
+      reportKpis: reportKpisByTarget[target.key] || [],
+      reportSections,
+      items: [],
+      rows: [],
+    };
   }
   if (target.module === 'compras' || target.key.includes('supplier')) {
     const sampleParty = target.key === 'compras.purchase-request' ? requester : target.key === 'compras.expense' || target.key === 'compras.recurring-expense' ? payee : supplier;
@@ -279,7 +500,7 @@ function settingsValue(settings: Record<string, unknown> | undefined, key: strin
 }
 
 function defaultBorderStyle(type: PdfTemplateNodeType): PdfTemplateNode['borderStyle'] {
-  if (type === 'table' || type === 'divider') return 'solid';
+  if (type === 'table' || type === 'report-sections' || type === 'divider') return 'solid';
   return 'none';
 }
 
@@ -302,12 +523,12 @@ function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
     'finanzas.transactions': ['Fecha', 'Concepto', 'Tipo', 'Monto'],
     'recursos-humanos.payrolls': ['Colaborador', 'Periodo', 'Neto', 'Estado'],
     'reportes.customers': ['Cliente', 'Identificación', 'Teléfono', 'Estado'],
-    'reportes.sales': ['Documento', 'Cliente', 'Fecha', 'Total'],
-    'reportes.purchases': ['Documento', 'Proveedor', 'Fecha', 'Total'],
-    'reportes.inventory': ['Producto', 'Código', 'Existencia', 'Valor'],
-    'reportes.providers': ['Proveedor', 'Identificación', 'Teléfono', 'Estado'],
-    'reportes.finance': ['Cuenta', 'Tipo', 'Debe', 'Haber'],
-    'reportes.hr': ['Colaborador', 'Cargo', 'Estado', 'Ingreso'],
+    'reportes.sales': ['Indicador', 'Valor', 'Detalle'],
+    'reportes.purchases': ['Producto', 'Monto', 'Unidades', 'Precio promedio'],
+    'reportes.inventory': ['Producto', 'Existencia', 'Valor'],
+    'reportes.providers': ['Indicador', 'Valor', 'Detalle'],
+    'reportes.finance': ['Indicador', 'Monto', 'Participación'],
+    'reportes.hr': ['Colaborador', 'Identificación', 'Cargo'],
     'reportes.subscriptions': ['Cliente', 'Estado', 'Plan', 'Monto'],
     'dashboard.tenant-overview': ['Indicador', 'Valor', 'Detalle'],
   };
@@ -328,7 +549,7 @@ const node = (value: Omit<PdfTemplateNode, 'id'>, id: string): PdfTemplateNode =
   borderStyle: defaultBorderStyle(value.type),
   fontSize: 9,
   color: '#334155',
-  borderColor: value.type === 'table' ? '#e2e8f0' : 'transparent',
+  borderColor: value.type === 'table' || value.type === 'report-sections' ? '#e2e8f0' : 'transparent',
   ...value,
 });
 
@@ -444,7 +665,13 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     node({ type: 'field', label: 'Datos de la sucursal', token: 'company.summary', x: headerLayout === 'ribbon' ? 43 : headerLayout === 'portal' ? 50 : 8, y: headerLayout === 'compact' ? 16 : 16, width: headerLayout === 'ribbon' ? 52 : headerLayout === 'portal' ? 41 : 46, height: 7, fontSize: 5.8, lineHeight: 1.15, color: headerLayout === 'ribbon' || headerLayout === 'portal' ? text : headerTextColor, align: 'left', borderStyle: 'none', padding: 0.2 }, 'company-summary'),
   ];
   const logoNode = node({ type: 'image', label: 'Logotipo', x: 8, y: 7, width: headerLayout === 'ribbon' ? 11 : 16, height: 8, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent' }, 'company-logo');
-  const nodes: PdfTemplateNode[] = [...headerNodes, logoNode, ...headerFields,
+  const reportHeaderFields = target.module === 'reportes'
+    ? [
+      ...headerFields.filter(item => ['company-name', 'document-title'].includes(item.id)),
+      node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 24, width: 84, height: 4, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+    ]
+    : headerFields;
+  const nodes: PdfTemplateNode[] = [...headerNodes, logoNode, ...reportHeaderFields,
     node({ type: 'field', label: 'Fecha', token: 'document.date', x: 8, y: headerLayout === 'compact' ? 20 : 24, width: 35, height: 4, fontSize: 8, color: text }, 'document-date'),
     node({ type: 'section', label: partySectionLabel, x: 5, y: 31, width: 90, height: 19, backgroundColor: '#f8fafc', borderColor: line, borderRadius: 3, color: text, borderStyle: 'none' }, 'party-section'),
     node({ type: 'field', label: partyLabel, token: partyToken, x: 8, y: 34, width: 50, height: 5.5, fontSize: 10, color: text, bold: true, borderStyle: 'none' }, 'party-name'),
@@ -454,6 +681,19 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     node({ type: 'field', label: party.labels.email, token: `${party.tokenPrefix}.email`, x: 8, y: 45.5, width: 50, height: 4, fontSize: 7, color: '#64748b', borderStyle: 'none' }, 'party-email'),
     node({ type: 'field', label: party.labels.contact, token: `${party.tokenPrefix}.contact`, x: 62, y: 45.5, width: 30, height: 4, fontSize: 7, color: '#64748b', align: 'right', borderStyle: 'none' }, 'party-contact'),
   ];
+
+  if (target.module === 'reportes') {
+    const kpiCount = target.key === 'reportes.hr' || target.key === 'reportes.finance' || target.key === 'reportes.sales' ? 5 : 4;
+    const kpiWidth = (90 - (kpiCount - 1) * 2) / kpiCount;
+    const kpiColors = [primary, secondary, primary, secondary, primary, secondary];
+    for (let index = 0; index < kpiCount; index += 1) {
+      const x = 5 + index * (kpiWidth + 2);
+      nodes.push(node({ type: 'section', label: '', text: '', x, y: 30, width: kpiWidth, height: 13, backgroundColor: kpiColors[index], borderColor: kpiColors[index], borderRadius: 3, firstPageOnly: true }, `report-kpi-card-${index}`));
+      nodes.push(node({ type: 'field', label: 'Indicador', token: `reportKpis.${index}.label`, x: x + 1, y: 31, width: kpiWidth - 2, height: 2.4, fontSize: 5.2, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-label-${index}`));
+      nodes.push(node({ type: 'field', label: 'Valor', token: `reportKpis.${index}.value`, x: x + 1, y: 34.2, width: kpiWidth - 2, height: 4.5, fontSize: 9, color: '#ffffff', bold: true, align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-value-${index}`));
+      nodes.push(node({ type: 'field', label: 'Detalle', token: `reportKpis.${index}.detail`, x: x + 1, y: 39.4, width: kpiWidth - 2, height: 2.6, fontSize: 4.6, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-detail-${index}`));
+    }
+  }
 
   const isTabular = family === 'transaction' || family === 'receipt' || family === 'report' || family === 'history' || family === 'cash' || family === 'dashboard';
   const compactReport = family === 'report' || family === 'dashboard' || family === 'cash' || party.mode === 'none';
@@ -468,10 +708,17 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     ]
     : defaultTableColumns(target.key);
   if (isTabular) {
-    nodes.push(node({
-      type: 'table', label: family === 'history' || family === 'report' || family === 'cash' ? 'Tabla de resultados' : 'Detalle',
-       x: 5, y: compactReport ? 31 : 52, width: 90, height: compactReport ? 47 : 26, backgroundColor: '#ffffff', borderColor: line, color: text, columns: tableColumns, repeatHeader: true,
-    }, 'items-table'));
+    if (target.module === 'reportes') {
+      nodes.push(node({
+        type: 'report-sections', label: 'Secciones del reporte', x: 5, y: 46, width: 90, height: 45,
+        subsequentY: 31, subsequentHeight: 63, backgroundColor: '#ffffff', borderColor: line, color: text, columns: tableColumns, repeatHeader: true,
+      }, 'report-sections'));
+    } else {
+      nodes.push(node({
+        type: 'table', label: family === 'history' || family === 'report' || family === 'cash' ? 'Tabla de resultados' : 'Detalle',
+        x: 5, y: compactReport ? 31 : 52, width: 90, height: compactReport ? 47 : 26, backgroundColor: '#ffffff', borderColor: line, color: text, columns: tableColumns, repeatHeader: true,
+      }, 'items-table'));
+    }
   } else {
     nodes.push(node({ type: 'text', label: 'Información', text: 'Información del documento', x: 5, y: 51, width: 90, height: 8, fontSize: 11, color: text, bold: true }, 'information-title'));
     nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 58, width: 90, height: 17, fontSize: 9, color: text }, 'document-notes'));
@@ -480,7 +727,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   if (family === 'transaction' || family === 'receipt' || family === 'cash') {
     nodes.push(node({ type: 'totals', label: 'Totales', x: 55, y: 80, width: 40, height: 12, backgroundColor: '#f8fafc', borderColor: line, color: text }, 'totals'));
   }
-  nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 80, width: 46, height: 10, fontSize: 8, color: text }, 'notes'));
+  if (target.module !== 'reportes') nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 80, width: 46, height: 10, fontSize: 8, color: text }, 'notes'));
   const footerIsFilled = ['band', 'wave', 'layers', 'notch'].includes(footerLayout);
   if (footerLayout === 'band') {
     nodes.push(node({ type: 'section', label: 'Banda inferior', x: 5, y: 93, width: 90, height: 5, backgroundColor: primary, borderColor: primary, borderRadius: 1 }, 'footer-band'));
@@ -572,6 +819,65 @@ function safeText(value: unknown, fallback: string) {
   return typeof value === 'string' ? value.slice(0, 500) : fallback;
 }
 
+function safeColorMap(value: unknown) {
+  if (!value || typeof value !== 'object') return undefined;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .slice(0, 24)
+    .map(([key, color]) => [key.slice(0, 80), safeText(color, '')] as const)
+    .filter(([, color]) => Boolean(color));
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function safeReportSectionStyles(value: unknown): Record<string, PdfTemplateReportSectionStyle> | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .slice(0, 120)
+    .map(([key, rawStyle]) => {
+      if (!rawStyle || typeof rawStyle !== 'object') return null;
+      const style = rawStyle as Record<string, unknown>;
+      return [key.slice(0, 80), {
+        headerColor: safeText(style.headerColor, ''),
+        headerTextColor: safeText(style.headerTextColor, ''),
+        rowColor: safeText(style.rowColor, ''),
+        stripeColor: safeText(style.stripeColor, ''),
+        columnColors: safeColorMap(style.columnColors),
+        columnTextColors: safeColorMap(style.columnTextColors),
+      }] as const;
+    })
+    .filter((entry): entry is readonly [string, Record<string, unknown>] => Boolean(entry));
+  return entries.length ? Object.fromEntries(entries) as Record<string, PdfTemplateReportSectionStyle> : undefined;
+}
+
+function upgradeReportTemplateNodes(nodes: PdfTemplateNode[], targetKey: string, settings?: Record<string, unknown>) {
+  if (getPdfTemplateTarget(targetKey).module !== 'reportes' || nodes.some(item => item.type === 'report-sections')) return nodes;
+  const fallback = createDefaultTemplateDefinition(targetKey, settings);
+  const reportKpiNodes = fallback.nodes.filter(item => item.id.startsWith('report-kpi-'));
+  const reportMetaNode = fallback.nodes.find(item => item.id === 'report-meta');
+  const previousTable = nodes.find(item => item.type === 'table');
+  const reportNode = fallback.nodes.find(item => item.id === 'report-sections');
+  if (!reportNode || !reportMetaNode) return nodes;
+  const migratedReportNode: PdfTemplateNode = {
+    ...reportNode,
+    ...(previousTable || {}),
+    id: 'report-sections',
+    type: 'report-sections',
+    label: 'Secciones del reporte',
+    x: previousTable?.x ?? reportNode.x,
+    y: 46,
+    width: previousTable?.width ?? reportNode.width,
+    height: 45,
+    subsequentY: 31,
+    subsequentHeight: 63,
+    columns: reportNode.columns,
+  };
+  return [
+    ...nodes.filter(item => item.type !== 'table' && !item.id.startsWith('report-kpi-') && !['company-summary', 'document-number', 'document-status', 'document-date', 'report-meta'].includes(item.id)),
+    ...reportKpiNodes,
+    reportMetaNode,
+    migratedReportNode,
+  ];
+}
+
 export function sanitizeTemplateDefinition(value: unknown, targetKey: string, settings?: Record<string, unknown>): PdfTemplateDefinition {
   const fallback = createDefaultTemplateDefinition(targetKey, settings);
   const party = getPdfTemplatePartyConfig(targetKey);
@@ -581,7 +887,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
   const nodes = candidate.nodes.slice(0, 120).flatMap((raw, index) => {
     if (!raw || typeof raw !== 'object') return [];
     const item = raw as Partial<PdfTemplateNode>;
-    const type: PdfTemplateNodeType = ['section', 'text', 'field', 'table', 'totals', 'image', 'barcode', 'divider', 'spacer'].includes(String(item.type))
+    const type: PdfTemplateNodeType = ['section', 'text', 'field', 'table', 'report-sections', 'totals', 'image', 'barcode', 'divider', 'spacer'].includes(String(item.type))
       ? item.type as PdfTemplateNodeType
       : 'text';
     const sanitizedNode = {
@@ -594,7 +900,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
         fontSize: Math.max(5, Math.min(72, Number(item.fontSize) || 9)), fontFamily: safeText(item.fontFamily, ''),
         fontWeight: [400, 500, 600, 700, 800].includes(Number(item.fontWeight)) ? Number(item.fontWeight) as PdfTemplateNode['fontWeight'] : undefined,
         color: safeText(item.color, '#334155'),
-        backgroundColor: safeText(item.backgroundColor, 'transparent'), borderColor: safeText(item.borderColor, type === 'table' ? '#e2e8f0' : 'transparent'),
+        backgroundColor: safeText(item.backgroundColor, 'transparent'), borderColor: safeText(item.borderColor, type === 'table' || type === 'report-sections' ? '#e2e8f0' : 'transparent'),
         borderStyle: item.borderStyle === 'solid' || item.borderStyle === 'dashed' || item.borderStyle === 'dotted' || item.borderStyle === 'double' || item.borderStyle === 'none' ? item.borderStyle : defaultBorderStyle(type),
         borderRadius: Math.max(0, Math.min(999, Number(item.borderRadius) || 0)), shape: item.shape === 'pill' || item.shape === 'wave' || item.shape === 'wave-bottom' || item.shape === 'circle' || item.shape === 'angled' || item.shape === 'blob' || item.shape === 'arc' ? item.shape : 'rectangle',
         rotation: Number.isFinite(Number(item.rotation)) ? Math.max(-180, Math.min(180, Number(item.rotation))) : 0, bold: Boolean(item.bold), italic: Boolean(item.italic),
@@ -607,8 +913,18 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
           id: safeText(column?.id, `column-${columnIndex}`), label: safeText(column?.label, `Columna ${columnIndex + 1}`),
           token: safeText(column?.token, 'description'), width: Math.max(1, Math.min(100, Number(column?.width) || 25)),
           align: column?.align === 'center' || column?.align === 'right' ? column.align : 'left',
+          backgroundColor: safeText(column?.backgroundColor, ''), color: safeText(column?.color, ''),
         })) : undefined,
+        tableHeaderColor: safeText(item.tableHeaderColor, ''), tableHeaderTextColor: safeText(item.tableHeaderTextColor, ''),
+        tableRowColor: safeText(item.tableRowColor, ''), tableStripeColor: safeText(item.tableStripeColor, ''),
+        reportSectionVisibility: item.reportSectionVisibility && typeof item.reportSectionVisibility === 'object'
+          ? Object.fromEntries(Object.entries(item.reportSectionVisibility as Record<string, unknown>).slice(0, 120).map(([key, visible]) => [key.slice(0, 80), Boolean(visible)]))
+          : undefined,
+        reportSectionStyles: safeReportSectionStyles(item.reportSectionStyles),
         repeatHeader: item.repeatHeader !== false,
+        firstPageOnly: Boolean(item.firstPageOnly),
+        subsequentY: Number.isFinite(Number(item.subsequentY)) ? safeNumber(item.subsequentY, 31) : undefined,
+        subsequentHeight: Number.isFinite(Number(item.subsequentHeight)) ? safeNumber(item.subsequentHeight, 63) : undefined,
       }, safeText(item.id, `node-${index + 1}`)),
     };
     // Diseños guardados antes de la escala tipográfica pueden conservar una
@@ -666,7 +982,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
       orientation: candidate.page?.orientation === 'landscape' ? 'landscape' : fallback.page.orientation,
       background: safeText(candidate.page?.background, fallback.page.background),
     },
-    nodes: normalizedNodes.length ? normalizedNodes : fallback.nodes,
+    nodes: upgradeReportTemplateNodes(normalizedNodes.length ? normalizedNodes : fallback.nodes, targetKey, settings),
     metadata: candidate.metadata,
   };
 }
@@ -804,7 +1120,7 @@ function htmlFontFamily(element: Element) {
 
 function normalizedNodeType(value: string | null, element: Element): PdfTemplateNodeType | null {
   const type = String(value || '').toLowerCase();
-  if (['section', 'text', 'field', 'table', 'totals', 'image', 'barcode', 'divider', 'spacer'].includes(type)) return type as PdfTemplateNodeType;
+  if (['section', 'text', 'field', 'table', 'report-sections', 'totals', 'image', 'barcode', 'divider', 'spacer'].includes(type)) return type as PdfTemplateNodeType;
   if (element.tagName.toLowerCase() === 'table') return 'table';
   const binding = element.getAttribute('data-novahub-bind');
   return binding ? 'field' : null;
@@ -819,7 +1135,7 @@ function htmlElementToNode(element: Element, index: number): PdfTemplateNode[] {
   const fontSize = styleNumber(getStyle(element, 'font-size'), tag === 'h1' ? 16 : tag.startsWith('h') ? 12 : 9);
   const fontWeight = styleNumber(getStyle(element, 'font-weight'), tag.startsWith('h') ? 700 : 400);
   const textDecoration = getStyle(element, 'text-decoration');
-  const columns = type === 'table' ? Array.from(element.querySelectorAll('thead th')).map((th, columnIndex) => {
+  const columns = type === 'table' || type === 'report-sections' ? Array.from(element.querySelectorAll('thead th')).map((th, columnIndex) => {
     const label = th.textContent?.trim() || `Columna ${columnIndex + 1}`;
     const token = th.getAttribute('data-novahub-token') || th.getAttribute('data-token') || th.getAttribute('data-novahub-bind') || ['description', 'quantity', 'unitPrice', 'total'][columnIndex] || `column-${columnIndex}`;
     return { id: `column-${columnIndex}`, label, token, width: styleNumber(th.getAttribute('data-width') || getStyle(th, 'width'), 100 / Math.max(1, element.querySelectorAll('thead th').length)), align: (th.getAttribute('data-align') || getStyle(th, 'text-align') || 'left') as PdfTemplateHorizontalAlign };
@@ -833,8 +1149,8 @@ function htmlElementToNode(element: Element, index: number): PdfTemplateNode[] {
     label: element.getAttribute('data-novahub-label') || (binding ? `Campo ${binding}` : textContent.slice(0, 80) || `Elemento ${index + 1}`),
     x: htmlPercent(element, 'data-novahub-x', 'left', 8),
     y: htmlPercent(element, 'data-novahub-y', 'top', 8 + index * 3),
-    width: htmlPercent(element, 'data-novahub-width', 'width', type === 'table' ? 84 : 30),
-    height: htmlPercent(element, 'data-novahub-height', 'height', type === 'table' ? 16 : 5),
+    width: htmlPercent(element, 'data-novahub-width', 'width', type === 'table' || type === 'report-sections' ? 84 : 30),
+    height: htmlPercent(element, 'data-novahub-height', 'height', type === 'table' || type === 'report-sections' ? 16 : 5),
     text: binding || type === 'field' ? undefined : textContent,
     token: binding,
     sample: element.getAttribute('data-novahub-sample') || undefined,
