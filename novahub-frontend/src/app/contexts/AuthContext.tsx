@@ -760,6 +760,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
       'restaurante': 'RESTAURANT',
+      'tracking': 'TRACKING',
       'compras': 'PURCHASES',
       'inventario': 'INVENTORY',
       'finanzas': 'FINANCIAL',
@@ -793,6 +794,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'SALES_PRICE_LISTS',
       ],
        restaurante: ['RESTAURANT'],
+      tracking: ['TRACKING'],
       compras: [
         'PURCHASES', 'PROVIDERS',
         'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',

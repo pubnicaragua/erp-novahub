@@ -48,6 +48,7 @@ import { generateSupplierHistoryPDF } from '../../utils/pdfGenerator';
 import { fetchSupplierHistoryItems, type SupplierHistoryItem } from '../../utils/supplierHistory';
 import { formatCurrencyAmount } from '../../utils/currency';
 import { toast } from 'sonner';
+import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 
 interface SupplierDetailDrawerProps {
   supplierId: string | null;
@@ -355,6 +356,11 @@ export function SupplierDetailDrawer({
                     <InfoField label="Ciudad" value={supplier?.city || 'Sin ciudad'} icon={MapPin} muted={!supplier?.city} />
                     <InfoField label="País" value={supplier?.country || 'Sin país'} icon={MapPin} muted={!supplier?.country} />
                   </div>
+                  <GoogleMap
+                    query={buildMapQuery([supplier?.address, supplier?.city, supplier?.country])}
+                    label={`Ubicación de ${supplier?.name || 'proveedor'}`}
+                    height={200}
+                  />
                 </Card>
 
                 <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">

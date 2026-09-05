@@ -89,6 +89,7 @@ import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/custo
 import { toast } from 'sonner';
 import type { Customer, Estimate, Invoice } from '../../types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 
 interface CustomerDetailDrawerProps {
   customerId: string | null;
@@ -654,6 +655,11 @@ export function CustomerDetailDrawer({
                     <InfoField label="Departamento" value={customer?.department || 'Sin departamento'} icon={MapPin} muted={!customer?.department} />
                     <InfoField label="País" value={customer?.country || 'Sin país'} icon={MapPin} muted={!customer?.country} />
                   </div>
+                  <GoogleMap
+                    query={buildMapQuery([customer?.address, customer?.city, customer?.department, customer?.country])}
+                    label={`Ubicación de ${customer?.name || 'cliente'}`}
+                    height={200}
+                  />
                 </Card>
 
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
