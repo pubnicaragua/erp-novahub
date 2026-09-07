@@ -4,12 +4,12 @@ export type DocumentOriginBadge = {
 };
 
 const ORIGIN_BADGE_COLORS = {
-  cashSale: 'bg-cyan-500/10 text-cyan-500',
-  estimate: 'bg-violet-500/10 text-violet-500',
-  salesOrder: 'bg-orange-500/10 text-orange-500',
-  recurring: 'bg-purple-500/10 text-purple-500',
-  purchaseRequest: 'bg-orange-500/10 text-orange-500',
-  purchaseOrder: 'bg-blue-500/10 text-blue-500',
+  cashSale: 'bg-primary/10 text-primary',
+  estimate: 'bg-primary/10 text-primary',
+  salesOrder: 'bg-primary/10 text-primary',
+  recurring: 'bg-primary/10 text-primary',
+  purchaseRequest: 'bg-primary/10 text-primary',
+  purchaseOrder: 'bg-primary/10 text-primary',
 } as const;
 
 type InvoiceOriginRecord = {

@@ -68,9 +68,9 @@ const MAX_EVIDENCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
 const statusOpts = [
-  { label: 'Borrador',  value: 'DRAFT',    color: 'bg-slate-500/10 text-slate-500' },
-  { label: 'Pendiente', value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Pagado',    value: 'PAID',     color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Borrador',  value: 'DRAFT',    color: 'bg-primary/10 text-primary' },
+  { label: 'Pendiente', value: 'PENDING',  color: 'bg-primary/10 text-primary' },
+  { label: 'Pagado',    value: 'PAID',     color: 'bg-primary/10 text-primary' },
 ];
 
 export function GastosView({ data, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId }: Props) {
@@ -814,8 +814,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
   const kpis = [
     { key: 'all', title: 'Gastos Operativos',  value: data.length,                                                                         icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    { key: 'draft', title: 'Borradores', value: data.filter(g => (g.status || '').toUpperCase() === 'DRAFT').length, icon: FileText, color: 'text-slate-500', bg: 'bg-slate-500/10', interactive: true },
-    { key: 'pending', title: 'Pendientes', value: data.filter(g => (g.status || '').toUpperCase() === 'PENDING').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', interactive: true },
+    { key: 'draft', title: 'Borradores', value: data.filter(g => (g.status || '').toUpperCase() === 'DRAFT').length, icon: FileText, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
+    { key: 'pending', title: 'Pendientes', value: data.filter(g => (g.status || '').toUpperCase() === 'PENDING').length, icon: Clock, color: 'text-primary', bg: 'bg-primary/10', interactive: true },
     { key: 'category', title: 'Por Categoría', value: uniqueCategories.length, icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
   ];
 

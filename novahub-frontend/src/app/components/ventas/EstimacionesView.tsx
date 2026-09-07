@@ -1127,8 +1127,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           ? originalQuotedTotals.map((summary) => <SalesKpiCard key={`quoted-${summary.currency}`} title={`Total Cotizado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />)
           : <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />}
         <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
-        <SalesKpiCard title="En proceso" value={data.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
-        <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="En proceso" value={data.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
       </div>
 
       <div className="flex flex-col gap-4">

@@ -39,9 +39,9 @@ const freqOpts = [
 ];
 const freqMap: Record<string,string> = { weekly:'Semanal', monthly:'Mensual', quarterly:'Trimestral', yearly:'Anual' };
 const statusOpts = [
-  { label: 'Activo',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Pausado',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Finalizado', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Activo',     value: 'ACTIVE',    color: 'bg-primary/10 text-primary' },
+  { label: 'Pausado',    value: 'PAUSED',    color: 'bg-primary/10 text-primary' },
+  { label: 'Finalizado', value: 'CANCELLED', color: 'bg-primary/10 text-primary' },
 ];
 
 export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
@@ -395,8 +395,8 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
   );
   const kpis = [
     { title: 'Total Recurrentes', value: data.length,                                                            icon: CalendarClock, color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Activos',           value: data.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length,     icon: RotateCcw,     color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
-    { title: 'Pausados',        value: data.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length,     icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'PAUSED' as const },
+    { title: 'Activos',           value: data.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length,     icon: RotateCcw,     color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: 'Pausados',        value: data.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length,     icon: Clock,         color: 'text-primary',  bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PAUSED' as const },
   ];
 
   return (

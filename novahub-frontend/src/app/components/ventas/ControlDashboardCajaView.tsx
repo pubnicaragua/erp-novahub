@@ -26,9 +26,9 @@ import { HistoricalCashReport } from './caja/HistoricalCashReport';
 type SectionType = 'dashboard' | 'session' | 'history' | 'report' | 'normas' | 'deficits';
 
 const DEFICIT_STATUS: Record<string, { label: string; cls: string }> = {
-  PENDING: { label: 'PENDIENTE', cls: 'bg-amber-500/10 text-amber-600 border-amber-500/30' },
-  COLLECTED: { label: 'COBRADO', cls: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30' },
-  WRITTEN_OFF: { label: 'CONDONADO', cls: 'bg-muted/20 text-muted-foreground border-border/40' },
+  PENDING: { label: 'PENDIENTE', cls: 'bg-primary/10 text-primary border-primary/30' },
+  COLLECTED: { label: 'COBRADO', cls: 'bg-primary/10 text-primary border-primary/30' },
+  WRITTEN_OFF: { label: 'CONDONADO', cls: 'bg-primary/10 text-primary border-primary/30' },
 };
 
 const CASH_CONTROL_TOUR_STEPS: GuidedTourStep[] = [
@@ -436,7 +436,7 @@ export function ControlDashboardCajaView({
                     <AccordionItem key={h.id} value={h.id} className="border border-border/50 rounded-lg bg-card/50 px-4">
                       <AccordionTrigger className="py-4 hover:no-underline">
                         <div className="flex w-full min-w-0 flex-wrap items-center gap-3 text-sm">
-                          <Badge variant={h.status === 'CLOSED' ? 'outline' : h.status === 'COUNTING' ? 'secondary' : 'default'} className="w-24 shrink-0 justify-center pointer-events-none shadow-none">
+                          <Badge className="w-24 shrink-0 justify-center pointer-events-none bg-primary text-primary-foreground shadow-none">
                             {h.status === 'CLOSED' ? 'CERRADA' : h.status === 'COUNTING' ? 'EN ARQUEO' : 'ABIERTA'}
                           </Badge>
                           <div className="min-w-0 flex-1 text-left">

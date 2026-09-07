@@ -417,14 +417,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     }
   };
 
-  const getPlanColor = (plan: string) => {
-    switch (plan) {
-      case 'BASIC': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-      case 'PROFESSIONAL': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
-      case 'ENTERPRISE': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-      default: return 'bg-muted/30 text-muted-foreground border-border/50';
-    }
-  };
+  const getPlanColor = (_plan: string) => 'bg-primary/10 text-primary border-primary/20';
 
   const isModuleActive = (modId: string) => {
     return tenant?.subscriptions?.some((s: any) => s.module === modId && s.isActive);
@@ -632,7 +625,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                           <Check className="size-3 mr-1" /> Activo
                         </Badge>
                       ) : isMainPending ? (
-                        <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 font-bold uppercase text-[10px] animate-pulse">
+                        <Badge className="bg-primary/10 text-primary border-primary/20 font-bold uppercase text-[10px] animate-pulse">
                           <Clock className="size-3 mr-1" /> Pendiente
                         </Badge>
                       ) : isPartial ? (
@@ -675,7 +668,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                               </div>
                               
                               {subPending && (
-                                <Badge className="bg-amber-500/10 text-amber-500 border-none text-[9px] uppercase px-1.5 py-0">
+                                <Badge className="bg-primary/10 text-primary border-none text-[9px] uppercase px-1.5 py-0">
                                   En Cola
                                 </Badge>
                               )}
@@ -752,14 +745,14 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                       <div className="flex items-center gap-2">
                         <h4 className="truncate text-sm font-bold text-foreground">{u.name}</h4>
                          {isCurrentUser && <Badge className="bg-primary text-primary-foreground text-[9px] uppercase">Tu usuario</Badge>}
-                         {u.isPrincipalAdmin && <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-[9px] uppercase text-amber-600">Administrador principal</Badge>}
+                         {u.isPrincipalAdmin && <Badge variant="outline" className="border-primary/30 bg-primary/10 text-[9px] uppercase text-primary">Administrador principal</Badge>}
                       </div>
                       <p className="flex items-center gap-1 truncate text-xs text-muted-foreground"><Mail className="size-3" /> {u.email}</p>
                       {(() => { const groupingDepartments = userGroupingDepartments(u); return <><p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{groupingDepartments.map((department: any) => department.name).join(' · ') || 'Sin departamento'}</p><p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="size-3" /> {groupingDepartments.length} {groupingDepartments.length === 1 ? 'departamento' : 'departamentos'} de equipo</p></>; })()}
-                      {u.employee ? <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-emerald-600"><UserRoundCheck className="size-3" /> Empleado: {u.employee.firstName} {u.employee.lastName}{linkedEmployeePuesto(u, employees) ? <span className="normal-case"> · Puesto: {linkedEmployeePuesto(u, employees)}</span> : <span className="font-semibold text-muted-foreground"> · Sin puesto</span>}</p> : <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><UserRoundCheck className="size-3" /> Sin puesto</p>}
+                       {u.employee ? <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-primary"><UserRoundCheck className="size-3" /> Empleado: {u.employee.firstName} {u.employee.lastName}{linkedEmployeePuesto(u, employees) ? <span className="normal-case"> · Puesto: {linkedEmployeePuesto(u, employees)}</span> : <span className="font-semibold text-muted-foreground"> · Sin puesto</span>}</p> : <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><UserRoundCheck className="size-3" /> Sin puesto</p>}
                     </div>
                   </div>
-                  <Badge variant="outline" className={cn('shrink-0 text-[10px] font-black uppercase tracking-widest', u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20')}>
+                   <Badge variant="outline" className="shrink-0 border-primary/20 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">
                     {u.isActive ? 'Activo' : 'Suspendido'}
                   </Badge>
                 </div>
@@ -783,15 +776,15 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                    {canManageRoles && isCollaborator && <div className="flex items-center gap-1.5">
                     <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rol</span>
                     <Select value={u.customRoleId || 'none'} onValueChange={(val) => handleUpdateCustomRole(u.id, val)}>
-                      <SelectTrigger className="h-8 w-full min-w-[10rem] max-w-full bg-purple-500/5 text-[10px] font-bold uppercase text-purple-600 sm:w-[10rem]"><SelectValue placeholder="Ninguno" /></SelectTrigger>
+                       <SelectTrigger className="h-8 w-full min-w-[10rem] max-w-full bg-primary/5 text-[10px] font-bold uppercase text-primary sm:w-[10rem]"><SelectValue placeholder="Ninguno" /></SelectTrigger>
                       <SelectContent><SelectItem value="none" className="text-[10px] font-bold uppercase">Ninguno</SelectItem>{customRoles.map(r => <SelectItem key={r.id} value={r.id} className="text-[10px] font-bold uppercase">{r.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>}
 
-                   {canChangeThisPassword && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
-                  {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
+                   {canChangeThisPassword && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
+                   {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
                   {(canViewUsers || canViewRoles) && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>}
-                  {canDeactivateUsers && <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
+                   {canDeactivateUsers && <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : 'hover:bg-primary/10 hover:text-primary')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
                     {u.isActive ? <><X className="size-3" /> {isCurrentUser ? 'Tu usuario' : 'Suspender'}</> : <><Check className="size-3" /> Activar</>}
                   </Button>}
                 </div>
@@ -889,10 +882,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                               </div>
                             </div>
                           </td>
-                          <td className="p-3 text-center">{p.read ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                          <td className="p-3 text-center">{(p.create ?? p.write) ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                          <td className="p-3 text-center">{(p.edit ?? p.write) ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                          <td className="p-3 text-center">{p.delete ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
+                          <td className="p-3 text-center">{p.read ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
+                          <td className="p-3 text-center">{(p.create ?? p.write) ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
+                          <td className="p-3 text-center">{(p.edit ?? p.write) ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
+                          <td className="p-3 text-center">{p.delete ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
                         </tr>
                       );
                     });
@@ -930,7 +923,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     {employees.filter((employee: any) => !employee.user).map((employee: any) => <SelectItem key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName} · {employee.employeeNumber}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                {!canEditEmployees ? <p className="text-[10px] text-muted-foreground">Solo lectura: solicita permiso de edición de empleados para vincular.</p> : !employees.some((employee: any) => !employee.user) && <p className="text-[10px] text-amber-600">No hay empleados sin vínculo disponibles para vincular.</p>}
+                {!canEditEmployees ? <p className="text-[10px] text-muted-foreground">Solo lectura: solicita permiso de edición de empleados para vincular.</p> : !employees.some((employee: any) => !employee.user) && <p className="text-[10px] text-primary">No hay empleados sin vínculo disponibles para vincular.</p>}
               </div>
             )}
             <div className="space-y-2">
@@ -972,7 +965,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </SelectContent>
               </Select>
               {userForm.role === 'EMPLOYEE' && (
-                <p className="text-[10px] text-amber-500 font-medium flex items-center gap-1">
+                <p className="text-[10px] text-primary font-medium flex items-center gap-1">
                   <Shield className="size-3" />
                   Deberás asignarle un rol personalizado después de crearlo desde "Mi Equipo".
                 </p>
@@ -1060,7 +1053,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="size-5 text-orange-500" /> Cambiar Contraseña
+               <KeyRound className="size-5 text-primary" /> Cambiar Contraseña
             </DialogTitle>
             <DialogDescription>
               Actualiza la contraseña del usuario <span className="font-bold text-foreground">{selectedUser?.name}</span>.
@@ -1082,7 +1075,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsChangePasswordDialogOpen(false)} disabled={updatingPassword}>Cancelar</Button>
-            <Button onClick={handleAdminChangePassword} disabled={updatingPassword || !!getPasswordError(newPasswordForUser)} className="bg-orange-700 hover:bg-orange-800 text-white font-bold h-10">
+             <Button onClick={handleAdminChangePassword} disabled={updatingPassword || !!getPasswordError(newPasswordForUser)} className="h-10 bg-primary font-bold text-primary-foreground hover:bg-primary/90">
               {updatingPassword ? 'Guardando...' : 'Actualizar Contraseña'}
             </Button>
           </DialogFooter>

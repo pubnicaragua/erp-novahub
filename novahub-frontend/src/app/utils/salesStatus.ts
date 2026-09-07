@@ -1,15 +1,11 @@
-/**
- * Paleta compartida para estados de Ventas.
- *
- * Los cuatro estados de flujo comunes toman como fuente de verdad la vista
- * de Cotizaciones. Los estados exclusivos de Facturas, devoluciones y
- * créditos mantienen tonos propios para no confundir su significado.
- */
+/** Color único de marca para estados y badges de registros de Ventas. */
+const SALES_THEME_STATUS_COLOR = 'bg-primary/10 text-primary' as const;
+
 export const SALES_WORKFLOW_STATUS_COLORS = {
-  DRAFT: 'bg-amber-500/10 text-amber-500',
-  IN_PROCESS: 'bg-blue-500/10 text-blue-500',
-  APPROVED: 'bg-emerald-500/10 text-emerald-500',
-  CANCELLED: 'bg-rose-500/10 text-rose-500',
+  DRAFT: SALES_THEME_STATUS_COLOR,
+  IN_PROCESS: SALES_THEME_STATUS_COLOR,
+  APPROVED: SALES_THEME_STATUS_COLOR,
+  CANCELLED: SALES_THEME_STATUS_COLOR,
 } as const;
 
 export const SALES_STATUS_COLORS = {
@@ -17,19 +13,19 @@ export const SALES_STATUS_COLORS = {
   SENT: SALES_WORKFLOW_STATUS_COLORS.IN_PROCESS,
   IN_PROGRESS: SALES_WORKFLOW_STATUS_COLORS.IN_PROCESS,
   CONFIRMED: SALES_WORKFLOW_STATUS_COLORS.APPROVED,
-  PENDING: 'bg-amber-500/10 text-amber-500',
-  PROCESSED: 'bg-blue-500/10 text-blue-500',
-  REJECTED: 'bg-rose-500/10 text-rose-500',
-  CREDIT: 'bg-violet-500/10 text-violet-500',
-  PAID: 'bg-cyan-500/10 text-cyan-500',
-  OVERDUE: 'bg-orange-500/10 text-orange-500',
-  PARTIAL: 'bg-indigo-500/10 text-indigo-500',
-  ISSUED: 'bg-emerald-500/10 text-emerald-500',
-  APPLIED: 'bg-blue-500/10 text-blue-500',
-  VOIDED: 'bg-rose-500/10 text-rose-500',
-  ACTIVE: 'bg-emerald-500/10 text-emerald-500',
-  PAUSED: 'bg-amber-500/10 text-amber-500',
-  EXPIRED: 'bg-muted/20 text-muted-foreground',
+  PENDING: SALES_THEME_STATUS_COLOR,
+  PROCESSED: SALES_THEME_STATUS_COLOR,
+  REJECTED: SALES_THEME_STATUS_COLOR,
+  CREDIT: SALES_THEME_STATUS_COLOR,
+  PAID: SALES_THEME_STATUS_COLOR,
+  OVERDUE: SALES_THEME_STATUS_COLOR,
+  PARTIAL: SALES_THEME_STATUS_COLOR,
+  ISSUED: SALES_THEME_STATUS_COLOR,
+  APPLIED: SALES_THEME_STATUS_COLOR,
+  VOIDED: SALES_THEME_STATUS_COLOR,
+  ACTIVE: SALES_THEME_STATUS_COLOR,
+  PAUSED: SALES_THEME_STATUS_COLOR,
+  EXPIRED: SALES_THEME_STATUS_COLOR,
 } as const;
 
 export const getSalesStatusColor = (status: unknown, fallback = 'bg-muted/20 text-muted-foreground') => (

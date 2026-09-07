@@ -669,13 +669,13 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       editable: canPerform('SALES_CLIENTS', 'edit'),
       type: 'select',
       options: [
-        { label: 'Activo', value: 'ACTIVE', color: 'bg-emerald-500/10 text-emerald-500' },
+        { label: 'Activo', value: 'ACTIVE', color: 'bg-primary/10 text-primary' },
         { label: 'Inactivo', value: 'INACTIVE', color: 'bg-primary/10 text-primary' }
       ],
       render: (val) => (
         <Badge variant="outline" className={cn(
           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
-          (val || '').toUpperCase() === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-primary/10 text-primary'
+          'bg-primary/10 text-primary'
         )}>
           {(val || '').toUpperCase() === 'ACTIVE' ? 'Activo' : 'Inactivo'}
         </Badge>

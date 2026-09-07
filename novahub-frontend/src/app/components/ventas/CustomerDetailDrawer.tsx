@@ -170,7 +170,7 @@ const getStatusBadge = (status?: string) => {
   switch (s) {
     case 'ACTIVE':
     case 'ACTIVO':
-      return { label: 'Activo', className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
+      return { label: 'Activo', className: 'bg-primary/10 text-primary border-primary/20' };
     case 'INACTIVE':
     case 'INACTIVO':
       return { label: 'Inactivo', className: 'bg-primary/10 text-primary border-primary/20' };
@@ -586,7 +586,7 @@ export function CustomerDetailDrawer({
                   <MetricCard label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
                   <MetricCard label={`Límite Crédito (${creditLimitCurrency})`} value={formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)} icon={CreditCard} accent="text-primary" loading={loading} />
                   <MetricCard label="Tipo Cliente" value={typeInfo.label} icon={TypeIcon} accent="text-primary" loading={loading} />
-                  <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent={String(customer?.status || '').toUpperCase() === 'ACTIVE' ? 'text-emerald-500' : 'text-primary'} loading={loading} />
+                    <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent="text-primary" loading={loading} />
                 </div>
 
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">

@@ -33,18 +33,18 @@ import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas
 import { getPurchasePriorityOption } from '../../utils/purchasePriority';
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-muted/20 text-muted-foreground',
+  DRAFT: 'bg-primary/10 text-primary',
   SUBMITTED: 'bg-primary/10 text-primary',
   RECEIVED: 'bg-primary/10 text-primary',
-  IN_REVIEW: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  IN_REVIEW: 'bg-primary/10 text-primary',
   IN_QUOTATION: 'bg-primary/10 text-primary',
-  PENDING_APPROVAL: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  APPROVED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  REJECTED: 'bg-destructive/10 text-destructive',
-  RETURNED_FOR_CORRECTION: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  CONVERTED_TO_ORDER: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  CLOSED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  CANCELLED: 'bg-destructive/10 text-destructive',
+  PENDING_APPROVAL: 'bg-primary/10 text-primary',
+  APPROVED: 'bg-primary/10 text-primary',
+  REJECTED: 'bg-primary/10 text-primary',
+  RETURNED_FOR_CORRECTION: 'bg-primary/10 text-primary',
+  CONVERTED_TO_ORDER: 'bg-primary/10 text-primary',
+  CLOSED: 'bg-primary/10 text-primary',
+  CANCELLED: 'bg-primary/10 text-primary',
 };
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -530,9 +530,9 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
   const requestKpis = [
     { title: 'Solicitudes', value: data.length, icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Pendientes', value: data.filter(r => normalizeRequestStatus(r.status) === 'PENDING_APPROVAL').length, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
-    { title: 'Aprobadas', value: data.filter(r => normalizeRequestStatus(r.status) === 'APPROVED').length, icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'APPROVED' },
-    { title: 'Anuladas', value: data.filter(r => normalizeRequestStatus(r.status) === 'CANCELLED').length, icon: Ban, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'filter' as const, filter: 'CANCELLED' },
+    { title: 'Pendientes', value: data.filter(r => normalizeRequestStatus(r.status) === 'PENDING_APPROVAL').length, icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
+    { title: 'Aprobadas', value: data.filter(r => normalizeRequestStatus(r.status) === 'APPROVED').length, icon: CheckCircle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'APPROVED' },
+    { title: 'Anuladas', value: data.filter(r => normalizeRequestStatus(r.status) === 'CANCELLED').length, icon: Ban, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'CANCELLED' },
   ];
 
   return (

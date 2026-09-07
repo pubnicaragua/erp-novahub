@@ -294,7 +294,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   ];
 
   const statusOptions = [
-    { label: 'Activo',   value: 'ACTIVE',   color: 'bg-emerald-500/10 text-emerald-500' },
+    { label: 'Activo',   value: 'ACTIVE',   color: 'bg-primary/10 text-primary' },
     { label: 'Inactivo', value: 'INACTIVE', color: 'bg-muted/20 text-muted-foreground' },
   ];
 
@@ -471,7 +471,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   const kpis = [
     { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Activos',   value: data.filter(s => (s as any).isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: 'Activos',   value: data.filter(s => (s as any).isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE').length, icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
     ...supplierDebtKpis.map((item) => ({ title: item.title, value: item.value, icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'indicator' as const })),
   ];
 
@@ -609,7 +609,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="Managua" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={draft.country} onChange={(e) => setDraft({ ...draft, country: e.target.value })} placeholder="Nicaragua" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><div className="flex h-11 items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 text-sm font-bold text-emerald-500">{editingSupplier ? 'Usa el botón Activar / Desactivar' : 'Activo al crear'}</div></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><div className="flex h-11 items-center rounded-xl border border-primary/20 bg-primary/5 px-3 text-sm font-bold text-primary">{editingSupplier ? 'Usa el botón Activar / Desactivar' : 'Activo al crear'}</div></div>
               </div>
             </section>
           </div>

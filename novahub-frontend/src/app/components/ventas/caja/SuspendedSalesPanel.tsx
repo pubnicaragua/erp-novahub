@@ -9,10 +9,10 @@ import { formatSalesAmount } from '../../../utils/salesPriceList';
 import type { PosHold } from '../../../services/caja.service';
 
 export const POS_HOLD_STATUS_META: Record<string, { label: string; className: string }> = {
-  SUSPENDED: { label: 'Suspendida', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' },
-  READY: { label: 'Cobrada', className: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' },
-  DELIVERED: { label: 'Entregada', className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' },
-  CANCELLED: { label: 'Cancelada', className: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
+  SUSPENDED: { label: 'Suspendida', className: 'bg-primary/10 text-primary border-primary/20' },
+  READY: { label: 'Cobrada', className: 'bg-primary/10 text-primary border-primary/20' },
+  DELIVERED: { label: 'Entregada', className: 'bg-primary/10 text-primary border-primary/20' },
+  CANCELLED: { label: 'Cancelada', className: 'bg-primary/10 text-primary border-primary/20' },
 };
 
 export function formatHoldDate(date: string) {

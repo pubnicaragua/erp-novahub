@@ -2799,10 +2799,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const countOrdersByStatus = (status: 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED') => data.filter((order) => normalizePurchaseOrderStatus(order.status) === status).length;
   const kpis = [
     { title: 'Total órdenes', value: data.length, icon: ClipboardList, color: 'text-primary', bg: 'bg-primary/10', filter: 'ALL' },
-    { title: 'Borradores', value: countOrdersByStatus('DRAFT'), icon: FileText, color: 'text-amber-500', bg: 'bg-amber-500/10', filter: 'DRAFT' },
-    { title: 'En proceso', value: countOrdersByStatus('IN_PROCESS'), icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10', filter: 'IN_PROCESS' },
-    { title: 'Aprobadas', value: countOrdersByStatus('APPROVED'), icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', filter: 'APPROVED' },
-    { title: 'Rechazadas', value: countOrdersByStatus('REJECTED'), icon: Ban, color: 'text-rose-500', bg: 'bg-rose-500/10', filter: 'REJECTED' },
+    { title: 'Borradores', value: countOrdersByStatus('DRAFT'), icon: FileText, color: 'text-primary', bg: 'bg-primary/10', filter: 'DRAFT' },
+    { title: 'En proceso', value: countOrdersByStatus('IN_PROCESS'), icon: Clock, color: 'text-primary', bg: 'bg-primary/10', filter: 'IN_PROCESS' },
+    { title: 'Aprobadas', value: countOrdersByStatus('APPROVED'), icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'APPROVED' },
+    { title: 'Rechazadas', value: countOrdersByStatus('REJECTED'), icon: Ban, color: 'text-primary', bg: 'bg-primary/10', filter: 'REJECTED' },
   ];
 
   return (

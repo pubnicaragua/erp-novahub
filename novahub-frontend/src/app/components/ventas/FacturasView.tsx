@@ -1393,7 +1393,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       render: (val, row) => (
         <span className={cn(
           "text-xs font-bold",
-          (row.status || '').toUpperCase() === 'OVERDUE' ? 'text-orange-500' : 'text-muted-foreground'
+           (row.status || '').toUpperCase() === 'OVERDUE' ? 'text-primary' : 'text-muted-foreground'
         )}>
           {formatDateSafe(val)}
         </span>
@@ -1463,7 +1463,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         if (!presentation.method && !presentation.isCredit) return <span className="text-[11px] font-medium text-muted-foreground">—</span>;
         return (
           <div className="flex flex-col items-start gap-0.5">
-            <Badge className={cn('border-none px-2 py-0.5 text-[8px] font-black uppercase tracking-widest', presentation.isCredit ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400')}>
+            <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-primary">
               {presentation.modalityLabel}
             </Badge>
             {presentation.methodLabel && <span className="text-[9px] font-bold uppercase text-muted-foreground/70">{presentation.methodLabel}</span>}
@@ -2150,12 +2150,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           ? originalBilled.map((summary) => <SalesKpiCard key={`billed-${summary.currency}`} title={`Facturado Total (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileText} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Facturado Total (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />}
         {displayMode === 'ORIGINAL'
-          ? originalReceivable.map((summary) => <SalesKpiCard key={`receivable-${summary.currency}`} title={`Por Cobrar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />)
-          : <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />}
-        <SalesKpiCard title="Vencidas" value={data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length} icon={AlertCircle} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
+           ? originalReceivable.map((summary) => <SalesKpiCard key={`receivable-${summary.currency}`} title={`Por Cobrar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />)
+           : <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />}
+         <SalesKpiCard title="Vencidas" value={data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length} icon={AlertCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
         {displayMode === 'ORIGINAL'
-          ? originalPaid.map((summary) => <SalesKpiCard key={`paid-${summary.currency}`} title={`Cobrado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />)
-          : <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />}
+           ? originalPaid.map((summary) => <SalesKpiCard key={`paid-${summary.currency}`} title={`Cobrado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />)
+           : <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

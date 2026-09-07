@@ -220,10 +220,10 @@ export function InvoiceDetailSheet({
                       const paidAfterPayment = Math.max(0, Number((Number(invoice.total || 0) - remainingAfterPayment).toFixed(2)));
                       const isCreditPayment = Boolean(payment.creditNoteId || payment.creditNote || (payment as any).creditNoteNumber);
                       const paymentStatus = isCreditPayment && remainingAfterPayment <= 0.01
-                        ? { label: 'Cancelado', className: 'bg-rose-500/10 text-rose-600 dark:text-rose-300' }
-                        : remainingAfterPayment > 0.01
-                          ? { label: 'Saldo pendiente', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-300' }
-                          : { label: 'Liquidado', className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' };
+                         ? { label: 'Cancelado', className: 'bg-primary/10 text-primary' }
+                         : remainingAfterPayment > 0.01
+                           ? { label: 'Saldo pendiente', className: 'bg-primary/10 text-primary' }
+                           : { label: 'Liquidado', className: 'bg-primary/10 text-primary' };
                       return (
                         <div key={payment.id} className="flex min-w-0 items-start gap-3 rounded-xl border border-border/50 bg-background/70 p-3">
                           <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Wallet className="size-4" /></div>

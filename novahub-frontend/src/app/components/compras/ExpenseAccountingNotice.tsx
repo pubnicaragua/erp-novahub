@@ -14,9 +14,9 @@ export function ExpenseAccountingNotice() {
             El borrador y el pendiente no generan asiento. Al marcar el gasto como pagado, Compras usa la cuenta de gasto y la cuenta configurada para el método elegido, y envía el detalle completo a Finanzas.
           </p>
           <p className="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
-            <span className="inline-flex items-center gap-1"><CircleDollarSign className="size-3 text-emerald-500" /> Pendiente</span>
+            <span className="inline-flex items-center gap-1"><CircleDollarSign className="size-3 text-primary" /> Pendiente</span>
             <ArrowRight className="size-3" />
-            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">Pagado · Finanzas</span>
+            <span className="inline-flex items-center gap-1 text-primary">Pagado · Finanzas</span>
           </p>
         </div>
       </CardContent>

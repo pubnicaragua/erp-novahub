@@ -599,13 +599,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       key: 'sourceType', header: 'Origen', width: '180px', render: (_val, row) => {
         if (row.creditNote?.number) return <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[9px] font-black text-primary">Crédito</Badge>;
         if (!row.invoice?.number) return <span className="text-xs text-muted-foreground">Sin documento</span>;
-        const isCashSale = String(row.sourceType || row.invoice.sourceType || '').toUpperCase() === 'CASH_SALE'
-          || Boolean(row.invoice.registerId || row.invoice.sessionId);
-        return (
+          const isCashSale = String(row.invoice?.sourceType ?? row.sourceType ?? '').toUpperCase() === 'CASH_SALE'
+            || Boolean(row.invoice?.cashSessionId ?? row.cashSessionId)
+
+          return (
           <Badge
             className={cn(
               'border-none px-2 py-0.5 text-[9px] font-black',
-              isCashSale ? 'bg-cyan-500/10 text-cyan-500' : 'bg-orange-500/10 text-orange-500',
+               'bg-primary/10 text-primary',
             )}
           >
             {isCashSale ? 'Facturación por caja' : 'Factura normal'}
@@ -890,9 +891,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto recibido</p>
                 <p className="mt-1 text-3xl font-black tabular-nums text-primary">{formatConvertedAmount(Number(detailPayment.amount || 0), detailPayment.currency, detailPayment.exchangeRate)}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold tracking-wider text-muted-foreground">
-                  <Badge className={cn('border-none', detailIsCreditSettled ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-600')}>{detailIsCreditSettled ? 'Cancelado' : 'Registrado'}</Badge>
+                  <Badge className="border-none bg-primary/10 text-primary">{detailIsCreditSettled ? 'Cancelado' : 'Registrado'}</Badge>
                   <Badge variant="outline" className="border-primary/20 text-primary">{detailPayment.paymentLabel || 'Pago único'}</Badge>
-                  {detailDocumentStatus && <Badge variant="outline" className="border-amber-500/30 text-amber-700 dark:text-amber-300">Estado: {formatPaymentStatus(detailDocumentStatus)}</Badge>}
+                  {detailDocumentStatus && <Badge variant="outline" className="border-primary/30 text-primary">Estado: {formatPaymentStatus(detailDocumentStatus)}</Badge>}
                   <span>Moneda: {currencyLabels[String(detailPayment.currency || baseCurrency).toUpperCase()] || 'No especificada'}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">

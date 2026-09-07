@@ -48,12 +48,12 @@ interface Props {
 }
 
 const statusOpts = [
-  { label: 'Pendiente',   value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Parcial',     value: 'PARTIAL',  color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Pendiente',   value: 'PENDING',  color: 'bg-primary/10 text-primary' },
+  { label: 'Parcial',     value: 'PARTIAL',  color: 'bg-primary/10 text-primary' },
   { label: 'A crédito',   value: 'CREDIT',   color: 'bg-primary/10 text-primary' },
-  { label: 'Pagada',      value: 'PAID',     color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Vencida',     value: 'OVERDUE',  color: 'bg-rose-500/10 text-rose-500' },
-  { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
+  { label: 'Pagada',      value: 'PAID',     color: 'bg-primary/10 text-primary' },
+  { label: 'Vencida',     value: 'OVERDUE',  color: 'bg-primary/10 text-primary' },
+  { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-primary/10 text-primary' },
 ];
 
 function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: number } {
@@ -779,16 +779,16 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const kpis = [
      { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10',    filter: 'ALL'       },
-     { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < nowMs && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', filter: 'OVERDUE' },
-     { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', filter: 'PAID' },
+     { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < nowMs && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', filter: 'OVERDUE' },
+     { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'PAID' },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {displayMode === 'ORIGINAL'
-          ? originalPendingAmounts.map((summary) => <PurchaseKpiCard key={`pending-${summary.currency}`} title={`Por Pagar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />)
-          : <PurchaseKpiCard title={`Por Pagar (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(pendingTotalInDisplayCurrency, displayCurrency)} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />}
+          ? originalPendingAmounts.map((summary) => <PurchaseKpiCard key={`pending-${summary.currency}`} title={`Por Pagar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />)
+          : <PurchaseKpiCard title={`Por Pagar (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(pendingTotalInDisplayCurrency, displayCurrency)} icon={Clock} color="text-primary" bg="bg-primary/10" kind="filter" active={statusFilter === 'PENDING'} onClick={() => { const next = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'; setStatusFilter(next); onStatusChange?.(next); }} />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="filter" active={statusFilter === k.filter} onClick={() => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); }} />
         ))}

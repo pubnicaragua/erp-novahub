@@ -39,10 +39,10 @@ const freqOpts = [
 ];
 const freqMap: Record<string,string> = { weekly:'Semanal', monthly:'Mensual', quarterly:'Trimestral', yearly:'Anual' };
 const statusOpts = [
-  { label: 'Activo',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Pausado',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Finalizado', value: 'EXPIRED',   color: 'bg-slate-500/10 text-slate-500' },
-  { label: 'Cancelado',  value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Activo',     value: 'ACTIVE',    color: 'bg-primary/10 text-primary' },
+  { label: 'Pausado',    value: 'PAUSED',    color: 'bg-primary/10 text-primary' },
+  { label: 'Finalizado', value: 'EXPIRED',   color: 'bg-primary/10 text-primary' },
+  { label: 'Cancelado',  value: 'CANCELLED', color: 'bg-primary/10 text-primary' },
 ];
 
 // Estos campos pertenecen a documentos individuales, no a una plantilla
@@ -594,9 +594,9 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     baseCurrency,
   );
   const kpis = [
-    { title: 'Activas',         value: data.filter(r => ((r as any).status||'').toUpperCase()==='ACTIVE').length,  icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: 'Activas',         value: data.filter(r => ((r as any).status||'').toUpperCase()==='ACTIVE').length,  icon: CheckCircle2,  color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
     { title: 'Total Recurrentes', value: data.length,                                                                icon: RotateCcw,     color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Pausadas',        value: data.filter(r => ((r as any).status||'').toUpperCase()==='PAUSED').length,   icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'PAUSED' as const },
+    { title: 'Pausadas',        value: data.filter(r => ((r as any).status||'').toUpperCase()==='PAUSED').length,   icon: Clock,         color: 'text-primary',  bg: 'bg-primary/10', kind: 'filter' as const, filter: 'PAUSED' as const },
   ];
 
   return (

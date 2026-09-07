@@ -127,12 +127,12 @@ const INVOICE_STATUS_LABELS: Record<string, string> = {
 const invoiceStatusLabel = (value?: string) => INVOICE_STATUS_LABELS[String(value || '').toUpperCase()] || String(value || '') || '';
 
 const statusOpts = [
-  { label: 'Borrador',  value: 'draft',   color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Emitido',   value: 'issued',  color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Aplicado',  value: 'applied', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Parcial',   value: 'partial', color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Pagado',    value: 'paid',    color: 'bg-emerald-600/10 text-emerald-600' },
-  { label: 'Anulado',   value: 'voided',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Borrador',  value: 'draft',   color: 'bg-primary/10 text-primary' },
+  { label: 'Emitido',   value: 'issued',  color: 'bg-primary/10 text-primary' },
+  { label: 'Aplicado',  value: 'applied', color: 'bg-primary/10 text-primary' },
+  { label: 'Parcial',   value: 'partial', color: 'bg-primary/10 text-primary' },
+  { label: 'Pagado',    value: 'paid',    color: 'bg-primary/10 text-primary' },
+  { label: 'Anulado',   value: 'voided',  color: 'bg-primary/10 text-primary' },
 ];
 
 export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], pagination, onSearchChange }: Props) {
@@ -1139,7 +1139,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   );
   const kpis = [
     { title: 'Total Créditos', value: data.length, icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Emitidos', value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length, icon: BadgeDollarSign, color: 'text-purple-500', bg: 'bg-purple-500/10', kind: 'filter' as const, filter: 'ISSUED' as const },
+    { title: 'Emitidos', value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length, icon: BadgeDollarSign, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'ISSUED' as const },
   ];
 
   return (
@@ -1149,8 +1149,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           ? originalDisponibleAmounts.map((summary) => <PurchaseKpiCard key={`available-${summary.currency}`} title={`Crédito Disponible (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" kind="indicator" />)
           : <PurchaseKpiCard title={`Crédito Disponible (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(disponible, displayCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" kind="indicator" />}
         {displayMode === 'ORIGINAL'
-          ? originalAplicadosAmounts.map((summary) => <PurchaseKpiCard key={`applied-${summary.currency}`} title={`Pagados (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-teal-500" bg="bg-teal-500/10" kind="filter" active={statusFilter === 'APPLIED'} onClick={() => setStatusFilter(statusFilter === 'APPLIED' ? 'ALL' : 'APPLIED')} />)
-          : <PurchaseKpiCard title={`Pagados (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(aplicados, displayCurrency)} icon={CheckCircle2} color="text-teal-500" bg="bg-teal-500/10" kind="filter" active={statusFilter === 'APPLIED'} onClick={() => setStatusFilter(statusFilter === 'APPLIED' ? 'ALL' : 'APPLIED')} />}
+          ? originalAplicadosAmounts.map((summary) => <PurchaseKpiCard key={`applied-${summary.currency}`} title={`Pagados (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" kind="filter" active={statusFilter === 'APPLIED'} onClick={() => setStatusFilter(statusFilter === 'APPLIED' ? 'ALL' : 'APPLIED')} />)
+          : <PurchaseKpiCard title={`Pagados (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(aplicados, displayCurrency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" kind="filter" active={statusFilter === 'APPLIED'} onClick={() => setStatusFilter(statusFilter === 'APPLIED' ? 'ALL' : 'APPLIED')} />}
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}

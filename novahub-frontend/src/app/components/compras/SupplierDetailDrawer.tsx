@@ -85,7 +85,7 @@ const statusInfo = (supplier?: Supplier | null) => {
   const inactive = (supplier as any)?.isActive === false || String((supplier as any)?.status || '').toUpperCase() === 'INACTIVE';
   return inactive
     ? { label: 'Inactivo', className: 'bg-muted/20 text-muted-foreground border-border/40' }
-    : { label: 'Activo', className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400' };
+    : { label: 'Activo', className: 'bg-primary/10 text-primary border-primary/20' };
 };
 
 const typeInfo = (type?: string) => String(type || 'COMPANY').toUpperCase() === 'INDIVIDUAL'
@@ -343,7 +343,7 @@ export function SupplierDetailDrawer({
                   <MetricCard label="Saldo a favor" value={formatConvertedAmount(supplierFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
                   <MetricCard label="Órdenes" value={String(orderCount)} icon={ReceiptText} accent="text-primary" loading={loadingTransactions} />
                   <MetricCard label="Facturas" value={String(invoiceCount)} icon={FileText} accent="text-primary" loading={loadingTransactions} />
-                  <MetricCard label="Estado" value={currentStatus.label} icon={CheckCircle2} accent={currentStatus.label === 'Activo' ? 'text-emerald-500' : 'text-muted-foreground'} loading={loading} />
+                  <MetricCard label="Estado" value={currentStatus.label} icon={CheckCircle2} accent={currentStatus.label === 'Activo' ? 'text-primary' : 'text-muted-foreground'} loading={loading} />
                 </div>
 
                 <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">

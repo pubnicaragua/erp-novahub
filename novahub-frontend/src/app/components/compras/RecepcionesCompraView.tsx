@@ -43,11 +43,11 @@ import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalIn
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; onOpenCredits?: () => void; }
 
 const statusOpts = [
-  { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  { label: 'Pendiente', value: 'PENDING', color: 'bg-primary/10 text-primary' },
   { label: 'Recibido', value: 'RECEIVED', color: 'bg-primary/10 text-primary' },
-  { label: 'Recibido con incidencias', value: 'WITH_INCIDENTS', color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
-  { label: 'Pagada',        value: 'PAID',           color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
-  { label: 'Cancelada',     value: 'CANCELLED',       color: 'bg-destructive/10 text-destructive' },
+  { label: 'Recibido con incidencias', value: 'WITH_INCIDENTS', color: 'bg-primary/10 text-primary' },
+  { label: 'Pagada',        value: 'PAID',           color: 'bg-primary/10 text-primary' },
+  { label: 'Cancelada',     value: 'CANCELLED',       color: 'bg-primary/10 text-primary' },
 ];
 
 function getActiveReceiptInvoices(receipt: Pick<PurchaseReceipt, 'supplierInvoices'>) {
@@ -1755,8 +1755,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
 
   const kpis = [
     { title: 'Recepciones',   value: data.length, icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Ítems Recibidos', value: totalItemsReceived, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
-    { title: 'Incidencias', value: `${withIncidencias} rec. / ${totalRechazados} rech.`, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
+    { title: 'Ítems Recibidos', value: totalItemsReceived, icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
+    { title: 'Incidencias', value: `${withIncidencias} rec. / ${totalRechazados} rech.`, icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
   ];
 
   return (

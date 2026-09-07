@@ -1450,12 +1450,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title="Órdenes en Proceso" value={data.filter(o => normalizeOrderStatus(o.status) === 'IN_PROCESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        <SalesKpiCard title="Órdenes en Proceso" value={data.filter(o => normalizeOrderStatus(o.status) === 'IN_PROCESS').length} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
         {displayMode === 'ORIGINAL'
           ? originalApprovedAmounts.map((summary) => <SalesKpiCard key={`approved-${summary.currency}`} title={`Monto Aprobado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />)
           : <SalesKpiCard title={`Monto Aprobado (${displayCurrency})`} value={formatConvertedAmount(approvedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />}
-        <SalesKpiCard title="Órdenes Aprobadas" value={data.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length} icon={Check} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
-        <SalesKpiCard title="Órdenes en Borrador" value={data.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length} icon={Eye} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
+        <SalesKpiCard title="Órdenes Aprobadas" value={data.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length} icon={Check} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Órdenes en Borrador" value={data.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length} icon={Eye} color="text-primary" bg="bg-primary/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
