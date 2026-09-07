@@ -1705,7 +1705,7 @@ th .column-filter-menu .column-filter-icon,
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 
 .scrollbar-overlay::-webkit-scrollbar {
@@ -1726,13 +1726,13 @@ th .column-filter-menu .column-filter-icon,
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 
 [data-import-preview-horizontal-scroller="true"] {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 
 /* On phones the title, validation summary and actions cannot share the

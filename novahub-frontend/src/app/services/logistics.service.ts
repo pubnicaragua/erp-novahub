@@ -16,6 +16,14 @@ export interface LogisticsSettings {
   lastInternalSequence: number;
 }
 
+export interface LogisticsSubagency {
+  id: string;
+  tenantId: string;
+  code?: string | null;
+  name: string;
+  isActive: boolean;
+}
+
 export interface LogisticsWarehouse {
   id: string;
   tenantId: string;
@@ -276,6 +284,7 @@ export const logisticsService = {
       shipmentModes: ShipmentMode[];
       trackingPrefixes: TrackingPrefix[];
       customFieldDefinitions: CustomFieldDefinition[];
+  subagencies: LogisticsSubagency[];
     }>;
   },
 
@@ -288,6 +297,18 @@ export const logisticsService = {
   },
 
   // Bodegas
+  async listSubagencies() {
+    return api.get('/logistics/subagencies') as Promise<LogisticsSubagency[]>;
+  },
+  async createSubagency(data: Partial<LogisticsSubagency>) {
+    return api.post('/logistics/subagencies', data) as Promise<LogisticsSubagency>;
+  },
+  async updateSubagency(id: string, data: Partial<LogisticsSubagency>) {
+    return api.patch(`/logistics/subagencies/${id}`, data) as Promise<LogisticsSubagency>;
+  },
+  async deleteSubagency(id: string) {
+    return api.delete(`/logistics/subagencies/${id}`) as Promise<{ deleted: boolean }>;
+  },
   async listWarehouses() {
     return api.get('/logistics/warehouses') as Promise<LogisticsWarehouse[]>;
   },
@@ -394,6 +415,7 @@ export const logisticsService = {
     search?: string;
     warehouseId?: string;
     shipmentModeCode?: string;
+    receptionBatchId?: string;
     dateFrom?: string;
     dateTo?: string;
   }) {
@@ -414,6 +436,48 @@ export const logisticsService = {
 
   async reconciliationByOrder(orderId: string) {
     return api.get(`/logistics/reconciliation/order/${orderId}`) as Promise<{ order: { id: string; number: string; status: string }; packages: ReceivedPackage[] }>;
+  },
+
+  // ─────────────────────── Referencias de recepción (lote) ───────────────────────
+
+  async listBatches(params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    status?: string;
+    warehouseId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }) {
+    return api.get('/logistics/batches', { params }) as Promise<PaginatedSimple<ReceptionBatch>>;
+  },
+
+  async createBatch(data: { provider?: string; supplierId?: string; warehouseId?: string; date?: string; notes?: string }) {
+    return api.post('/logistics/batches', data) as Promise<ReceptionBatch>;
+  },
+
+  async getBatch(id: string) {
+    return api.get(`/logistics/batches/${id}`) as Promise<BatchDetail>;
+  },
+
+  async updateBatch(id: string, data: { provider?: string; supplierId?: string; warehouseId?: string; notes?: string }) {
+    return api.patch(`/logistics/batches/${id}`, data) as Promise<ReceptionBatch>;
+  },
+
+  async deleteBatch(id: string) {
+    return api.delete(`/logistics/batches/${id}`) as Promise<{ deleted: boolean; id: string }>;
+  },
+
+  async addBatchPackages(id: string, rows: BatchPackageRow[]) {
+    return api.post(`/logistics/batches/${id}/packages`, { rows }) as Promise<BatchPackagesResult>;
+  },
+
+  async confirmBatch(id: string, data: { invoiceNumber?: string; date?: string; dueDate?: string; notes?: string }) {
+    return api.post(`/logistics/batches/${id}/confirm`, data) as Promise<ConfirmBatchResult>;
+  },
+
+  async pdfPreview(fileName: string, dataBase64: string) {
+    return api.post('/logistics/reception/pdf-preview', { fileName, dataBase64 }) as Promise<PdfPreviewResult>;
   },
 
   // ─────────────────────── Disponibles para facturar (Bloque 5) ───────────────────────
@@ -599,6 +663,78 @@ export interface PaginatedSimple<T> {
   pageSize: number;
 }
 
+// ─────────────────────── Referencias de recepción (lote) ───────────────────────
+
+export interface ReceptionBatch {
+  id: string;
+  tenantId: string;
+  number: string;
+  provider?: string | null;
+  supplierId?: string | null;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
+  warehouseStrategy: WarehouseStrategy;
+  warehouseLastN: number;
+  date: string;
+  notes?: string | null;
+  status: 'OPEN' | 'CONFIRMED' | string;
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
+  totalAmount: number;
+  packageCount: number;
+  createdById?: string | null;
+  createdByName?: string | null;
+  confirmedById?: string | null;
+  confirmedByName?: string | null;
+  confirmedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BatchPackageRow {
+  line?: number;
+  trackingCode?: string;
+  item?: string;
+  quantity?: number;
+  unitPrice?: number;
+  subtotal?: number;
+  physicalWeight?: number;
+  weightUnit?: string;
+  warehouseValue?: string;
+  subagency?: OwnerInfo;
+  customer?: OwnerInfo;
+}
+
+export interface PdfPreviewRow extends BatchPackageRow {
+  id: string; // clave local para la grilla editable
+}
+
+export interface PdfPreviewResult {
+  format: 'AWBOX' | 'OGLOBAL' | null;
+  rows: BatchPackageRow[];
+  warnings: string[];
+  fileName: string;
+}
+
+export interface BatchPackagesResult {
+  inserted: number;
+  rows: Array<{ row: number; tracking: string; result: 'OK' | 'WARNING' | 'SKIPPED'; observation: string }>;
+  batch: string;
+}
+
+export interface ConfirmBatchResult {
+  batch: { id: string; number: string; status: string };
+  invoice: SupplierInvoiceSummary | null;
+  linkedPackages: number;
+  invoiceSkipped: boolean;
+}
+
+export interface BatchDetail {
+  batch: ReceptionBatch;
+  packages: ReceivedPackage[];
+  invoice: SupplierInvoiceSummary | null;
+}
+
 export interface SupplierInvoiceSummary {
   id: string;
   number: string;
@@ -610,8 +746,9 @@ export interface SupplierInvoiceSummary {
 }
 
 export interface ReconciliationConfirmInput {
-  supplierId: string;
-  purchaseOrderId: string;
+  supplierId?: string;
+  purchaseOrderId?: string;
+  receptionBatchId?: string;
   number?: string;
   date: string;
   dueDate?: string;
@@ -621,8 +758,11 @@ export interface ReconciliationConfirmInput {
 }
 
 export interface ReconciliationPreviewResult {
-  supplierId: string;
-  purchaseOrderId: string;
+  supplierId?: string;
+  purchaseOrderId?: string;
+  receptionBatchId?: string;
+  referenceNumber?: string;
+  provider?: string;
   invoiceNumber: string;
   packageCount: number;
   weights: { supplierWeight: number; physicalWeight: number; billableWeight: number };
@@ -640,7 +780,7 @@ export interface ReconciliationPreviewResult {
 }
 
 export interface ReconciliationConfirmResult {
-  invoice: SupplierInvoiceSummary;
+  invoice: SupplierInvoiceSummary | null;
   linkedPackages: number;
 }
 

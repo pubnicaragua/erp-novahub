@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BadgeDollarSign, CheckCircle2, FileText, PackageCheck, PackageSearch, RotateCcw, Search, Truck } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, CheckCircle2, FileText, MessageCircle, PackageCheck, PackageSearch, RotateCcw, Search, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -14,6 +14,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../ui/table';
 import { getApiErrorMessage } from '../../services/api';
+import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
+import { customersService } from '../../services/ventas.service';
 import {
   logisticsService,
   type BillingAvailableResult,
@@ -46,6 +48,7 @@ export function Billing() {
   const [date, setDate] = useState(today());
   const [dueDate, setDueDate] = useState('');
   const [preview, setPreview] = useState<BillingPreviewResult | null>(null);
+  const [lastCustomerId, setLastCustomerId] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<BillingConfirmResult | null>(null);
@@ -135,19 +138,44 @@ export function Billing() {
     if (selected.size === 0) { toast.error('Selecciona al menos un paquete'); return; }
     setBusy(true);
     try {
-      setPreview(await logisticsService.billingPreview({
+      const p = await logisticsService.billingPreview({
         customerName: customerName || undefined,
         date,
         dueDate: dueDate || undefined,
         packageIds: [...selected],
         rates,
-      }));
+      });
+      setPreview(p);
+      setLastCustomerId(p.customer?.id || '');
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo preparar la factura'));
     } finally {
       setBusy(false);
     }
   }, [selected, customerName, date, dueDate, rates]);
+
+  const sendWhatsApp = useCallback(async () => {
+    if (!result || !lastCustomerId) { toast.error('No hay cliente registrado para la factura'); return; }
+    try {
+      const link = await publicAccessService.createDocumentLink({
+        customerId: lastCustomerId,
+        documentType: 'invoice',
+        documentId: result.invoice.id,
+        allowView: true,
+      });
+      const url = publicLinkUrl(link.path);
+      let phone = '';
+      try {
+        const cust: any = await customersService.getById(lastCustomerId);
+        phone = String(cust?.phone || '').replace(/[^\d]/g, '');
+      } catch { /* sin teléfono: se abre la lista de chats */ }
+      const text = `Hola, te compartimos tu factura ${result.invoice.number} de NovaHub: ${url}`;
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+      toast.success('Factura lista para enviar por WhatsApp');
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'No se pudo generar el enlace de la factura'));
+    }
+  }, [result, lastCustomerId]);
 
   const confirm = useCallback(async () => {
     if (!preview) return;
@@ -444,9 +472,12 @@ export function Billing() {
                   <span className="text-primary">${preview.totalAmount.toFixed(2)}</span>
                 </div>
               </div>
-              <Button className="mt-3 rounded-xl text-xs" onClick={confirm} disabled={confirming} data-tour="log-billing-confirm">
-                {confirming ? 'Confirmando…' : `Emitir factura (${preview.packageCount})`}
-              </Button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button className="rounded-xl text-xs" onClick={confirm} disabled={confirming} data-tour="log-billing-confirm">
+                  {confirming ? 'Confirmando…' : `Emitir factura (${preview.packageCount})`}
+                </Button>
+                <Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva factura</Button>
+              </div>
             </Card>
           )}
 
@@ -456,7 +487,12 @@ export function Billing() {
               <p className="mt-2 text-sm">
                 Factura <b>{result.invoice.number}</b> por <b>${Number(result.invoice.total || 0).toFixed(2)}</b> con <b>{result.billedPackages}</b> paquete(s). Usa la pestaña <b>Entrega</b> para registrar la salida.
               </p>
-              <Button variant="outline" className="mt-3 rounded-xl text-xs" onClick={reset}>Nueva factura</Button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button className="rounded-xl text-xs" onClick={() => void sendWhatsApp()} disabled={!lastCustomerId}>
+                  <MessageCircle className="size-4" /> Enviar factura por WhatsApp
+                </Button>
+                <Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva factura</Button>
+              </div>
             </Card>
           )}
         </>
