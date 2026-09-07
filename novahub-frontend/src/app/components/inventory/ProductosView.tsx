@@ -112,6 +112,7 @@ const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 export type ProductStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+type InitialImportReimportMode = 'REJECT' | 'MERGE';
 
 const PRODUCT_TABLE_WIDTHS = {
   selector: '40px',
@@ -1076,6 +1077,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [importExchangeRate, setImportExchangeRate] = useState<number>(Number(exchangeRate || 1));
   const [initialImportConfirmOpen, setInitialImportConfirmOpen] = useState(false);
   const [initialImportConfirmText, setInitialImportConfirmText] = useState('');
+  const [initialImportReimportMode, setInitialImportReimportMode] = useState<InitialImportReimportMode>('REJECT');
   const [similarImportGroups, setSimilarImportGroups] = useState<SimilarProductGroup[]>([]);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
@@ -2859,7 +2861,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         ['GUÍA DE LLENADO · IMPORTACIÓN DE SERVICIOS'],
         ['Puedes importar servicios en cualquier momento. Revisa, normaliza y corrige la previsualización antes de confirmar.'],
         ['Campo', 'Regla'],
-        ['Código / SKU', 'Obligatorio y único dentro de la empresa.'],
+        ['Código / SKU', 'Obligatorio y único dentro de la sucursal.'],
         ['Nombre', 'Obligatorio.'],
         ['Descripción', 'Opcional. Texto descriptivo del servicio.'],
         ['Nota comercial', 'Opcional; máximo 100 caracteres. Se muestra en ventas y documentos.'],
@@ -3415,10 +3417,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         }
         setImportProgress(25);
        const results = isServiceView
-         ? await inventoryService.importServices({ items, currency: importCurrency, exchangeRate: importExchangeRate, reimportMode: 'MERGE', confirmText: 'IMPORTAR' })
+         ? await inventoryService.importServices({ items, currency: importCurrency, exchangeRate: importExchangeRate, reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' })
          : advancedCatalogPayload
-           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: 'MERGE', confirmText: 'IMPORTAR' })
-           : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', reimportMode: 'MERGE', confirmText: 'IMPORTAR' });
+           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' })
+           : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' });
       setImportProgress(55);
       await uploadInitialImportImages(valid, setImportProgress);
       setImportProgress(100);
@@ -3427,6 +3429,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setInitialImportConfirmOpen(false);
       setImportPreviewOpen(false);
       setInitialImportConfirmText('');
+      setInitialImportReimportMode('REJECT');
       setImportData([]);
       setAdvancedImportCatalog(null);
       setImportFileName('');
@@ -3439,7 +3442,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setImporting(false);
       setImportProgress(0);
     }
-  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView]);
+  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView]);
 
   const handleBulkImageArchiveSelected = useCallback(async (file: File) => {
     if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
@@ -4380,8 +4383,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         open={similarImportGroups.length > 0}
         groups={similarImportGroups}
         title="La importación contiene productos existentes o similares"
-        description="Revisa nombre, marca, SKU, atributos, precios y costos. Los SKU existentes en una reimportación se actualizarán; una coincidencia distinta puede ser rechazada por el servidor para evitar duplicados."
-        continueLabel="Continuar importación"
+        description={`Revisa nombre, marca, SKU, atributos, precios y costos. ${initialImportReimportMode === 'MERGE' ? 'Los SKU existentes se actualizarán conservando ID, historial y existencias.' : 'Los SKU existentes se omitirán y aparecerán como incidencias; no se actualizarán automáticamente.'}`}
+        continueLabel={initialImportReimportMode === 'MERGE' ? 'Actualizar existentes' : 'Continuar sin actualizar'}
         onOpenChange={(value) => { if (!value) setSimilarImportGroups([]); }}
         onContinue={() => {
           setSimilarImportGroups([]);
@@ -4751,10 +4754,29 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         <DialogContent>
           <DialogHeader data-tour="inventory-initial-confirm-title">
              <DialogTitle>Formalizar importación</DialogTitle>
-          <DialogDescription>Esta acción creará o actualizará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'registros de catálogo'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios se actualizarán sin IVA, bodega, stock ni variantes.' : 'La reimportación conserva IDs, existencias e historial; actualiza datos maestros y precios, agrega variantes nuevas y rechaza conflictos de tipo o SKU.'} {isServiceView ? `El precio se guardará en ${importCurrency}.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
+             <DialogDescription>Esta acción procesará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'registros de catálogo'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios no manejan IVA, bodega, stock ni variantes.' : 'Los SKU existentes se controlan por sucursal y sin distinguir mayúsculas/minúsculas.'} {isServiceView ? `El precio se guardará en ${importCurrency}.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
           <InventoryViewTutorial label="Cómo confirmar importación" targetPrefix="inventory-initial-confirm" copy={{ data: { description: 'Escribe IMPORTAR únicamente después de revisar las filas válidas, errores y advertencias.' }, actions: { description: `Confirma la importación para crear ${isServiceView ? 'los servicios' : 'los productos nuevos'}.` } }} />
           </DialogHeader>
-          <div data-tour="inventory-initial-confirm-data"><Input value={initialImportConfirmText} onChange={(event) => setInitialImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus /></div>
+          <div className="space-y-3" data-tour="inventory-initial-confirm-data">
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              <label htmlFor="initial-import-reimport-mode" className="text-xs font-black uppercase tracking-wider text-muted-foreground">Si el SKU ya existe en esta sucursal</label>
+              <select
+                id="initial-import-reimport-mode"
+                value={initialImportReimportMode}
+                onChange={(event) => setInitialImportReimportMode(event.target.value as InitialImportReimportMode)}
+                className="mt-2 h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="REJECT">Omitirlo y reportarlo como incidencia</option>
+                <option value="MERGE">Actualizar el registro existente</option>
+              </select>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {initialImportReimportMode === 'MERGE'
+                  ? 'Se conserva el ID, historial y stock; se actualizan los datos maestros permitidos y se agregan variantes nuevas.'
+                  : 'No se modificará el producto existente. La fila quedará reportada para revisión.'}
+              </p>
+            </div>
+            <Input value={initialImportConfirmText} onChange={(event) => setInitialImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
+          </div>
           <DialogFooter data-tour="inventory-initial-confirm-actions"><Button variant="outline" onClick={() => setInitialImportConfirmOpen(false)}>Cancelar</Button><Button onClick={handleFinalInitialImport} disabled={initialImportConfirmText !== 'IMPORTAR' || importing}>Confirmar importación</Button></DialogFooter>
         </DialogContent>
       </Dialog>
