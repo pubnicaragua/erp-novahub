@@ -167,7 +167,7 @@ export function Reconciliation() {
         </div>
       </Card>
 
-      <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm" data-tour="log-recon-table">
+      <Card className="flex-1 overflow-auto rounded-2xl border-border/60 shadow-sm" data-tour="log-recon-table" style={{ minHeight: '18rem' }}>
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow>

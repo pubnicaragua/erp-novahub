@@ -88,12 +88,15 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
   const downloadTemplate = () => {
     const headers = ['TRACKING', 'SKU', 'PESO DEL PAQUETE', 'PRECIO DE COMPRA', 'PRECIO DE VENTA', 'BODEGA', 'COD_AGENCIA', 'COD_SUB_AGENCIA'];
     const example = ['GFUS01065222301697', 'ZAPATO-ROJO-38', '2.5', '3.5', '7.0', 'Bodega Managua', 'A1', 'S1'];
-    const lines = [headers.join(','), example.join(',')];
-    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Paquetes');
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'plantilla-paquetes.csv';
+    a.download = 'plantilla-paquetes.xlsx';
     a.click();
     URL.revokeObjectURL(url);
   };
