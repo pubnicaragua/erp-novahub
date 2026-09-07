@@ -4,10 +4,11 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { Combobox } from '@/app/components/ui/Combobox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { Badge } from '@/app/components/ui/badge';
 import { ProductImagePicker } from '../ui/ProductImage';
-import { Trash2, Plus, Package, X, Tag, Check } from 'lucide-react';
+import { ArrowLeft, Trash2, Plus, Package, X, Tag, Check, ChevronDown } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { inventoryService } from '@/app/services/inventario.service';
@@ -17,15 +18,18 @@ import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { ProductSimilarityAlert } from './ProductSimilarityAlert';
 import type { SimilarProductGroup } from '@/app/services/inventario.service';
 import { priceListsService, type PriceList } from '@/app/services/price-lists.service';
+import { resolveStandardProductPriceLists } from '@/app/utils/product-price-lists';
 
 interface AddProductsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   categories?: any[];
   warehouses?: any[];
+  brands?: string[];
   priceLists?: Array<Pick<PriceList, 'code' | 'name'>>;
   onRefresh: () => void;
   itemType?: 'PRODUCT' | 'SERVICE';
+  presentation?: 'dialog' | 'page';
 }
 
 const makeDefaultDraft = (categoryId: string, itemType: string) => ({
@@ -39,8 +43,8 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   priceCurrency: 'NIO',
   prices: {} as Record<string, number | string>,
   costPrice: '',
-  lastPurchasePrice: '',
   taxRate: '0.15',
+  unit: 'unidad',
   barcode: '',
   brand: '',
   model: '',
@@ -61,6 +65,7 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   isActive: true,
   initialStock: '',
   variantInitialStocks: {} as Record<string, number>,
+  variantPrices: {} as Record<string, Record<string, number | string>>,
   variantCostPrices: {} as Record<string, number | string>,
   variantMinStocks: {} as Record<string, number | string>,
   variantMaxStocks: {} as Record<string, number | string>,
@@ -98,7 +103,7 @@ const getVariantStockTotal = (product: any) =>
     0,
   );
 
-export function AddProductsModal({ open, onOpenChange, categories, warehouses, priceLists, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
+export function AddProductsModal({ open, onOpenChange, categories, warehouses, brands = [], priceLists, onRefresh, itemType = 'PRODUCT', presentation = 'dialog' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
@@ -123,14 +128,31 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
     [...effectiveCategories, ...extraCategories].forEach((c: any) => map.set(c.id, c));
     return Array.from(map.values());
   }, [effectiveCategories, extraCategories]);
+  const brandOptions = useMemo(() => {
+    const uniqueBrands = new Map<string, string>();
+    brands.forEach((brand) => {
+      const label = String(brand || '').trim();
+      if (!label) return;
+      const normalized = label.toLocaleLowerCase();
+      if (!uniqueBrands.has(normalized)) uniqueBrands.set(normalized, label);
+    });
+    return Array.from(uniqueBrands.values())
+      .sort((left, right) => left.localeCompare(right, 'es', { sensitivity: 'base' }))
+      .map((brand) => ({ label: brand, value: brand }));
+  }, [brands]);
+  const categoryOptions = useMemo(() => allCategories.map((category: any) => ({
+    label: category.name,
+    value: category.id,
+  })), [allCategories]);
   const effectiveWarehouses = warehouses ?? internalWarehouses;
   const [internalPriceLists, setInternalPriceLists] = useState<Array<Pick<PriceList, 'code' | 'name'>>>([
     { code: 'RETAIL', name: 'Minorista' },
     { code: 'WHOLESALE', name: 'Mayorista' },
     { code: 'DISTRIBUTOR', name: 'Distribuidor' },
   ]);
-  const effectivePriceLists = (priceLists && priceLists.length > 0 ? priceLists : internalPriceLists).filter((list) => list.code && list.name);
+  const effectivePriceLists = resolveStandardProductPriceLists(priceLists && priceLists.length > 0 ? priceLists : internalPriceLists);
   const catalogItemType = itemType;
+  const isPagePresentation = presentation === 'page';
 
   const [productsList, setProductsList] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -147,6 +169,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
   const [similarGroups, setSimilarGroups] = useState<SimilarProductGroup[]>([]);
+  const [attributesStepExpanded, setAttributesStepExpanded] = useState(true);
+  const [valuesStepExpanded, setValuesStepExpanded] = useState(true);
+  const [expandedAttributeId, setExpandedAttributeId] = useState<string | null>(null);
+  const [variantsExpanded, setVariantsExpanded] = useState(true);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const validateSkuDebounced = (code: string) => {
@@ -182,7 +208,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
     if (!open || (priceLists && priceLists.length > 0)) return;
     const controller = new AbortController();
     priceListsService.getAll(controller.signal)
-      .then((lists) => setInternalPriceLists(Array.isArray(lists) ? lists.filter((list) => list.isActive !== false).map((list) => ({ code: list.code, name: list.name })) : []))
+      .then((lists) => setInternalPriceLists(resolveStandardProductPriceLists(Array.isArray(lists) ? lists.filter((list) => list.isActive !== false) : [])))
       .catch(() => undefined);
     return () => controller.abort();
   }, [open, priceLists]);
@@ -193,19 +219,30 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
     );
   };
 
-  const combinationCount = (attrs: any[]) => {
-    if (attrs.length === 0) return 0;
-    return attrs.reduce((acc: number, attr: any) => {
-      const linked = draftProduct.linkedAttributes.find((la: any) => la.attributeId === attr.id);
-      const selectedCount = linked?.selectedOptions?.length || attr.options?.length || 0;
-      return acc * Math.max(1, selectedCount);
-    }, 1);
-  };
-
   const variantCombinations = useMemo(
     () => buildVariantCombinations(draftProduct.linkedAttributes),
     [draftProduct.linkedAttributes],
   );
+
+  const variantSkuPreviews = useMemo(() => {
+    const parentSku = String(draftProduct.code || '').trim() || 'SKU-PADRE';
+    const usedSkus = new Set<string>();
+    const previews: Record<string, string> = {};
+
+    variantCombinations.forEach((combination) => {
+      const suffix = combination.map((attribute) => {
+        const normalized = attribute.value.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+        return normalized.substring(0, 8);
+      }).filter(Boolean).join('-');
+      let sku = suffix ? `${parentSku}-${suffix}` : parentSku;
+      let counter = 2;
+      while (usedSkus.has(sku.toLowerCase())) sku = `${parentSku}-${suffix}-${counter++}`;
+      usedSkus.add(sku.toLowerCase());
+      previews[variantCombinationKey(combination)] = sku;
+    });
+
+    return previews;
+  }, [draftProduct.code, variantCombinations]);
 
   const allocatedVariantStock = getVariantStockTotal(draftProduct);
 
@@ -228,6 +265,20 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
       variantCostPrices: {
         ...(prev.variantCostPrices || {}),
         [key]: value,
+      },
+    }));
+  };
+
+  const updateVariantPrice = (combination: VariantCombination, priceListCode: string, value: string) => {
+    const key = variantCombinationKey(combination);
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      variantPrices: {
+        ...(prev.variantPrices || {}),
+        [key]: {
+          ...(prev.variantPrices?.[key] || {}),
+          [priceListCode]: value,
+        },
       },
     }));
   };
@@ -269,10 +320,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
 
   const hasValidSellingPrice = (product: any) => {
     if (product.itemType === 'SERVICE') return product.salePrice !== '' && Number.isFinite(Number(product.salePrice)) && Number(product.salePrice) >= 0;
-    return effectivePriceLists.some((list) => product.prices?.[list.code] !== undefined && product.prices?.[list.code] !== '' && Number.isFinite(Number(product.prices[list.code])) && Number(product.prices[list.code]) >= 0);
+    const hasParentPrice = effectivePriceLists.some((list) => product.prices?.[list.code] !== undefined && product.prices?.[list.code] !== '' && Number.isFinite(Number(product.prices[list.code])) && Number(product.prices[list.code]) >= 0);
+    const hasVariantPrice = product.isVariable && Object.values(product.variantPrices || {}).some((prices: any) =>
+      effectivePriceLists.some((list) => prices?.[list.code] !== undefined && prices?.[list.code] !== '' && Number.isFinite(Number(prices[list.code])) && Number(prices[list.code]) >= 0),
+    );
+    return hasParentPrice || hasVariantPrice;
   };
 
   const toggleAttribute = (attrId: string) => {
+    const isCurrentlySelected = draftProduct.linkedAttributes.some((la: any) => la.attributeId === attrId);
     setDraftProduct((prev: any) => {
       const exists = prev.linkedAttributes.find((la: any) => la.attributeId === attrId);
       if (exists) {
@@ -281,9 +337,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
       const attr = catalogAttributes.find((a: any) => a.id === attrId);
       return {
         ...prev,
-        linkedAttributes: [...prev.linkedAttributes, { attributeId: attrId, name: attr?.name || '', selectedOptions: attr?.options || [] }],
+        linkedAttributes: [...prev.linkedAttributes, { attributeId: attrId, name: attr?.name || '', selectedOptions: [] }],
       };
     });
+    setExpandedAttributeId(isCurrentlySelected ? null : attrId);
   };
 
   const toggleAttributeOption = (attrId: string, option: string) => {
@@ -458,7 +515,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
           ? (product.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate))
           : 1;
         const convertedCost = Number(product.costPrice || 0) * rate;
-        const convertedLastPurchasePrice = Number(product.lastPurchasePrice || 0) * rate;
         const primaryPrice = product.itemType === 'SERVICE'
           ? Number(product.salePrice || 0)
           : Number((product.prices?.RETAIL ?? product.prices?.[effectivePriceLists[0]?.code || ''] ?? product.salePrice) || 0);
@@ -472,7 +528,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
           trackInventory: product.itemType === 'PRODUCT',
           trackSeries: Boolean(product.trackSerialNumbers),
           trackBatch: Boolean(product.trackBatch),
-          ...(canViewInventoryCost ? { costPrice: convertedCost, lastPurchasePrice: convertedLastPurchasePrice } : {}),
+          ...(canViewInventoryCost ? { costPrice: convertedCost } : {}),
           salePrice: primaryPrice * rate,
           salePriceOriginal: primaryPrice,
           priceCurrency: product.priceCurrency || baseCurrency,
@@ -509,6 +565,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
               maxStock: product.variantMaxStocks?.[variantCombinationKey(combination)] === undefined || product.variantMaxStocks?.[variantCombinationKey(combination)] === ''
                 ? undefined
                 : Number(product.variantMaxStocks[variantCombinationKey(combination)]),
+              prices: Object.fromEntries(
+                effectivePriceLists
+                  .map((list) => [list.code, product.variantPrices?.[variantCombinationKey(combination)]?.[list.code]] as const)
+                  .filter(([, value]) => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0),
+              ),
               costPrice: (() => {
                 const rawCost = product.variantCostPrices?.[variantCombinationKey(combination)];
                 return rawCost === undefined || rawCost === '' ? null : Number(rawCost) * rate;
@@ -599,6 +660,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
       const response = await inventoryService.checkSimilarProducts(listToSave.map((product) => ({
         code: product.code,
         name: product.name,
+        description: product.description,
         brand: product.brand,
         linkedAttributes: product.linkedAttributes,
         variants: product.isVariable ? buildVariantCombinations(product.linkedAttributes).map((attributes) => ({ attributes })) : undefined,
@@ -621,12 +683,26 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
       open={similarGroups.length > 0}
       groups={similarGroups}
       title="El producto ya existe o es muy similar"
-      description="No se creó ningún registro. Corrige el nombre, SKU, marca o atributos para evitar duplicados."
+      description="No se creó ningún registro. Corrige el nombre, descripción, SKU, marca o atributos para evitar duplicados."
       onOpenChange={(value) => { if (!value) setSimilarGroups([]); }}
     />
     <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
-      <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,780px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col overflow-hidden">
+      <DialogContent className={presentation === 'page'
+        ? '!fixed !inset-0 !top-0 !left-0 !z-[60] !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-none !border-0 !bg-background !p-4 !shadow-none !backdrop-blur-none sm:!p-6 lg:!p-10'
+        : 'w-[calc(100vw-2rem)] !max-w-[min(95vw,1100px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col overflow-hidden'}>
         <DialogHeader data-tour="inventory-product-add-title">
+          {presentation === 'page' && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mb-1 w-fit -translate-x-2 rounded-lg px-2 text-xs font-bold text-muted-foreground hover:text-foreground"
+              onClick={() => onOpenChange(false)}
+              disabled={isSaving}
+            >
+              <ArrowLeft className="mr-2 size-4" /> Volver a productos
+            </Button>
+          )}
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
             <Package className="size-5 text-primary" /> Agregar {catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}
           </DialogTitle>
@@ -641,20 +717,24 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
           />
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto flex flex-col gap-6 p-1" data-tour="inventory-product-add-data">
+        <div className={isPagePresentation ? 'min-h-0 flex-1 overflow-auto flex flex-col gap-3 p-0 xl:mx-auto xl:w-full xl:max-w-[1800px]' : 'flex-1 overflow-auto flex flex-col gap-6 p-1'} data-tour="inventory-product-add-data">
           
           {/* FORMULARIO SUPERIOR */}
-          <div className="flex flex-col gap-4 rounded-xl border border-dashed bg-muted/30 p-4 sm:flex-row">
-            <div>
+          <div className={isPagePresentation
+            ? 'grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-dashed bg-muted/30 p-3 sm:grid-cols-2 md:grid-cols-12'
+            : 'grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-dashed bg-muted/30 p-4 sm:grid-cols-2 md:grid-cols-8'}>
+            <div className={isPagePresentation
+              ? 'flex items-start justify-center sm:col-span-1 md:col-span-1 md:row-span-2 md:items-center md:pt-0'
+              : 'flex items-start justify-center sm:col-span-1 md:row-span-2 md:items-center md:pt-0'}>
               <ProductImagePicker
                 src={draftProduct.imagePreviewUrl}
                 productName={draftProduct.name}
                 onSelect={handleImageSelected}
                 onRemove={handleImageRemoved}
+                className="!size-24 !rounded-xl"
               />
             </div>
-            <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
-              <div className="col-span-1">
+              <div className={isPagePresentation ? 'col-span-1 md:col-start-2 md:row-start-1 md:col-span-2' : 'col-span-1 md:col-start-2 md:row-start-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
                 <div className="flex flex-col gap-1 mt-1 w-full">
                   <Input 
@@ -666,7 +746,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                   {skuError && <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
                 </div>
               </div>
-              <div className="sm:col-span-2">
+              <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-1 md:col-span-9' : 'sm:col-span-2 md:col-start-3 md:row-start-1 md:col-span-3'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
                 <Input 
                   value={draftProduct.name} 
@@ -675,86 +755,127 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                     placeholder={`Nombre del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
                 />
               </div>
-              <div className="sm:col-span-2 md:col-span-5">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción <span className="normal-case font-medium">(opcional)</span></label>
-                <Textarea
-                  value={draftProduct.description}
-                  onChange={e => handleUpdateDraft('description', e.target.value)}
-                  className="mt-1 min-h-16 text-xs"
-                  placeholder={`Descripción del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
-                />
-                <div className="mt-2">
+              {catalogItemType !== 'SERVICE' && <>
+                <div className={isPagePresentation ? 'col-span-1 md:col-start-2 md:row-start-2 md:col-span-3' : 'col-span-1 md:col-start-6 md:row-start-1 md:col-span-3'}>
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Marca</label>
+                  <Combobox
+                    value={draftProduct.brand}
+                    onChange={value => handleUpdateDraft('brand', value)}
+                    options={brandOptions}
+                    allowCustomValue
+                    searchPlaceholder="Buscar o escribir una marca..."
+                    emptyMessage="No hay marcas registradas. Puedes escribir una nueva."
+                    className="mt-1 !h-8 !rounded-none text-xs"
+                    contentClassName="!z-[70] min-w-[320px]"
+                    placeholder="Marca del producto"
+                  />
+                </div>
+                <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-5 md:row-start-2 md:col-span-4' : 'sm:col-span-2 md:col-start-2 md:row-start-2 md:col-span-4'}>
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría *</label>
+                  {newCategoryOpen ? (
+                    <div className="mt-1 space-y-1.5 rounded-lg border border-primary/40 bg-primary/5 p-2">
+                      <Input
+                        value={newCategoryName}
+                        onChange={e => setNewCategoryName(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="Nombre de la categoría"
+                        autoFocus
+                      />
+                      <Input
+                        value={newCategoryDesc}
+                        onChange={e => setNewCategoryDesc(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="Descripción (opcional)"
+                      />
+                      <div className="flex gap-1.5">
+                        <Button type="button" size="sm" className="h-6 flex-1 text-[9px] font-bold" onClick={handleCreateCategory} disabled={creatingCategory || !newCategoryName.trim()}>
+                          {creatingCategory ? 'Creando...' : 'Crear'}
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" className="h-6 text-[9px]" onClick={() => { setNewCategoryOpen(false); setNewCategoryName(''); setNewCategoryDesc(''); }}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1 flex min-w-0 gap-1.5">
+                      <Combobox
+                        value={draftProduct.categoryId}
+                        onChange={value => handleUpdateDraft('categoryId', value)}
+                        options={categoryOptions}
+                        searchPlaceholder="Buscar categoría..."
+                        emptyMessage="No se encontraron categorías."
+                        className="!h-8 flex-1 !rounded-none text-xs"
+                        contentClassName="!z-[70] min-w-[360px]"
+                        placeholder="Seleccionar categoría"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-8 shrink-0 rounded-lg border-primary/30 text-primary hover:bg-primary/10"
+                        onClick={() => setNewCategoryOpen(true)}
+                        title="Crear nueva categoría"
+                      >
+                        <Plus className="size-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className={isPagePresentation ? 'col-span-1 md:col-start-9 md:row-start-2 md:col-span-4' : 'col-span-1 md:col-start-6 md:row-start-2 md:col-span-3'}>
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad</label>
+                  <Select value={draftProduct.unit || 'unidad'} onValueChange={v => handleUpdateDraft('unit', v)}>
+                    <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue placeholder="Unidad" /></SelectTrigger>
+                    <SelectContent className="!rounded-none">
+                      <SelectItem value="unidad">Unidad</SelectItem>
+                      <SelectItem value="kilo">Kilo</SelectItem>
+                      <SelectItem value="libra">Libra</SelectItem>
+                      <SelectItem value="docena">Docena</SelectItem>
+                      <SelectItem value="caja">Caja</SelectItem>
+                      <SelectItem value="litro">Litro</SelectItem>
+                      <SelectItem value="metro">Metro</SelectItem>
+                      <SelectItem value="par">Par</SelectItem>
+                      <SelectItem value="rollo">Rollo</SelectItem>
+                      <SelectItem value="pieza">Pieza</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>}
+              <div className={isPagePresentation
+                ? 'sm:col-span-2 md:col-start-1 md:row-start-3 md:col-span-12 md:grid md:grid-cols-2 md:gap-2'
+                : 'sm:col-span-2 md:col-start-1 md:row-start-3 md:col-span-8'}>
+                <div className="min-w-0">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción <span className="normal-case font-medium">(opcional)</span></label>
+                  <Textarea
+                    value={draftProduct.description}
+                    onChange={e => handleUpdateDraft('description', e.target.value)}
+                    className={isPagePresentation ? 'mt-1 min-h-12 text-xs' : 'mt-1 min-h-16 text-xs'}
+                    placeholder={`Descripción del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
+                  />
+                </div>
+                <div className={isPagePresentation ? 'min-w-0' : 'mt-2'}>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Nota comercial <span className="normal-case font-medium">(opcional)</span></label>
                   <Textarea
                     value={draftProduct.commercialNote || ''}
                     onChange={e => handleUpdateDraft('commercialNote', Array.from(e.target.value).slice(0, 100).join(''))}
                     maxLength={100}
-                    className="mt-1 min-h-14 text-xs"
+                    className={isPagePresentation ? 'mt-1 min-h-12 text-xs' : 'mt-1 min-h-14 text-xs'}
                     placeholder="Nota visible en ventas, compras y facturas"
                   />
-                  <p className="mt-1 text-right text-[10px] text-muted-foreground">{Array.from(String(draftProduct.commercialNote || '')).length}/100</p>
+                  <p className="mt-0.5 text-right text-[10px] text-muted-foreground">{Array.from(String(draftProduct.commercialNote || '')).length}/100</p>
                 </div>
               </div>
-              <div className="sm:col-span-2">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría *</label>
-                {newCategoryOpen ? (
-                  <div className="mt-1 space-y-1.5 rounded-lg border border-primary/40 bg-primary/5 p-2">
-                    <Input
-                      value={newCategoryName}
-                      onChange={e => setNewCategoryName(e.target.value)}
-                      className="h-7 text-xs"
-                      placeholder="Nombre de la categoría"
-                      autoFocus
-                    />
-                    <Input
-                      value={newCategoryDesc}
-                      onChange={e => setNewCategoryDesc(e.target.value)}
-                      className="h-7 text-xs"
-                      placeholder="Descripción (opcional)"
-                    />
-                    <div className="flex gap-1.5">
-                      <Button type="button" size="sm" className="h-6 flex-1 text-[9px] font-bold" onClick={handleCreateCategory} disabled={creatingCategory || !newCategoryName.trim()}>
-                        {creatingCategory ? 'Creando...' : 'Crear'}
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" className="h-6 text-[9px]" onClick={() => { setNewCategoryOpen(false); setNewCategoryName(''); setNewCategoryDesc(''); }}>
-                        Cancelar
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-1.5 mt-1">
-                    <Select value={draftProduct.categoryId} onValueChange={v => handleUpdateDraft('categoryId', v)}>
-                      <SelectTrigger className="h-8 flex-1 text-xs"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                      <SelectContent>
-                        {allCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="size-8 shrink-0 rounded-lg border-primary/30 text-primary hover:bg-primary/10"
-                      onClick={() => setNewCategoryOpen(true)}
-                      title="Crear nueva categoría"
-                    >
-                      <Plus className="size-3.5" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {!itemType && <div className="col-span-1">
+              {!itemType && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-1' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Tipo</label>
                 <Select value={draftProduct.itemType} onValueChange={v => handleUpdateDraft('itemType', v)}>
-                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent className="!rounded-none">
                     <SelectItem value="PRODUCT">Producto</SelectItem>
                     <SelectItem value="SERVICE">Servicio</SelectItem>
                   </SelectContent>
                 </Select>
               </div>}
 
-              {catalogItemType !== 'SERVICE' && <div className="col-span-1">
+              {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-1' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Variable</label>
                 <Button
                   type="button"
@@ -772,17 +893,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                 </Button>
               </div>}
 
-              <div className="col-span-1">
+              <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-1' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
                 <Select value={draftProduct.priceCurrency} onValueChange={v => handleUpdateDraft('priceCurrency', v)}>
-                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent className="!rounded-none">
                     <SelectItem value="NIO">NIO</SelectItem>
                     <SelectItem value="USD">USD</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {catalogItemType === 'SERVICE' && <div className="col-span-1">
+              {catalogItemType === 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio</label>
                 <Input
                   type="number"
@@ -795,7 +916,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                 />
               </div>}
               {catalogItemType !== 'SERVICE' && effectivePriceLists.map((list) => (
-                <div key={list.code} className="col-span-1">
+                <div key={list.code} className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio {list.name}</label>
                   <Input
                     type="number"
@@ -809,7 +930,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                 </div>
               ))}
               
-              {canViewInventoryCost && <div className="col-span-1">
+              {canViewInventoryCost && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
                 <Input 
                   type="number" min={0}
@@ -819,18 +940,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                   placeholder="0.00" 
                 />
               </div>}
-              {canViewInventoryCost && catalogItemType !== 'SERVICE' && <div className="col-span-1">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Último costo</label>
-                <Input
-                  type="number" min={0} step="any"
-                  value={draftProduct.lastPurchasePrice}
-                  onChange={e => handleUpdateDraft('lastPurchasePrice', e.target.value)}
-                  className="h-8 text-xs text-right mt-1 tabular-nums"
-                  placeholder="0.00"
-                />
-              </div>}
-              
-              {catalogItemType !== 'SERVICE' && <div className="col-span-1">
+              {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
                 <Button
                   type="button"
@@ -843,7 +953,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
               </div>}
 
               {catalogItemType !== 'SERVICE' && draftProduct.trackSerialNumbers && (
-                <div className="col-span-1">
+              <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">IMEI / Serie *</label>
                   <Input
                     value={draftProduct.imeiNumber}
@@ -857,16 +967,16 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
               {draftProduct.itemType === 'PRODUCT' ? (
                 !draftProduct.isVariable ? (
                 <>
-                  <div className="sm:col-span-2">
+                  <div className={isPagePresentation ? 'sm:col-span-2 md:row-start-5 md:col-span-4' : 'sm:col-span-2'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega (Stock Inicial)</label>
                     <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Bodega para ingreso" /></SelectTrigger>
-                      <SelectContent>
+                      <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue placeholder="Bodega para ingreso" /></SelectTrigger>
+                      <SelectContent className="!rounded-none">
                         {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-1">
+                  <div className={isPagePresentation ? 'col-span-1 md:row-start-5 md:col-span-2' : 'col-span-1'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Inicial</label>
                     <Input
                       type="number"
@@ -876,27 +986,27 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                       className="h-8 text-xs text-right mt-1 tabular-nums"
                     />
                   </div>
-                  <div className="col-span-1">
+                  <div className={isPagePresentation ? 'col-span-1 md:row-start-5 md:col-span-3' : 'col-span-1'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock mínimo</label>
                     <Input type="number" min={0} value={draftProduct.minStock} onChange={e => handleUpdateDraft('minStock', e.target.value)} className="h-8 text-xs text-right mt-1 tabular-nums" />
                   </div>
-                  <div className="col-span-1">
+                  <div className={isPagePresentation ? 'col-span-1 md:row-start-5 md:col-span-3' : 'col-span-1'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock máximo</label>
                     <Input type="number" min={0} value={draftProduct.maxStock} onChange={e => handleUpdateDraft('maxStock', e.target.value)} className="h-8 text-xs text-right mt-1 tabular-nums" />
                   </div>
                 </>
                 ) : (
                 <>
-                  <div className="sm:col-span-2 md:col-span-3">
+                  <div className={isPagePresentation ? 'sm:col-span-2 md:row-start-5 md:col-span-4' : 'sm:col-span-2 md:col-span-4'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega *</label>
                     <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Bodega del producto" /></SelectTrigger>
-                      <SelectContent>
+                      <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue placeholder="Bodega del producto" /></SelectTrigger>
+                      <SelectContent className="!rounded-none">
                         {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-1 sm:col-span-2 md:col-span-2">
+                  <div className={isPagePresentation ? 'col-span-1 sm:col-span-2 md:row-start-5 md:col-span-8' : 'col-span-1 sm:col-span-2 md:col-span-2'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock total de variantes</label>
                     <Input
                       type="number"
@@ -915,11 +1025,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                 )
               ) : (
                 <>
-                  <div className="col-span-1">
+                  <div className={isPagePresentation ? 'col-span-1 md:row-start-5 md:col-span-4' : 'col-span-1'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Disponibilidad</label>
                     <Select value={draftProduct.isActive === false ? 'unavailable' : 'available'} onValueChange={v => handleUpdateDraft('isActive', v === 'available')}>
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent className="!rounded-none">
                         <SelectItem value="available">Disponible</SelectItem>
                         <SelectItem value="unavailable">No disponible</SelectItem>
                       </SelectContent>
@@ -928,223 +1038,246 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, p
                 </>
               )}
               
-              <div className={`sm:col-span-2 md:col-span-5 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>
+              <div className={`sm:col-span-2 ${isPagePresentation ? 'md:col-span-12 md:row-start-6' : 'md:col-span-8'} flex justify-end`}>
                 <Button onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={!!skuError || isCheckingAccounting || isSaving}>
                   <Plus className="size-3 mr-2" />
                   {isCheckingAccounting ? 'Validando contabilidad...' : 'Agregar a la lista'}
                 </Button>
               </div>
 
-            </div>
           </div>
 
-          {catalogItemType !== 'SERVICE' && (
-            <div className="rounded-xl border border-border/60 bg-card/60 p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-xs font-black uppercase tracking-wider">Datos del catálogo</h4>
-                  <p className="mt-1 text-[10px] text-muted-foreground">Estos campos también se aceptan en la importación avanzada.</p>
-                </div>
-                <Badge variant="outline" className="shrink-0 text-[9px]">Opcionales</Badge>
-              </div>
-              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {[
-                  ['barcode', 'Código de barras', ''],
-                  ['brand', 'Marca', 'Marca del producto'],
-                  ['model', 'Modelo', 'Modelo o referencia'],
-                  ['color', 'Color', 'Color principal'],
-                  ['weight', 'Peso', '0.00'],
-                  ['weightUnit', 'Unidad de peso', 'kg, lb...'],
-                  ['dimensions', 'Dimensiones', 'Descripción libre'],
-                  ['width', 'Ancho', '0.00'],
-                  ['height', 'Alto', '0.00'],
-                  ['depth', 'Profundidad', '0.00'],
-                  ['dimensionUnit', 'Unidad de dimensión', 'cm, m...'],
-                  ['warranty', 'Garantía', 'Detalle o plazo'],
-                ].map(([field, label, placeholder]) => (
-                  <div key={field} className="min-w-0">
-                    <label className="text-[10px] font-bold uppercase text-muted-foreground">{label}</label>
-                    <Input
-                      type={['weight', 'width', 'height', 'depth'].includes(field) ? 'number' : 'text'}
-                      min={['weight', 'width', 'height', 'depth'].includes(field) ? 0 : undefined}
-                      step={['weight', 'width', 'height', 'depth'].includes(field) ? 'any' : undefined}
-                      value={draftProduct[field] ?? ''}
-                      onChange={e => handleUpdateDraft(field, e.target.value)}
-                      className="mt-1 h-8 min-w-0 text-xs"
-                      placeholder={placeholder}
-                    />
-                  </div>
-                ))}
-                <div className="min-w-0">
-                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Impuesto</label>
-                  <Select value={String(draftProduct.taxRate ?? '0.15')} onValueChange={v => handleUpdateDraft('taxRate', v)}>
-                    <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="0.15">Gravado 15%</SelectItem><SelectItem value="0">Exento 0%</SelectItem></SelectContent>
-                  </Select>
-                </div>
-                <div className="min-w-0">
-                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Control de lotes</label>
-                  <Button type="button" variant={draftProduct.trackBatch ? 'default' : 'outline'} className="mt-1 h-8 w-full text-[10px] uppercase" onClick={() => handleUpdateDraft('trackBatch', !draftProduct.trackBatch)}>
-                    {draftProduct.trackBatch ? 'Sí' : 'No'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* SECCIÓN DE ATRIBUTOS (solo productos variables) */}
+          {/* CONFIGURACIÓN DE VARIANTES (solo productos variables) */}
           {draftProduct.isVariable && (
-            <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Tag className="size-4 text-primary" />
-                  <h4 className="text-xs font-black uppercase tracking-wider text-primary">Atributos del producto</h4>
+            <div className={isPagePresentation ? 'rounded-xl border border-dashed border-primary/40 bg-primary/5 p-3 space-y-3' : 'rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 space-y-4'}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <Tag className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-primary">Configurar variantes</h4>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Elige primero los atributos y después los valores que tendrá cada producto.</p>
+                  </div>
                 </div>
-                {getSelectedAttributes().length > 0 && (
-                  <Badge variant="outline" className="text-[9px] font-mono">
-                    {combinationCount(getSelectedAttributes())} variante{combinationCount(getSelectedAttributes()) !== 1 ? 's' : ''}
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {getSelectedAttributes().length > 0 && (
+                    <Badge variant="outline" className="text-[9px] tabular-nums">
+                      {getSelectedAttributes().length} atributo{getSelectedAttributes().length !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                  <Badge variant="secondary" className="text-[9px] tabular-nums">
+                    {variantCombinations.length} variante{variantCombinations.length !== 1 ? 's' : ''}
                   </Badge>
-                )}
+                </div>
               </div>
-
-              <p className="text-[10px] text-muted-foreground">
-                Selecciona los atributos y sus opciones específicas para este producto.
-              </p>
 
               {catalogAttributes.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border/60 bg-background/50 p-4 text-center">
                   <p className="text-xs text-muted-foreground">No hay atributos creados.</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">Crea atributos desde <span className="font-bold text-primary">Inventario → Atributos</span> primero.</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Crea atributos desde <span className="font-bold text-primary">Inventario → Atributos</span> primero.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {catalogAttributes.map((attr: any) => {
-                    const linked = draftProduct.linkedAttributes.find((la: any) => la.attributeId === attr.id);
-                    const isSelected = !!linked;
-                    return (
-                      <div
-                        key={attr.id}
-                        className={`rounded-lg border p-3 transition-colors ${
-                          isSelected
-                            ? 'border-primary/40 bg-primary/10'
-                            : 'border-border/60 bg-background/80 hover:border-primary/20 cursor-pointer'
-                        }`}
-                        onClick={() => !isSelected && toggleAttribute(attr.id)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className={`size-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`}>
-                              {isSelected && <Check className="size-2.5 text-primary-foreground" />}
-                            </div>
-                            <span className="text-xs font-bold uppercase tracking-wider">{attr.name}</span>
-                          </div>
-                          {isSelected && (
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="text-[9px]">
-                                {linked.selectedOptions.length} de {attr.options?.length || 0}
-                              </Badge>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="size-5 text-red-500 hover:text-white hover:bg-red-500"
-                                onClick={(e) => { e.stopPropagation(); toggleAttribute(attr.id); }}
-                              >
-                                <X className="size-3" />
-                              </Button>
-                            </div>
-                          )}
-                          {!isSelected && (
-                            <Badge variant="secondary" className="text-[9px]">
-                              {attr.options?.length || 0} opciones
-                            </Badge>
-                          )}
-                        </div>
-                        {isSelected && attr.options && attr.options.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2.5 ml-6" onClick={(e) => e.stopPropagation()}>
-                            {attr.options.map((opt: string, i: number) => {
-                              const isOptSelected = linked.selectedOptions.includes(opt);
-                              return (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  onClick={() => toggleAttributeOption(attr.id, opt)}
-                                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${
-                                    isOptSelected
-                                      ? 'border-primary/40 bg-primary text-primary-foreground'
-                                      : 'border-border/60 bg-background text-muted-foreground hover:border-primary/30'
-                                  }`}
-                                >
-                                  {isOptSelected && <Check className="size-2.5" />}
-                                  {opt}
-                                </button>
-                              );
-                            })}
-                          </div>
+                <div className="space-y-3">
+                  <section className="rounded-lg border border-border/60 bg-background/60 p-3">
+                    <button
+                      type="button"
+                      className="flex w-full min-w-0 items-center justify-between gap-3 text-left"
+                      onClick={() => setAttributesStepExpanded((expanded) => !expanded)}
+                      aria-expanded={attributesStepExpanded}
+                    >
+                      <span className="flex min-w-0 items-start gap-2">
+                        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">1</span>
+                        <span className="min-w-0">
+                          <span className="block text-[10px] font-black uppercase tracking-wider text-foreground">Elige los atributos</span>
+                          <span className="mt-0.5 block text-[10px] text-muted-foreground">Ejemplo: Color, talla o capacidad.</span>
+                        </span>
+                      </span>
+                      <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${attributesStepExpanded ? 'rotate-180 text-primary' : ''}`} />
+                    </button>
+                    {attributesStepExpanded && (
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {catalogAttributes.filter((attr: any) => !draftProduct.linkedAttributes.some((la: any) => la.attributeId === attr.id)).map((attr: any) => (
+                          <Button
+                            key={attr.id}
+                            type="button"
+                            variant="outline"
+                            className="h-auto min-w-0 justify-between gap-2 rounded-lg px-3 py-2 text-left"
+                            onClick={() => toggleAttribute(attr.id)}
+                          >
+                            <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-wide">{attr.name}</span>
+                            <span className="shrink-0 text-[9px] text-muted-foreground">{attr.options?.length || 0} valores</span>
+                            <Plus className="size-3.5 shrink-0 text-primary" />
+                          </Button>
+                        ))}
+                        {catalogAttributes.every((attr: any) => draftProduct.linkedAttributes.some((la: any) => la.attributeId === attr.id)) && (
+                          <p className="text-[10px] text-muted-foreground sm:col-span-2 lg:col-span-3 xl:col-span-4">Ya seleccionaste todos los atributos disponibles.</p>
                         )}
                       </div>
-                    );
-                  })}
+                    )}
+                  </section>
+
+                  {getSelectedAttributes().length > 0 && (
+                    <section className="rounded-lg border border-border/60 bg-background/60 p-3">
+                      <button
+                        type="button"
+                        className="flex w-full min-w-0 items-center justify-between gap-3 text-left"
+                        onClick={() => setValuesStepExpanded((expanded) => !expanded)}
+                        aria-expanded={valuesStepExpanded}
+                      >
+                        <span className="flex min-w-0 items-start gap-2">
+                          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">2</span>
+                          <span className="min-w-0">
+                            <span className="block text-[10px] font-black uppercase tracking-wider text-foreground">Selecciona los valores</span>
+                            <span className="mt-0.5 block text-[10px] text-muted-foreground">Abre cada atributo y marca solo las opciones que realmente venderás.</span>
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <Badge variant="secondary" className="text-[9px] tabular-nums">{getSelectedAttributes().length} atributo{getSelectedAttributes().length !== 1 ? 's' : ''}</Badge>
+                          <ChevronDown className={`size-4 text-muted-foreground transition-transform ${valuesStepExpanded ? 'rotate-180 text-primary' : ''}`} />
+                        </span>
+                      </button>
+                      {valuesStepExpanded && <div className="mt-2 space-y-2">
+                        {getSelectedAttributes().map((attr: any) => {
+                          const linked = draftProduct.linkedAttributes.find((la: any) => la.attributeId === attr.id);
+                          const isExpanded = expandedAttributeId === attr.id;
+                          const selectedCount = linked?.selectedOptions?.length || 0;
+                          return (
+                            <div key={attr.id} className="overflow-hidden rounded-lg border border-border/60 bg-card">
+                              <div className="flex min-w-0 items-center gap-2 px-3 py-2">
+                                <button
+                                  type="button"
+                                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                  onClick={() => setExpandedAttributeId(isExpanded ? null : attr.id)}
+                                  aria-expanded={isExpanded}
+                                >
+                                  <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180 text-primary' : ''}`} />
+                                  <span className="min-w-0 truncate text-xs font-bold uppercase tracking-wide">{attr.name}</span>
+                                  <Badge variant={selectedCount > 0 ? 'secondary' : 'outline'} className="shrink-0 text-[9px] tabular-nums">
+                                    {selectedCount} de {attr.options?.length || 0}
+                                  </Badge>
+                                </button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-7 shrink-0 text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
+                                  onClick={() => toggleAttribute(attr.id)}
+                                  aria-label={`Quitar atributo ${attr.name}`}
+                                  title="Quitar atributo"
+                                >
+                                  <X className="size-3.5" />
+                                </Button>
+                              </div>
+                              {isExpanded && (
+                                <div className="border-t border-border/60 bg-muted/20 px-3 py-3">
+                                  {Array.isArray(attr.options) && attr.options.length > 0 ? (
+                                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                      {attr.options.map((opt: string, index: number) => {
+                                        const isOptSelected = linked?.selectedOptions?.includes(opt);
+                                        return (
+                                          <button
+                                            key={`${attr.id}-${index}`}
+                                            type="button"
+                                            aria-pressed={isOptSelected}
+                                            onClick={() => toggleAttributeOption(attr.id, opt)}
+                                            className={`flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-[10px] font-bold transition-colors ${
+                                              isOptSelected
+                                                ? 'border-primary/50 bg-primary text-primary-foreground shadow-sm'
+                                                : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                            }`}
+                                          >
+                                            <span className={`flex size-4 shrink-0 items-center justify-center rounded border ${isOptSelected ? 'border-primary-foreground/70' : 'border-muted-foreground/40'}`}>
+                                              {isOptSelected && <Check className="size-2.5" />}
+                                            </span>
+                                            <span className="min-w-0 truncate">{opt}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] text-muted-foreground">Este atributo todavía no tiene valores configurados.</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>}
+                    </section>
+                  )}
                 </div>
               )}
 
               {variantCombinations.length > 0 && (
-                <div className="rounded-lg border border-primary/25 bg-background/80 p-3 space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h5 className="text-[10px] font-black uppercase tracking-wider text-foreground">Distribución del stock por variante</h5>
-                      <p className="mt-1 text-[10px] text-muted-foreground">El stock total del producto se calcula sumando estas variantes.</p>
+                <section className={isPagePresentation ? 'rounded-lg border border-primary/25 bg-background/80 p-3' : 'rounded-lg border border-primary/25 bg-background/80 p-3'}>
+                  <button
+                    type="button"
+                    className="flex w-full min-w-0 items-center justify-between gap-3 text-left"
+                    onClick={() => setVariantsExpanded((expanded) => !expanded)}
+                    aria-expanded={variantsExpanded}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">3</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[10px] font-black uppercase tracking-wider text-foreground">Revisa las variantes generadas</span>
+                        <span className="mt-0.5 block text-[10px] text-muted-foreground">Aquí puedes distribuir stock, costos y precios por variante.</span>
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Badge variant="secondary" className="text-[9px] tabular-nums">{allocatedVariantStock} unidades</Badge>
+                      <ChevronDown className={`size-4 text-muted-foreground transition-transform ${variantsExpanded ? 'rotate-180' : ''}`} />
+                    </span>
+                  </button>
+
+                  {variantsExpanded && (
+                    <div className="mt-3 space-y-2">
+                      <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-[10px] text-muted-foreground">
+                        El SKU de cada variante se genera automáticamente con el SKU padre y sus valores. Ejemplo: <span className="font-mono font-bold text-foreground">{draftProduct.code.trim() || 'SKU-PADRE'}-ROJO-M</span>.
+                      </div>
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        {variantCombinations.map((combination) => {
+                          const key = variantCombinationKey(combination);
+                          const combinationLabel = combination.map((attribute) => attribute.value).join(' / ');
+                          return (
+                            <div key={key} className="min-w-0 rounded-xl border border-border/60 bg-card p-3 shadow-sm">
+                              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-bold text-foreground" title={combinationLabel}>{combinationLabel}</p>
+                                  <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
+                                    <span>SKU generado:</span>
+                                    <code className="truncate rounded bg-muted px-1.5 py-0.5 font-mono font-bold text-foreground">{variantSkuPreviews[key]}</code>
+                                  </p>
+                                </div>
+                                <Badge variant="outline" className="shrink-0 text-[9px]">Variante</Badge>
+                              </div>
+                              <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+                                <div className="min-w-0">
+                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Stock</span>
+                                  <Input type="number" min={0} step="1" value={draftProduct.variantInitialStocks?.[key] || ''} onChange={(e) => updateVariantInitialStock(combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock inicial para ${combinationLabel}`} />
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Mín.</span>
+                                  <Input type="number" min={0} value={draftProduct.variantMinStocks?.[key] ?? ''} onChange={(e) => updateVariantStockThreshold('min', combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock mínimo para ${combinationLabel}`} />
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Máx.</span>
+                                  <Input type="number" min={0} value={draftProduct.variantMaxStocks?.[key] ?? ''} onChange={(e) => updateVariantStockThreshold('max', combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock máximo para ${combinationLabel}`} />
+                                </div>
+                                {canViewInventoryCost && <div className="min-w-0">
+                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Costo propio</span>
+                                  <Input type="number" min={0} step="any" value={draftProduct.variantCostPrices?.[key] ?? ''} onChange={(e) => updateVariantCostPrice(combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Costo propio para ${combinationLabel}`} />
+                                </div>}
+                                {effectivePriceLists.map((list) => <div key={list.code} className="min-w-0">
+                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Precio {list.name}</span>
+                                  <Input type="number" min={0} step="any" value={draftProduct.variantPrices?.[key]?.[list.code] ?? ''} onChange={(e) => updateVariantPrice(combination, list.code, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Precio ${list.name} para ${combinationLabel}`} />
+                                </div>)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <Badge variant="secondary" className="text-[9px] tabular-nums">
-                      {allocatedVariantStock} unidades derivadas
-                    </Badge>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {variantCombinations.map((combination) => {
-                      const key = variantCombinationKey(combination);
-                      return (
-                        <div key={key} className="grid gap-2 rounded-lg border border-border/60 bg-card px-3 py-2 sm:grid-cols-[minmax(0,1fr)_5rem_5rem_5rem_6rem] sm:items-center">
-                          <span className="min-w-0 truncate text-xs font-semibold" title={combination.map((attribute) => attribute.value).join(' / ')}>
-                            {combination.map((attribute) => attribute.value).join(' / ')}
-                          </span>
-                          <div className="min-w-0">
-                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Stock</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step="1"
-                              value={draftProduct.variantInitialStocks?.[key] || ''}
-                              onChange={(e) => updateVariantInitialStock(combination, e.target.value)}
-                              className="h-8 w-full text-right text-xs tabular-nums"
-                              aria-label={`Stock inicial para ${combination.map((attribute) => attribute.value).join(' / ')}`}
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Mín.</span>
-                            <Input type="number" min={0} value={draftProduct.variantMinStocks?.[key] ?? ''} onChange={(e) => updateVariantStockThreshold('min', combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock mínimo para ${combination.map((attribute) => attribute.value).join(' / ')}`} />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Máx.</span>
-                            <Input type="number" min={0} value={draftProduct.variantMaxStocks?.[key] ?? ''} onChange={(e) => updateVariantStockThreshold('max', combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock máximo para ${combination.map((attribute) => attribute.value).join(' / ')}`} />
-                          </div>
-                          {canViewInventoryCost && <div className="min-w-0">
-                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Costo propio</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step="any"
-                              value={draftProduct.variantCostPrices?.[key] ?? ''}
-                              onChange={(e) => updateVariantCostPrice(combination, e.target.value)}
-                              className="h-8 w-full text-right text-xs tabular-nums"
-                              placeholder="Hereda base"
-                              aria-label={`Costo propio para ${combination.map((attribute) => attribute.value).join(' / ')}`}
-                            />
-                          </div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                  )}
+                </section>
               )}
             </div>
           )}

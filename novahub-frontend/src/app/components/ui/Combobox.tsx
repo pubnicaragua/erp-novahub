@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown, Plus } from "lucide-react"
 
 import { cn } from "./utils"
 import { Button } from "./button"
@@ -28,7 +28,9 @@ interface ComboboxProps {
   searchPlaceholder?: string
   maxVisibleOptions?: number
   className?: string
+  contentClassName?: string
   disabled?: boolean
+  allowCustomValue?: boolean
 }
 
 export function Combobox({
@@ -40,7 +42,9 @@ export function Combobox({
   searchPlaceholder,
   maxVisibleOptions = 100,
   className,
+  contentClassName,
   disabled = false,
+  allowCustomValue = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -66,6 +70,22 @@ export function Combobox({
     onChange(nextValue === value ? "" : nextValue)
     setOpen(false)
   }, [onChange, value])
+
+  const customValue = search.trim()
+  const hasExactOption = React.useMemo(() => {
+    const normalizedValue = customValue.toLowerCase()
+    return Boolean(normalizedValue) && options.some((option) =>
+      option.label.trim().toLowerCase() === normalizedValue || option.value.trim().toLowerCase() === normalizedValue,
+    )
+  }, [customValue, options])
+  const canUseCustomValue = allowCustomValue && Boolean(customValue) && !hasExactOption
+
+  const commitCustomValue = React.useCallback(() => {
+    if (!customValue) return
+    onChange(customValue)
+    setSearch('')
+    setOpen(false)
+  }, [customValue, onChange])
 
   React.useEffect(() => () => {
     if (wheelFrame.current !== null) window.cancelAnimationFrame(wheelFrame.current)
@@ -114,13 +134,13 @@ export function Combobox({
         >
           <span className="min-w-0 flex-1 truncate text-left">
             {value
-              ? options.find((option) => option.value === value)?.label
+              ? options.find((option) => option.value === value)?.label || value
               : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-foreground/70" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
+      <PopoverContent className={cn("w-full p-0", contentClassName)} align="start">
         <Command shouldFilter={false}>
           <CommandInput value={search} onValueChange={setSearch} placeholder={searchPlaceholder || placeholder} className="h-8 text-xs" />
           <CommandList
@@ -129,6 +149,30 @@ export function Combobox({
           >
             <CommandEmpty className="text-xs py-2">{emptyMessage}</CommandEmpty>
             <CommandGroup>
+              {canUseCustomValue && (
+                <CommandItem
+                  value={`__custom__${customValue}`}
+                  onPointerDown={(event) => {
+                    if (event.button === 2) return
+                    pointerSelection.current = '__custom__'
+                    commitCustomValue()
+                    window.setTimeout(() => {
+                      if (pointerSelection.current === '__custom__') pointerSelection.current = null
+                    }, 250)
+                  }}
+                  onSelect={() => {
+                    if (pointerSelection.current === '__custom__') {
+                      pointerSelection.current = null
+                      return
+                    }
+                    commitCustomValue()
+                  }}
+                  className="text-xs"
+                >
+                  <Plus className="mr-2 h-4 w-4 shrink-0 text-primary" />
+                  <span className="truncate">Usar “{customValue}”</span>
+                </CommandItem>
+              )}
               {visibleOptions.map((option) => (
                 <CommandItem
                   key={option.value}

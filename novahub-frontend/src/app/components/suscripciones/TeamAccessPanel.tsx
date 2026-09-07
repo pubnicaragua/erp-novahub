@@ -1,23 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Check, Edit2, Eye, Info, Plus, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronsDown, ChevronsUp, Edit2, Eye, Info, ListChecks, Plus, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { Switch } from '../ui/switch';
+import { Checkbox } from '../ui/checkbox';
+import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { rolesService } from '../../services/roles.service';
-import { ALL_PERM_MODULES, normalizePermissions, SUBMODULES_FOR_PERMS } from '../ConfiguracionPage';
+import { priceListsService, type PriceList } from '../../services/price-lists.service';
+import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
+import { allowedModulesFromPermissions, getPermissionActionKeys, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
+import { PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_MODULE_IDS } from '../../utils/sidebarPermissions';
+import { cn } from '../ui/utils';
 
 interface TeamAccessPanelProps {
   tenantId: string;
   tenantName: string;
   users: any[];
+  onBack: () => void;
   onRolesChange?: () => Promise<unknown> | void;
   canViewRoles?: boolean;
   canCreateRoles?: boolean;
@@ -26,15 +30,63 @@ interface TeamAccessPanelProps {
 }
 
 const permissionActions = [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS];
+const LEGACY_PERMISSION_KEYS = ['view', 'canView', 'write', 'canWrite', 'canCreate', 'canEdit', 'canApprove', 'canViewCost', 'deactivate', 'cancel', 'reject', 'reverse', 'canDelete', 'canDeactivate', 'canCancel', 'canReject', 'canReverse'];
 
-const emptyPermissions = () => ALL_PERM_MODULES.map((module: any) => ({
+/**
+ * Los padres siguen viniendo del catálogo histórico para conservar sus
+ * nombres, mientras que los hijos vienen del catálogo real del sidebar y de
+ * los tabs internos autorizables. PROJECTS no estaba en el catálogo histórico
+ * aunque sí existe como módulo operativo, por eso se declara aquí con el
+ * mismo identificador que consume la aplicación.
+ */
+const ROLE_PERMISSION_MODULES = (() => {
+  const parents = ALL_PERM_MODULES
+    .filter((module: any) => !module.parent)
+    .filter((module: any) => module.id === 'DASHBOARD' || SIDEBAR_PERMISSION_MODULE_IDS.has(module.id));
+  const knownParents = new Set(parents.map((module: any) => module.id));
+  const allParents = knownParents.has('PROJECTS')
+    ? parents
+    : [...parents, { id: 'PROJECTS', label: 'Proyectos', description: 'Portafolio, planificación, costos y colaboración' }];
+  const parentIds = new Set(allParents.map((parent: any) => parent.id));
+  const seenIds = new Set<string>();
+
+  return allParents.flatMap((parent: any) => {
+    const entries = [
+      parent,
+      ...PERMISSION_SUBMODULES
+        .filter((module) => module.parent === parent.id && !parentIds.has(module.id))
+        .map((module) => ({ ...module, icon: undefined, description: `Permisos de la vista ${module.label}` })),
+    ];
+    return entries.filter((module: any) => {
+      if (seenIds.has(module.id)) return false;
+      seenIds.add(module.id);
+      return true;
+    });
+  });
+})();
+
+const ROLE_PERMISSION_CHILDREN = ROLE_PERMISSION_MODULES.filter((module: any) => module.parent);
+
+const emptyPermissions = () => ROLE_PERMISSION_MODULES.map((module: any) => ({
   module: module.id,
   ...Object.fromEntries(permissionActions.map(({ key }) => [key, false])),
+  ...(module.id === 'SALES_PRICE_LISTS' ? { allowedPriceListIds: [] } : {}),
 }));
 
 const getPermissionGroupLabel = (group: string) => {
-  const module = ALL_PERM_MODULES.find((item: any) => item.id === group) as any;
+  const module = ROLE_PERMISSION_MODULES.find((item: any) => item.id === group) as any;
   return module?.label || group.replace(/_/g, ' ');
+};
+
+const getLinkedUserCount = (role: any, users: any[]) => Number.isFinite(Number(role?._count?.users))
+  ? Number(role._count.users)
+  : users.filter((user: any) => user.customRoleId === role?.id).length;
+
+const getActionLabel = (key: PermissionMatrixAction) => permissionActions.find((action) => action.key === key)?.label || key;
+
+const getViewActionDescription = (module: any, action: PermissionMatrixAction) => {
+  if (action === 'read') return `Permite acceder a la vista ${module.label}.`;
+  return permissionActions.find((item) => item.key === action)?.description || `Permite ejecutar ${getActionLabel(action).toLowerCase()} en ${module.label}.`;
 };
 
 function PermissionHelp() {
@@ -48,7 +100,7 @@ function PermissionHelp() {
       <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] p-0">
         <div className="border-b border-border/60 bg-muted/30 px-4 py-3">
           <p className="text-xs font-black uppercase tracking-widest">¿Qué incluye cada acción?</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Las acciones se aplican a la vista de cada fila. "Aprobar" solo aparece donde existe un flujo de aprobación o transición.</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Las acciones se aplican a la vista de cada tarjeta. "Aprobar" solo aparece donde existe un flujo de aprobación o transición.</p>
         </div>
         <div className="space-y-3 p-4">
           {permissionActions.map(({ key, label, description }) => (
@@ -68,19 +120,30 @@ function PermissionHelp() {
 
 function hydratePermissions(role: any) {
   const current = normalizePermissions(role?.permissions);
-  return ALL_PERM_MODULES.map((module: any) => {
+  const hydrated = ROLE_PERMISSION_MODULES.map((module: any) => {
     const existing = current.find((permission: any) => String(permission.module || '').toUpperCase() === String(module.id).toUpperCase());
-    return hydratePermissionActions(existing, module.id);
+    const parent = module.parent
+      ? current.find((permission: any) => String(permission.module || '').toUpperCase() === String(module.parent).toUpperCase())
+      : undefined;
+    return hydratePermissionActions(existing || parent, module.id);
   });
+  // No borrar silenciosamente flags históricos que todavía reconoce el
+  // backend. Se conservan en el payload, aunque ya no se ofrecen como nuevas
+  // opciones del editor.
+  const visibleIds = new Set(ROLE_PERMISSION_MODULES.map((module: any) => module.id));
+  return [...hydrated, ...current
+    .filter((permission: any) => !visibleIds.has(String(permission.module || '').toUpperCase()))
+    .map((permission: any) => ({ ...permission }))];
 }
 
-export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, canViewRoles = true, canCreateRoles = true, canEditRoles = true, canDeleteRoles = true }: TeamAccessPanelProps) {
-  const [roles, setRoles] = useState<any[]>([]);
-  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesChange, canViewRoles = true, canCreateRoles = true, canEditRoles = true, canDeleteRoles = true }: TeamAccessPanelProps) {
+  const [roleView, setRoleView] = useState<'list' | 'editor' | 'preview'>('list');
   const [roleSaving, setRoleSaving] = useState(false);
   const [editingRole, setEditingRole] = useState<any | null>(null);
   const [viewingRole, setViewingRole] = useState<any | null>(null);
   const [assignedUsersRole, setAssignedUsersRole] = useState<any | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [expandedViews, setExpandedViews] = useState<Record<string, boolean>>({});
 
   const { data: teamData, refetch: refetchTeam } = useTenantQuery(
     ['my-company-team-access', tenantId],
@@ -93,10 +156,19 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
     { enabled: Boolean(tenantId && canViewRoles), onError: (error) => toast.error(error.message || 'No se pudo cargar la configuración del equipo') },
   );
 
-  useEffect(() => {
-    if (!teamData) return;
-    setRoles(teamData.roles);
-  }, [teamData]);
+  const { data: priceListCatalogData, isPending: priceListCatalogLoading } = useTenantQuery<PriceList[]>(
+    ['sales-price-list-permission-catalog', tenantId],
+    async (signal) => asList(await priceListsService.getPermissionCatalog(signal)) as PriceList[],
+    {
+      enabled: Boolean(tenantId && canViewRoles),
+      staleTime: 0,
+      refetchOnMount: 'always',
+      onError: (error) => toast.error(error.message || 'No se pudo cargar el catálogo de listas de precios'),
+    },
+  );
+
+  const roles = teamData?.roles || [];
+  const priceListCatalog = priceListCatalogData || [];
 
   const load = async () => {
     try {
@@ -106,7 +178,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
     }
   };
 
-  const groupedModules = useMemo(() => ALL_PERM_MODULES.reduce((groups: Record<string, any[]>, module: any) => {
+  const groupedModules = useMemo(() => ROLE_PERMISSION_MODULES.reduce((groups: Record<string, any[]>, module: any) => {
     const group = module.parent || module.id;
     (groups[group] ||= []).push(module);
     return groups;
@@ -116,34 +188,124 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
     ? supportsInventoryCostPermission(moduleId)
     : supportsPermissionAction(moduleId, action);
 
-  const isSectionFullyEnabled = (modules: any[]) => {
-    const permissions = normalizePermissions(editingRole?.permissions);
-    return modules.length > 0 && modules.every((module: any) => {
-      const permission = permissions.find((item: any) => item.module === module.id) || {};
-      return permissionActions.every(({ key }) => !actionIsAvailable(module.id, key) || permissionValue(permission, key));
+  const availableActionsFor = (moduleId: string) => permissionActions.filter(({ key }) => getPermissionActionKeys(moduleId).includes(key));
+
+  const setAllExpanded = (expanded: boolean) => {
+    setExpandedSections(Object.fromEntries(Object.keys(groupedModules).map((group) => [group, expanded])));
+    setExpandedViews(Object.fromEntries(ROLE_PERMISSION_MODULES.map((module: any) => [module.id, expanded])));
+  };
+  const expandAll = () => setAllExpanded(true);
+  const collapseAll = () => setAllExpanded(false);
+  const toggleSection = (group: string) => setExpandedSections((current) => ({ ...current, [group]: !(current[group] ?? false) }));
+  const toggleView = (moduleId: string) => setExpandedViews((current) => ({ ...current, [moduleId]: !(current[moduleId] ?? false) }));
+
+  const updatePermissionActions = (permission: any, moduleId: string, shouldEnable: boolean) => {
+    permissionActions.forEach(({ key }) => {
+      if (actionIsAvailable(moduleId, key)) permission[key] = shouldEnable;
+      else if (key === 'approve') permission[key] = false;
     });
+    permission.write = shouldEnable && (actionIsAvailable(moduleId, 'create') || actionIsAvailable(moduleId, 'edit'));
+    if (!shouldEnable) LEGACY_PERMISSION_KEYS.forEach((key) => { permission[key] = false; });
+    if (moduleId === 'SALES_PRICE_LISTS' && (shouldEnable || Object.prototype.hasOwnProperty.call(permission, 'allowedPriceListIds'))) {
+      permission.allowedPriceListIds = shouldEnable ? priceListCatalog.map((list) => list.id) : [];
+    }
+  };
+
+  const priceListScopeIsComplete = (permission: any) => {
+    if (!priceListCatalog.length) return true;
+    if (!Object.prototype.hasOwnProperty.call(permission || {}, 'allowedPriceListIds')) return true;
+    const selectedIds = new Set(Array.isArray(permission.allowedPriceListIds) ? permission.allowedPriceListIds : []);
+    return priceListCatalog.every((list) => selectedIds.has(list.id));
+  };
+
+  const togglePriceListAccess = (priceListId: string) => {
+    if ((!canEditRoles && !canCreateRoles) || !priceListId) return;
+    setEditingRole((current: any) => {
+      if (!current) return current;
+      const permissions = normalizePermissions(current.permissions).map((permission: any) => ({ ...permission }));
+      const target = permissions.find((permission: any) => permission.module === 'SALES_PRICE_LISTS');
+      if (!target) return current;
+      const currentIds = Object.prototype.hasOwnProperty.call(target, 'allowedPriceListIds')
+        ? new Set(Array.isArray(target.allowedPriceListIds) ? target.allowedPriceListIds : [])
+        : new Set(priceListCatalog.map((list) => list.id));
+      if (currentIds.has(priceListId)) currentIds.delete(priceListId);
+      else currentIds.add(priceListId);
+      target.allowedPriceListIds = [...currentIds];
+      return { ...current, permissions };
+    });
+  };
+
+  const toggleAllPriceListAccess = () => {
+    if ((!canEditRoles && !canCreateRoles) || !priceListCatalog.length) return;
+    setEditingRole((current: any) => {
+      if (!current) return current;
+      const permissions = normalizePermissions(current.permissions).map((permission: any) => ({ ...permission }));
+      const target = permissions.find((permission: any) => permission.module === 'SALES_PRICE_LISTS');
+      if (!target) return current;
+      target.allowedPriceListIds = priceListScopeIsComplete(target) ? [] : priceListCatalog.map((list) => list.id);
+      return { ...current, permissions };
+    });
+  };
+
+  const syncParentPermission = (permissions: any[], moduleId: string) => {
+    const childDefinition = ROLE_PERMISSION_CHILDREN.find((module: any) => module.id === moduleId);
+    if (!childDefinition) return;
+    const parentPermission = permissions.find((permission: any) => permission.module === childDefinition.parent);
+    const siblings = ROLE_PERMISSION_CHILDREN.filter((module: any) => module.parent === childDefinition.parent);
+    const siblingPermissions = siblings.map((sibling: any) => permissions.find((permission: any) => permission.module === sibling.id)).filter(Boolean);
+    if (!parentPermission || !siblingPermissions.length) return;
+    permissionActions.forEach(({ key }) => {
+      if (actionIsAvailable(childDefinition.parent, key)) {
+        parentPermission[key] = siblingPermissions.every((permission: any) => permissionValue(permission, key));
+      }
+    });
+    parentPermission.write = actionIsAvailable(childDefinition.parent, 'create') && permissionValue(parentPermission, 'create')
+      || actionIsAvailable(childDefinition.parent, 'edit') && permissionValue(parentPermission, 'edit');
+    parentPermission.read = siblingPermissions.every((permission: any) => permissionValue(permission, 'read'));
+  };
+
+  const isSectionFullyEnabled = (modules: any[]) => {
+    return modules.length > 0 && modules.every((module: any) => isViewFullyEnabled(module));
   };
 
   const toggleSectionPermissions = (modules: any[]) => {
     if ((!canEditRoles && !canCreateRoles) || !modules.length) return;
     const shouldEnable = !isSectionFullyEnabled(modules);
     const moduleIds = new Set(modules.map((module: any) => module.id));
-    const legacyKeys = ['view', 'canView', 'write', 'deactivate', 'cancel', 'reject', 'reverse', 'canDelete', 'canDeactivate', 'canCancel', 'canReject', 'canReverse'];
-
     setEditingRole((current: any) => {
       if (!current) return current;
       const permissions = normalizePermissions(current.permissions).map((permission: any) => ({ ...permission }));
       permissions.forEach((permission: any) => {
         if (!moduleIds.has(permission.module)) return;
-        permissionActions.forEach(({ key }) => {
-          if (!actionIsAvailable(permission.module, key)) {
-            if (key === 'approve') permission[key] = false;
-            return;
-          }
-          permission[key] = shouldEnable;
-        });
-        permission.write = shouldEnable;
-        if (!shouldEnable) legacyKeys.forEach((key) => { permission[key] = false; });
+        updatePermissionActions(permission, permission.module, shouldEnable);
+      });
+      return { ...current, permissions };
+    });
+  };
+
+  const toggleViewPermissions = (module: any) => {
+    if ((!canEditRoles && !canCreateRoles) || !module) return;
+    const shouldEnable = !isViewFullyEnabled(module);
+    setEditingRole((current: any) => {
+      if (!current) return current;
+      const permissions = normalizePermissions(current.permissions).map((permission: any) => ({ ...permission }));
+      const target = permissions.find((permission: any) => permission.module === module.id);
+      if (!target) return current;
+      updatePermissionActions(target, module.id, shouldEnable);
+      syncParentPermission(permissions, module.id);
+      return { ...current, permissions };
+    });
+  };
+
+  const toggleAllPermissions = () => {
+    if ((!canEditRoles && !canCreateRoles)) return;
+    const shouldEnable = !isAllPermissionsEnabled();
+    setEditingRole((current: any) => {
+      if (!current) return current;
+      const permissions = normalizePermissions(current.permissions).map((permission: any) => ({ ...permission }));
+      ROLE_PERMISSION_MODULES.forEach((module: any) => {
+        const target = permissions.find((permission: any) => permission.module === module.id);
+        if (target) updatePermissionActions(target, module.id, shouldEnable);
       });
       return { ...current, permissions };
     });
@@ -152,17 +314,42 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
   const openCreateRole = () => {
     if (!canCreateRoles) return;
     setEditingRole({ name: '', description: '', permissions: emptyPermissions() });
-    setRoleDialogOpen(true);
+    setViewingRole(null);
+    collapseAll();
+    setRoleView('editor');
   };
+
+  const isViewFullyEnabled = (module: any) => {
+    const permission = normalizePermissions(editingRole?.permissions).find((item: any) => item.module === module.id) || {};
+    const availableActions = availableActionsFor(module.id);
+    return availableActions.length > 0
+      && availableActions.every(({ key }) => permissionValue(permission, key))
+      && (module.id !== 'SALES_PRICE_LISTS' || priceListScopeIsComplete(permission));
+  };
+
+  const isAllPermissionsEnabled = () => ROLE_PERMISSION_MODULES.length > 0 && ROLE_PERMISSION_MODULES.every((module: any) => isViewFullyEnabled(module));
 
   const openEditRole = (role: any) => {
     if (!canEditRoles) return;
     setEditingRole({ ...role, permissions: hydratePermissions(role) });
-    setRoleDialogOpen(true);
+    setViewingRole(null);
+    collapseAll();
+    setRoleView('editor');
   };
 
-  const openViewRole = (role: any) => setViewingRole({ ...role, permissions: hydratePermissions(role) });
+  const openViewRole = (role: any) => {
+    setViewingRole({ ...role, permissions: hydratePermissions(role) });
+    setEditingRole(null);
+    collapseAll();
+    setRoleView('preview');
+  };
   const openAssignedUsers = (role: any) => setAssignedUsersRole(role);
+
+  const closeRoleView = () => {
+    setRoleView('list');
+    setEditingRole(null);
+    setViewingRole(null);
+  };
 
   const togglePermission = (moduleId: string, action: PermissionMatrixAction) => {
     if ((!canEditRoles && !canCreateRoles) || !actionIsAvailable(moduleId, action)) return;
@@ -176,7 +363,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
       target[action] = nextValue;
       if (action !== 'read' && nextValue) target.read = true;
 
-      const childModules = SUBMODULES_FOR_PERMS.filter((module: any) => module.parent === moduleId);
+      const childModules = ROLE_PERMISSION_CHILDREN.filter((module: any) => module.parent === moduleId);
       childModules.forEach((child: any) => {
         if (!actionIsAvailable(child.id, action)) return;
         const childPermission = permissions.find((permission: any) => permission.module === child.id);
@@ -189,10 +376,10 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
         }
       });
 
-      const childDefinition = SUBMODULES_FOR_PERMS.find((module: any) => module.id === moduleId);
+      const childDefinition = ROLE_PERMISSION_CHILDREN.find((module: any) => module.id === moduleId);
       if (childDefinition) {
         const parentPermission = permissions.find((permission: any) => permission.module === childDefinition.parent);
-        const siblings = SUBMODULES_FOR_PERMS.filter((module: any) => module.parent === childDefinition.parent);
+        const siblings = ROLE_PERMISSION_CHILDREN.filter((module: any) => module.parent === childDefinition.parent);
         const siblingPermissions = siblings.map((sibling: any) => permissions.find((permission: any) => permission.module === sibling.id)).filter(Boolean);
         if (parentPermission && actionIsAvailable(childDefinition.parent, action) && siblingPermissions.length > 0) {
           parentPermission[action] = siblingPermissions.every((permission: any) => permissionValue(permission, action));
@@ -225,8 +412,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
       if (editingRole.id) await rolesService.update(editingRole.id, payload);
       else await rolesService.create(payload);
       toast.success(editingRole.id ? 'Rol actualizado' : 'Rol creado');
-      setRoleDialogOpen(false);
-      setEditingRole(null);
+      closeRoleView();
       await load();
       await onRolesChange?.();
     } catch (error: any) {
@@ -239,6 +425,10 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
   const deleteRole = async (role: any) => {
     if (!canDeleteRoles) return;
     if (role.isSystemRole) return toast.error('Los roles del sistema no se pueden eliminar');
+    const linkedUsers = getLinkedUserCount(role, users);
+    if (linkedUsers > 0) {
+      return toast.error(`No se puede eliminar el rol porque tiene ${linkedUsers} usuario${linkedUsers === 1 ? '' : 's'} vinculado${linkedUsers === 1 ? '' : 's'}. Reasigna esos usuarios antes de eliminarlo.`);
+    }
     try {
       await rolesService.delete(role.id);
       toast.success('Rol eliminado');
@@ -250,128 +440,174 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
   };
 
   return (
-    <div className="h-full" data-tour="team-roles">
-      <Card className="h-full border-border/50">
-          <CardHeader className="flex-row items-center justify-between gap-4 pb-3">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><UserCog className="size-4 text-primary" /> Roles ({roles.length})</CardTitle>
-              <CardDescription className="mt-1 text-xs">Define los permisos que tendrá cada grupo de usuarios.</CardDescription>
-            </div>
-            {canCreateRoles && <Button size="sm" onClick={openCreateRole} className="h-8 gap-1.5 text-xs"><Plus className="size-3.5" /> Nuevo rol</Button>}
+    <div className="min-w-0 space-y-6" data-tour="team-roles">
+      {roleView === 'list' && <>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <Button variant="outline" size="icon" onClick={onBack} aria-label="Volver a Mi Equipo"><ArrowLeft className="size-4" /></Button>
+            <div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">Roles y permisos</h2><p className="text-xs text-muted-foreground">Crea grupos de acceso para controlar los módulos y vistas de {tenantName}.</p></div>
+          </div>
+          <Badge variant="outline" className="w-fit gap-1.5 border-primary/20 text-primary"><UserCog className="size-3.5" /> {roles.length} {roles.length === 1 ? 'rol' : 'roles'}</Badge>
+        </div>
+
+        <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" /><p>Los permisos se organizan por módulos y, cuando existen, por sus vistas internas. Puedes revisar un rol o editarlo en una vista completa sin perder el contexto de la empresa.</p></div>
+
+        <Card className="min-w-0 border-border/50">
+          <CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><UserCog className="size-4 text-primary" /> Catálogo de roles</CardTitle><CardDescription className="mt-1 text-xs">Define los permisos que tendrá cada grupo de usuarios.</CardDescription></div>
+            {canCreateRoles && <Button size="sm" onClick={openCreateRole} className="h-9 w-fit gap-1.5 text-xs"><Plus className="size-3.5" /> Nuevo rol</Button>}
           </CardHeader>
-          <CardContent className="space-y-2">
-            {!roles.length && <p className="py-5 text-center text-xs text-muted-foreground">Sin roles personalizados</p>}
+          <CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
+            {!roles.length && <p className="rounded-xl border border-dashed border-border p-8 text-center text-xs text-muted-foreground">Sin roles personalizados</p>}
             {roles.map((role: any) => (
-              <div key={role.id || role.name} className="flex items-center justify-between gap-3 rounded-lg bg-muted/20 px-4 py-3 text-xs">
-                <div className="min-w-0"><p className="truncate font-bold">{role.name}</p><p className="truncate text-[10px] text-muted-foreground">{role.description || 'Sin descripción'}</p></div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Badge variant="secondary" className="text-[9px]">{normalizePermissions(role.permissions).filter((permission: any) => permission.read).length} módulos</Badge>
-                  <Badge variant="outline" className="text-[9px]">{users.filter((user: any) => user.customRoleId === role.id).length} usuarios</Badge>
-                  {canViewRoles && <Button variant="ghost" size="icon" className="size-7" onClick={() => openViewRole(role)} title="Ver permisos"><Eye className="size-3.5" /></Button>}
-                  {canViewRoles && <Button variant="ghost" size="icon" className="size-7" onClick={() => openAssignedUsers(role)} title="Ver usuarios asignados"><Users className="size-3.5" /></Button>}
-                  {canEditRoles && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditRole(role)} title="Editar permisos"><Edit2 className="size-3.5" /></Button>}
-                  {canDeleteRoles && <Button variant="ghost" size="icon" className="size-7 text-rose-500" disabled={role.isSystemRole} onClick={() => void deleteRole(role)} title="Eliminar rol"><Trash2 className="size-3.5" /></Button>}
+              (() => {
+                const linkedUsers = getLinkedUserCount(role, users);
+                const cannotDelete = Boolean(role.isSystemRole) || linkedUsers > 0;
+                const deleteLabel = role.isSystemRole
+                  ? 'Los roles del sistema no se pueden eliminar'
+                  : linkedUsers > 0
+                    ? `No se puede eliminar: ${linkedUsers} usuario${linkedUsers === 1 ? '' : 's'} vinculado${linkedUsers === 1 ? '' : 's'}`
+                    : 'Eliminar rol';
+                return <div key={role.id || role.name} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/50 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0"><p className="truncate text-sm font-bold">{role.name}</p><p className="truncate text-xs text-muted-foreground">{role.description || 'Sin descripción'}</p></div>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <Badge variant="secondary" className="text-[9px]">{normalizePermissions(role.permissions).filter((permission: any) => permission.read).length} vistas</Badge>
+                  <Badge variant="outline" className={cn('text-[9px]', linkedUsers > 0 && 'border-amber-500/40 text-amber-600')}>
+                    {linkedUsers} {linkedUsers === 1 ? 'usuario vinculado' : 'usuarios vinculados'}
+                  </Badge>
+                  {canViewRoles && <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => openViewRole(role)} title="Ver permisos" aria-label={`Ver permisos de ${role.name}`}><Eye className="size-3.5" /></Button>}
+                  {canViewRoles && <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => openAssignedUsers(role)} title="Ver usuarios asignados" aria-label={`Ver usuarios asignados al rol ${role.name}`}><Users className="size-3.5" /></Button>}
+                  {canEditRoles && <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => openEditRole(role)} title="Editar permisos" aria-label={`Editar rol ${role.name}`}><Edit2 className="size-3.5" /></Button>}
+                  {canDeleteRoles && <Button variant="ghost" size="icon" className="size-8 shrink-0 text-rose-500" disabled={cannotDelete} onClick={() => void deleteRole(role)} title={deleteLabel} aria-label={`${deleteLabel}: ${role.name}`}><Trash2 className="size-3.5" /></Button>}
                 </div>
-              </div>
+                </div>;
+              })()
             ))}
           </CardContent>
-      </Card>
+        </Card>
+      </>}
 
-      <Dialog open={!!viewingRole} onOpenChange={(open) => !open && setViewingRole(null)}>
-        <DialogContent className="flex h-[90vh] w-[96vw] max-w-[calc(100%-1rem)] flex-col overflow-hidden p-0 sm:!max-w-6xl">
-          <DialogHeader className="shrink-0 border-b border-border/50 bg-card px-6 py-5">
-            <div className="flex items-center justify-between gap-3"><DialogTitle className="flex items-center gap-2 text-xl font-black"><Eye className="size-5 text-primary" /> Permisos del rol: {viewingRole?.name}</DialogTitle><PermissionHelp /></div>
-            <DialogDescription className="text-sm">{viewingRole?.description || 'Revisa los módulos y acciones habilitadas para este rol.'}</DialogDescription>
-          </DialogHeader>
-          <div className="relative min-h-0 flex-1 overflow-auto px-6 pt-0 pb-5">
-            <div className="min-w-[1040px] rounded-xl border border-border/50">
-              <div className="isolate sticky top-0 z-[100] grid min-w-[1040px] items-center gap-1.5 border-b border-border bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground shadow-md" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
-                <span>Módulo</span>{permissionActions.map(({ key, label }) => <span key={key} className="text-center">{label}</span>)}
-              </div>
-              {Object.entries(groupedModules).map(([group, modules]) => <div key={group} className="border-b border-border last:border-b-0">
-                <div className="bg-muted px-5 py-3 text-xs font-black uppercase tracking-widest text-primary">{getPermissionGroupLabel(group)}</div>
-                {(modules as any[]).map((module: any) => {
-                  const permission = normalizePermissions(viewingRole?.permissions).find((item: any) => item.module === module.id) || {};
-                  return <div key={module.id} className="grid min-w-[1040px] items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
-                    <span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>
-                    {permissionActions.map(({ key }) => <div key={key} className="flex justify-center">
-                      {!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : permissionValue(permission, key) ? <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-500"><Check className="mr-1 size-3" />Sí</Badge> : <span className="text-muted-foreground/30">—</span>}
-                    </div>)}
-                  </div>;
-                })}
-              </div>)}
-            </div>
-          </div>
-          <DialogFooter className="shrink-0 border-t border-border/50 bg-card px-6 py-4"><Button variant="outline" onClick={() => setViewingRole(null)}>Cerrar</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {roleView === 'preview' && viewingRole && <>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">Permisos del rol</h2><p className="truncate text-xs text-muted-foreground">{viewingRole.name} · {viewingRole.description || 'Sin descripción'}</p></div></div>
+          {canEditRoles && <Button className="w-fit gap-2" onClick={() => openEditRole(viewingRole)}><Edit2 className="size-4" /> Editar rol</Button>}
+        </div>
+        <Card className="min-w-0 border-border/50">
+          <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b border-border/30 bg-muted/10"><div><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Eye className="size-4 text-primary" /> Módulos y vistas habilitadas</CardTitle><CardDescription className="mt-1 text-xs">Revisa las acciones efectivas de este rol. Cada módulo se puede desplegar o contraer.</CardDescription></div><PermissionHelp /></CardHeader>
+          <CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
+            {Object.entries(groupedModules).map(([group, modules]) => {
+              const expanded = expandedSections[group] ?? false;
+              return <section key={group} className="overflow-hidden rounded-xl border border-border/60">
+                <div className="flex items-center justify-between gap-3 bg-muted/50 px-4 py-3"><button type="button" onClick={() => toggleSection(group)} className="flex min-w-0 items-center gap-2 text-left" aria-expanded={expanded}><ChevronDown className={cn('size-4 shrink-0 text-primary transition-transform', expanded && 'rotate-180')} /><span className="truncate text-xs font-black uppercase tracking-widest text-primary">{getPermissionGroupLabel(group)}</span><Badge variant="secondary" className="shrink-0 text-[9px]">{(modules as any[]).length} vistas</Badge></button><span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{expanded ? 'Contraer' : 'Desplegar'}</span></div>
+                {expanded && <div className="overflow-x-auto"><div className="min-w-[1040px]"><div className="grid items-center gap-1.5 border-t border-border/40 bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span>Vista</span>{permissionActions.map(({ key, label }) => <span key={key} className="text-center">{label}</span>)}</div>{(modules as any[]).map((module: any) => { const permission = normalizePermissions(viewingRole.permissions).find((item: any) => item.module === module.id) || {}; return <div key={module.id} className="grid items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>{permissionActions.map(({ key }) => <div key={key} className="flex justify-center">{!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : permissionValue(permission, key) ? <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-500"><Check className="mr-1 size-3" />Sí</Badge> : <span className="text-muted-foreground/30">—</span>}</div>)}</div>; })}</div></div>}
+              </section>;
+            })}
+          </CardContent>
+        </Card>
+      </>}
+
+      {roleView === 'editor' && editingRole && <>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} disabled={roleSaving} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">{editingRole.id ? 'Editar rol' : 'Nuevo rol'}</h2><p className="truncate text-xs text-muted-foreground">Define el acceso de este rol dentro de {tenantName}.</p></div></div>
+          <div className="flex flex-wrap items-center gap-2"><PermissionHelp /><Button variant="outline" onClick={closeRoleView} disabled={roleSaving}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
+        </div>
+
+        <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><ShieldCheck className="size-4 text-primary" /> Datos del rol</CardTitle><CardDescription className="mt-1 text-xs">El nombre y la descripción ayudan a identificar el alcance del equipo.</CardDescription></CardHeader><CardContent className="grid min-w-0 gap-4 p-4 sm:p-6 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="role-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del rol</Label><Input id="role-name" data-tour="role-name" value={editingRole.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ej: Gerencia" className="h-11" /></div><div className="space-y-2"><Label htmlFor="role-description" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción (opcional)</Label><Input id="role-description" data-tour="role-description" value={editingRole.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe el alcance del rol" className="h-11" /></div></CardContent></Card>
+
+        <Card data-tour="role-permissions" className="min-w-0 border-border/50"><CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-sm font-black uppercase tracking-wider">Permisos</CardTitle><CardDescription className="mt-1 text-xs">Cada sección es un módulo y cada tarjeta es una vista o tab real. Despliega o contrae los módulos y sus vistas para definir el acceso.</CardDescription></div><Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{ROLE_PERMISSION_MODULES.length} módulos y vistas</Badge></div><div className="flex flex-wrap items-center gap-2 border-t border-border/30 pt-3"><Button type="button" variant="outline" size="sm" onClick={expandAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsDown className="size-3.5" /> Expandir todo</Button><Button type="button" variant="outline" size="sm" onClick={collapseAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsUp className="size-3.5" /> Contraer todo</Button><Button type="button" variant="secondary" size="sm" onClick={toggleAllPermissions} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ListChecks className="size-3.5" /> {isAllPermissionsEnabled() ? 'Desmarcar todo' : 'Marcar todo'}</Button><span className="text-[10px] text-muted-foreground">Puedes marcar una vista, un módulo o todos los permisos.</span></div></CardHeader><CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
+           {Object.entries(groupedModules).map(([group, modules]) => {
+             const expanded = expandedSections[group] ?? false;
+             const groupModules = modules as any[];
+             const viewModules = groupModules.filter((module) => module.parent);
+             const modulesToRender = viewModules.length > 0 ? viewModules : groupModules;
+             const moduleEnabled = isSectionFullyEnabled(groupModules);
+             return (
+               <section key={group} className="overflow-hidden rounded-xl border border-border/60">
+                 <div className="flex flex-col gap-3 bg-muted/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                   <button type="button" onClick={() => toggleSection(group)} className="flex min-w-0 items-center gap-2 text-left" aria-expanded={expanded}>
+                     <ChevronDown className={cn('size-4 shrink-0 text-primary transition-transform', expanded && 'rotate-180')} />
+                     <span className="truncate text-xs font-black uppercase tracking-widest text-primary">{getPermissionGroupLabel(group)}</span>
+                     <Badge variant="secondary" className="shrink-0 text-[9px]">{modulesToRender.length} {modulesToRender.length === 1 ? 'vista' : 'vistas'}</Badge>
+                   </button>
+                   <Button type="button" variant="outline" size="sm" onClick={() => toggleSectionPermissions(groupModules)} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 w-fit shrink-0 gap-1.5 text-[10px] font-black uppercase tracking-wider">
+                     {moduleEnabled ? <CheckCheck className="size-3.5" /> : <ListChecks className="size-3.5" />}
+                     {moduleEnabled ? 'Desmarcar módulo' : 'Marcar módulo'}
+                   </Button>
+                 </div>
+                 {expanded && (
+                   <div className="space-y-2 border-t border-border/40 bg-muted/10 p-3 sm:p-4">
+                     {modulesToRender.map((module: any) => {
+                       const permission = normalizePermissions(editingRole.permissions).find((item: any) => item.module === module.id) || {};
+                       const availableActions = availableActionsFor(module.id);
+                       const viewExpanded = expandedViews[module.id] ?? false;
+                       const viewEnabled = isViewFullyEnabled(module);
+                       return (
+                         <div key={module.id} className="rounded-xl border border-border/60 bg-card shadow-sm transition-colors hover:border-primary/30">
+                           <div className="flex min-w-0 flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+                             <button type="button" onClick={() => toggleView(module.id)} className="flex min-w-0 items-center gap-3 text-left" aria-expanded={viewExpanded} aria-label={`${viewExpanded ? 'Contraer' : 'Expandir'} permisos de ${module.label}`}>
+                               <ChevronDown className={cn('size-4 shrink-0 text-primary transition-transform', viewExpanded && 'rotate-180')} />
+                               <div className="min-w-0"><p className="truncate text-sm font-bold">{module.label}</p><p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{getViewActionDescription(module, 'read')}</p></div>
+                             </button>
+                             <div className="flex flex-wrap items-center gap-2 pl-7 sm:shrink-0 sm:pl-0">
+                               <Badge variant="outline" className="text-[9px] uppercase tracking-wider">{availableActions.length} {availableActions.length === 1 ? 'opción' : 'opciones'}</Badge>
+                               <Button type="button" variant="ghost" size="sm" onClick={() => toggleViewPermissions(module)} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 gap-1.5 px-2 text-[10px] font-black uppercase tracking-wider">
+                                 {viewEnabled ? <CheckCheck className="size-3.5" /> : <ListChecks className="size-3.5" />}
+                                 {viewEnabled ? 'Desmarcar vista' : 'Marcar vista'}
+                               </Button>
+                             </div>
+                           </div>
+                           {viewExpanded && (
+                             <div className="grid gap-2 border-t border-border/50 px-3 py-3 sm:grid-cols-2 sm:px-4 lg:grid-cols-3">
+                               {availableActions.map(({ key }) => (
+                                 <div key={key} className="flex min-w-0 items-start gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+                                   <Checkbox checked={permissionValue(permission, key)} onCheckedChange={() => togglePermission(module.id, key)} aria-label={`${module.label}: ${getActionLabel(key)}`} className="mt-0.5" />
+                                   <div className="min-w-0"><p className="text-xs font-semibold">{getActionLabel(key)}</p><p className="text-[10px] leading-relaxed text-muted-foreground">{getViewActionDescription(module, key)}</p></div>
+                                 </div>
+                               ))}
+                               {module.id === 'SALES_PRICE_LISTS' && (
+                                 <div className="col-span-full space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3 sm:p-4">
+                                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                     <div className="min-w-0">
+                                       <p className="text-xs font-bold">Listas de precios permitidas</p>
+                                       <p className="text-[10px] leading-relaxed text-muted-foreground">Define qué listas puede consultar y seleccionar este rol al facturar. Las listas nuevas aparecerán aquí automáticamente al volver a editar el rol.</p>
+                                     </div>
+                                     <Button type="button" variant="outline" size="sm" onClick={toggleAllPriceListAccess} disabled={roleSaving || priceListCatalogLoading || (!canEditRoles && !canCreateRoles) || !priceListCatalog.length} className="h-8 shrink-0 gap-1.5 text-[10px] font-black uppercase tracking-wider">
+                                       {priceListScopeIsComplete(permission) ? <CheckCheck className="size-3.5" /> : <ListChecks className="size-3.5" />}
+                                       {priceListScopeIsComplete(permission) ? 'Desmarcar todas' : 'Marcar todas'}
+                                     </Button>
+                                   </div>
+                                   {priceListCatalogLoading && <p className="text-[10px] text-muted-foreground">Cargando listas de precios…</p>}
+                                   {!priceListCatalogLoading && !priceListCatalog.length && <p className="rounded-lg border border-dashed border-border/60 p-3 text-[10px] text-muted-foreground">No hay listas de precios creadas todavía.</p>}
+                                   {!priceListCatalogLoading && priceListCatalog.length > 0 && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                     {priceListCatalog.map((list) => {
+                                       const selected = !Object.prototype.hasOwnProperty.call(permission, 'allowedPriceListIds')
+                                         || (Array.isArray(permission.allowedPriceListIds) && permission.allowedPriceListIds.includes(list.id));
+                                       return <label key={list.id} className="flex min-w-0 cursor-pointer items-start gap-2 rounded-lg border border-border/50 bg-card px-3 py-2">
+                                         <Checkbox checked={selected} onCheckedChange={() => togglePriceListAccess(list.id)} aria-label={`Lista de precios: ${list.name}`} className="mt-0.5" />
+                                         <span className="min-w-0"><span className="block truncate text-xs font-semibold">{list.name}</span><span className="block truncate text-[10px] text-muted-foreground">{list.code}{list.isActive === false ? ' · Inactiva' : ''}</span></span>
+                                       </label>;
+                                     })}
+                                   </div>}
+                                 </div>
+                               )}
+                             </div>
+                           )}
+                         </div>
+                       );
+                     })}
+                   </div>
+                 )}
+               </section>
+             );
+           })}
+        </CardContent></Card>
+      </>}
 
       <Dialog open={!!assignedUsersRole} onOpenChange={(open) => !open && setAssignedUsersRole(null)}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Users className="size-5 text-primary" /> Usuarios con el rol {assignedUsersRole?.name}</DialogTitle>
-            <DialogDescription>Usuarios que tienen asignado este rol personalizado.</DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto py-2">
-            {users.filter((user: any) => user.customRoleId === assignedUsersRole?.id).map((user: any) => <div key={user.id} className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-4 py-3">
-              <div><p className="text-sm font-bold">{user.name}</p><p className="text-xs text-muted-foreground">{user.email}</p></div>
-              <Badge variant="outline" className="text-[9px] uppercase">{user.isActive ? 'Activo' : 'Suspendido'}</Badge>
-            </div>)}
-            {!users.some((user: any) => user.customRoleId === assignedUsersRole?.id) && <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Ningún usuario tiene este rol asignado.</div>}
-          </div>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Users className="size-5 text-primary" /> Usuarios con el rol {assignedUsersRole?.name}</DialogTitle><DialogDescription>Usuarios que tienen asignado este rol personalizado.</DialogDescription></DialogHeader>
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto py-2">{users.filter((user: any) => user.customRoleId === assignedUsersRole?.id).map((user: any) => <div key={user.id} className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-4 py-3"><div><p className="text-sm font-bold">{user.name}</p><p className="text-xs text-muted-foreground">{user.email}</p></div><Badge variant="outline" className="text-[9px] uppercase">{user.isActive ? 'Activo' : 'Suspendido'}</Badge></div>)}{!users.some((user: any) => user.customRoleId === assignedUsersRole?.id) && <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Ningún usuario tiene este rol asignado.</div>}</div>
           <DialogFooter><Button variant="outline" onClick={() => setAssignedUsersRole(null)}>Cerrar</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={roleDialogOpen} onOpenChange={(open) => { setRoleDialogOpen(open); if (!open) setEditingRole(null); }}>
-        <DialogContent className="flex h-[90vh] w-[96vw] max-w-[calc(100%-1rem)] flex-col overflow-hidden p-0 sm:!max-w-6xl">
-          <DialogHeader className="sticky top-0 z-30 shrink-0 border-b border-border/50 bg-card px-6 py-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <DialogTitle className="flex items-center gap-2 text-xl font-black"><ShieldCheck className="size-5 text-primary" /> {editingRole?.id ? 'Editar rol' : 'Nuevo rol'}</DialogTitle>
-                <DialogDescription className="mt-1 text-sm">Define qué módulos y acciones podrá utilizar este rol dentro de {tenantName}.</DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-          <div className="grid shrink-0 gap-4 border-b border-border/50 bg-background px-6 py-5 md:grid-cols-2">
-            <Input data-tour="role-name" value={editingRole?.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Nombre del rol" className="h-11" />
-            <Input data-tour="role-description" value={editingRole?.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Descripción (opcional)" className="h-11" />
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/50 bg-muted/20 px-6 py-3">
-            <div className="flex min-w-0 items-start gap-2">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-foreground">Matriz de permisos por módulo y vista</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Cada fila representa una vista. Desplázate horizontalmente para revisar todas las acciones.</p>
-              </div>
-            </div>
-            <PermissionHelp />
-            <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{ALL_PERM_MODULES.length} vistas · {permissionActions.length} acciones</Badge>
-          </div>
-          <div data-tour="role-permissions" className="relative min-h-0 flex-1 overflow-auto px-6 pt-0 pb-5">
-            <div className="min-w-[1040px] rounded-xl border border-border/50">
-              <div className="isolate sticky top-0 z-[100] grid min-w-[1040px] items-center gap-1.5 border-b border-border bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground shadow-md" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
-                <span>Módulo</span>{permissionActions.map(({ key, label }) => <span key={key} className="text-center">{label}</span>)}
-              </div>
-              {Object.entries(groupedModules).map(([group, modules]) => <div key={group} className="border-b border-border last:border-b-0">
-                <div className="flex items-center justify-between gap-4 bg-muted px-5 py-3">
-                  <span className="text-xs font-black uppercase tracking-widest text-primary">{getPermissionGroupLabel(group)}</span>
-                  <label className="flex shrink-0 items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    <span>{isSectionFullyEnabled(modules as any[]) ? 'Todos habilitados' : 'Habilitar todos'}</span>
-                    <Switch
-                      aria-label={`${isSectionFullyEnabled(modules as any[]) ? 'Deshabilitar' : 'Habilitar'} todos los permisos de ${getPermissionGroupLabel(group)}`}
-                      checked={isSectionFullyEnabled(modules as any[])}
-                      onCheckedChange={() => toggleSectionPermissions(modules as any[])}
-                    />
-                  </label>
-                </div>
-                {(modules as any[]).map((module: any) => {
-                  const permission = normalizePermissions(editingRole?.permissions).find((item: any) => item.module === module.id) || {};
-                  return <div key={module.id} className="grid min-w-[1040px] items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>{permissionActions.map(({ key, label }) => <div key={key} className={`flex justify-center ${key === 'viewCost' ? 'border-l border-rose-500/20' : ''}`}>{!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : <Switch aria-label={`${module.label}: ${label}`} checked={permissionValue(permission, key)} onCheckedChange={() => togglePermission(module.id, key)} className={key === 'viewCost' ? 'data-[state=checked]:bg-rose-500' : undefined} />}</div>)}</div>;
-                })}
-              </div>)}
-            </div>
-          </div>
-        <DialogFooter className="shrink-0 border-t border-border/50 bg-card px-6 py-4"><Button variant="outline" onClick={() => setRoleDialogOpen(false)} disabled={roleSaving}>Cancelar</Button>{(editingRole?.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

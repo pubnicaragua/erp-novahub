@@ -463,6 +463,13 @@ const createUserObject = (apiPayload: any): User => {
       permission?.[action] === true,
     ]),
   );
+  const mapPriceListScope = (permission: any) => Object.prototype.hasOwnProperty.call(permission || {}, 'allowedPriceListIds')
+    ? {
+        allowedPriceListIds: Array.isArray(permission.allowedPriceListIds)
+          ? [...new Set(permission.allowedPriceListIds.map((id: unknown) => String(id || '').trim()).filter(Boolean))]
+          : [],
+      }
+    : {};
   
   // Normalizar permisos del servidor: puede venir como objeto {moduleName: {read,write,delete}} o como array
   const rawPerms = apiUser.permissions;
@@ -498,6 +505,7 @@ const createUserObject = (apiPayload: any): User => {
         canImport: !!serverMatch.import,
         canExport: !!serverMatch.export,
         canViewCost: serverMatch.viewCost === true || serverMatch.canViewCost === true,
+        ...mapPriceListScope(serverMatch),
         approve: Object.prototype.hasOwnProperty.call(serverMatch, 'approve') ? !!serverMatch.approve : undefined,
         ...mapSpecialPermissionFlags(serverMatch),
       };
@@ -538,6 +546,7 @@ const createUserObject = (apiPayload: any): User => {
         canImport: !!sp.import,
         canExport: !!sp.export,
         canViewCost: sp.viewCost === true || sp.canViewCost === true,
+        ...mapPriceListScope(sp),
         approve: Object.prototype.hasOwnProperty.call(sp, 'approve') ? !!sp.approve : undefined,
         ...mapSpecialPermissionFlags(sp),
       });

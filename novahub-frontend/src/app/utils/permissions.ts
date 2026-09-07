@@ -64,8 +64,175 @@ export const APPROVAL_PERMISSION_MODULES = [
   'ACTIVITIES_TASKS',
 ] as const;
 
+/**
+ * Acciones que realmente se consumen por cada vista del catálogo de Roles.
+ *
+ * La pantalla no debe ofrecer una matriz CRUD idéntica para todas las vistas:
+ * un reporte no crea registros y un dashboard no elimina datos. Los permisos
+ * históricos que no aparecen aquí siguen siendo aceptados por el backend y
+ * se conservan al editar un rol, pero no se ofrecen como nuevas opciones.
+ */
+const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]> = {
+  DASHBOARD: ['read'],
+  FINANCING: ['read', 'create', 'edit'],
+  SALES: ['read'],
+  RESTAURANT: ['read'],
+  TRACKING: ['read'],
+  PURCHASES: ['read', 'create'],
+  INVENTORY: ['read', 'edit', 'viewCost'],
+  FINANCIAL: ['read'],
+  ACCOUNTING: ['read', 'create', 'edit', 'delete', 'import', 'export'],
+  HR: ['read'],
+  ACTIVITIES: ['read'],
+  PROJECTS: ['read', 'create', 'edit', 'delete'],
+  FORCE_SALES: ['read'],
+  TICKETS: ['read', 'create', 'edit', 'delete'],
+  HR_TRAINING: ['read', 'create', 'edit', 'approve'],
+  SUPPORT_TECH: ['read', 'create', 'edit', 'delete'],
+  LEGAL: ['read'],
+  NOVACHAT: ['read'],
+  DOCUMENTS: ['read'],
+  NOTIFICATIONS: ['read'],
+  REPORTS: ['read'],
+  MY_COMPANY: ['read'],
+  CONFIGURATION: ['read', 'edit'],
+
+  SALES_CLIENTS: ['read', 'create', 'edit', 'export'],
+  SALES_QUOTES: ['read', 'create', 'edit', 'approve'],
+  SALES_ORDERS: ['read', 'create', 'edit', 'delete', 'approve'],
+  SALES_INVOICES: ['read', 'create', 'edit', 'delete', 'approve'],
+  SALES_RECURRING: ['read', 'create', 'edit', 'delete'],
+  SALES_PAYMENTS: ['read', 'create', 'approve'],
+  SALES_RETURNS: ['read', 'create', 'edit', 'delete', 'approve'],
+  SALES_CREDIT_NOTES: ['read', 'create', 'edit', 'delete', 'approve'],
+  SALES_PRICE_LISTS: ['read', 'create', 'edit', 'import', 'export'],
+  RETAIL_POS: ['read', 'edit', 'approve'],
+
+  RESTAURANT_TABLES: ['read', 'create', 'approve'],
+  RESTAURANT_MENU: ['read', 'create', 'edit'],
+  RESTAURANT_KITCHEN: ['read', 'approve'],
+  RESTAURANT_REPORTS: ['read'],
+
+  PURCHASES_REQUESTS: ['read', 'delete', 'approve', 'export'],
+  PURCHASES_PROVIDERS: ['read', 'create', 'edit', 'export'],
+  PURCHASES_EXPENSES: ['read', 'create', 'edit', 'delete', 'approve'],
+  PURCHASES_EXPENSES_REC: ['read', 'create', 'edit', 'delete'],
+  PURCHASES_ORDERS: ['read', 'create', 'edit', 'delete', 'approve'],
+  PURCHASES_RECEIPTS: ['read', 'create', 'edit', 'delete', 'approve'],
+  PURCHASES_INVOICES_REC: ['read', 'create', 'edit', 'delete'],
+  PURCHASES_PAYMENTS: ['read', 'create', 'edit', 'delete', 'approve'],
+  PURCHASES_RETURNS: ['read', 'create', 'edit', 'delete', 'approve'],
+
+  INVENTORY_PRODUCTS: ['read', 'create', 'edit', 'export', 'viewCost'],
+  INVENTORY_SERVICES: ['read'],
+  INVENTORY_ATTRIBUTES: ['read'],
+  INVENTORY_WAREHOUSES: ['read', 'create', 'edit', 'delete'],
+  INVENTORY_TRANSFERS: ['read', 'create'],
+  INVENTORY_ADJUSTMENTS: ['read', 'create', 'approve', 'viewCost'],
+  INVENTORY_MOVEMENTS: ['read'],
+  INVENTORY_AUDITS: ['read', 'create', 'delete', 'approve'],
+  INVENTORY_LOSSES: ['read'],
+  INVENTORY_ASSETS: ['read'],
+  INVENTORY_CONFIG: ['read', 'edit'],
+
+  FINANCIAL_DASHBOARD: ['read'],
+  FINANCIAL_BANK: ['read'],
+  FINANCIAL_RECEIVABLES: ['read'],
+  FINANCIAL_PAYABLES: ['read'],
+  FINANCIAL_INCOMES: ['read', 'export'],
+  FINANCIAL_EXPENSES: ['read', 'export'],
+  FINANCIAL_EXPENSES_REC: ['read', 'export'],
+  FINANCIAL_CALENDAR: ['read'],
+  FINANCIAL_ANALYSIS: ['read', 'export'],
+  FINANCIAL_BALANCE: ['read', 'export'],
+  FINANCIAL_LOSSES: ['read', 'export'],
+
+  HR_DASHBOARD: ['read'],
+  HR_EMPLOYEES: ['read', 'create', 'edit', 'delete', 'approve'],
+  HR_PAYROLL: ['read', 'edit', 'delete', 'export', 'approve'],
+  HR_COMMISSIONS: ['read', 'export'],
+  HR_ATTENDANCE: ['read', 'create'],
+  HR_LEAVES: ['read', 'create', 'edit', 'delete', 'approve'],
+  HR_PERFORMANCE: ['read', 'create', 'edit'],
+  HR_BENEFITS: ['read', 'create', 'edit', 'delete', 'approve'],
+  HR_PAYROLL_CONFIG: ['read', 'edit'],
+
+  ACTIVITIES_TASKS: ['read', 'create', 'edit', 'delete', 'approve'],
+  ACTIVITIES_EVENTS: ['read', 'create', 'edit', 'delete', 'approve'],
+  ACTIVITIES_REMINDERS: ['read', 'create', 'edit', 'delete'],
+  ACTIVITIES_LOGS: ['read', 'create', 'edit', 'delete'],
+
+  PROJECTS_LIST: ['read'],
+  PROJECTS_TASKS: ['read', 'create', 'edit', 'delete'],
+  PROJECTS_MILESTONES: ['read'],
+  PROJECTS_EXPENSES: ['read', 'create', 'edit'],
+  PROJECTS_DOCUMENTS: ['read', 'create', 'delete'],
+  PROJECTS_TIME: ['read'],
+
+  DOCUMENTS_FILES: ['read', 'create', 'edit', 'delete'],
+  DOCUMENTS_CONTRACTS: ['read', 'create', 'edit', 'delete'],
+  DOCUMENTS_INVOICES: ['read', 'create', 'edit', 'delete'],
+  DOCUMENTS_REPORTS: ['read', 'create', 'edit', 'delete'],
+  NOTIFICATIONS_ALERTS: ['read', 'create'],
+  NOTIFICATIONS_MESSAGES: ['read', 'create'],
+  NOTIFICATIONS_PUSH: ['read', 'create'],
+  TICKETS_KNOWLEDGE_BASE: ['read'],
+  TICKETS_AGENTS: ['read'],
+  LEGAL_CASES: ['read', 'create', 'edit', 'approve'],
+  LEGAL_REMINDERS: ['read', 'create', 'delete'],
+
+  REPORTS_SALES: ['read'],
+  REPORTS_PURCHASES: ['read'],
+  REPORTS_FINANCIAL: ['read'],
+  REPORTS_INVENTORY: ['read'],
+  REPORTS_CLIENTS: ['read'],
+  REPORTS_PROVIDERS: ['read'],
+  REPORTS_HR: ['read'],
+
+  ACCOUNTING_CHART: ['read', 'create', 'edit', 'export'],
+  ACCOUNTING_JOURNAL: ['read', 'delete', 'approve'],
+  ACCOUNTING_HR_PAYMENT_REQUESTS: ['read', 'approve'],
+  ACCOUNTING_LEDGER: ['read'],
+  ACCOUNTING_TRIAL_BALANCE: ['read', 'export'],
+  ACCOUNTING_PROFIT_LOSS: ['read'],
+  ACCOUNTING_BALANCE_SHEET: ['read'],
+  ACCOUNTING_CASH_FLOW: ['read'],
+  ACCOUNTING_EXCHANGE_DIFFERENCES: ['read', 'approve'],
+  ACCOUNTING_EQUITY: ['read'],
+  ACCOUNTING_ASSETS: ['read', 'create', 'approve', 'export'],
+  ACCOUNTING_RECONCILIATION: ['read', 'create', 'edit', 'approve'],
+  ACCOUNTING_PERIODS: ['read', 'create', 'approve'],
+  ACCOUNTING_FISCAL: ['read'],
+  ACCOUNTING_INVOICE_AUDIT: ['read', 'approve'],
+  ACCOUNTING_BUDGET: ['read'],
+  ACCOUNTING_EXPENSE_CATEGORIES: ['read'],
+  ACCOUNTING_CONFIG: ['read'],
+
+  CONFIG_BRANDING: ['read', 'edit'],
+  CONFIG_PDF: ['read', 'create', 'edit', 'delete'],
+  CONFIG_SECURITY: ['read', 'edit'],
+  CONFIG_TENANCY: ['read', 'edit'],
+  CONFIG_CURRENCY: ['read', 'edit'],
+  CONFIG_PLATFORM: ['read', 'edit'],
+  CONFIG_COUNTRIES: ['read', 'edit'],
+  CONFIG_MODULE_PRICING: ['read', 'edit'],
+  CONFIG_COMPANY: ['read', 'create', 'edit', 'delete'],
+  SUBSCRIPTIONS: ['read', 'create'],
+  CONFIG_USERS: ['read', 'create', 'edit', 'delete'],
+  CONFIG_ROLES: ['read', 'create', 'edit', 'delete'],
+  CONFIG_DEPARTMENTS: ['read'],
+  CONFIG_ORG_CHART: ['read'],
+  COMPANY_BRANCHES: ['read'],
+  CONFIG_DOMAINS: ['read'],
+};
+
+export function getPermissionActionKeys(module: string): readonly PermissionMatrixAction[] {
+  return VIEW_PERMISSION_ACTIONS[String(module || '').toUpperCase()] || ['read'];
+}
+
 export function supportsPermissionAction(module: string, action: PermissionMatrixAction): boolean {
-  return action !== 'approve' || APPROVAL_PERMISSION_MODULES.includes(String(module || '').toUpperCase() as typeof APPROVAL_PERMISSION_MODULES[number]);
+  if (action === 'viewCost') return supportsInventoryCostPermission(module);
+  return getPermissionActionKeys(module).includes(action);
 }
 
 export function permissionValue(permission: any, action: PermissionMatrixAction): boolean {
@@ -83,6 +250,25 @@ export function permissionValue(permission: any, action: PermissionMatrixAction)
   if (permission[frontendKey] !== undefined) return permission[frontendKey] === true;
   if ((action === 'create' || action === 'edit') && permission.write === true) return true;
   return false;
+}
+
+/**
+ * Devuelve el alcance de listas de precios del usuario. `null` representa el
+ * comportamiento legado: todas las listas están disponibles. Un arreglo vacío
+ * es deliberado y significa que el rol aún no tiene listas asignadas.
+ */
+export function getAllowedPriceListIds(user: any): string[] | null {
+  const permission = (Array.isArray(user?.permissions) ? user.permissions : [])
+    .find((candidate: any) => String(candidate?.module || '').trim().toUpperCase() === 'SALES_PRICE_LISTS');
+  if (!permission || !Object.prototype.hasOwnProperty.call(permission, 'allowedPriceListIds')) return null;
+  return Array.isArray(permission.allowedPriceListIds)
+    ? [...new Set(permission.allowedPriceListIds.map((id: unknown) => String(id || '').trim()).filter(Boolean))]
+    : [];
+}
+
+export function filterAllowedPriceLists<T extends { id: string }>(lists: T[], user: any): T[] {
+  const allowedIds = getAllowedPriceListIds(user);
+  return allowedIds === null ? lists : lists.filter((list) => allowedIds.includes(list.id));
 }
 
 /**
@@ -114,5 +300,8 @@ export function hydratePermissionActions(permission: any, module: string) {
     module,
     ...Object.fromEntries(PERMISSION_ACTION_DEFINITIONS.map(({ key }) => [key, permissionValue(permission, key)])),
     viewCost: permissionValue(permission, 'viewCost'),
+    ...(Object.prototype.hasOwnProperty.call(permission || {}, 'allowedPriceListIds')
+      ? { allowedPriceListIds: Array.isArray(permission.allowedPriceListIds) ? [...permission.allowedPriceListIds] : [] }
+      : {}),
   };
 }

@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Info, Crown, Link2, UserRoundCheck, GitBranch
+  Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck, GitBranch
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -24,7 +24,6 @@ import { usersService } from '../../services/users.service';
 import { brandingService } from '../../services/branding.service';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
-import { cajaService } from '../../services/caja.service';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -94,6 +93,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
   const [showDepartmentsView, setShowDepartmentsView] = useState(false);
+  const [showRolesView, setShowRolesView] = useState(false);
   const [showOrgChartView, setShowOrgChartView] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -103,7 +103,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [notes, setNotes] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [companySlug, setCompanySlug] = useState('');
   const [companyIndustry, setCompanyIndustry] = useState('OTHER');
@@ -136,11 +135,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       ]);
       return { users: asList(usersRes), branding, industries: asList(industriesRes), employees: asList(employeesRes) };
     },
-    { enabled: Boolean(tenant?.id), onError: (error) => toast.error(error.message || 'Error cargando Mi Empresa') },
+    { enabled: Boolean(tenant?.id), onError: (error) => toast.error(error.message || 'Error cargando Mi Sucursal') },
   );
 
   useEffect(() => {
-    setLoadingUsers(tenantDataLoading);
     if (!tenant) return;
     setCompanyName(tenantData?.branding?.companyName || tenant.name || '');
     setCompanySlug(tenant.slug || '');
@@ -269,14 +267,11 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
 
   const fetchUsers = async () => {
     try {
-      setLoadingUsers(true);
       const refreshed = await refetchTenantData();
       const nextUsers = (refreshed.data as any)?.users;
       if (Array.isArray(nextUsers)) setUsers(nextUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
-    } finally {
-      setLoadingUsers(false);
     }
   };
 
@@ -440,7 +435,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   if (!tenant) {
-    return <div className="mx-auto flex min-h-[320px] max-w-3xl items-center justify-center p-6 text-center text-sm text-muted-foreground">Cargando la información de Mi Empresa...</div>;
+    return <div className="mx-auto flex min-h-[320px] max-w-3xl items-center justify-center p-6 text-center text-sm text-muted-foreground">Cargando la información de Mi Sucursal...</div>;
   }
 
   return (
@@ -453,8 +448,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       >
         <div>
           <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">
-            <Zap className="size-10 text-primary fill-primary/20" />
-             Mi Empresa
+            <Building2 className="size-10 text-primary" />
+             Mi Sucursal
           </h1>
         </div>
         
@@ -709,14 +704,17 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         </TabsContent>
 
          <TabsContent value="team" className="space-y-4">
-          {showOrgChartView ? <OrgChartView tenantId={tenant.id} tenantName={tenant.name} employees={employees} users={users} onBack={() => setShowOrgChartView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : <>
-            <div className="flex justify-end">
-             <div className="flex items-center gap-2">
+          {showOrgChartView ? <OrgChartView tenantId={tenant.id} tenantName={tenant.name} employees={employees} users={users} onBack={() => setShowOrgChartView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : showRolesView ? <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onBack={() => setShowRolesView(false)} onRolesChange={async () => { await refetchTenantData(); await onRefresh(); }} canViewRoles={canViewRoles} canCreateRoles={canPerform('CONFIG_ROLES', 'create')} canEditRoles={canPerform('CONFIG_ROLES', 'edit')} canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')} /> : <>
+            <div className="flex flex-wrap justify-end">
+             <div className="flex flex-wrap items-center justify-end gap-2">
               {canViewUsers && <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
                 <CircleHelp className="size-4" /> Tutorial
               </Button>}
               {canViewUsers && canViewDepartments && <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
               <Building2 className="size-4" /> Departamentos
+              </Button>}
+              {canViewRoles && <Button data-tour="team-roles" variant="outline" className="gap-2 font-bold" onClick={() => setShowRolesView(true)}>
+              <Shield className="size-4" /> Roles
               </Button>}
               {canViewUsers && canViewEmployees && canViewOrgChart && <Button variant="outline" className="gap-2 font-bold" onClick={() => setShowOrgChartView(true)}>
               <GitBranch className="size-4" /> Organigrama
@@ -724,9 +722,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             </div>
            </div>
 
-          <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
-            {canViewUsers && <Card className="h-full border-border/50" data-tour="team-users">
-              <CardHeader className="flex-row items-center justify-between gap-4 border-b border-border/30 bg-muted/10 pb-3">
+          <div className="min-w-0">
+            {canViewUsers && <Card className="min-w-0 border-border/50" data-tour="team-users">
+              <CardHeader className="flex flex-col items-start justify-between gap-3 border-b border-border/30 bg-muted/10 pb-3 sm:flex-row sm:items-center">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Users className="size-4 text-primary" /> Usuarios ({users.length})</CardTitle>
                   <CardDescription className="mt-1 text-xs">Administra las personas que tienen acceso a la empresa.</CardDescription>
@@ -735,7 +733,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   <Plus className="size-4" /> Crear usuario
                 </Button>}
               </CardHeader>
-              <CardContent className="space-y-2 p-4">
+              <CardContent className="min-w-0 space-y-2 p-4">
             {users.map((u) => {
                const isCurrentUser = currentUser?.id === u.id;
                const normalizedRole = String(u.role || '').toUpperCase();
@@ -802,8 +800,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 {!users.length && <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Aún no hay usuarios creados.</div>}
               </CardContent>
             </Card>}
-
-            {canViewRoles && <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onRolesChange={async () => { await refetchTenantData(); await onRefresh(); }} canViewRoles={canViewRoles} canCreateRoles={canPerform('CONFIG_ROLES', 'create')} canEditRoles={canPerform('CONFIG_ROLES', 'edit')} canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')} />}
           </div>
           </>}
          </TabsContent>

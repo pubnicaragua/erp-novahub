@@ -1,9 +1,29 @@
 import * as XLSX from 'xlsx';
+import { resolveStandardProductPriceLists } from './product-price-lists';
 
 export type CanonicalImportPriceList = {
   code: string;
   name: string;
 };
+
+export const getCanonicalProductImportHeaders = (
+  priceLists: CanonicalImportPriceList[],
+  canViewInventoryCost: boolean,
+) => [
+  'Código / SKU',
+  'Nombre',
+  'Descripción',
+  'Nota comercial',
+  'Categoría',
+  'Unidad',
+  'Marca',
+  'Variable',
+  'Moneda',
+  ...priceLists.map((list) => `Precio ${list.name}`),
+  ...(canViewInventoryCost ? ['Costo'] : []),
+  'Serie/IMEI',
+  'Imagen URL',
+];
 
 export type CanonicalImportLocation = {
   label: string;
@@ -48,22 +68,17 @@ const appendSheet = (workbook: XLSX.WorkBook, name: string, rows: any[][]) => {
 export const createCanonicalVariantImportWorkbook = (
   options: CanonicalVariantImportTemplateOptions = {},
 ) => {
-  const priceLists = (options.priceLists || []).filter((list) => list.code && list.name).length > 0
-    ? (options.priceLists || []).filter((list) => list.code && list.name)
-    : FALLBACK_PRICE_LISTS;
+  const priceLists = resolveStandardProductPriceLists(
+    (options.priceLists || []).filter((list) => list.code && list.name).length > 0
+      ? options.priceLists || []
+      : FALLBACK_PRICE_LISTS,
+  );
   const currency = String(options.currency || 'NIO').toUpperCase();
   const exchangeRate = Number(options.exchangeRate || 1) > 0 ? Number(options.exchangeRate) : 1;
   const canViewInventoryCost = options.canViewInventoryCost !== false;
   const mode = options.context?.mode || 'INVENTORY';
 
-  const productHeaders = [
-    'Código / SKU', 'Nombre', 'Marca', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad',
-    'Código de barras', 'Modelo', 'Color', 'Peso', 'Unidad de peso', 'Dimensiones',
-    'Ancho', 'Alto', 'Profundidad', 'Unidad de dimensión', 'Garantía', 'Tasa IVA',
-    'Control inventario', 'Lotes', 'Series', 'Último costo', 'Imagen URL', 'Disponible',
-    ...priceLists.map((list) => `Precio ${list.name}`),
-    ...(canViewInventoryCost ? ['Costo'] : []),
-  ];
+  const productHeaders = getCanonicalProductImportHeaders(priceLists, canViewInventoryCost);
   const variantHeaders = [
     'Código producto', 'SKU variante', 'Nombre variante',
     ...(canViewInventoryCost ? ['Costo variante'] : []),
@@ -94,7 +109,7 @@ export const createCanonicalVariantImportWorkbook = (
     [mode === 'PURCHASE_ORDER' ? 'GUÍA · PLANTILLA CANÓNICA PARA ORDEN DE COMPRA' : 'GUÍA · PLANTILLA CANÓNICA DE PRODUCTOS CON VARIANTES'],
     ['Plantilla vacía', 'Las hojas de carga contienen únicamente encabezados. Registra tus propios productos, variantes, atributos, precios y destinos antes de importar.'],
     ['Contrato NOVAHUB_VARIANTS_V1. Las hojas Productos, Variantes, Atributos, Precios e Inventario se leen como una sola carga relacionada por código de producto y SKU de variante.'],
-    ['Productos', 'Una fila por producto padre. Contiene identidad comercial, categoría, unidad, nota, campos descriptivos, precios base por lista y costo base.'],
+    ['Productos', 'Una fila por producto padre. Usa los mismos datos de la creación: código, nombre, descripción, nota comercial, categoría, unidad, marca, indicador de variable, moneda, tres precios de venta, costo, serie/IMEI e imagen opcional.'],
     ['Variantes', 'Una fila por presentación vendible. El SKU variante debe ser único; el costo variante vacío hereda el costo del padre y un costo informado es propio de esa variante.'],
     ['Atributos', mode === 'PURCHASE_ORDER'
       ? 'Una fila por SKU variante + atributo + valor. Los atributos faltantes quedan pendientes y se crean al recepcionar la compra.'
@@ -108,6 +123,7 @@ export const createCanonicalVariantImportWorkbook = (
     ['Bodegas inválidas', 'La fila se rechaza hasta seleccionar una bodega activa existente en la previsualización. La importación no crea bodegas automáticamente.'],
     ['Reimportación', 'MERGE conserva IDs, movimientos y existencias existentes; actualiza datos maestros y agrega variantes nuevas sin duplicar productos o SKUs.'],
     ['Valores numéricos', `Usa números sin símbolo de moneda. La moneda del archivo es ${currency}; la tasa aplicada es ${exchangeRate}.`],
+    ['Variable y moneda', 'Variable indica si el producto tendrá filas en Variantes. La moneda se aplica a toda la importación y debe coincidir con la moneda seleccionada en la pantalla de carga.'],
     ['Categorías', mode === 'PURCHASE_ORDER'
       ? 'Escribe el nombre de la categoría. Si no existe, queda pendiente y se crea como categoría de productos al recepcionar; no se duplica si ya existe.'
       : 'Escribe el nombre de la categoría. Si no existe, se crea automáticamente como categoría de productos al confirmar; no se duplica si ya existe.'],

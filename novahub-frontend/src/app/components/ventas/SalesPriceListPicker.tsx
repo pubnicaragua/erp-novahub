@@ -5,7 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../ui/badge';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { useAuth } from '../../contexts/AuthContext';
-import { getSalesUnitPrice, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { filterAllowedPriceLists } from '../../utils/permissions';
+import { getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 
 type Line = { productId?: string | null; variantId?: string | null; unitPrice?: number; quantity?: number; total?: number; [key: string]: any };
 
@@ -29,16 +30,20 @@ export function SalesPriceListPicker({ customer, value, items, currency = 'NIO',
     staleTime: 60_000,
   });
   const matrix = useMemo(() => unwrapSalesPriceListMatrix(matrixQuery.data), [matrixQuery.data]);
-  const lists = matrix.lists;
+  const lists = useMemo(() => filterAllowedPriceLists(matrix.lists, user), [matrix.lists, user]);
+  const visibleListIds = useMemo(() => new Set(lists.map((list) => list.id)), [lists]);
+  const matrixItems = useMemo(() => matrix.items.filter((item) => visibleListIds.has(item.priceListId)), [matrix.items, visibleListIds]);
   const customerListId = customer?.priceListId || customer?.priceList?.id;
   const requestedListId = value || customerListId;
   const resolvedValue = lists.some((list) => sameSalesId(list.id, requestedListId))
     ? requestedListId
     : lists.find((list) => list.isDefault)?.id || lists[0]?.id || '';
+  const customerListUnavailable = Boolean(customerListId && !lists.some((list) => sameSalesId(list.id, customerListId)));
+  const resolvedListName = lists.find((list) => sameSalesId(list.id, resolvedValue))?.name;
 
   const prices = useMemo(() => {
     const map = new Map<string, number>();
-    for (const item of matrix.items) {
+    for (const item of matrixItems) {
       if (sameSalesId(item.priceListId, resolvedValue)) {
         if (item.variantId) {
           const key = `${item.productId}:${item.variantId}`;
@@ -51,11 +56,11 @@ export function SalesPriceListPicker({ customer, value, items, currency = 'NIO',
       }
     }
     return map;
-  }, [matrix.items, resolvedValue, currency, exchangeRate]);
+  }, [matrixItems, resolvedValue, currency, exchangeRate]);
 
   const apply = (priceListId: string) => {
     const nextPrices = new Map<string, number>();
-    for (const item of matrix.items) {
+    for (const item of matrixItems) {
       if (sameSalesId(item.priceListId, priceListId)) {
         if (item.variantId) {
           const key = `${item.productId}:${item.variantId}`;
@@ -84,10 +89,11 @@ export function SalesPriceListPicker({ customer, value, items, currency = 'NIO',
   };
 
   useEffect(() => {
-    if (!resolvedValue || value || !lists.length || !matrix.items.length) return;
+    const valueIsAllowed = Boolean(value && lists.some((list) => sameSalesId(list.id, value)));
+    if (!resolvedValue || valueIsAllowed || !lists.length || !matrixItems.length) return;
     apply(resolvedValue);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerListId, lists.length, resolvedValue, matrix.items.length]);
+  }, [customerListId, value, lists.length, resolvedValue, matrixItems.length]);
 
   const missingCount = items.filter((item) => {
     if (!item.productId) return false;
@@ -100,6 +106,7 @@ export function SalesPriceListPicker({ customer, value, items, currency = 'NIO',
       <SelectTrigger className="h-9 w-52"><SelectValue placeholder="Cargando listas…" /></SelectTrigger>
       <SelectContent>{lists.map((list: PriceList) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent>
     </Select>
+    {customerListUnavailable && resolvedListName && <Badge variant="outline" className="border-amber-500/40 text-amber-700">La lista del cliente no está disponible · usando {resolvedListName}</Badge>}
     {missingCount > 0 && <Badge variant="outline" className="border-rose-500/40 text-rose-600"><AlertTriangle className="mr-1 size-3" />{missingCount} sin precio</Badge>}
   </div>;
 }

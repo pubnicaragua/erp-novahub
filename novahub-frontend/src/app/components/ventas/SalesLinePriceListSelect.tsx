@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { priceListsService } from '../../services/price-lists.service';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
+import { filterAllowedPriceLists } from '../../utils/permissions';
 import { getSalesLinePriceListId, getSalesUnitPrice, hasSalesProductPriceListConflict, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 
 
@@ -43,8 +44,13 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
     return unwrapSalesPriceListMatrix(query.data);
   }, [query.data]);
 
-  const lists = Array.isArray(matrix?.lists) ? matrix.lists : [];
-  const matrixItems = Array.isArray(matrix?.items) ? matrix.items : [];
+  const allLists = Array.isArray(matrix?.lists) ? matrix.lists : [];
+  const lists = useMemo(() => filterAllowedPriceLists(allLists, user), [allLists, user]);
+  const visibleListIds = useMemo(() => new Set(lists.map((list: any) => list.id)), [lists]);
+  const matrixItems = useMemo(
+    () => matrix.items.filter((item: any) => visibleListIds.has(item.priceListId)),
+    [matrix.items, visibleListIds],
+  );
   const matrixProduct = matrix.products.find((product: any) =>
     sameSalesId(product.code, productCode) || sameSalesId(product.id, productId),
   ) || matrix.products.find((product: any) =>

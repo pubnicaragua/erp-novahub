@@ -59,6 +59,9 @@ export interface PriceListMatrix {
 export const priceListsService = {
   getAll: (signal?: AbortSignal) => api.get<PriceList[]>('/sales/price-lists', { signal }),
 
+  getPermissionCatalog: (signal?: AbortSignal) =>
+    api.get<PriceList[]>('/sales/price-lists/permission-catalog', { signal }),
+
   getMatrix: (signal?: AbortSignal) =>
     api.get<PriceListMatrix>('/sales/price-lists/matrix', { signal }),
 

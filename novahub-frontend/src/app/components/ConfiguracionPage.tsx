@@ -384,6 +384,7 @@ interface SidebarPreviewProps {
   logo?: string | null;
   primaryHex: string;
   primaryForeground: string;
+  paletteMode: ThemePaletteMode;
   sidebarHex: string;
   sidebarForeground: string;
   sidebarAccentHex: string;
@@ -395,14 +396,22 @@ function SidebarPreview({
   logo,
   primaryHex,
   primaryForeground,
+  paletteMode,
   sidebarHex,
   sidebarForeground,
   sidebarAccentHex,
   sidebarAccentForeground,
 }: SidebarPreviewProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const borderColor = hexWithAlpha(sidebarForeground, '35');
-  const mutedForeground = hexWithAlpha(sidebarForeground, 'a6');
+  const isComplete = paletteMode === 'complete';
+  const previewSidebarBackground = isComplete ? sidebarHex : 'var(--sidebar-neutral)';
+  const previewSidebarForeground = isComplete ? sidebarForeground : 'var(--sidebar-neutral-foreground)';
+  const previewSidebarAccent = isComplete ? sidebarAccentHex : 'var(--sidebar-neutral-accent)';
+  const previewSidebarAccentForeground = isComplete ? sidebarAccentForeground : 'var(--sidebar-neutral-accent-foreground)';
+  const borderColor = isComplete ? hexWithAlpha(sidebarForeground, '35') : 'var(--sidebar-neutral-border)';
+  const mutedForeground = isComplete
+    ? hexWithAlpha(sidebarForeground, 'a6')
+    : 'color-mix(in srgb, var(--sidebar-neutral-foreground) 65%, transparent)';
   const previewItems = [
     { label: 'Dashboard', icon: BarChart3 },
     { label: 'Ventas', icon: TrendingUp },
@@ -419,7 +428,11 @@ function SidebarPreview({
             <CardTitle className="flex items-center gap-2 text-lg font-black">
               <Eye className="size-5 text-primary" />Previsualización del Sidebar
             </CardTitle>
-            <CardDescription>Así se verá el menú con los colores que estás editando.</CardDescription>
+            <CardDescription>
+              {isComplete
+                ? 'Así se verá el menú con la tonalidad completa de la paleta.'
+                : 'Así se verá el menú con el sidebar neutral y los colores internos de la paleta.'}
+            </CardDescription>
           </div>
           <button
             type="button"
@@ -437,7 +450,7 @@ function SidebarPreview({
         <div className="flex min-h-[310px] overflow-hidden rounded-2xl border border-border/60 bg-muted/20 shadow-inner">
           <aside
             className={cn('flex shrink-0 flex-col transition-[width] duration-300', collapsed ? 'w-[68px]' : 'w-[208px]')}
-            style={{ backgroundColor: sidebarHex, color: sidebarForeground }}
+            style={{ backgroundColor: previewSidebarBackground, color: previewSidebarForeground }}
             aria-label="Previsualización del menú lateral"
           >
             <div className="flex min-h-16 items-center gap-2 border-b px-3" style={{ borderColor }}>
@@ -475,7 +488,7 @@ function SidebarPreview({
             </nav>
 
             <div className="border-t p-2" style={{ borderColor }}>
-              <div className={cn('flex items-center gap-2 rounded-lg p-2', collapsed && 'justify-center')} style={{ backgroundColor: sidebarAccentHex, color: sidebarAccentForeground }}>
+              <div className={cn('flex items-center gap-2 rounded-lg p-2', collapsed && 'justify-center')} style={{ backgroundColor: previewSidebarAccent, color: previewSidebarAccentForeground }}>
                 <div className="flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black" style={{ backgroundColor: primaryHex, color: primaryForeground }}>R</div>
                 {!collapsed && <span className="truncate text-[10px] font-bold">Usuario activo</span>}
               </div>
@@ -505,7 +518,7 @@ function SidebarPreview({
           </div>
         </div>
         <div className="flex flex-wrap gap-2 text-[10px] font-bold text-muted-foreground">
-          <span className="rounded-full border border-border/60 px-2.5 py-1">Fondo: {sidebarHex}</span>
+          <span className="rounded-full border border-border/60 px-2.5 py-1">Fondo: {isComplete ? sidebarHex : 'Neutral'}</span>
           <span className="rounded-full border border-border/60 px-2.5 py-1">Primario: {primaryHex}</span>
           <span className="rounded-full border border-border/60 px-2.5 py-1">Acento: {sidebarAccentHex}</span>
         </div>
@@ -1261,12 +1274,20 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       setPendingDeleteRole(null);
       return;
     }
+    const linkedUsers = Number((role as any)._count?.users || 0);
+    if (linkedUsers > 0) {
+      toast.error(`No se puede eliminar el rol porque tiene ${linkedUsers} usuario${linkedUsers === 1 ? '' : 's'} vinculados.`);
+      setPendingDeleteRole(null);
+      return;
+    }
     try {
       await rolesService.delete(role.id);
       toast.success('Rol eliminado');
       setPendingDeleteRole(null);
       fetchRoles();
-    } catch { toast.error('Error al eliminar rol'); }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar rol');
+    }
   };
 
   const handleSaveRole = async () => {
@@ -1593,6 +1614,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 logo={logoPreview}
                 primaryHex={primaryHex}
                 primaryForeground={previewPrimaryForeground}
+                paletteMode={paletteMode}
                 sidebarHex={sidebarHex}
                 sidebarForeground={previewSidebarForeground}
                 sidebarAccentHex={accentHex}
@@ -1817,7 +1839,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               {!['Administrador', 'Admin'].includes(role.name) && canDeleteRoles && (
                                 <button onClick={async () => {
                                   setPendingDeleteRole(role);
-                                }} className="size-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-500 transition-all">
+                                }} disabled={Number((role as any)._count?.users || 0) > 0} title={Number((role as any)._count?.users || 0) > 0 ? 'No se puede eliminar porque tiene usuarios vinculados' : 'Eliminar rol'} className="size-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-500 transition-all disabled:cursor-not-allowed disabled:opacity-40">
                                   <Trash2 className="size-3.5" />
                                 </button>
                               )}

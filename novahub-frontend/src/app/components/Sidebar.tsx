@@ -38,7 +38,6 @@ import {
   FileOutput,
   Plus,
   Database,
-  Zap,
   ListTodo,
   CalendarDays,
   Bell,
@@ -334,7 +333,7 @@ const menuItems: MenuItem[] = [
       { id: 'push', label: 'Push', icon: <Send className="size-4" /> }
     ]
   },
-  { id: 'suscripciones', label: 'Mi Empresa', icon: <Zap className="size-5" />, section: 'Sistema' },
+  { id: 'suscripciones', label: 'Mi Sucursal', icon: <Building2 className="size-5" />, section: 'Sistema' },
   { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-5" /> },
 ];
 

@@ -51,7 +51,7 @@ import { Progress } from '../ui/progress';
 
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
-import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
+import { ImageViewer } from '../ui/ImageViewer';
 import {
   Table,
   TableBody,
@@ -1221,18 +1221,13 @@ export function ProductDetailDrawer({
           </Button>
         </div>
         </Tabs>
-        <Dialog open={expandedImageOpen} onOpenChange={setExpandedImageOpen}>
-          <DialogContent className="w-[calc(100vw-2rem)] !max-w-4xl border-0 bg-transparent p-2 shadow-none">
-            <DialogTitle className="sr-only">Imagen del producto</DialogTitle>
-            {product?.imageUrl && (
-              <img
-                src={product.imageUrl}
-                alt={product.name || 'Producto'}
-                className="max-h-[85vh] w-full rounded-2xl object-contain shadow-2xl"
-              />
-            )}
-          </DialogContent>
-        </Dialog>
+        <ImageViewer
+          open={expandedImageOpen}
+          onOpenChange={setExpandedImageOpen}
+          src={product?.imageUrl}
+          alt={product?.name || 'Producto'}
+          title={product?.name || 'Imagen del producto'}
+        />
       </SheetContent>
     </Sheet>
   );

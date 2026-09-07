@@ -23,6 +23,7 @@ import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } 
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatSalesAmount } from '../../utils/salesPriceList';
+import { filterAllowedPriceLists } from '../../utils/permissions';
 import { formatExchangeRate } from '../../utils/currency';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
@@ -226,10 +227,11 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     gcTime: 5 * 60_000,
     placeholderData: keepPreviousData,
   });
-  const lists = useMemo(() => matrixQuery.data?.lists || [], [matrixQuery.data]);
-  const matrixItems = useMemo(() => (matrixQuery.data?.items || []) as PriceListItem[], [matrixQuery.data]);
+  const lists = useMemo(() => filterAllowedPriceLists((matrixQuery.data?.lists || []) as any[], user), [matrixQuery.data, user]);
   const matrixProducts = useMemo(() => matrixQuery.data?.products || [], [matrixQuery.data]);
   const [visibleListIds, setVisibleListIds] = useLocalStorageState<string[] | null>(`sales-price-lists-columns-${tenantKey}`, null, 24 * 365);
+  const visibleAccessListIds = useMemo(() => new Set(lists.map((list) => list.id)), [lists]);
+  const matrixItems = useMemo(() => (matrixQuery.data?.items || []).filter((item) => visibleAccessListIds.has(item.priceListId)) as PriceListItem[], [matrixQuery.data, visibleAccessListIds]);
   const [paginationEnabled, setPaginationEnabled] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);

@@ -1295,6 +1295,7 @@ export interface Permission {
   cancel?: boolean;
   import?: boolean;
   export?: boolean;
+  allowedPriceListIds?: string[];
   [action: string]: unknown;
 }
 

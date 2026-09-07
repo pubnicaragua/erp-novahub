@@ -18,7 +18,7 @@ export function ProductSimilarityAlert({
   open,
   groups,
   title = 'Producto similar encontrado',
-  description = 'Revisa los registros existentes antes de continuar. La comparación ignora mayúsculas, minúsculas y acentos.',
+  description = 'Revisa los registros existentes antes de continuar. La comparación ignora mayúsculas, minúsculas, acentos y espacios repetidos.',
   continueLabel,
   onOpenChange,
   onContinue,
@@ -47,6 +47,7 @@ export function ProductSimilarityAlert({
               <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
                 <div><span className="font-bold text-muted-foreground">Marca:</span> {match.brand || 'Sin marca'}</div>
                 <div><span className="font-bold text-muted-foreground">Categoría:</span> {match.category || 'Sin categoría'}</div>
+                <div className="sm:col-span-2"><span className="font-bold text-muted-foreground">Descripción:</span> {match.description || 'Sin descripción'}</div>
                 <div className="sm:col-span-2">
                   <span className="font-bold text-muted-foreground">Atributos y valores:</span>{' '}
                   {match.attributes?.length ? match.attributes.map((attribute) => `${attribute.name}: ${attribute.value}`).join(' · ') : 'Sin atributos'}

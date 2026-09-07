@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
 import { ProductosView, type ProductStatusFilter } from './inventory/ProductosView';
+import { CrearProductoView } from './inventory/CrearProductoView';
 import { ServiciosView } from './inventory/ServiciosView';
 import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
@@ -79,6 +80,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const queryClient = useQueryClient();
   const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches, accessibleBranches, refreshBranches } = useBranchScope();
   const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
+  const [createProductViewOpen, setCreateProductViewOpen] = useState(false);
   const tenantKey = user?.tenantId || 'anonymous';
   const branchScopeEnabled = Boolean(selectedBranchId);
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
@@ -465,6 +467,16 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     ...product,
     itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
   })).map(withSharedWarehouseLevels).filter((product: any) => isProductInScope(product));
+  const availableProductBrands = useMemo(() => {
+    const uniqueBrands = new Map<string, string>();
+    summaryProducts.forEach((product: any) => {
+      const brand = String(product.brand || product.details?.brand || '').trim();
+      if (!brand) return;
+      const normalized = brand.toLocaleLowerCase();
+      if (!uniqueBrands.has(normalized)) uniqueBrands.set(normalized, brand);
+    });
+    return Array.from(uniqueBrands.values()).sort((left, right) => left.localeCompare(right, 'es', { sensitivity: 'base' }));
+  }, [summaryProducts]);
 
   useEffect(() => {
     const nextTab = activeSubModule === 'dashboard' ? 'productos' : activeSubModule;
@@ -484,6 +496,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       onSubModuleChange?.(fallback);
     }
   }, [activeTab, canViewInventorySection, onSubModuleChange]);
+
+  useEffect(() => {
+    if (activeTab !== 'productos') setCreateProductViewOpen(false);
+  }, [activeTab]);
 
   const handleExportData = async () => {
     if (!canExportInventory) return;
@@ -622,7 +638,16 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             </BoneyardSkeleton>
           ) : (
             <>
-              <TabsContent value="productos" className="m-0" asChild>
+              <TabsContent value="productos" className="m-0">
+                {createProductViewOpen ? (
+                  <CrearProductoView
+                    categories={data.categories}
+                    warehouses={scopedWarehouses}
+                    brands={availableProductBrands}
+                    onBack={() => setCreateProductViewOpen(false)}
+                    onRefresh={() => fetchData('products')}
+                  />
+                ) : (
                 <Tabs value={productScope} onValueChange={(value) => setProductScope(value as 'branch' | 'linkedWarehouses')} className="w-full">
                   <div className="mb-5 w-full overflow-x-auto custom-scrollbar">
                     <TabsList className="flex h-auto w-max gap-1.5 rounded-2xl border border-border/40 bg-muted/20 p-1.5">
@@ -646,6 +671,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                         series={data.series}
                         movements={data.movements}
                         onRefresh={() => fetchData('products')}
+                        onCreateProduct={() => setCreateProductViewOpen(true)}
                         pagination={productsPagination}
                         onSearchChange={(value) => updateSearch('productos', value)}
                         onCategoryChange={(value) => updateProductFilters('productos', 'categoryIds', value)}
@@ -674,6 +700,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     </motion.div>
                   </TabsContent>
                 </Tabs>
+                )}
               </TabsContent>
               <TabsContent value="servicios" className="m-0" asChild>
                 <motion.div

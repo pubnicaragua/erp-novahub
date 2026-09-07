@@ -6,6 +6,7 @@ export interface SimilarProductMatch {
   id: string;
   name: string;
   brand?: string | null;
+  description?: string | null;
   code: string;
   sku?: string | null;
   category?: string | null;
@@ -32,7 +33,7 @@ export const inventoryService = {
   },
   createProduct: (data: Partial<Product> & {
     initialStock?: number;
-    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; warehouseId?: string }>;
+    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; warehouseId?: string; prices?: Record<string, number | string> }>;
   }) => api.post<Product>('/inventory/products', data),
   previewProductStockAccounting: (warehouseIds: string[]) =>
     api.post<{ ready: boolean; errors: string[]; warnings?: string[]; autoGenerationEnabled: boolean; warehouses: any[] }>('/inventory/products/accounting-preflight', { warehouseIds }),

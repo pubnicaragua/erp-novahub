@@ -13,6 +13,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } from '../ui/ImportPreviewMobile';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Combobox } from '../ui/Combobox';
 import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
@@ -26,6 +27,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ProductImagePicker, ProductThumbnail } from '../ui/ProductImage';
+import { ImageViewer } from '../ui/ImageViewer';
 import { storageService } from '../../services/storage.service';
 import { AddProductsModal } from './AddProductsModal';
 import { ProductSimilarityAlert } from './ProductSimilarityAlert';
@@ -40,7 +42,8 @@ import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { buildVariantImportPreviewRows, parseVariantImportWorkbook, type VariantImportCatalog } from '../../utils/variant-import';
-import { downloadCanonicalVariantImportTemplate } from '../../utils/variant-import-template';
+import { downloadCanonicalVariantImportTemplate, getCanonicalProductImportHeaders } from '../../utils/variant-import-template';
+import { isStandardProductPriceListCode, resolveStandardProductPriceLists, STANDARD_PRODUCT_PRICE_LISTS } from '../../utils/product-price-lists';
 import { normalizePurchasePriority, PURCHASE_PRIORITY_OPTIONS } from '../../utils/purchasePriority';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { formatExchangeRate } from '../../utils/currency';
@@ -71,11 +74,7 @@ const TAX_OPTIONS = [
   { value: '0', label: 'Exento 0%' },
 ];
 
-const DEFAULT_IMPORT_PRICE_LISTS: Array<Pick<PriceList, 'code' | 'name'>> = [
-  { code: 'RETAIL', name: 'Minorista' },
-  { code: 'WHOLESALE', name: 'Mayorista' },
-  { code: 'DISTRIBUTOR', name: 'Distribuidor' },
-];
+const DEFAULT_IMPORT_PRICE_LISTS: Array<Pick<PriceList, 'code' | 'name'>> = STANDARD_PRODUCT_PRICE_LISTS;
 
 const normalizePriceListImportKey = (value: unknown) => String(value ?? '')
   .normalize('NFD')
@@ -164,6 +163,7 @@ interface ProductosViewProps {
   series?: any[];
   movements?: any[];
   onRefresh: () => void;
+  onCreateProduct?: () => void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   onCategoryChange?: (value: string[]) => void;
@@ -507,7 +507,7 @@ function ImportPreviewPage({
     const configuredCodes = new Set(visiblePriceLists.map((list) => String(list.code).toUpperCase()));
     const extraCodes = (advancedCatalog?.prices || [])
       .map((price) => String(price.priceListCode || '').trim().toUpperCase())
-      .filter((code) => code && !configuredCodes.has(code));
+      .filter((code) => isStandardProductPriceListCode(code) && code && !configuredCodes.has(code));
     return [
       ...visiblePriceLists,
       ...[...new Set(extraCodes)].map((code) => ({ code, name: code })),
@@ -895,7 +895,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, onCreateProduct, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
@@ -916,13 +916,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const importPriceLists = useMemo(() => {
     const unique = new Map<string, Pick<PriceList, 'code' | 'name'>>();
     const source = configuredPriceLists.filter((list) => list.isActive !== false);
-    for (const list of source) {
-      const code = String(list.code || '').trim().toUpperCase();
-      const name = String(list.name || '').trim();
-      const key = normalizePriceListImportKey(name || code);
-      if (key && code && name && !unique.has(key)) unique.set(key, { code, name });
-    }
-    return unique.size > 0 ? Array.from(unique.values()) : DEFAULT_IMPORT_PRICE_LISTS;
+    const resolved = resolveStandardProductPriceLists(source);
+    resolved.forEach((list) => unique.set(normalizePriceListImportKey(list.code), list));
+    return Array.from(unique.values());
   }, [configuredPriceLists]);
   const importPriceListsForView = isServiceView ? [] : importPriceLists;
   const getPrimaryImportPrice = useCallback((prices: Record<string, any> = {}) => {
@@ -1611,7 +1607,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     return Number(product.stock || 0);
   };
 
-  const filteredProducts = products.filter((p: any) => {
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    code: (p: any) => p.code || '',
+    name: (p: any) => {
+      const sort = colFilters.state.name?.sort;
+      return sort === 'desc' ? (p.createdAt || p.createdDate || p.created_on ? new Date(p.createdAt || p.createdDate || p.created_on).getTime() : 0) : p.name || '';
+    },
+    category: (p: any) => p.category?.name || 'Sin categoría',
+    brand: (p: any) => String(p.brand || p.details?.brand || '').trim().toLowerCase(),
+    stock: (p: any) => getProductStock(p),
+  };
+  const matchesProductFilters = (p: any) => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     const normalizedBrandFilter = effectiveBrandFilter.trim().toLowerCase();
     const productBrand = String(p.brand || p.details?.brand || '').trim();
@@ -1660,28 +1667,22 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
     const matchesUnit = !effectiveUnitFilter || (p.unit || p.details?.unit || '') === effectiveUnitFilter;
-    const matchesBrand = !normalizedBrandFilter || productBrand.toLowerCase().includes(normalizedBrandFilter);
+    const matchesBrand = !normalizedBrandFilter || productBrand.toLowerCase() === normalizedBrandFilter;
     const matchesTaxRate = !effectiveTaxRateFilter || String(p.taxRate ?? '') === effectiveTaxRateFilter;
     return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability && matchesUnit && matchesBrand && matchesTaxRate;
-      })
-      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
-
-  const colFilters = useColumnFilters();
-  const filterGetters = {
-    code: (p: any) => p.code || '',
-    name: (p: any) => {
-      const sort = colFilters.state.name?.sort;
-      return sort === 'desc' ? (p.createdAt || p.createdDate || p.created_on ? new Date(p.createdAt || p.createdDate || p.created_on).getTime() : 0) : p.name || '';
-    },
-    category: (p: any) => p.category?.name || 'Sin categoría',
-    brand: (p: any) => String(p.brand || p.details?.brand || '').trim().toLowerCase(),
-    stock: (p: any) => getProductStock(p),
   };
+  const filteredProducts = products
+    .filter(matchesProductFilters)
+    .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
+
+  const summarySource = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
+  const filteredSummaryProducts = colFilters.applyTo(summarySource.filter(matchesProductFilters), filterGetters);
   const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
   const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filteredProducts.filter((p: any) => (p.category?.name || 'Sin categoría') === label).length }));
   const brandOptions = useMemo(() => {
-    const source = (summaryProducts && summaryProducts.length > 0) ? summaryProducts : filteredProducts;
+    const source = ((summaryProducts && summaryProducts.length > 0) ? summaryProducts : products)
+      .filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
     const grouped = new Map<string, { label: string; count: number }>();
     source.forEach((product: any) => {
       const label = String(product.brand || product.details?.brand || '').trim();
@@ -1693,7 +1694,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     return [...grouped.entries()]
       .sort(([, left], [, right]) => left.label.localeCompare(right.label, 'es', { sensitivity: 'base' }))
       .map(([value, option]) => ({ value, ...option }));
-  }, [filteredProducts, summaryProducts]);
+  }, [catalogItemType, products, summaryProducts]);
 
   const paginatedProducts = useMemo(() => {
     if (pagination) return filteredData;
@@ -1717,10 +1718,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
 
   const inventorySummary = useMemo(() => {
-    // Los KPIs se calculan sobre el catálogo completo (summaryProducts) y no
-    // sobre la página visible, para reflejar los totales reales.
-    const source = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
-    const stockProducts = source.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
+    // Los KPIs usan el catálogo completo, pero aplicando exactamente los
+    // mismos filtros de la tabla; nunca se limitan a la página visible.
+    const stockProducts = filteredSummaryProducts.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
     const isLow = (p: any) => {
       const stock = getProductStock(p);
       if (stock <= 0) return false;
@@ -1739,11 +1739,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       low: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter(isLow).length,
       out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => getProductStock(p) <= 0).length,
     };
-  }, [products, summaryProducts, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet, stockWarehouseIdSet]);
+  }, [filteredSummaryProducts, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet, stockWarehouseIdSet]);
 
   const serviceSummary = useMemo(() => {
-    const source = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
-    const services = source.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
+    const services = filteredSummaryProducts.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
     const categories = new Set(services.map((service: any) => service.categoryId || service.category?.id).filter(Boolean));
     const now = Date.now();
     const twelveWeeksAgo = now - (12 * 7 * 24 * 60 * 60 * 1000);
@@ -1757,7 +1756,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       weeklyAverage: createdInLastTwelveWeeks / 12,
       averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
     };
-  }, [products, summaryProducts]);
+  }, [filteredSummaryProducts]);
 
   const inventoryKpis = isServiceView
     ? [
@@ -2759,41 +2758,21 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         return product.variants?.length > 1 || String(variant?.sku || '').trim().toLowerCase() !== productCode || String(variant?.name || '').trim().toLowerCase() !== 'estándar';
       };
       const customVariants = catalogProducts.flatMap((product) => (product.variants || []).filter((variant: any) => isCustomVariant(product, variant)).map((variant: any) => ({ product, variant })));
-      const productHeaders = [
-        'Código / SKU', 'Nombre', 'Marca', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad',
-        'Código de barras', 'Modelo', 'Color', 'Peso', 'Unidad de peso', 'Dimensiones',
-        'Ancho', 'Alto', 'Profundidad', 'Unidad de dimensión', 'Garantía', 'Tasa IVA',
-        'Control inventario', 'Lotes', 'Series', 'Último costo', 'Imagen URL', 'Disponible',
-        ...importPriceLists.map((list) => `Precio ${list.name}`), ...(canViewInventoryCost ? ['Costo'] : []),
-      ];
+      const productHeaders = getCanonicalProductImportHeaders(importPriceLists, canViewInventoryCost);
       const productRows = catalogProducts.map((product) => [
         product.code || '',
         product.name || '',
-        product.brand || product.details?.brand || '',
         product.description || '',
         product.commercialNote || '',
         product.category?.name || product.category || '',
         product.unit || product.details?.unit || 'unidad',
-        product.barcode || product.details?.barcode || '',
-        product.model || product.details?.model || '',
-        product.color || product.details?.color || '',
-        product.weight ?? product.details?.weight ?? '',
-        product.weightUnit || product.details?.weightUnit || '',
-        product.dimensions || product.details?.dimensions || '',
-        product.width ?? product.details?.width ?? '',
-        product.height ?? product.details?.height ?? '',
-        product.depth ?? product.details?.depth ?? '',
-        product.dimensionUnit || product.details?.dimensionUnit || '',
-        product.warranty || product.details?.warranty || '',
-        product.taxRate ?? '',
-        product.trackInventory ?? product.details?.trackInventory ?? true,
-        product.trackBatch ?? product.details?.trackBatch ?? false,
-        product.trackSeries ?? product.details?.trackSeries ?? false,
-        product.lastPurchasePrice ?? product.details?.lastPurchasePrice ?? '',
-        product.imageUrl || '',
-        product.isActive !== false,
+        product.brand || product.details?.brand || '',
+        customVariants.some(({ product: candidate }) => String(candidate.code || '').trim().toLowerCase() === String(product.code || '').trim().toLowerCase()) ? 'SI' : 'NO',
+        importCurrency,
         ...importPriceLists.map((list) => getProductPrice(product, list)),
         ...(canViewInventoryCost ? [convertBaseAmount(product.costPrice)] : []),
+        product.trackSeries ?? product.details?.trackSeries ?? false ? 'SI' : 'NO',
+        product.imageUrl || '',
       ]);
       const variantHeaders = ['Código producto', 'SKU variante', 'Nombre variante', ...(canViewInventoryCost ? ['Costo variante'] : [])];
       const variantRows = customVariants.map(({ product, variant }) => [
@@ -2834,6 +2813,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const guide = XLSX.utils.aoa_to_sheet([
         ['GUÍA · PLANTILLA VACÍA DE PRODUCTOS Y VARIANTES'],
         ['Plantilla vacía', 'No incluye productos actuales ni datos del catálogo. Completa las hojas Productos, Variantes, Atributos, Precios e Inventario antes de importarla.'],
+        ['Productos', 'Usa los campos de la creación actual: código, nombre, descripción, nota comercial, categoría, unidad, marca, variable, moneda, precios minorista/mayorista/distribuidor, costo, serie/IMEI e imagen URL opcional.'],
         ['Listas de precios', importPriceLists.map((list) => list.name).join(' · ') || 'Sin listas configuradas'],
         ['Variantes', 'Registra una fila por SKU en Variantes y sus atributos en Atributos. Los productos simples usan su SKU padre.'],
         ['Stock', 'Registra una fila por SKU y bodega en Inventario. En productos con variantes, el padre no lleva stock propio.'],
@@ -3310,6 +3290,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         const similarityItems = valid.map((row) => ({
           code: row.code,
           name: row.name,
+          description: row.description,
           brand: row.brand,
           attributes: row.attributes,
           variants: advancedImportCatalog?.variants
@@ -3374,7 +3355,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                })),
              prices: [
                ...advancedImportCatalog.prices
-                 .filter((price) => String(price.scope).toUpperCase() === 'VARIANT' && finalCodeBySource.has(String(price.productCode || '').trim().toLowerCase()))
+                 .filter((price) => isStandardProductPriceListCode(price.priceListCode) && String(price.scope).toUpperCase() === 'VARIANT' && finalCodeBySource.has(String(price.productCode || '').trim().toLowerCase()))
                  .map((price) => ({
                    ...price,
                    productCode: finalCodeBySource.get(String(price.productCode || '').trim().toLowerCase()) || price.productCode,
@@ -3395,6 +3376,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                }),
            }
            : null;
+        const catalogCurrencies = advancedCatalogPayload
+          ? [...new Set(advancedCatalogPayload.products
+            .map((product: any) => String(product.priceCurrency || '').trim().toUpperCase())
+            .filter(Boolean))]
+          : [];
+        if (catalogCurrencies.length > 1) {
+          throw new Error('La plantilla debe usar una sola moneda para todos los productos.');
+        }
+        const effectiveImportCurrency = catalogCurrencies[0] || importCurrency;
         if (!isServiceView) {
           const stockWarehouseIds = [...new Set((advancedCatalogPayload
             ? advancedCatalogPayload.stock
@@ -3419,7 +3409,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
        const results = isServiceView
          ? await inventoryService.importServices({ items, currency: importCurrency, exchangeRate: importExchangeRate, reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' })
          : advancedCatalogPayload
-           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' })
+           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: effectiveImportCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' })
            : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' });
       setImportProgress(55);
       await uploadInitialImportImages(valid, setImportProgress);
@@ -3663,13 +3653,21 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
           {!isServiceView && (
             <div className="relative min-w-0 flex-1 sm:flex-none">
-              <Tag className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input
-                placeholder="Filtrar por marca..."
-                className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest sm:w-52"
-                value={effectiveBrandFilter}
-                onChange={(e) => { setLocalBrandFilter(e.target.value); onBrandChange?.(e.target.value); }}
-                aria-label="Filtrar productos por marca"
+              <Combobox
+                options={brandOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: `${option.count} producto${option.count === 1 ? '' : 's'}`,
+                }))}
+                value={brandOptions.some((option) => option.value === effectiveBrandFilter.trim().toLowerCase())
+                  ? effectiveBrandFilter.trim().toLowerCase()
+                  : ''}
+                onChange={(value) => { setLocalBrandFilter(value); onBrandChange?.(value); }}
+                placeholder="Marca"
+                searchPlaceholder="Buscar marca..."
+                emptyMessage="No hay marcas ingresadas"
+                contentClassName="w-[min(20rem,calc(100vw-2rem))]"
+                className="h-10 w-full rounded-xl border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest sm:w-52"
               />
             </div>
           )}
@@ -3755,7 +3753,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
           <div className="erp-toolbar-primary-group flex w-full max-w-full shrink-0 flex-wrap items-center justify-start gap-2 min-[1800px]:w-auto min-[1800px]:justify-end" data-tour="inventory-products-actions">
           {canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 md:order-last" onClick={() => setCreateModalOpen(true)}>
+            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 md:order-last" onClick={() => onCreateProduct ? onCreateProduct() : setCreateModalOpen(true)}>
               <Plus className="mr-2 size-4" /> Nuevo
             </Button>
           )}
@@ -4469,7 +4467,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           </DialogHeader>
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm" data-tour="inventory-initial-import-data">
              <p><b>La plantilla siempre incluye:</b> {canViewInventoryCost ? (isServiceView ? 'costo del servicio, ' : 'costo base y costo por variante, ') : ''}{isServiceView ? 'un único precio, disponibilidad e imagen opcional.' : 'una fila por producto, una fila por variante, atributos dinámicos, precios por alcance y stock por SKU/bodega; el stock del padre siempre se calcula, nunca se captura.'}</p>
-             <p>Cada {isServiceView ? 'servicio' : 'producto'} debe tener SKU único, nombre, categoría y {canViewInventoryCost ? 'costo base y ' : ''}al menos un precio base. {isServiceView ? 'El servicio no lleva IVA ni precios alternos.' : 'Los precios de variante son opcionales y solo sobrescriben el precio padre para ese SKU.'}</p>
+             <p>Cada {isServiceView ? 'servicio' : 'producto'} debe tener SKU único, nombre, categoría y {canViewInventoryCost ? 'costo base y ' : ''}al menos un precio base. {isServiceView ? 'El servicio no lleva IVA ni precios alternos.' : 'La hoja Productos usa los mismos campos de la creación actual; no incluye modelo, color, peso, dimensiones, garantía ni otros datos de catálogo que no se capturan allí. Los precios de variante son opcionales y solo sobrescriben el precio padre para ese SKU.'}</p>
              {!isServiceView && <p>Si un atributo o valor no existe, se detectará en la revisión y se creará/reutilizará dentro de la misma transacción. Un producto sin filas en Variantes recibirá la variante Estándar.</p>}
              {isServiceView && <p>Los servicios no se vinculan a bodegas, no manejan stock inicial y no tienen variantes.</p>}
             <p>Opcionalmente puedes cargar un ZIP o RAR con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
@@ -4822,18 +4820,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         description={previewLoading ? 'Leyendo el archivo, validando columnas y preparando los registros para edición.' : 'Preparando las filas visibles de forma virtualizada para que la página siga respondiendo.'}
       />
 
-      <Dialog open={expandedProductImage !== null} onOpenChange={(open) => { if (!open) setExpandedProductImage(null); }}>
-        <DialogContent className="w-[calc(100vw-2rem)] !max-w-5xl border-0 bg-transparent p-2 shadow-none">
-          <DialogTitle className="sr-only">Imagen del producto</DialogTitle>
-          {expandedProductImage && (
-            <img
-              src={expandedProductImage.src}
-              alt={expandedProductImage.alt}
-              className="max-h-[85vh] w-full rounded-2xl object-contain shadow-2xl"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      <ImageViewer
+        open={expandedProductImage !== null}
+        onOpenChange={(open) => { if (!open) setExpandedProductImage(null); }}
+        src={expandedProductImage?.src}
+        alt={expandedProductImage?.alt || 'Imagen del producto'}
+        title={expandedProductImage?.alt || 'Imagen del producto'}
+      />
 
       <Dialog open={solicitudOpen} onOpenChange={(o) => { if (!o) closeSolicitud(); }}>
         <DialogContent className="!flex !w-[calc(100vw-1rem)] !max-w-[1100px] max-h-[min(90vh,calc(100dvh-1rem))] flex-col overflow-hidden rounded-3xl p-4 sm:p-6">

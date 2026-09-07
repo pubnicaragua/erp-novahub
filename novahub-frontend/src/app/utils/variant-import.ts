@@ -10,6 +10,8 @@ export type VariantImportProduct = {
   description?: string;
   commercialNote?: string;
   unit?: string;
+  isVariable?: boolean;
+  priceCurrency?: string;
   costPrice?: number;
   taxRate?: number;
   trackInventory?: boolean;
@@ -103,6 +105,8 @@ const aliases: Record<string, string[]> = {
   description: ['descripcion'],
   commercialNote: ['nota comercial', 'nota', 'commercial note', 'commercialnote'],
   unit: ['unidad', 'unidad medida'],
+  isVariable: ['variable', 'es variable', 'producto variable', 'variantes'],
+  priceCurrency: ['moneda', 'moneda precio', 'currency'],
   costPrice: ['costo base', 'costo producto', 'costo variante', 'costo', 'precio costo', 'cost price', 'variant cost'],
   taxRate: ['tasa iva', 'iva', 'tax rate'],
   trackInventory: ['control inventario', 'control de inventario', 'track inventory'],
@@ -119,7 +123,7 @@ const aliases: Record<string, string[]> = {
   dimensionUnit: ['unidad dimension', 'unidad dimensiones', 'dimension unit'],
   warranty: ['garantia', 'warranty'],
   trackBatch: ['lotes', 'control lotes', 'control de lotes', 'track batch'],
-  trackSeries: ['series', 'control series', 'control de series', 'track series'],
+  trackSeries: ['series', 'serie imei', 'serie/imei', 'control series', 'control de series', 'track series'],
   lastPurchasePrice: ['ultimo costo', 'ultimo precio costo', 'last purchase price'],
   imageUrl: ['imagen url', 'imagen', 'image url'],
   isActive: ['activo', 'disponible', 'estado', 'active', 'is active'],
@@ -214,6 +218,8 @@ export function parseVariantImportWorkbook(sheets: Record<string, any[][]>, pric
     description: textValue(row, 'description') || undefined,
     commercialNote: textValue(row, 'commercialNote') || undefined,
     unit: textValue(row, 'unit') || undefined,
+    isVariable: yesValue(findValue(row, 'isVariable'), false),
+    priceCurrency: textValue(row, 'priceCurrency').toUpperCase() || undefined,
     costPrice: numberValue(row, 'costPrice'),
     taxRate: numberValue(row, 'taxRate'),
     trackInventory: yesValue(findValue(row, 'trackInventory'), true),
