@@ -136,7 +136,7 @@ export function LogisticsConfig() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" data-tour="log-config-tabs">
         {tabs.map((t) => (
           <Button key={t.id} size="sm" variant={tab === t.id ? 'default' : 'outline'} className="rounded-xl text-xs" onClick={() => setTab(t.id)}>
             {t.label}
@@ -160,7 +160,7 @@ export function LogisticsConfig() {
               <Input value={settingsForm.defaultCountry ?? settings.defaultCountry ?? ''} onChange={(e) => setSettingsForm((f) => ({ ...f, defaultCountry: e.target.value }))} className="rounded-xl" /></div>
           </div>
           <p className="mt-3 text-[11px] text-muted-foreground">Ej: 0.13 → 0.50 · 1.13 → 1.20 · 3.87 → 3.90 (redondeo siempre hacia arriba).</p>
-          <div className="mt-4"><Button className="rounded-xl" onClick={saveSettings} disabled={busy}><Save className="size-4" /> Guardar</Button></div>
+          <div className="mt-4"><Button className="rounded-xl" onClick={saveSettings} disabled={busy} data-tour="log-config-save"><Save className="size-4" /> Guardar</Button></div>
         </Card>
       )}
 
@@ -195,7 +195,7 @@ export function LogisticsConfig() {
       )}
 
       {tab === 'modes' && (
-        <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
+        <Card className="rounded-2xl border-border/60 p-5 shadow-sm" data-tour="log-config-form">
           <h3 className="text-sm font-black">Tipos de envío configurables</h3>
           <div className="mt-4 flex gap-2">
             <Input placeholder="Código (ej. AEREO)" value={modeForm.code || ''} onChange={(e) => setModeForm((f) => ({ ...f, code: e.target.value }))} className="rounded-xl" />

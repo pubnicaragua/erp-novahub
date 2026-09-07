@@ -193,9 +193,9 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
   ];
 
   return (
-    <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+    <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6" data-tour="log-reception-wizard">
       {step !== 'done' && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="log-reception-title">
           {stepsMeta.map((s) => (
             <Badge key={s.n} variant="outline" className={`gap-1 rounded-lg text-[10px] ${step === s.n ? 'bg-primary text-primary-foreground ring-primary' : 'text-muted-foreground'}`}>
               <span>{s.n}</span> {s.label}
@@ -411,7 +411,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
           </div>
           <div className="mt-5 flex justify-between">
             <Button variant="outline" className="rounded-xl" onClick={() => setStep(4)}><ArrowLeft className="size-4" /> Atrás</Button>
-            <Button className="rounded-xl" onClick={submit} disabled={submitting}>
+            <Button className="rounded-xl" onClick={submit} disabled={submitting} data-tour="log-reception-save">
               {submitting ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar paquete
             </Button>
           </div>

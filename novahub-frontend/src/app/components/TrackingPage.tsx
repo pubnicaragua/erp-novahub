@@ -46,6 +46,7 @@ import { ReceivedPackages } from './tracking/ReceivedPackages';
 import { Reconciliation } from './tracking/Reconciliation';
 import { Billing } from './tracking/Billing';
 import { LogisticsConfig } from './tracking/LogisticsConfig';
+import { TrackingViewTutorial } from './tracking/TrackingViewTutorial';
 
 type TrackingTab = 'transit' | 'reception' | 'packages' | 'reconciliation' | 'billing' | 'config';
 
@@ -250,10 +251,13 @@ export function TrackingPage() {
             {t.label}
           </button>
         ))}
+        <div className="ml-auto pb-1">
+          <TrackingViewTutorial view={tab} />
+        </div>
       </div>
       {tab === 'transit' ? (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-6">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-6" data-tour="log-transit-title">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Ship className="size-5" /></div>
           <div>
@@ -263,7 +267,7 @@ export function TrackingPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           
-          <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)}><Plus className="size-4" /> Nuevo ticket</Button>
+          <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)} data-tour="log-transit-create"><Plus className="size-4" /> Nuevo ticket</Button>
         </div>
       </header>
 
@@ -319,7 +323,7 @@ export function TrackingPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-56 flex-1">
+          <div className="relative min-w-56 flex-1" data-tour="log-transit-search">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Buscar por código de tracking, ticket o cliente…"
@@ -338,7 +342,7 @@ export function TrackingPage() {
           </select>
         </div>
 
-        <Card className="hidden overflow-hidden rounded-2xl border-border/60 shadow-sm lg:block">
+        <Card className="hidden overflow-hidden rounded-2xl border-border/60 shadow-sm lg:block" data-tour="log-transit-table">
           <Table>
             <TableHeader className="bg-muted/40">
               <TableRow>
@@ -511,7 +515,7 @@ export function TrackingPage() {
                 </Card>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => { const url = `${window.location.origin}/public/tracking/${encodeURIComponent(selected.trackingCode)}`; navigator.clipboard.writeText(url); toast.success('Enlace público copiado: ' + url); }}>
+                  <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => { const url = `${window.location.origin}/public/tracking`; navigator.clipboard.writeText(url); toast.success('Enlace público copiado: ' + url); }}>
                     <Truck className="size-4" /> Copiar enlace público
                   </Button>
                   <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>

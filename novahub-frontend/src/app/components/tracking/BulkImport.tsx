@@ -1,6 +1,6 @@
 ﻿import { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { FileSpreadsheet, Loader2, Upload } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -85,6 +85,19 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
     }
   };
 
+  const downloadTemplate = () => {
+    const headers = ['TRACKING', 'SKU', 'PESO DEL PAQUETE', 'PRECIO DE COMPRA', 'PRECIO DE VENTA', 'BODEGA', 'COD_AGENCIA', 'COD_SUB_AGENCIA'];
+    const example = ['GFUS01065222301697', 'ZAPATO-ROJO-38', '2.5', '3.5', '7.0', 'Bodega Managua', 'A1', 'S1'];
+    const lines = [headers.join(','), example.join(',')];
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plantilla-paquetes.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const validate = async () => {
     if (rows.length === 0) return;
     setBusy(true);
@@ -112,6 +125,9 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" className="rounded-xl" onClick={downloadTemplate}>
+          <Download className="size-4" /> Descargar plantilla
+        </Button>
         <Button variant="outline" className="rounded-xl" onClick={() => fileRef.current?.click()}>
           <FileSpreadsheet className="size-4" /> Seleccionar archivo
         </Button>

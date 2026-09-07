@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router';
-import { Loader2, PackageCheck, SearchX, Truck } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
+import { Loader2, PackageCheck, Search, SearchX, Truck } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -46,26 +48,41 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function PublicTrackingPage() {
   const location = useLocation();
-  const code = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+  const navigate = useNavigate();
+  const urlCode = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+  const [code, setCode] = useState(urlCode);
+  const [query, setQuery] = useState(urlCode);
   const [data, setData] = useState<PublicTrackingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(urlCode));
+
+  const lookup = async (raw: string) => {
+    const clean = raw.trim();
+    if (!clean) { setError('Escribe el código de tracking de tu paquete.'); return; }
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const res = await fetch(`${API}/public-access/tracking/${encodeURIComponent(clean)}`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const rawMsg = body?.message;
+        throw new Error(typeof rawMsg === 'string' ? rawMsg : (rawMsg?.message || 'No se encontró el envío.'));
+      }
+      setData(body);
+      setCode(clean);
+      navigate(`/public/tracking/${encodeURIComponent(clean)}`, { replace: true });
+    } catch (err) {
+      setError((err as Error).message || 'No se pudo consultar el envío.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!code) { setError('Enlace incompleto: falta el código de tracking.'); setLoading(false); return; }
-    setLoading(true);
-    fetch(`${API}/public-access/tracking/${encodeURIComponent(code)}`)
-      .then(async (res) => {
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const raw = body?.message;
-          throw new Error(typeof raw === 'string' ? raw : (raw?.message || 'No se encontró el envío.'));
-        }
-        setData(body);
-      })
-      .catch((err) => setError(err.message || 'No se pudo consultar el envío.'))
-      .finally(() => setLoading(false));
-  }, [code]);
+    if (urlCode) { setCode(urlCode); setQuery(urlCode); void lookup(urlCode); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCode]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -74,12 +91,31 @@ export function PublicTrackingPage() {
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Truck className="size-5" /></div>
           <div>
             <h1 className="text-lg font-black tracking-tight">Seguimiento de envío</h1>
-            <p className="text-xs text-muted-foreground">Consulta el estado de tu paquete con el código de tracking</p>
+            <p className="text-xs text-muted-foreground">Escribe el código de tracking de tu paquete para ver su estado</p>
           </div>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+        <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-5 shadow-sm">
+          <div className="flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void lookup(query); }}
+                placeholder="Ej. GFUS01065222301697"
+                className="rounded-xl pl-9"
+              />
+            </div>
+            <Button className="rounded-xl" onClick={() => void lookup(query)} disabled={loading}>
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />} Consultar
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">El código lo encuentras en la etiqueta de tu paquete o en el mensaje que te envió tu agencia.</p>
+        </div>
+
         {loading ? (
           <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground"><Loader2 className="size-8 animate-spin" /><p className="text-sm">Consultando…</p></div>
         ) : error ? (
@@ -87,7 +123,7 @@ export function PublicTrackingPage() {
             <SearchX className="mx-auto size-10 text-muted-foreground/50" />
             <p className="mt-3 text-sm font-bold">No pudimos encontrar el envío</p>
             <p className="mt-1 text-xs text-muted-foreground">{error}</p>
-            <p className="mt-4 font-mono text-xs text-primary">{code}</p>
+            {code && <p className="mt-4 font-mono text-xs text-primary">{code}</p>}
           </div>
         ) : data ? (
           <div className="space-y-4">
@@ -131,7 +167,12 @@ export function PublicTrackingPage() {
               )}
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="py-16 text-center">
+            <Truck className="mx-auto size-10 text-muted-foreground/30" />
+            <p className="mt-3 text-sm text-muted-foreground">Escribe tu código de tracking arriba y pulsa Consultar.</p>
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-border/60 py-4 text-center text-[11px] text-muted-foreground">

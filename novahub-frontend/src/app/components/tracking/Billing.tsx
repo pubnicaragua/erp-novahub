@@ -336,7 +336,7 @@ export function Billing() {
             </div>
           </Card>
 
-          <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm">
+          <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm" data-tour="log-billing-table">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>
@@ -392,7 +392,7 @@ export function Billing() {
             </div>
           )}
 
-          <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
+          <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm" data-tour="log-billing-form">
             <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
               <FileText className="size-4 text-primary" /> Nueva factura · {selectedPackages.length} paquete(s) · {selectedWeight.toFixed(2)} lb · ${selectedAmount.toFixed(2)}
             </h3>
@@ -426,7 +426,7 @@ export function Billing() {
           </Card>
 
           {preview && (
-            <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4 shadow-sm">
+            <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4 shadow-sm" data-tour="log-billing-preview">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary"><CheckCircle2 className="size-4" /> Resumen de factura</h3>
                 <Badge variant="outline" className="rounded-lg text-[11px]">Cliente: {preview.customer.name}</Badge>
@@ -444,7 +444,7 @@ export function Billing() {
                   <span className="text-primary">${preview.totalAmount.toFixed(2)}</span>
                 </div>
               </div>
-              <Button className="mt-3 rounded-xl text-xs" onClick={confirm} disabled={confirming}>
+              <Button className="mt-3 rounded-xl text-xs" onClick={confirm} disabled={confirming} data-tour="log-billing-confirm">
                 {confirming ? 'Confirmando…' : `Emitir factura (${preview.packageCount})`}
               </Button>
             </Card>
@@ -463,7 +463,7 @@ export function Billing() {
       )}
 
       {sub === 'delivery' && (
-        <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
+        <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm" data-tour="log-billing-deliver">
           <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
             <Truck className="size-4 text-primary" /> Paquetes facturados por entregar · {deliverable.length}
           </h3>

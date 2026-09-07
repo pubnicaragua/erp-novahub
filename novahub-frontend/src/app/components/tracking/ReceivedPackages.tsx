@@ -131,7 +131,7 @@ export function ReceivedPackages() {
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
       {/* KPIs (respetan filtros activos) */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6" data-tour="log-packages-kpis">
         <KpiCard label="Total paquetes" value={kpis?.total} icon={<PackageSearch className="size-4 text-primary" />} />
         <KpiCard label="Libras aéreo" value={kpis?.librasAereo} icon={<Ship className="size-4 text-sky-500" />} suffix="lb" />
         <KpiCard label="Libras marítimo" value={kpis?.librasMaritimo} icon={<Anchor className="size-4 text-cyan-500" />} suffix="lb" />
@@ -142,7 +142,7 @@ export function ReceivedPackages() {
 
       {/* Acciones + buscador */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-56 flex-1">
+        <div className="relative min-w-56 flex-1" data-tour="log-packages-search">
           <PackageSearch className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar: tracking, dígitos, warehouse, SKU, cliente, agencia…"
@@ -151,8 +151,8 @@ export function ReceivedPackages() {
             className="rounded-xl pl-9"
           />
         </div>
-        <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')}><Zap className="size-4" /> Recepción rápida</Button>
-        <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')}><Download className="size-4" /> Importar Excel</Button>
+        <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')} data-tour="log-reception-quick"><Zap className="size-4" /> Recepción rápida</Button>
+        <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')} data-tour="log-reception-import"><Download className="size-4" /> Importar Excel</Button>
       </div>
 
       {/* Filtros */}
@@ -196,7 +196,7 @@ export function ReceivedPackages() {
       )}
 
       {/* Tabla */}
-      <Card className="hidden overflow-hidden rounded-2xl border-border/60 shadow-sm lg:block">
+      <Card className="hidden overflow-hidden rounded-2xl border-border/60 shadow-sm lg:block" data-tour="log-packages-table">
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow>

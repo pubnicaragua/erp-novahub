@@ -69,8 +69,10 @@ export function Reconciliation() {
           suppliersService.getAll({ page: 1, pageSize: 200 } as any),
           purchaseOrdersService.getAll({ page: 1, pageSize: 200, status: 'APPROVED' } as any),
         ]);
-        setSuppliers((sup?.items || []).map((s) => ({ id: s.id, name: s.name, code: s.code })));
-        setOrders((ord?.items || []).map((o) => ({ id: o.id, number: o.number, status: o.status })));
+        const supplierList: any[] = sup?.data || (sup as any)?.items || [];
+        const orderList: any[] = ord?.data || (ord as any)?.items || [];
+        setSuppliers(supplierList.map((s) => ({ id: s.id, name: s.name, code: s.code })));
+        setOrders(orderList.map((o) => ({ id: o.id, number: o.number, status: o.status })));
       } catch {
         /* catálogos opcionales */
       }
@@ -152,7 +154,7 @@ export function Reconciliation() {
         </div>
       </div>
 
-      <Card className="rounded-2xl border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 shadow-sm">
+      <Card className="rounded-2xl border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 shadow-sm" data-tour="log-recon-search">
         <div className="flex flex-wrap items-end gap-3">
           <div className="relative min-w-56 flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -165,11 +167,29 @@ export function Reconciliation() {
         </div>
       </Card>
 
-      <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm">
+      <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm" data-tour="log-recon-table">
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow>
-              <TableHead className="w-10"></TableHead>
+              <TableHead className="w-12">
+                <input
+                  type="checkbox"
+                  aria-label="Seleccionar todos"
+                  checked={data ? data.items.length > 0 && data.items.every((p) => selected.has(p.id)) : false}
+                  onChange={() => {
+                    setSelected((prev) => {
+                      const next = new Set(prev);
+                      if (data && data.items.every((p) => next.has(p.id))) {
+                        data.items.forEach((p) => next.delete(p.id));
+                      } else if (data) {
+                        data.items.forEach((p) => next.add(p.id));
+                      }
+                      return next;
+                    });
+                  }}
+                  className="size-5 accent-primary"
+                />
+              </TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Tracking</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Cliente</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">SKU</TableHead>
@@ -188,22 +208,23 @@ export function Reconciliation() {
                 <p className="text-xs text-muted-foreground">Los paquetes recibidos sin compra aparecen aquí.</p>
               </TableCell></TableRow>
             ) : data!.items.map((p) => (
-              <TableRow key={p.id} className={selected.has(p.id) ? 'bg-primary/5' : ''}>
+              <TableRow key={p.id} className={`cursor-pointer select-none ${selected.has(p.id) ? 'bg-primary/5' : 'hover:bg-muted/40'}`} onClick={() => toggle(p.id)}>
                 <TableCell>
                   <input
                     type="checkbox"
                     aria-label={`Seleccionar ${p.trackingCode}`}
                     checked={selected.has(p.id)}
                     onChange={() => toggle(p.id)}
-                    className="size-4 accent-primary"
+                    onClick={(e) => e.stopPropagation()}
+                    className="size-5 accent-primary"
                   />
                 </TableCell>
-                <TableCell className="font-mono text-xs font-bold text-primary">{p.trackingCode}</TableCell>
-                <TableCell className="text-xs font-semibold">{p.customerName || p.subagencyName || '—'}</TableCell>
-                <TableCell className="text-xs">{p.sku}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{p.warehouseValue || p.warehouseName || '—'}</TableCell>
-                <TableCell className="text-right text-xs font-black">{p.billableWeight} {p.weightUnit}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{formatDate(p.receivedAt)}</TableCell>
+                <TableCell className="py-3 font-mono text-xs font-bold text-primary">{p.trackingCode}</TableCell>
+                <TableCell className="py-3 text-xs font-semibold">{p.customerName || p.subagencyName || '—'}</TableCell>
+                <TableCell className="py-3 text-xs">{p.sku}</TableCell>
+                <TableCell className="py-3 text-xs text-muted-foreground">{p.warehouseValue || p.warehouseName || '—'}</TableCell>
+                <TableCell className="py-3 text-right text-xs font-black">{p.billableWeight} {p.weightUnit}</TableCell>
+                <TableCell className="py-3 text-xs text-muted-foreground">{formatDate(p.receivedAt)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -220,7 +241,7 @@ export function Reconciliation() {
         </div>
       )}
 
-      <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
+      <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm" data-tour="log-recon-form">
         <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
           <ReceiptText className="size-4 text-primary" /> Nueva conciliación · {selectedPackages.length} paquete(s) seleccionado(s)
         </h3>
@@ -267,7 +288,7 @@ export function Reconciliation() {
       </Card>
 
       {preview && (
-        <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4 shadow-sm">
+        <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4 shadow-sm" data-tour="log-recon-preview">
           <div className="flex items-center justify-between gap-2">
             <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary"><CheckCircle2 className="size-4" /> Resumen</h3>
             <Badge variant="outline" className="rounded-lg text-[11px]">{preview.packageCount} paquetes · {preview.invoiceNumber}</Badge>
