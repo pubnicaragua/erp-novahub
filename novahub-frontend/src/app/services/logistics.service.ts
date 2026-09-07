@@ -697,6 +697,7 @@ export interface ReceptionBatch {
 export interface BatchPackageRow {
   line?: number;
   trackingCode?: string;
+  shipmentModeCode?: string;
   item?: string;
   quantity?: number;
   unitPrice?: number;
@@ -705,6 +706,7 @@ export interface BatchPackageRow {
   physicalWeight?: number;
   weightUnit?: string;
   warehouseValue?: string;
+  agency?: OwnerInfo;
   subagency?: OwnerInfo;
   customer?: OwnerInfo;
 }

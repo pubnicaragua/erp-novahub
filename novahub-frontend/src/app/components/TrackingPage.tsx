@@ -43,18 +43,16 @@ import {
 } from '../services/tracking.service';
 import { Reception } from './tracking/Reception';
 import { ReceivedPackages } from './tracking/ReceivedPackages';
-import { Reconciliation } from './tracking/Reconciliation';
 import { Billing } from './tracking/Billing';
 import { LogisticsConfig } from './tracking/LogisticsConfig';
 import { TrackingViewTutorial } from './tracking/TrackingViewTutorial';
 
-type TrackingTab = 'transit' | 'reception' | 'packages' | 'reconciliation' | 'billing' | 'config';
+type TrackingTab = 'transit' | 'reception' | 'packages' | 'billing' | 'config';
 
 const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
   { id: 'transit', label: 'En tránsito' },
   { id: 'reception', label: 'Recepción' },
   { id: 'packages', label: 'Paquetes recibidos' },
-  { id: 'reconciliation', label: 'Conciliación de compras' },
   { id: 'billing', label: 'Disponibles para facturar' },
   { id: 'config', label: 'Configuración' },
 ];
@@ -543,8 +541,6 @@ export function TrackingPage() {
         <Reception />
       ) : tab === 'packages' ? (
         <ReceivedPackages />
-      ) : tab === 'reconciliation' ? (
-        <Reconciliation />
       ) : tab === 'billing' ? (
         <Billing />
       ) : (

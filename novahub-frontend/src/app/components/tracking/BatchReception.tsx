@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, FileText, FileUp, PackageSearch, Plus, ReceiptText, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -81,7 +81,6 @@ export function BatchReception() {
   const [warehouses, setWarehouses] = useState<LogisticsWarehouse[]>([]);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   const [commonOwner, setCommonOwner] = useState({ subagencyId: '', subagencyName: '', customerId: '', customerName: '' });
-  const autoOpenedCreate = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -123,13 +122,6 @@ export function BatchReception() {
     const timer = setTimeout(load, 250);
     return () => clearTimeout(timer);
   }, [load]);
-
-  useEffect(() => {
-    if (data && data.total === 0 && !autoOpenedCreate.current) {
-      autoOpenedCreate.current = true;
-      setCreateOpen(true);
-    }
-  }, [data]);
 
   const openDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
@@ -307,7 +299,7 @@ export function BatchReception() {
               {batch.provider || 'Sin proveedor'} · {batch.warehouseName || 'Sin bodega'} · {formatDate(batch.date)}
             </p>
           </div>
-          {open && (
+          {false && (
             <Button className="rounded-xl text-xs" onClick={() => setConfirmOpen(true)} disabled={detail.packages.length === 0} data-tour="log-batch-confirm">
               <CheckCircle2 className="size-4" /> Confirmar referencia
             </Button>
@@ -344,9 +336,9 @@ export function BatchReception() {
           </Card>
         )}
 
-        {open && (
+        {false && (
 <Card className="rounded-2xl border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 shadow-sm" data-tour="log-batch-import">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
                   <FileUp className="size-4 text-primary" /> Agregar paquetes en lote
@@ -528,11 +520,10 @@ export function BatchReception() {
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ReceiptText className="size-5" /></div>
           <div>
-            <h1 className="text-lg font-black tracking-tight">Recepción en lote</h1>
-            <p className="text-xs text-muted-foreground">Referencias de compra al proveedor (AWBOX / OGLOBAL): importa el PDF y registra los paquetes.</p>
+            <h1 className="text-lg font-black tracking-tight">Historial de referencias</h1>
+            <p className="text-xs text-muted-foreground">Consulta las referencias de recepción creadas desde el flujo principal.</p>
           </div>
         </div>
-        <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)} data-tour="log-batch-new"><Plus className="size-4" /> Nueva referencia</Button>
       </div>
 
       <Card className="rounded-2xl border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 shadow-sm">
@@ -574,7 +565,7 @@ export function BatchReception() {
               <TableRow><TableCell colSpan={8} className="py-10 text-center">
                 <ReceiptText className="mx-auto size-8 text-muted-foreground/40" />
                 <p className="mt-2 text-sm font-bold">Sin referencias</p>
-                <p className="text-xs text-muted-foreground">Crea una referencia e importa el PDF del proveedor para registrar los paquetes en lote.</p>
+                <p className="text-xs text-muted-foreground">Las nuevas referencias se crean automáticamente desde Recepción.</p>
               </TableCell></TableRow>
             ) : data!.items.map((b) => (
               <TableRow key={b.id} className="cursor-pointer hover:bg-muted/40" onClick={() => void openDetail(b.id)}>

@@ -23,9 +23,9 @@ const TUTORIALS: Record<TrackingTutorialView, TrackingTutorial> = {
     title: 'Recepción · paso a paso',
     steps: [
       { target: '[data-tour="log-reception-title"]', title: 'Recepción', description: 'Aquí registras los paquetes que llegan a tu bodega, todo en una sola vista.', placement: 'bottom' },
-      { target: '[data-tour="log-reception-wizard"]', title: '1. Registrar paquetes', description: 'Completa los datos comunes una sola vez, agrega todos los paquetes y pulsa Registrar paquetes. Sin pasos intermedios.', placement: 'bottom' },
-      { target: '[data-tour="log-reception-save"]', title: '2. Guardar', description: 'Pulsa Registrar paquete: queda registrado. Si el código ya existía, el sistema avisa y no lo duplica.', placement: 'top' },
-      { target: '[data-tour="log-wizard-open-batch"]', title: '3. Varios / PDF', description: 'Pulsa Lote / PDF del proveedor: crea una referencia (REF-######), importa el PDF del ticket (AWBOX u OGLOBAL) y guarda todos los paquetes de una vez.', placement: 'bottom' },
+      { target: '[data-tour="log-reception-wizard"]', title: '1. Datos de la recepción', description: 'Selecciona proveedor, agencia, cliente opcional y bodega. Estos datos se usan para toda la referencia.', placement: 'bottom' },
+      { target: '[data-tour="log-reception-save"]', title: '2. Registrar paquetes', description: 'Agrega filas, mezcla aéreo y marítimo, carga uno o varios PDFs y edita cada dato antes de guardar.', placement: 'top' },
+      { target: '[data-tour="log-reception-history"]', title: '3. Historial', description: 'Cada registro genera automáticamente una referencia REF-###### para consultar el historial de la recepción.', placement: 'bottom' },
     ],
   },
   packages: {

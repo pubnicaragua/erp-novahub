@@ -237,6 +237,7 @@ export function LogisticsConfig() {
             <select value={whForm.strategy || 'NONE'} onChange={(e) => setWhForm((f) => ({ ...f, strategy: e.target.value as WarehouseStrategy }))} className="rounded-xl border border-input bg-background px-3 py-2 text-sm">
               {Object.entries(WAREHOUSE_STRATEGY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
+            {whForm.strategy === 'TRACKING_LAST_N' && <Input type="number" min="1" max="32" placeholder="N últimos caracteres" value={whForm.trackingLastN || 6} onChange={(e) => setWhForm((f) => ({ ...f, trackingLastN: Number(e.target.value) }))} className="rounded-xl" />}
             {whEditId ? (
               <Button className="rounded-xl" onClick={saveWarehouseEdit} disabled={busy}><Check className="size-4" /> Guardar</Button>
             ) : (
