@@ -14,12 +14,16 @@ import { inventoryService } from '@/app/services/inventario.service';
 import { storageService } from '@/app/services/storage.service';
 import { toast } from 'sonner';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
+import { ProductSimilarityAlert } from './ProductSimilarityAlert';
+import type { SimilarProductGroup } from '@/app/services/inventario.service';
+import { priceListsService, type PriceList } from '@/app/services/price-lists.service';
 
 interface AddProductsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   categories?: any[];
   warehouses?: any[];
+  priceLists?: Array<Pick<PriceList, 'code' | 'name'>>;
   onRefresh: () => void;
   itemType?: 'PRODUCT' | 'SERVICE';
 }
@@ -33,13 +37,33 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   description: '',
   commercialNote: '',
   priceCurrency: 'NIO',
+  prices: {} as Record<string, number | string>,
   costPrice: '',
+  lastPurchasePrice: '',
+  taxRate: '0.15',
+  barcode: '',
+  brand: '',
+  model: '',
+  color: '',
+  weight: '',
+  weightUnit: '',
+  dimensions: '',
+  width: '',
+  height: '',
+  depth: '',
+  dimensionUnit: '',
+  warranty: '',
+  minStock: '',
+  maxStock: '',
+  trackBatch: false,
   salePrice: '',
   trackSerialNumbers: false,
   isActive: true,
   initialStock: '',
   variantInitialStocks: {} as Record<string, number>,
   variantCostPrices: {} as Record<string, number | string>,
+  variantMinStocks: {} as Record<string, number | string>,
+  variantMaxStocks: {} as Record<string, number | string>,
   initialWarehouseId: '',
   imageFile: null as File | null,
   imagePreviewUrl: '',
@@ -74,7 +98,7 @@ const getVariantStockTotal = (product: any) =>
     0,
   );
 
-export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
+export function AddProductsModal({ open, onOpenChange, categories, warehouses, priceLists, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
@@ -100,6 +124,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     return Array.from(map.values());
   }, [effectiveCategories, extraCategories]);
   const effectiveWarehouses = warehouses ?? internalWarehouses;
+  const [internalPriceLists, setInternalPriceLists] = useState<Array<Pick<PriceList, 'code' | 'name'>>>([
+    { code: 'RETAIL', name: 'Minorista' },
+    { code: 'WHOLESALE', name: 'Mayorista' },
+    { code: 'DISTRIBUTOR', name: 'Distribuidor' },
+  ]);
+  const effectivePriceLists = (priceLists && priceLists.length > 0 ? priceLists : internalPriceLists).filter((list) => list.code && list.name);
   const catalogItemType = itemType;
 
   const [productsList, setProductsList] = useState<any[]>([]);
@@ -116,6 +146,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
+  const [similarGroups, setSimilarGroups] = useState<SimilarProductGroup[]>([]);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const validateSkuDebounced = (code: string) => {
@@ -146,6 +177,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       .catch(() => setCatalogAttributes([]));
     return () => controller.abort();
   }, [open]);
+
+  useEffect(() => {
+    if (!open || (priceLists && priceLists.length > 0)) return;
+    const controller = new AbortController();
+    priceListsService.getAll(controller.signal)
+      .then((lists) => setInternalPriceLists(Array.isArray(lists) ? lists.filter((list) => list.isActive !== false).map((list) => ({ code: list.code, name: list.name })) : []))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [open, priceLists]);
 
   const getSelectedAttributes = () => {
     return catalogAttributes.filter((a: any) =>
@@ -192,6 +232,23 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     }));
   };
 
+  const updateVariantStockThreshold = (kind: 'min' | 'max', combination: VariantCombination, value: string) => {
+    const key = variantCombinationKey(combination);
+    const field = kind === 'min' ? 'variantMinStocks' : 'variantMaxStocks';
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      [field]: { ...(prev[field] || {}), [key]: value },
+    }));
+  };
+
+  const updatePrice = (code: string, value: string) => {
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      prices: { ...(prev.prices || {}), [code]: value },
+      salePrice: String(code).toUpperCase() === 'RETAIL' ? value : prev.salePrice,
+    }));
+  };
+
   const validateVariableStockDistribution = (product: any) => {
     if (!product.isVariable) return true;
     const combinations = buildVariantCombinations(product.linkedAttributes);
@@ -208,6 +265,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       return false;
     }
     return true;
+  };
+
+  const hasValidSellingPrice = (product: any) => {
+    if (product.itemType === 'SERVICE') return product.salePrice !== '' && Number.isFinite(Number(product.salePrice)) && Number(product.salePrice) >= 0;
+    return effectivePriceLists.some((list) => product.prices?.[list.code] !== undefined && product.prices?.[list.code] !== '' && Number.isFinite(Number(product.prices[list.code])) && Number(product.prices[list.code]) >= 0);
   };
 
   const toggleAttribute = (attrId: string) => {
@@ -332,6 +394,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       toast.error('Código, Nombre y Categoría son obligatorios');
       return;
     }
+    if (!hasValidSellingPrice(draftProduct)) {
+      toast.error('Ingresa al menos un precio de venta válido');
+      return;
+    }
     if (draftProduct.isVariable) {
       if (draftProduct.linkedAttributes.length === 0) {
         toast.error('Selecciona al menos un atributo del catálogo');
@@ -374,15 +440,123 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     setProductsList((prev) => prev.filter(p => p.id !== id));
   };
 
+  const persistProducts = async (listToSave: any[]) => {
+    setIsSaving(true);
+    let successCount = 0;
+
+    try {
+      for (const product of listToSave) {
+        let uploadedImageUri: string | undefined;
+        if (product.imageFile) {
+          const uploaded = await storageService.uploadFile('product-image', product.imageFile, {
+            folder: 'catalog',
+          });
+          uploadedImageUri = uploaded.uri;
+        }
+
+        const rate = product.priceCurrency !== baseCurrency
+          ? (product.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate))
+          : 1;
+        const convertedCost = Number(product.costPrice || 0) * rate;
+        const convertedLastPurchasePrice = Number(product.lastPurchasePrice || 0) * rate;
+        const primaryPrice = product.itemType === 'SERVICE'
+          ? Number(product.salePrice || 0)
+          : Number((product.prices?.RETAIL ?? product.prices?.[effectivePriceLists[0]?.code || ''] ?? product.salePrice) || 0);
+
+        const createdResponse = await inventoryService.createProduct({
+          code: product.code,
+          name: product.name,
+          categoryId: product.categoryId,
+          type: product.itemType || 'PRODUCT',
+          ...(product.itemType === 'PRODUCT' ? { warehouseId: product.initialWarehouseId || undefined, warehouseIds: product.initialWarehouseId ? [product.initialWarehouseId] : [] } : {}),
+          trackInventory: product.itemType === 'PRODUCT',
+          trackSeries: Boolean(product.trackSerialNumbers),
+          trackBatch: Boolean(product.trackBatch),
+          ...(canViewInventoryCost ? { costPrice: convertedCost, lastPurchasePrice: convertedLastPurchasePrice } : {}),
+          salePrice: primaryPrice * rate,
+          salePriceOriginal: primaryPrice,
+          priceCurrency: product.priceCurrency || baseCurrency,
+          priceExchangeRate: Number(product.priceCurrency === baseCurrency ? 1 : exchangeRate),
+          prices: product.itemType === 'PRODUCT' ? product.prices : undefined,
+          taxRate: product.itemType === 'SERVICE' ? 0 : Number(product.taxRate || 0.15),
+          trackSerialNumbers: Boolean(product.trackSerialNumbers),
+          isActive: product.isActive !== false,
+          description: product.description || '',
+          commercialNote: product.commercialNote || '',
+          barcode: product.barcode || undefined,
+          brand: product.brand || undefined,
+          model: product.model || undefined,
+          color: product.color || undefined,
+          weight: product.weight === '' ? undefined : Number(product.weight),
+          weightUnit: product.weightUnit || undefined,
+          dimensions: product.dimensions || undefined,
+          width: product.width === '' ? undefined : Number(product.width),
+          height: product.height === '' ? undefined : Number(product.height),
+          depth: product.depth === '' ? undefined : Number(product.depth),
+          dimensionUnit: product.dimensionUnit || undefined,
+          warranty: product.warranty || undefined,
+          unit: product.unit || 'unidad',
+          minStock: Number(product.minStock || 0),
+          maxStock: product.maxStock === '' ? undefined : Number(product.maxStock),
+          itemType: product.itemType || 'PRODUCT',
+          initialStock: product.isVariable ? getVariantStockTotal(product) : Number(product.initialStock || 0),
+          variantInitialStocks: product.isVariable
+            ? buildVariantCombinations(product.linkedAttributes).map((combination) => ({
+              attributes: combination,
+              quantity: Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
+              warehouseId: product.initialWarehouseId || undefined,
+              minStock: Number(product.variantMinStocks?.[variantCombinationKey(combination)] || 0),
+              maxStock: product.variantMaxStocks?.[variantCombinationKey(combination)] === undefined || product.variantMaxStocks?.[variantCombinationKey(combination)] === ''
+                ? undefined
+                : Number(product.variantMaxStocks[variantCombinationKey(combination)]),
+              costPrice: (() => {
+                const rawCost = product.variantCostPrices?.[variantCombinationKey(combination)];
+                return rawCost === undefined || rawCost === '' ? null : Number(rawCost) * rate;
+              })(),
+            }))
+            : undefined,
+          imageUrl: uploadedImageUri || undefined,
+          isVariable: Boolean(product.isVariable),
+          linkedAttributes: product.isVariable ? product.linkedAttributes : undefined,
+        } as any);
+
+        const created = (createdResponse as any)?.data || createdResponse;
+        const createdId = created?.id;
+        if (product.trackSerialNumbers && product.imeiNumber && product.imeiNumber.trim() && createdId) {
+          try {
+            await inventoryService.createSeries({ productId: createdId, number: product.imeiNumber.trim() });
+          } catch (seriesErr) {
+            console.error('Error creating serial number', seriesErr);
+          }
+        }
+        successCount++;
+      }
+      toast.success(`${successCount} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'} guardado(s) correctamente`);
+      setProductsList([]);
+      setDraftProduct({ ...defaultDraft, id: `draft-${Date.now()}`, categoryId: effectiveCategories[0]?.id || '' });
+      setSkuError('');
+      onOpenChange(false);
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     const listToSave = productsList.map((product) => ({
       ...product,
       initialStock: product.isVariable ? getVariantStockTotal(product) : product.initialStock,
     }));
-    
+
     if (productsList.length === 0) {
       if (!draftProduct.code.trim() || !draftProduct.name.trim() || !draftProduct.categoryId) {
         toast.error('Código, Nombre y Categoría son obligatorios');
+        return;
+      }
+      if (!hasValidSellingPrice(draftProduct)) {
+        toast.error('Ingresa al menos un precio de venta válido');
         return;
       }
       if (skuError) {
@@ -420,97 +594,36 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       if (!validateVariableStockDistribution(product)) return;
     }
     if (!(await validateProductsStockAccounting(listToSave))) return;
-    
-    setIsSaving(true);
-    let successCount = 0;
 
     try {
-      for (const product of listToSave) {
-        let uploadedImageUri: string | undefined;
-        if (product.imageFile) {
-          const uploaded = await storageService.uploadFile('product-image', product.imageFile, {
-            folder: 'catalog',
-          });
-          uploadedImageUri = uploaded.uri;
-        }
-
-        const rate = product.priceCurrency !== baseCurrency ? 
-                      (product.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate)) 
-                      : 1;
-        const convertedCost = Number(product.costPrice || 0) * rate;
-
-        const createdResponse = await inventoryService.createProduct({
-          code: product.code,
-          name: product.name,
-          categoryId: product.categoryId,
-          type: product.itemType || 'PRODUCT',
-          ...(product.itemType === 'PRODUCT' ? { warehouseId: product.initialWarehouseId || undefined } : {}),
-          trackInventory: product.itemType === 'PRODUCT',
-          trackSeries: Boolean(product.trackSerialNumbers),
-          ...(canViewInventoryCost ? { costPrice: convertedCost } : {}),
-          salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? exchangeRate : 1 / exchangeRate),
-          salePriceOriginal: Number(product.salePrice || 0),
-          priceCurrency: product.priceCurrency || baseCurrency,
-          trackSerialNumbers: Boolean(product.trackSerialNumbers),
-          isActive: product.isActive !== false,
-          description: product.description || '',
-          commercialNote: product.commercialNote || '',
-          itemType: product.itemType || 'PRODUCT',
-          // El padre no captura stock cuando tiene variantes. El backend
-          // también recalcula este total para evitar que un payload alterado
-          // pueda crear existencias fuera de los SKU de variante.
-          initialStock: product.isVariable ? getVariantStockTotal(product) : Number(product.initialStock || 0),
-          variantInitialStocks: product.isVariable
-            ? buildVariantCombinations(product.linkedAttributes).map((combination) => ({
-              attributes: combination,
-              quantity: Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
-              warehouseId: product.initialWarehouseId || undefined,
-              costPrice: (() => {
-                const rawCost = product.variantCostPrices?.[variantCombinationKey(combination)];
-                return rawCost === undefined || rawCost === '' ? null : Number(rawCost) * rate;
-              })(),
-            }))
-            : undefined,
-          imageUrl: uploadedImageUri || undefined,
-          isVariable: Boolean(product.isVariable),
-          linkedAttributes: product.isVariable ? product.linkedAttributes : undefined,
-        } as any);
-
-        const created = (createdResponse as any)?.data || createdResponse;
-        const createdId = created?.id;
-
-        // Si tiene IMEI/Serie, crear la entrada en ProductSeries
-        if (product.trackSerialNumbers && product.imeiNumber && product.imeiNumber.trim() && createdId) {
-          try {
-            await inventoryService.createSeries({
-              productId: createdId,
-              number: product.imeiNumber.trim(),
-            });
-          } catch (seriesErr) {
-            console.error('Error creating serial number', seriesErr);
-          }
-        }
-
-        successCount++;
+      const response = await inventoryService.checkSimilarProducts(listToSave.map((product) => ({
+        code: product.code,
+        name: product.name,
+        brand: product.brand,
+        linkedAttributes: product.linkedAttributes,
+        variants: product.isVariable ? buildVariantCombinations(product.linkedAttributes).map((attributes) => ({ attributes })) : undefined,
+      })));
+      const groups = response?.matches || [];
+      if (groups.length > 0) {
+        setSimilarGroups(groups);
+        return;
       }
-      toast.success(`${successCount} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'} guardado(s) correctamente`);
-      setProductsList([]);
-      setDraftProduct({
-        ...defaultDraft,
-        id: `draft-${Date.now()}`,
-        categoryId: effectiveCategories[0]?.id || '',
-      });
-      setSkuError('');
-      onOpenChange(false);
-      onRefresh();
     } catch (error: any) {
-            toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
-    } finally {
-      setIsSaving(false);
+      toast.error(error?.message || 'No se pudo validar si el producto ya existe.');
+      return;
     }
+    await persistProducts(listToSave);
   };
 
   return (
+    <>
+    <ProductSimilarityAlert
+      open={similarGroups.length > 0}
+      groups={similarGroups}
+      title="El producto ya existe o es muy similar"
+      description="No se creó ningún registro. Corrige el nombre, SKU, marca o atributos para evitar duplicados."
+      onOpenChange={(value) => { if (!value) setSimilarGroups([]); }}
+    />
     <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
       <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,780px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col overflow-hidden">
         <DialogHeader data-tour="inventory-product-add-title">
@@ -681,6 +794,20 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   placeholder="0.00"
                 />
               </div>}
+              {catalogItemType !== 'SERVICE' && effectivePriceLists.map((list) => (
+                <div key={list.code} className="col-span-1">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio {list.name}</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={draftProduct.prices?.[list.code] ?? ''}
+                    onChange={e => updatePrice(list.code, e.target.value)}
+                    className="h-8 text-xs text-right mt-1 tabular-nums"
+                    placeholder="0.00"
+                  />
+                </div>
+              ))}
               
               {canViewInventoryCost && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
@@ -690,6 +817,16 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   onChange={e => handleUpdateDraft('costPrice', e.target.value)} 
                   className="h-8 text-xs text-right mt-1 tabular-nums" 
                   placeholder="0.00" 
+                />
+              </div>}
+              {canViewInventoryCost && catalogItemType !== 'SERVICE' && <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Último costo</label>
+                <Input
+                  type="number" min={0} step="any"
+                  value={draftProduct.lastPurchasePrice}
+                  onChange={e => handleUpdateDraft('lastPurchasePrice', e.target.value)}
+                  className="h-8 text-xs text-right mt-1 tabular-nums"
+                  placeholder="0.00"
                 />
               </div>}
               
@@ -731,13 +868,21 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   </div>
                   <div className="col-span-1">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Inicial</label>
-                    <Input 
+                    <Input
                       type="number"
-                      value={0}
-                      disabled
-                      className="h-8 text-xs text-right mt-1 tabular-nums bg-muted/50 text-muted-foreground cursor-not-allowed" 
-                      title="El stock inicia en 0. Se gestiona desde Inventario."
+                      min={0}
+                      value={draftProduct.initialStock}
+                      onChange={e => handleUpdateDraft('initialStock', e.target.value)}
+                      className="h-8 text-xs text-right mt-1 tabular-nums"
                     />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock mínimo</label>
+                    <Input type="number" min={0} value={draftProduct.minStock} onChange={e => handleUpdateDraft('minStock', e.target.value)} className="h-8 text-xs text-right mt-1 tabular-nums" />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock máximo</label>
+                    <Input type="number" min={0} value={draftProduct.maxStock} onChange={e => handleUpdateDraft('maxStock', e.target.value)} className="h-8 text-xs text-right mt-1 tabular-nums" />
                   </div>
                 </>
                 ) : (
@@ -792,6 +937,60 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
             </div>
           </div>
+
+          {catalogItemType !== 'SERVICE' && (
+            <div className="rounded-xl border border-border/60 bg-card/60 p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider">Datos del catálogo</h4>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Estos campos también se aceptan en la importación avanzada.</p>
+                </div>
+                <Badge variant="outline" className="shrink-0 text-[9px]">Opcionales</Badge>
+              </div>
+              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ['barcode', 'Código de barras', ''],
+                  ['brand', 'Marca', 'Marca del producto'],
+                  ['model', 'Modelo', 'Modelo o referencia'],
+                  ['color', 'Color', 'Color principal'],
+                  ['weight', 'Peso', '0.00'],
+                  ['weightUnit', 'Unidad de peso', 'kg, lb...'],
+                  ['dimensions', 'Dimensiones', 'Descripción libre'],
+                  ['width', 'Ancho', '0.00'],
+                  ['height', 'Alto', '0.00'],
+                  ['depth', 'Profundidad', '0.00'],
+                  ['dimensionUnit', 'Unidad de dimensión', 'cm, m...'],
+                  ['warranty', 'Garantía', 'Detalle o plazo'],
+                ].map(([field, label, placeholder]) => (
+                  <div key={field} className="min-w-0">
+                    <label className="text-[10px] font-bold uppercase text-muted-foreground">{label}</label>
+                    <Input
+                      type={['weight', 'width', 'height', 'depth'].includes(field) ? 'number' : 'text'}
+                      min={['weight', 'width', 'height', 'depth'].includes(field) ? 0 : undefined}
+                      step={['weight', 'width', 'height', 'depth'].includes(field) ? 'any' : undefined}
+                      value={draftProduct[field] ?? ''}
+                      onChange={e => handleUpdateDraft(field, e.target.value)}
+                      className="mt-1 h-8 min-w-0 text-xs"
+                      placeholder={placeholder}
+                    />
+                  </div>
+                ))}
+                <div className="min-w-0">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Impuesto</label>
+                  <Select value={String(draftProduct.taxRate ?? '0.15')} onValueChange={v => handleUpdateDraft('taxRate', v)}>
+                    <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="0.15">Gravado 15%</SelectItem><SelectItem value="0">Exento 0%</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-0">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Control de lotes</label>
+                  <Button type="button" variant={draftProduct.trackBatch ? 'default' : 'outline'} className="mt-1 h-8 w-full text-[10px] uppercase" onClick={() => handleUpdateDraft('trackBatch', !draftProduct.trackBatch)}>
+                    {draftProduct.trackBatch ? 'Sí' : 'No'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* SECCIÓN DE ATRIBUTOS (solo productos variables) */}
           {draftProduct.isVariable && (
@@ -904,7 +1103,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                     {variantCombinations.map((combination) => {
                       const key = variantCombinationKey(combination);
                       return (
-                        <div key={key} className="grid gap-2 rounded-lg border border-border/60 bg-card px-3 py-2 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:items-center">
+                        <div key={key} className="grid gap-2 rounded-lg border border-border/60 bg-card px-3 py-2 sm:grid-cols-[minmax(0,1fr)_5rem_5rem_5rem_6rem] sm:items-center">
                           <span className="min-w-0 truncate text-xs font-semibold" title={combination.map((attribute) => attribute.value).join(' / ')}>
                             {combination.map((attribute) => attribute.value).join(' / ')}
                           </span>
@@ -919,6 +1118,14 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                               className="h-8 w-full text-right text-xs tabular-nums"
                               aria-label={`Stock inicial para ${combination.map((attribute) => attribute.value).join(' / ')}`}
                             />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Mín.</span>
+                            <Input type="number" min={0} value={draftProduct.variantMinStocks?.[key] ?? ''} onChange={(e) => updateVariantStockThreshold('min', combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock mínimo para ${combination.map((attribute) => attribute.value).join(' / ')}`} />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Máx.</span>
+                            <Input type="number" min={0} value={draftProduct.variantMaxStocks?.[key] ?? ''} onChange={(e) => updateVariantStockThreshold('max', combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock máximo para ${combination.map((attribute) => attribute.value).join(' / ')}`} />
                           </div>
                           {canViewInventoryCost && <div className="min-w-0">
                             <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Costo propio</span>
@@ -1016,5 +1223,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

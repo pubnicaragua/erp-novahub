@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback } from 'react';
-import { brandingService, type Branding } from '../services/branding.service';
+import { brandingService, type Branding, type ThemePaletteMode, type UserThemeSettings } from '../services/branding.service';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
 import { ensureReadableForeground, validateThemeRoot } from '../utils/color-contrast';
@@ -21,6 +21,7 @@ export interface ThemeConfig {
   tenantId: string;
   tenantName: string;
   logo?: string;
+  paletteMode: ThemePaletteMode;
   colors: BrandColors;
 }
 
@@ -28,7 +29,7 @@ interface ThemeContextType {
   themeConfig: ThemeConfig;
   /** El panel no debe montarse antes de resolver el branding del tenant activo. */
   isBrandingReady: boolean;
-  updateTheme: (colors: Partial<BrandColors>) => void;
+  updateTheme: (colors: Partial<BrandColors>, paletteMode?: ThemePaletteMode) => void;
   updateConfig: (config: Partial<Omit<ThemeConfig, 'colors' | 'userId'>>) => void;
   resetTheme: () => void;
 }
@@ -44,10 +45,13 @@ const defaultColors: BrandColors = {
   sidebarAccent: 'oklch(0.22 0.02 155)',
 };
 
+const DEFAULT_PALETTE_MODE: ThemePaletteMode = 'details';
+
 const defaultTheme: ThemeConfig = {
   userId: 'anonymous',
   tenantId: 'default',
   tenantName: 'Nova Hub ERP',
+  paletteMode: DEFAULT_PALETTE_MODE,
   colors: defaultColors,
 };
 
@@ -80,9 +84,20 @@ function brandingColors(branding: Branding): Partial<BrandColors> {
   return colors;
 }
 
-function userThemeColors(branding: Branding): Partial<BrandColors> {
-  const colors = branding.userTheme?.colors;
-  return colors && typeof colors === 'object' ? colors : {};
+function normalizePaletteMode(value: unknown, fallback: ThemePaletteMode = DEFAULT_PALETTE_MODE): ThemePaletteMode {
+  return value === 'complete' || value === 'details' ? value : fallback;
+}
+
+function normalizeUserTheme(value: unknown): UserThemeSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const candidate = value as UserThemeSettings;
+  const paletteMode = candidate.paletteMode === 'complete' || candidate.paletteMode === 'details'
+    ? candidate.paletteMode
+    : undefined;
+  return {
+    ...(paletteMode ? { paletteMode } : {}),
+    colors: candidate.colors && typeof candidate.colors === 'object' ? candidate.colors : {},
+  };
 }
 
 function resolveThemeForeground(background: string, foreground?: string): string {
@@ -100,10 +115,14 @@ function readStoredTheme(userId: string, tenantId: string): ThemeConfig {
       const parsed = JSON.parse(saved) as Partial<ThemeConfig>;
       const colors = { ...defaultColors, ...(parsed.colors || {}) };
       if (parsed.tenantName === 'Solcom ERP') return createDefaultTheme(userId, tenantId);
+      const hasStoredColors = Boolean(parsed.colors && typeof parsed.colors === 'object' && Object.keys(parsed.colors).length > 0);
       return {
         ...createDefaultTheme(userId, tenantId),
         userId,
         tenantId,
+        // Before paletteMode existed, saved user themes always colored the
+        // sidebar. Treat those records as complete to preserve their behavior.
+        paletteMode: normalizePaletteMode((parsed as any).paletteMode, hasStoredColors ? 'complete' : DEFAULT_PALETTE_MODE),
         colors: {
           ...colors,
           primaryForeground: resolveThemeForeground(colors.primary, colors.primaryForeground),
@@ -133,9 +152,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
   const isBrandingReady = !user || activeTenantId === 'default' || readyBrandingSessionKey === brandingSessionKey;
 
-  const updateTheme = useCallback((colors: Partial<BrandColors>) => {
+  const updateTheme = useCallback((colors: Partial<BrandColors>, paletteMode?: ThemePaletteMode) => {
     setThemeConfig(prev => ({
       ...prev,
+      paletteMode: paletteMode || prev.paletteMode,
       colors: (() => {
         const nextColors = { ...prev.colors, ...colors };
         return {
@@ -156,7 +176,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applyServerBranding = useCallback((branding: Branding, tenantId: string, userId: string) => {
-    const colors = { ...brandingColors(branding), ...userThemeColors(branding) };
+    const userTheme = normalizeUserTheme(branding.userTheme);
+    const colors = { ...brandingColors(branding), ...userTheme.colors };
+    const paletteMode = userTheme.paletteMode
+      || (Object.keys(userTheme.colors || {}).length > 0 ? 'complete' : DEFAULT_PALETTE_MODE);
     setThemeConfig(previous => {
       const base = previous.userId === userId && previous.tenantId === tenantId
         ? previous
@@ -166,6 +189,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         ...base,
         userId,
         tenantId,
+        paletteMode,
         tenantName: branding.companyName || base.tenantName,
         // Logo y nombre pertenecen a la identidad corporativa del contexto
         // actual; no se recuperan del almacenamiento privado del usuario.
@@ -186,10 +210,33 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeConfig(() => (!user ? createDefaultTheme() : readStoredTheme(themeUserId, activeTenantId)));
   }, [activeTenantId, themeUserId]);
 
+  useEffect(() => {
+    // Login/profile ya transporta la preferencia privada. Aplicarla aquí evita
+    // que una sesión nueva dependa de visitar Configuración para descubrirla.
+    if (!user) return;
+    const userTheme = normalizeUserTheme(user.themeSettings);
+    if (!userTheme.paletteMode && Object.keys(userTheme.colors || {}).length === 0) return;
+    setThemeConfig(previous => {
+      const nextColors = { ...previous.colors, ...(userTheme.colors || {}) };
+      const paletteMode = userTheme.paletteMode
+        || (Object.keys(userTheme.colors || {}).length > 0 ? 'complete' : previous.paletteMode);
+      return {
+        ...previous,
+        userId: themeUserId,
+        tenantId: activeTenantId,
+        paletteMode,
+        colors: {
+          ...nextColors,
+          primaryForeground: resolveThemeForeground(nextColors.primary, nextColors.primaryForeground),
+          accentForeground: resolveThemeForeground(nextColors.accent, nextColors.accentForeground),
+          sidebarForeground: resolveThemeForeground(nextColors.sidebar, nextColors.sidebarForeground),
+        },
+      };
+    });
+  }, [activeTenantId, themeUserId, user?.themeSettings]);
+
   useLayoutEffect(() => {
-    // Apply brand colors while keeping the sidebar preference consistent in
-    // light and dark mode. The sidebar is a branded surface, so the selected
-    // color must not be replaced by the static dark-mode token.
+    // Apply brand colors and choose whether the sidebar is neutral or branded.
     const root = document.documentElement;
     // During login, logout, or tenant switching, the previous tenant can remain
     // in state for one render. Never apply or persist that stale configuration.
@@ -220,6 +267,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
 
     const applySidebarVariant = () => {
+      root.dataset.novahubPaletteMode = activeTheme.paletteMode;
+      if (activeTheme.paletteMode === 'details') {
+        // Let theme.css provide white in light mode and the matching dark
+        // surface in dark mode. Removing inline values also handles a live
+        // switch from complete to details without a reload.
+        [
+          '--sidebar',
+          '--sidebar-foreground',
+          '--sidebar-primary',
+          '--sidebar-primary-foreground',
+          '--sidebar-accent',
+          '--sidebar-accent-foreground',
+        ].forEach(key => root.style.removeProperty(key));
+        validateAppliedTheme();
+        return;
+      }
       const sidebar = activeTheme.colors.sidebar;
       const foreground = resolveThemeForeground(sidebar, activeTheme.colors.sidebarForeground);
       const primary = activeTheme.colors.sidebarPrimary;

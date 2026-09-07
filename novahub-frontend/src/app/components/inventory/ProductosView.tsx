@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
-import { inventoryService } from '../../services/inventario.service';
+import { inventoryService, type SimilarProductGroup } from '../../services/inventario.service';
 import { purchaseRequestsService } from '../../services/compras.service';
 import { employeesService } from '../../services/rh.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -28,6 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ProductImagePicker, ProductThumbnail } from '../ui/ProductImage';
 import { storageService } from '../../services/storage.service';
 import { AddProductsModal } from './AddProductsModal';
+import { ProductSimilarityAlert } from './ProductSimilarityAlert';
 import { EditProductModal } from './EditProductModal';
 import { LabelPrintModal } from './LabelPrintModal';
 import { VariantManagerModal } from './VariantManagerModal';
@@ -116,6 +117,7 @@ const PRODUCT_TABLE_WIDTHS = {
   selector: '40px',
   code: '112px',
   name: '224px',
+  brand: '144px',
   note: '180px',
   category: '144px',
   unit: '112px',
@@ -164,6 +166,7 @@ interface ProductosViewProps {
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   onCategoryChange?: (value: string[]) => void;
+  onBrandChange?: (value: string) => void;
   onWarehouseChange?: (value: string[]) => void;
   onUnitChange?: (value: string) => void;
   onTaxRateChange?: (value: string) => void;
@@ -179,6 +182,7 @@ interface ProductosViewProps {
   branchWarehouseIds?: string[];
   stockWarehouseIds?: string[];
   unitFilter?: string;
+  brandFilter?: string;
   taxRateFilter?: string;
   stockStatusFilter?: string;
 }
@@ -343,6 +347,7 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
       </TableCell>
       <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
       <TableCell className="min-w-[220px] p-1"><div className="space-y-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} />{isService && <Input value={row.description || ''} title={row.description || ''} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className="h-8 w-full text-xs" placeholder="Descripción" />}{hasVariants && <span className="flex flex-wrap items-center gap-1 text-[10px] font-black text-primary"><span>Producto padre</span><Badge variant="outline" className="border-primary/25 bg-primary/5 text-[9px] text-primary">{row._variantCount} variantes</Badge></span>}</div></TableCell>
+      <TableCell className="p-1"><Input value={row.brand || ''} title={row.brand || ''} onChange={(event) => onRowUpdate(index, 'brand', event.target.value)} className="h-8 text-xs" /></TableCell>
       <TableCell className="min-w-[180px] p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(event) => onRowUpdate(index, 'commercialNote', event.target.value)} className="h-8 w-full text-xs" /></TableCell>
       <TableCell className="p-1 text-center">
         {row._imageStatus === 'matched' ? <span role="img" aria-label="Imagen vinculada" title="Imagen vinculada"><ImageIcon className="mx-auto size-4 text-emerald-500" /></span> : row._imageStatus === 'missing' ? <span role="img" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU"><ImageOff className="mx-auto size-4 text-red-500" /></span> : <span role="img" aria-label="Sin archivo de imágenes" title="No se cargó un ZIP o RAR de imágenes"><ImageOff className="mx-auto size-4 text-muted-foreground/50" /></span>}
@@ -527,7 +532,7 @@ function ImportPreviewPage({
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const [rowsReady, setRowsReady] = useState(false);
   const gridTemplate = [
-    '32px', '128px', 'minmax(220px, 1fr)', '180px', '80px', '128px', '112px',
+    '32px', '128px', 'minmax(220px, 1fr)', '144px', '180px', '80px', '128px', '112px',
     ...(isService ? ['112px'] : visiblePriceLists.map(() => '112px')),
     ...(canViewInventoryCost ? ['112px'] : []),
     ...(isService ? ['130px'] : ['96px', '96px', '220px']),
@@ -636,6 +641,7 @@ function ImportPreviewPage({
           <ImportPreviewField label="Unidad"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
           {isService && <ImportPreviewField label="Duración (min)"><Input type="number" min={0} step="1" value={row.estimatedDuration ?? ''} onChange={(event) => onRowUpdate(index, 'estimatedDuration', event.target.value === '' ? undefined : Number(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>}
           <ImportPreviewField label="Nombre *" className="sm:col-span-2"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`${importPreviewFieldClass} ${!row.name ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Marca"><Input value={row.brand || ''} title={row.brand || ''} onChange={(event) => onRowUpdate(index, 'brand', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
           {isService && <ImportPreviewField label="Descripción" className="sm:col-span-2"><Input value={row.description || ''} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>}
           <ImportPreviewField label="Nota comercial" className="sm:col-span-2"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(event) => onRowUpdate(index, 'commercialNote', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></ImportPreviewField>
           <ImportPreviewField label="Categoría" className="sm:col-span-2">
@@ -841,6 +847,7 @@ function ImportPreviewPage({
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">Código</TableHead>
                 <TableHead className="min-w-[220px] text-[10px] uppercase">{isService ? 'Nombre / descripción' : 'Nombre'}</TableHead>
+                <TableHead className="w-36 text-[10px] uppercase">Marca</TableHead>
                 <TableHead className="w-44 text-[10px] uppercase">Nota comercial</TableHead>
                 <TableHead className="w-20 text-center text-[10px] uppercase">Imagen</TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">Categoría</TableHead>
@@ -887,7 +894,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
@@ -1014,6 +1021,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const effectiveProductStatusFilter = controlledProductStatusFilter ?? localProductStatusFilter;
   const [localUnitFilter, setLocalUnitFilter] = useState('');
   const effectiveUnitFilter = controlledUnitFilter ?? localUnitFilter;
+  const [localBrandFilter, setLocalBrandFilter] = useState('');
+  const effectiveBrandFilter = controlledBrandFilter ?? localBrandFilter;
   const [localTaxRateFilter, setLocalTaxRateFilter] = useState('');
   const effectiveTaxRateFilter = controlledTaxRateFilter ?? localTaxRateFilter;
   const [localStockStatusFilter, setLocalStockStatusFilter] = useState('');
@@ -1067,6 +1076,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [importExchangeRate, setImportExchangeRate] = useState<number>(Number(exchangeRate || 1));
   const [initialImportConfirmOpen, setInitialImportConfirmOpen] = useState(false);
   const [initialImportConfirmText, setInitialImportConfirmText] = useState('');
+  const [similarImportGroups, setSimilarImportGroups] = useState<SimilarProductGroup[]>([]);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
   const [variantManagerProduct, setVariantManagerProduct] = useState<any | null>(null);
@@ -1572,7 +1582,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   useEffect(() => {
     setPage(1);
     pagination?.onPageChange(1);
-  }, [searchTerm, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, effectiveUnitFilter, effectiveTaxRateFilter, effectiveStockStatusFilter, showAllWarehouseProducts, catalogItemType]);
+  }, [searchTerm, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, effectiveUnitFilter, effectiveBrandFilter, effectiveTaxRateFilter, effectiveStockStatusFilter, showAllWarehouseProducts, catalogItemType]);
 
   // La celda Stock muestra únicamente las existencias locales de la sucursal;
   // los almacenes corporativos pueden aparecer en la distribución, pero no se
@@ -1601,12 +1611,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const filteredProducts = products.filter((p: any) => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
+    const normalizedBrandFilter = effectiveBrandFilter.trim().toLowerCase();
+    const productBrand = String(p.brand || p.details?.brand || '').trim();
     const matchesVariantSku = Array.isArray(p.variants) && p.variants.some((variant: any) =>
       String(variant?.sku || '').toLowerCase().includes(normalizedSearch),
     );
     const matchesSearch = !normalizedSearch ||
       p.name?.toLowerCase().includes(normalizedSearch) ||
       p.code?.toLowerCase().includes(normalizedSearch) ||
+      productBrand.toLowerCase().includes(normalizedSearch) ||
       p.category?.name?.toLowerCase().includes(normalizedSearch) ||
       matchesVariantSku;
     const matchesCategory = true;
@@ -1645,8 +1658,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
     const matchesUnit = !effectiveUnitFilter || (p.unit || p.details?.unit || '') === effectiveUnitFilter;
+    const matchesBrand = !normalizedBrandFilter || productBrand.toLowerCase().includes(normalizedBrandFilter);
     const matchesTaxRate = !effectiveTaxRateFilter || String(p.taxRate ?? '') === effectiveTaxRateFilter;
-    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability && matchesUnit && matchesTaxRate;
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability && matchesUnit && matchesBrand && matchesTaxRate;
       })
       .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
 
@@ -1658,11 +1672,26 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       return sort === 'desc' ? (p.createdAt || p.createdDate || p.created_on ? new Date(p.createdAt || p.createdDate || p.created_on).getTime() : 0) : p.name || '';
     },
     category: (p: any) => p.category?.name || 'Sin categoría',
+    brand: (p: any) => String(p.brand || p.details?.brand || '').trim().toLowerCase(),
     stock: (p: any) => getProductStock(p),
   };
   const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
   const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filteredProducts.filter((p: any) => (p.category?.name || 'Sin categoría') === label).length }));
+  const brandOptions = useMemo(() => {
+    const source = (summaryProducts && summaryProducts.length > 0) ? summaryProducts : filteredProducts;
+    const grouped = new Map<string, { label: string; count: number }>();
+    source.forEach((product: any) => {
+      const label = String(product.brand || product.details?.brand || '').trim();
+      const value = label.toLowerCase();
+      if (!value) return;
+      const current = grouped.get(value);
+      grouped.set(value, { label: current?.label || label, count: (current?.count || 0) + 1 });
+    });
+    return [...grouped.entries()]
+      .sort(([, left], [, right]) => left.label.localeCompare(right.label, 'es', { sensitivity: 'base' }))
+      .map(([value, option]) => ({ value, ...option }));
+  }, [filteredProducts, summaryProducts]);
 
   const paginatedProducts = useMemo(() => {
     if (pagination) return filteredData;
@@ -1748,6 +1777,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     availabilityFilter !== 'all',
     !isServiceView && effectiveProductStatusFilter !== 'ALL',
     Boolean(effectiveUnitFilter),
+    Boolean(effectiveBrandFilter),
     Boolean(effectiveTaxRateFilter),
     Boolean(effectiveStockStatusFilter),
     !showAllWarehouseProducts,
@@ -2362,6 +2392,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </div>
           </div>
         </TableCell>
+        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}>
+          <span className="block max-w-[144px] truncate text-xs text-muted-foreground" title={(product as any).brand || undefined}>
+            {(product as any).brand || '—'}
+          </span>
+        </TableCell>}
         <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>
           <Input
             value={product.commercialNote || ''}
@@ -2722,13 +2757,39 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         return product.variants?.length > 1 || String(variant?.sku || '').trim().toLowerCase() !== productCode || String(variant?.name || '').trim().toLowerCase() !== 'estándar';
       };
       const customVariants = catalogProducts.flatMap((product) => (product.variants || []).filter((variant: any) => isCustomVariant(product, variant)).map((variant: any) => ({ product, variant })));
-      const productHeaders = ['Código / SKU', 'Nombre', 'Nota comercial', 'Categoría', 'Unidad', ...importPriceLists.map((list) => `Precio ${list.name}`), ...(canViewInventoryCost ? ['Costo'] : [])];
+      const productHeaders = [
+        'Código / SKU', 'Nombre', 'Marca', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad',
+        'Código de barras', 'Modelo', 'Color', 'Peso', 'Unidad de peso', 'Dimensiones',
+        'Ancho', 'Alto', 'Profundidad', 'Unidad de dimensión', 'Garantía', 'Tasa IVA',
+        'Control inventario', 'Lotes', 'Series', 'Último costo', 'Imagen URL', 'Disponible',
+        ...importPriceLists.map((list) => `Precio ${list.name}`), ...(canViewInventoryCost ? ['Costo'] : []),
+      ];
       const productRows = catalogProducts.map((product) => [
         product.code || '',
         product.name || '',
+        product.brand || product.details?.brand || '',
+        product.description || '',
         product.commercialNote || '',
         product.category?.name || product.category || '',
-        product.unit || 'unidad',
+        product.unit || product.details?.unit || 'unidad',
+        product.barcode || product.details?.barcode || '',
+        product.model || product.details?.model || '',
+        product.color || product.details?.color || '',
+        product.weight ?? product.details?.weight ?? '',
+        product.weightUnit || product.details?.weightUnit || '',
+        product.dimensions || product.details?.dimensions || '',
+        product.width ?? product.details?.width ?? '',
+        product.height ?? product.details?.height ?? '',
+        product.depth ?? product.details?.depth ?? '',
+        product.dimensionUnit || product.details?.dimensionUnit || '',
+        product.warranty || product.details?.warranty || '',
+        product.taxRate ?? '',
+        product.trackInventory ?? product.details?.trackInventory ?? true,
+        product.trackBatch ?? product.details?.trackBatch ?? false,
+        product.trackSeries ?? product.details?.trackSeries ?? false,
+        product.lastPurchasePrice ?? product.details?.lastPurchasePrice ?? '',
+        product.imageUrl || '',
+        product.isActive !== false,
         ...importPriceLists.map((list) => getProductPrice(product, list)),
         ...(canViewInventoryCost ? [convertBaseAmount(product.costPrice)] : []),
       ]);
@@ -3239,9 +3300,31 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
   }, [imageArchiveEntries, isServiceView]);
 
-  const handleFinalInitialImport = useCallback(async () => {
+  const handleFinalInitialImport = useCallback(async (skipSimilarityCheck = false) => {
     const valid = importData.filter((row) => !row._hasError);
     if (initialImportConfirmText !== 'IMPORTAR' || valid.length === 0) return;
+    if (!skipSimilarityCheck) {
+      try {
+        const similarityItems = valid.map((row) => ({
+          code: row.code,
+          name: row.name,
+          brand: row.brand,
+          attributes: row.attributes,
+          variants: advancedImportCatalog?.variants
+            .filter((variant) => String(variant.productCode || '').trim().toLowerCase() === String(row._sourceCode || row.code).trim().toLowerCase())
+            .map((variant) => ({ sku: variant.sku, attributes: variant.attributes })),
+        }));
+        const similarityResponse = await inventoryService.checkSimilarProducts(similarityItems);
+        if (similarityResponse?.matches?.length) {
+          setSimilarImportGroups(similarityResponse.matches);
+          setInitialImportConfirmOpen(false);
+          return;
+        }
+      } catch (error: any) {
+        toast.error(error?.message || 'No se pudo validar si la importación contiene productos similares.');
+        return;
+      }
+    }
     setImporting(true);
     setImportProgress(10);
     try {
@@ -3575,6 +3658,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             />
           </div>
 
+          {!isServiceView && (
+            <div className="relative min-w-0 flex-1 sm:flex-none">
+              <Tag className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+              <Input
+                placeholder="Filtrar por marca..."
+                className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest sm:w-52"
+                value={effectiveBrandFilter}
+                onChange={(e) => { setLocalBrandFilter(e.target.value); onBrandChange?.(e.target.value); }}
+                aria-label="Filtrar productos por marca"
+              />
+            </div>
+          )}
+
           <MultiSelectFilter
             label="Bodegas"
             placeholder="Buscar bodegas..."
@@ -3642,9 +3738,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </label>
           )}
 
-          {(warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
+          {(warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveBrandFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
             <Button variant="outline" size="sm" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground" onClick={() => {
-              setSearchTerm(''); setCategoryFilters([]); setWarehouseFilters([]); onSearchChange?.(''); onCategoryChange?.([]); onWarehouseChange?.([]); setStockFilter('all'); setAvailabilityFilter('all'); setLocalProductStatusFilter('ALL'); onProductStatusFilterChange?.('ALL'); setLocalUnitFilter(''); onUnitChange?.(''); setLocalTaxRateFilter(''); onTaxRateChange?.(''); setLocalStockStatusFilter(''); onStockStatusChange?.(''); setShowAllWarehouseProducts(true);
+              setSearchTerm(''); setCategoryFilters([]); setWarehouseFilters([]); onSearchChange?.(''); onCategoryChange?.([]); onBrandChange?.(''); setLocalBrandFilter(''); onWarehouseChange?.([]); setStockFilter('all'); setAvailabilityFilter('all'); setLocalProductStatusFilter('ALL'); onProductStatusFilterChange?.('ALL'); setLocalUnitFilter(''); onUnitChange?.(''); setLocalTaxRateFilter(''); onTaxRateChange?.(''); setLocalStockStatusFilter(''); onStockStatusChange?.(''); setShowAllWarehouseProducts(true);
             }}>
               <X className="mr-2 size-4" /> Limpiar
             </Button>
@@ -3777,6 +3873,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase">{isServiceView ? 'Servicio' : 'Producto'}</Badge>
                   </div>
                   <p className="mt-2 truncate text-xs text-muted-foreground">{product.category?.name || 'Sin categoría'}</p>
+                  {!isServiceView && <p className="mt-1 truncate text-xs text-muted-foreground"><span className="font-semibold">Marca:</span> {product.brand || product.details?.brand || '—'}</p>}
                   <p className="mt-1 max-w-full truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}><span className="font-semibold">Nota:</span> {product.commercialNote || '—'}</p>
                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3 xl:grid-cols-4">
                      {isServiceView && <div>
@@ -3859,7 +3956,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
       {/* Desktop table */}
       <div className="hidden max-w-full overflow-x-auto rounded-lg border xl:block" data-tour="inventory-products-table">
-        <Table className="w-full table-fixed" style={{ minWidth: isServiceView ? '1100px' : '1356px' }}>
+        <Table className="w-full table-fixed" style={{ minWidth: isServiceView ? '1100px' : '1500px' }}>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead style={{ width: PRODUCT_TABLE_WIDTHS.selector, minWidth: PRODUCT_TABLE_WIDTHS.selector }}>
@@ -3881,6 +3978,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">Código<ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}><span className="inline-flex items-center gap-1">Marca<ColumnFilterMenu label="Marca" options={brandOptions} selected={colFilters.state.brand?.values || []} onSelect={(values) => colFilters.setValues('brand', values)} sort={colFilters.state.brand?.sort || null} onSort={(sort) => colFilters.setSort('brand', sort)} /></span></TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>Nota comercial</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}><span className="inline-flex items-center gap-1">Categoría<ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} /></span></TableHead>
                {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
@@ -3903,7 +4001,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             {/* Existing products */}
             {filteredData.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                 <TableCell colSpan={isServiceView ? (canViewInventoryCost ? 9 : 8) : canViewInventoryCost ? 12 : 11} className="text-center py-12 text-muted-foreground">
+                 <TableCell colSpan={isServiceView ? (canViewInventoryCost ? 9 : 8) : canViewInventoryCost ? 13 : 12} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">{products.length > 0 ? 'No hay coincidencias' : `No hay ${isServiceView ? 'servicios' : 'productos'} registrados`}</p>
                   <p className="text-sm">
@@ -4001,6 +4099,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                         </div>
                       </div>
                     </TableCell>
+                    {!isServiceView && <TableCell>
+                      <span className="block max-w-[144px] truncate text-xs text-muted-foreground" title={product.brand || product.details?.brand || undefined}>
+                        {product.brand || product.details?.brand || '—'}
+                      </span>
+                    </TableCell>}
                     <TableCell className="max-w-[180px]">
                       <span className="block max-w-[180px] truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}>
                         {product.commercialNote || '—'}
@@ -4273,11 +4376,24 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         movements={movements}
         series={series}
       />
+      <ProductSimilarityAlert
+        open={similarImportGroups.length > 0}
+        groups={similarImportGroups}
+        title="La importación contiene productos existentes o similares"
+        description="Revisa nombre, marca, SKU, atributos, precios y costos. Los SKU existentes en una reimportación se actualizarán; una coincidencia distinta puede ser rechazada por el servidor para evitar duplicados."
+        continueLabel="Continuar importación"
+        onOpenChange={(value) => { if (!value) setSimilarImportGroups([]); }}
+        onContinue={() => {
+          setSimilarImportGroups([]);
+          void handleFinalInitialImport(true);
+        }}
+      />
       <AddProductsModal
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         categories={categories}
         warehouses={warehouses}
+        priceLists={importPriceLists}
         onRefresh={onRefresh}
         itemType={catalogItemType}
       />
@@ -4451,6 +4567,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                           <TableHead className="text-[10px] uppercase w-8"></TableHead>
                           <TableHead className="text-[10px] uppercase w-32">Código</TableHead>
                           <TableHead className="text-[10px] uppercase">Nombre</TableHead>
+                          <TableHead className="text-[10px] uppercase w-36">Marca</TableHead>
                           {isServiceView && <TableHead className="text-[10px] uppercase w-52">Descripción</TableHead>}
                           <TableHead className="text-[10px] uppercase w-44">Nota comercial</TableHead>
                             <TableHead className="text-[10px] uppercase w-32">Categoría</TableHead>
@@ -4487,6 +4604,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                 className={`h-8 text-xs ${!row.name ? 'border-red-500' : ''}`}
                               />
                             </TableCell>
+                            <TableCell className="p-1"><Input value={row.brand || ''} onChange={(e) => handleImportRowUpdate(i, 'brand', e.target.value)} className="h-8 text-xs" /></TableCell>
                             {isServiceView && <TableCell className="p-1"><Input value={row.description || ''} title={row.description || ''} onChange={(e) => handleImportRowUpdate(i, 'description', e.target.value)} className="h-8 text-xs" /></TableCell>}
                             <TableCell className="p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(e) => handleImportRowUpdate(i, 'commercialNote', e.target.value)} className="h-8 text-xs" /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></TableCell>
                             <TableCell className="p-1">

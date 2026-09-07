@@ -25,7 +25,7 @@ import { NovaSuiteIcon } from './ui/NovaIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { rolesService } from '../services/roles.service';
 import { subscriptionsService } from '../services/subscriptions.service';
-import { brandingService } from '../services/branding.service';
+import { brandingService, type ThemePaletteMode } from '../services/branding.service';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
@@ -38,7 +38,7 @@ import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
 import { HIDDEN_PERMISSION_MODULE_IDS, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
-import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
+import { getReadableForeground } from '../utils/color-contrast';
 import { formatExchangeRate } from '../utils/currency';
 import { optimizeImageFile } from '../utils/image-optimization';
 import { FastColorInput } from './ui/FastColorInput';
@@ -745,6 +745,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [primaryFgHex, setPrimaryFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.primaryForeground));
   const [portalPrimaryHex, setPortalPrimaryHex] = useState('#10b981');
   const [portalAccentHex, setPortalAccentHex] = useState('#0f172a');
+  const [paletteMode, setPaletteMode] = useState<ThemePaletteMode>(() => themeConfig.paletteMode);
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -898,6 +899,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     themeDraftDirtyRef.current = true;
   }, []);
 
+  const selectPaletteMode = (mode: ThemePaletteMode) => {
+    setPaletteMode(mode);
+    themeDraftDirtyRef.current = true;
+  };
+
   const handleSave = async () => {
     if (!canEditBranding || isSavingTheme) return;
     setIsSavingTheme(true);
@@ -914,9 +920,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       colors.sidebarForeground = selectedSidebarFgHex;
 
       await brandingService.update({
-        userTheme: { colors },
+        userTheme: { paletteMode, colors },
       });
-      updateTheme(colors);
+      updateTheme(colors, paletteMode);
       themeDraftDirtyRef.current = false;
       await refetchConfiguration();
 
@@ -936,6 +942,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setPrimaryHex('#10b981');
     setSidebarHex('#0c1a12');
     setAccentHex('#064e3b');
+    setPaletteMode('details');
     setPrimaryFgHex(getReadableForeground('#10b981'));
     setSidebarFgHex(getReadableForeground('#0c1a12'));
     setActivePreset('Emerald Default');
@@ -1109,6 +1116,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     const modulesList = asList(configurationData.modules);
 
     const userThemeColors = branding?.userTheme?.colors || {};
+    const resolvedPaletteMode: ThemePaletteMode = branding?.userTheme?.paletteMode === 'complete'
+      ? 'complete'
+      : branding?.userTheme?.paletteMode === 'details'
+        ? 'details'
+        : Object.keys(userThemeColors).length > 0
+          ? 'complete'
+          : 'details';
     const resolvedPrimary = userThemeColors.primary || branding?.primaryColor;
     const resolvedSidebar = userThemeColors.sidebar || branding?.sidebarColor;
     const resolvedAccent = userThemeColors.accent || branding?.accentColor;
@@ -1120,6 +1134,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       if (resolvedAccent) setAccentHex(resolvedAccent.startsWith('oklch') ? oklchToApproxHex(resolvedAccent) : resolvedAccent);
       if (resolvedPrimaryForeground) setPrimaryFgHex(resolvedPrimaryForeground.startsWith('oklch') ? oklchToApproxHex(resolvedPrimaryForeground) : resolvedPrimaryForeground);
       if (resolvedSidebarForeground) setSidebarFgHex(resolvedSidebarForeground.startsWith('oklch') ? oklchToApproxHex(resolvedSidebarForeground) : resolvedSidebarForeground);
+      setPaletteMode(resolvedPaletteMode);
     }
     if (branding?.portalPrimaryColor) setPortalPrimaryHex(branding.portalPrimaryColor);
     if (branding?.portalAccentColor) setPortalAccentHex(branding.portalAccentColor);
@@ -1161,7 +1176,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       if (userThemeColors.sidebarAccent) {
         serverColors.sidebarAccent = userThemeColors.sidebarAccent;
       }
-      updateTheme(serverColors);
+      updateTheme(serverColors, resolvedPaletteMode);
     }
     if (currency) {
       setExchangeRateAuto(currency.auto !== false);
@@ -1425,13 +1440,15 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               {/* Presets */}
               <Card className="border-border/50 shadow-sm overflow-hidden">
                 <CardHeader className="border-b border-border/30 bg-muted/10">
-                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Sparkles className="size-5 text-primary" />Paletas de Color</CardTitle>
-                  <CardDescription>Aplica un esquema completo con un solo click</CardDescription>
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-lg font-black"><Sparkles className="size-5 text-primary" />Paletas de Color <Badge variant="outline" className="text-[10px] uppercase tracking-widest">Sidebar: {paletteMode === 'complete' ? 'Completo' : 'Detalles'}</Badge></CardTitle>
+                  <CardDescription>Selecciona una paleta y define si se aplica solo al contenido o también al sidebar.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {colorPresets.map(preset => (
                       <button key={preset.name} onClick={() => applyPreset(preset)}
+                        type="button"
+                        aria-pressed={activePreset === preset.name}
                         className={cn('relative flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all hover:shadow-xl hover:-translate-y-0.5',
                           activePreset === preset.name ? 'border-primary shadow-lg shadow-primary/20 bg-primary/5' : 'border-border/50 hover:border-primary/30')}>
                         {activePreset === preset.name && (
@@ -1451,6 +1468,46 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       </button>
                     ))}
                   </div>
+                  {activePreset && (
+                    <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-4" role="radiogroup" aria-label="Modo de aplicación de la paleta">
+                      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs font-black uppercase tracking-widest text-foreground">Aplicación: {activePreset}</p>
+                        <p className="text-xs text-muted-foreground">Esta elección se conserva al guardar y recargar.</p>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={paletteMode === 'details'}
+                          onClick={() => selectPaletteMode('details')}
+                          className={cn(
+                            'rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                            paletteMode === 'details' ? 'border-primary bg-background shadow-sm' : 'border-border/60 hover:border-primary/40',
+                          )}
+                        >
+                          <span className="flex items-center gap-2 text-sm font-bold"><span className={cn('flex size-4 items-center justify-center rounded-full border', paletteMode === 'details' && 'border-primary bg-primary text-primary-foreground')}>
+                            {paletteMode === 'details' && <Check className="size-3" />}
+                          </span>Modo detalles</span>
+                          <span className="mt-1 block pl-6 text-xs text-muted-foreground">Cambia los elementos internos. Sidebar blanco en claro y oscuro en dark mode.</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={paletteMode === 'complete'}
+                          onClick={() => selectPaletteMode('complete')}
+                          className={cn(
+                            'rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                            paletteMode === 'complete' ? 'border-primary bg-background shadow-sm' : 'border-border/60 hover:border-primary/40',
+                          )}
+                        >
+                          <span className="flex items-center gap-2 text-sm font-bold"><span className={cn('flex size-4 items-center justify-center rounded-full border', paletteMode === 'complete' && 'border-primary bg-primary text-primary-foreground')}>
+                            {paletteMode === 'complete' && <Check className="size-3" />}
+                          </span>Modo completo</span>
+                          <span className="mt-1 block pl-6 text-xs text-muted-foreground">Aplica también la tonalidad de la paleta al sidebar.</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

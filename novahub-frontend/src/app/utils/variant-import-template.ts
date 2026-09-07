@@ -57,7 +57,10 @@ export const createCanonicalVariantImportWorkbook = (
   const mode = options.context?.mode || 'INVENTORY';
 
   const productHeaders = [
-    'Código / SKU', 'Nombre', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad',
+    'Código / SKU', 'Nombre', 'Marca', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad',
+    'Código de barras', 'Modelo', 'Color', 'Peso', 'Unidad de peso', 'Dimensiones',
+    'Ancho', 'Alto', 'Profundidad', 'Unidad de dimensión', 'Garantía', 'Tasa IVA',
+    'Control inventario', 'Lotes', 'Series', 'Último costo', 'Imagen URL', 'Disponible',
     ...priceLists.map((list) => `Precio ${list.name}`),
     ...(canViewInventoryCost ? ['Costo'] : []),
   ];

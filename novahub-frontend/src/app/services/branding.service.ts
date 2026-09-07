@@ -1,5 +1,12 @@
 import { api } from './api';
 
+export type ThemePaletteMode = 'details' | 'complete';
+
+export interface UserThemeSettings {
+  paletteMode?: ThemePaletteMode;
+  colors?: Partial<Record<'primary' | 'primaryForeground' | 'accent' | 'accentForeground' | 'sidebar' | 'sidebarForeground' | 'sidebarPrimary' | 'sidebarAccent', string>>;
+}
+
 export interface Branding {
   logo: string | null;
   primaryColor: string;
@@ -10,9 +17,7 @@ export interface Branding {
   whiteLabel: boolean;
   companyName: string;
   industry?: string;
-  userTheme?: {
-    colors?: Partial<Record<'primary' | 'primaryForeground' | 'accent' | 'accentForeground' | 'sidebar' | 'sidebarForeground' | 'sidebarPrimary' | 'sidebarAccent', string>>;
-  } | null;
+  userTheme?: UserThemeSettings | null;
 }
 
 /**

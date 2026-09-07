@@ -7,6 +7,7 @@ import { clearSessionCache } from '../services/session-cache';
 import { clearStorageUrlCache } from '../services/storage.service';
 import { BrandLogoLoader } from '../components/BrandLogo';
 import { SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
+import type { UserThemeSettings } from '../services/branding.service';
 
 export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
 export type UserType = 'admin' | 'collaborator' | 'manager';
@@ -196,6 +197,8 @@ export interface User {
     name?: string;
     logo?: string | null;
   };
+  /** Preferencia visual privada, hidratada con la sesión para evitar un flash de tema al iniciar. */
+  themeSettings?: UserThemeSettings | null;
 }
 
 /**
@@ -575,6 +578,7 @@ const createUserObject = (apiPayload: any): User => {
         }
       : null,
     sessionBranding,
+    themeSettings: apiUser.themeSettings || null,
     clientTenant: apiUser.clientTenant
       ? {
           name: apiUser.clientTenant.name,

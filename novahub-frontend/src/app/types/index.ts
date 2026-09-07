@@ -25,6 +25,7 @@ export interface ApiFilters {
   /** Códigos/SKU separados por coma para resolver coincidencias exactas en cargas masivas. */
   codes?: string;
   categoryId?: string;
+  brand?: string;
   type?: string;
   warehouseId?: string;
   branchId?: string;

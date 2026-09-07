@@ -2,6 +2,24 @@ import { api } from './api';
 import type { Product, Warehouse, PaginatedResponse, ApiFilters } from '../types';
 import { resolveStorageReferences } from './storage.service';
 
+export interface SimilarProductMatch {
+  id: string;
+  name: string;
+  brand?: string | null;
+  code: string;
+  sku?: string | null;
+  category?: string | null;
+  attributes?: Array<{ name: string; value: string }>;
+  prices?: Array<{ list: string; price: number; currency?: string; variantId?: string | null }>;
+  costPrice?: number | null;
+  reasons?: string[];
+}
+
+export interface SimilarProductGroup {
+  inputKey: string;
+  matches: SimilarProductMatch[];
+}
+
 export const inventoryService = {
   // ==================== PRODUCTS ====================
   getProducts: async (filters?: ApiFilters, signal?: AbortSignal) => {
@@ -14,7 +32,7 @@ export const inventoryService = {
   },
   createProduct: (data: Partial<Product> & {
     initialStock?: number;
-    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; warehouseId?: string }>;
+    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; warehouseId?: string }>;
   }) => api.post<Product>('/inventory/products', data),
   previewProductStockAccounting: (warehouseIds: string[]) =>
     api.post<{ ready: boolean; errors: string[]; warnings?: string[]; autoGenerationEnabled: boolean; warehouses: any[] }>('/inventory/products/accounting-preflight', { warehouseIds }),
@@ -23,6 +41,8 @@ export const inventoryService = {
   duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`),
   checkProductCode: (code: string, excludeId?: string) => 
     api.get<{ exists: boolean }>('/inventory/products/check-code', { code, excludeId } as any),
+  checkSimilarProducts: (items: any[]) =>
+    api.post<{ matches: SimilarProductGroup[] }>('/inventory/products/check-similar', { items }),
 
   // ==================== CATEGORIES ====================
   getCategories: (signal?: AbortSignal) => api.get<any[]>('/inventory/categories', { signal }),
