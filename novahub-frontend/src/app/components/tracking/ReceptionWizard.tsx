@@ -9,7 +9,7 @@ import { getApiErrorMessage } from '../../services/api';
 import { authService } from '../../services/auth.service';
 import { inventoryService } from '../../services/inventario.service';
 import { customersService } from '../../services/ventas.service';
-import { logisticsService, calculateBillableWeight } from '../../services/logistics.service';
+import { logisticsService, calculateBillableWeight, WAREHOUSE_STRATEGY_LABELS } from '../../services/logistics.service';
 
 type Step = 1 | 2 | 3 | 4 | 'confirm' | 'done';
 
@@ -26,9 +26,10 @@ const EMPTY_FORM = {
   trackingCode: '',
   warehouseId: '',
   warehouseValue: '',
-  ownerType: 'CUSTOMER' as 'CUSTOMER' | 'AGENCY' | 'SUBAGENCY',
+  ownerType: 'SUBAGENCY' as 'CUSTOMER' | 'AGENCY' | 'SUBAGENCY',
   customerName: '',
   agencyName: '',
+  subagencyId: '',
   subagencyName: '',
   provider: '',
 };
@@ -39,6 +40,7 @@ interface LogisticsContextData {
   shipmentModes: NonNullable<Awaited<ReturnType<typeof logisticsService.getContext>>>['shipmentModes'];
   trackingPrefixes: NonNullable<Awaited<ReturnType<typeof logisticsService.getContext>>>['trackingPrefixes'];
   customFieldDefinitions: NonNullable<Awaited<ReturnType<typeof logisticsService.getContext>>>['customFieldDefinitions'];
+  subagencies: NonNullable<Awaited<ReturnType<typeof logisticsService.getContext>>>['subagencies'];
 }
 
 export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) => void }) {
@@ -121,6 +123,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
     if (step === 1) return form.shipmentModeCode && form.sku.trim();
     if (step === 2) return Number(form.physicalWeight) > 0;
     if (step === 3) return form.trackingCode.trim().length >= 4 && checkState.status !== 'duplicate';
+    if (step === 4) return Boolean(form.subagencyName);
     return true;
   };
 
@@ -144,10 +147,9 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
         warehouseValue: form.warehouseValue || undefined,
         warehouseId: warehouse?.id,
         warehouseName: warehouse?.name,
-        ownerType: form.ownerType,
-        customer: form.ownerType === 'CUSTOMER' && form.customerName ? { name: form.customerName } : undefined,
-        agency: form.ownerType === 'AGENCY' && form.agencyName ? { name: form.agencyName } : undefined,
-        subagency: form.ownerType === 'SUBAGENCY' && form.subagencyName ? { name: form.subagencyName } : undefined,
+        ownerType: 'SUBAGENCY',
+        customer: form.customerName ? { name: form.customerName } : undefined,
+        subagency: form.subagencyName ? { id: form.subagencyId || undefined, name: form.subagencyName } : undefined,
         provider: form.provider || warehouse?.provider || undefined,
         customFields: Object.keys(customValues).length > 0 ? customValues : undefined,
       };
@@ -305,55 +307,46 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
 
       {step === 4 && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Paso 4 · Propietario y bodega</h3>
+          <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Paso 4 · Subagencia y bodega</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Propietario *</label>
-              <select value={form.ownerType} onChange={(e) => setForm((f) => ({ ...f, ownerType: e.target.value as any }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
-                <option value="CUSTOMER">Cliente</option>
-                <option value="AGENCY">Agencia</option>
-                <option value="SUBAGENCY">Subagencia</option>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Subagencia *</label>
+              <select
+                value={form.subagencyId}
+                onChange={(e) => {
+                  const sa = (ctx?.subagencies || []).find((s) => s.id === e.target.value);
+                  setForm((f) => ({ ...f, subagencyId: e.target.value, subagencyName: sa?.name || '' }));
+                }}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Selecciona la subagencia…</option>
+                {(ctx?.subagencies || []).map((s) => <option key={s.id} value={s.id}>{s.name}{s.code ? ` (${s.code})` : ''}</option>)}
               </select>
+              {(ctx?.subagencies || []).length === 0 && <p className="mt-1 text-[11px] text-muted-foreground">Crea subagencias en Configuración → Subagencias.</p>}
             </div>
-            {form.ownerType === 'CUSTOMER' && (
-              <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</label>
-                <Input list="reception-customers" value={form.customerName} onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))} placeholder="Busca o escribe el cliente" className="rounded-xl" />
-              </div>
-            )}
-            {form.ownerType === 'AGENCY' && (
-              <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Agencia</label>
-                <Input value={form.agencyName} onChange={(e) => setForm((f) => ({ ...f, agencyName: e.target.value }))} placeholder="Nombre de la agencia" className="rounded-xl" />
-              </div>
-            )}
-            {form.ownerType === 'SUBAGENCY' && (
-              <>
-                <div>
-                  <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Agencia</label>
-                  <Input value={form.agencyName} onChange={(e) => setForm((f) => ({ ...f, agencyName: e.target.value }))} placeholder="Agencia a la que pertenece" className="rounded-xl" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Subagencia</label>
-                  <Input value={form.subagencyName} onChange={(e) => setForm((f) => ({ ...f, subagencyName: e.target.value }))} placeholder="Nombre de la subagencia" className="rounded-xl" />
-                </div>
-              </>
-            )}
+            <div>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente (opcional)</label>
+              <Input list="reception-customers" value={form.customerName} onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))} placeholder="Cliente final de la subagencia (opcional)" className="rounded-xl" />
+            </div>
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodega / País</label>
               <select value={form.warehouseId} onChange={(e) => setForm((f) => ({ ...f, warehouseId: e.target.value, warehouseValue: '' }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
                 <option value="">Sin bodega</option>
-                {ctx.warehouses.map((w) => <option key={w.id} value={w.id}>{w.name} · {w.country} ({w.strategy})</option>)}
+                {ctx.warehouses.map((w) => <option key={w.id} value={w.id}>{w.name} · {w.country} ({WAREHOUSE_STRATEGY_LABELS[w.strategy] || w.strategy})</option>)}
               </select>
             </div>
             {warehouse && needsManualWarehouse && (
               <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Warehouse (manual)</label>
-                <Input value={form.warehouseValue} onChange={(e) => setForm((f) => ({ ...f, warehouseValue: e.target.value }))} placeholder="Ingresa el warehouse" className="rounded-xl" />
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodega (manual)</label>
+                <Input value={form.warehouseValue} onChange={(e) => setForm((f) => ({ ...f, warehouseValue: e.target.value }))} placeholder="Ingresa el número de bodega" className="rounded-xl" />
               </div>
             )}
             {warehouse && lastNWarehouse && (
-              <p className="text-xs text-muted-foreground">Warehouse automático: últimos {warehouse.trackingLastN} del tracking → <b>{form.trackingCode.slice(-warehouse.trackingLastN) || '—'}</b></p>
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodega automática (editable)</label>
+                <Input value={form.warehouseValue || form.trackingCode.slice(-warehouse.trackingLastN)} onChange={(e) => setForm((f) => ({ ...f, warehouseValue: e.target.value }))} placeholder={`Últimos ${warehouse.trackingLastN} del tracking`} className="rounded-xl font-mono" />
+                <p className="mt-1 text-[11px] text-muted-foreground">Se completa con los últimos {warehouse.trackingLastN} del tracking; puedes editarlo.</p>
+              </div>
             )}
           </div>
 

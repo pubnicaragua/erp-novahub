@@ -22,6 +22,7 @@ import {
 
 interface SupplierOption { id: string; name: string; code: string; }
 interface OrderOption { id: string; number: string; status: string; }
+interface BatchOption { id: string; number: string; provider?: string | null; status: string; }
 
 const formatDate = (value?: string | Date) => (value ? format(new Date(value), 'dd/MM/yyyy', { locale: es }) : '');
 
@@ -35,6 +36,8 @@ export function Reconciliation() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [orders, setOrders] = useState<OrderOption[]>([]);
+  const [batches, setBatches] = useState<BatchOption[]>([]);
+  const [receptionBatchId, setReceptionBatchId] = useState('');
   const [supplierId, setSupplierId] = useState('');
   const [orderId, setOrderId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -49,13 +52,15 @@ export function Reconciliation() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      setData(await logisticsService.reconciliationAvailable({ page, pageSize, search: search || undefined }));
+      setData(await logisticsService.reconciliationAvailable({
+        page, pageSize, search: search || undefined, receptionBatchId: receptionBatchId || undefined,
+      }));
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudieron cargar los paquetes por conciliar'));
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, receptionBatchId]);
 
   useEffect(() => {
     const timer = setTimeout(load, 250);
@@ -65,14 +70,16 @@ export function Reconciliation() {
   useEffect(() => {
     (async () => {
       try {
-        const [sup, ord] = await Promise.all([
+        const [sup, ord, bch] = await Promise.all([
           suppliersService.getAll({ page: 1, pageSize: 200 } as any),
           purchaseOrdersService.getAll({ page: 1, pageSize: 200, status: 'APPROVED' } as any),
+          logisticsService.listBatches({ page: 1, pageSize: 200 }),
         ]);
         const supplierList: any[] = sup?.data || (sup as any)?.items || [];
         const orderList: any[] = ord?.data || (ord as any)?.items || [];
         setSuppliers(supplierList.map((s) => ({ id: s.id, name: s.name, code: s.code })));
         setOrders(orderList.map((o) => ({ id: o.id, number: o.number, status: o.status })));
+        setBatches((bch?.items || []).map((b) => ({ id: b.id, number: b.number, provider: b.provider, status: b.status })));
       } catch {
         /* catálogos opcionales */
       }
@@ -91,12 +98,13 @@ export function Reconciliation() {
 
   const runPreview = useCallback(async () => {
     if (selected.size === 0) { toast.error('Selecciona al menos un paquete'); return; }
-    if (!supplierId || !orderId) { toast.error('Selecciona proveedor y orden de compra'); return; }
+    if (!receptionBatchId && (!supplierId || !orderId)) { toast.error('Selecciona una referencia o proveedor y orden de compra'); return; }
     setBusy(true);
     try {
       setPreview(await logisticsService.reconciliationPreview({
-        supplierId,
-        purchaseOrderId: orderId,
+        supplierId: receptionBatchId ? undefined : supplierId,
+        purchaseOrderId: receptionBatchId ? undefined : orderId,
+        receptionBatchId: receptionBatchId || undefined,
         number: invoiceNumber || undefined,
         date,
         dueDate: dueDate || undefined,
@@ -108,15 +116,16 @@ export function Reconciliation() {
     } finally {
       setBusy(false);
     }
-  }, [selected, supplierId, orderId, invoiceNumber, date, dueDate, notes]);
+  }, [selected, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
 
   const confirm = useCallback(async () => {
     if (!preview) return;
     setConfirming(true);
     try {
       const res = await logisticsService.reconciliationConfirm({
-        supplierId,
-        purchaseOrderId: orderId,
+        supplierId: receptionBatchId ? undefined : supplierId,
+        purchaseOrderId: receptionBatchId ? undefined : orderId,
+        receptionBatchId: receptionBatchId || undefined,
         number: invoiceNumber || undefined,
         date,
         dueDate: dueDate || undefined,
@@ -125,18 +134,23 @@ export function Reconciliation() {
         notes: notes || undefined,
       });
       setResult(res);
-      toast.success(`Conciliación confirmada: ${res.linkedPackages} paquete(s), factura ${res.invoice.number}`);
+      toast.success(
+        res.invoice
+          ? `Conciliación confirmada: ${res.linkedPackages} paquete(s), factura ${res.invoice.number}`
+          : `Conciliación confirmada sin factura (la referencia no tiene proveedor): ${res.linkedPackages} paquete(s)`,
+      );
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo confirmar la conciliación'));
     } finally {
       setConfirming(false);
     }
-  }, [preview, supplierId, orderId, invoiceNumber, date, dueDate, notes]);
+  }, [preview, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
 
   const reset = useCallback(() => {
     setResult(null);
     setPreview(null);
     setSelected(new Set());
+    setReceptionBatchId('');
     setInvoiceNumber('');
     setDate(formatDate(new Date()));
     setDueDate('');
@@ -246,20 +260,40 @@ export function Reconciliation() {
           <ReceiptText className="size-4 text-primary" /> Nueva conciliación · {selectedPackages.length} paquete(s) seleccionado(s)
         </h3>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proveedor *</label>
-            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
-              <option value="">Selecciona proveedor…</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              Referencia de recepción (opcional)
+            </label>
+            <select value={receptionBatchId} onChange={(e) => { setReceptionBatchId(e.target.value); setPage(1); }} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
+              <option value="">Sin referencia (proveedor + OC manual)</option>
+              {batches.filter((b) => b.status === 'OPEN').map((b) => (
+                <option key={b.id} value={b.id}>{b.number} · {b.provider || 'Sin proveedor'}</option>
+              ))}
             </select>
+            {receptionBatchId && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Al confirmar se usa el proveedor de la referencia; si no tiene proveedor, se omite la factura de compra.
+              </p>
+            )}
           </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Orden de compra aprobada *</label>
-            <select value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
-              <option value="">Selecciona OC aprobada…</option>
-              {orders.map((o) => <option key={o.id} value={o.id}>{o.number}</option>)}
-            </select>
-          </div>
+          {!receptionBatchId && (
+            <>
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proveedor *</label>
+                <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
+                  <option value="">Selecciona proveedor…</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Orden de compra aprobada *</label>
+                <select value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
+                  <option value="">Selecciona OC aprobada…</option>
+                  {orders.map((o) => <option key={o.id} value={o.id}>{o.number}</option>)}
+                </select>
+              </div>
+            </>
+          )}
           <div>
             <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Factura / referencia del proveedor</label>
             <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Ej. F-001 (opcional)" className="rounded-xl text-xs" />
@@ -280,7 +314,7 @@ export function Reconciliation() {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button className="rounded-xl text-xs" onClick={runPreview} disabled={busy || selected.size === 0 || !supplierId || !orderId}>
+          <Button className="rounded-xl text-xs" onClick={runPreview} disabled={busy || selected.size === 0 || (!receptionBatchId && (!supplierId || !orderId))}>
             <FileText className="size-4" /> {busy ? 'Preparando…' : 'Preparar conciliación'}
           </Button>
           <Button variant="outline" className="rounded-xl text-xs" onClick={() => setSelected(new Set())} disabled={selected.size === 0}>Limpiar selección</Button>
@@ -291,7 +325,7 @@ export function Reconciliation() {
         <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4 shadow-sm" data-tour="log-recon-preview">
           <div className="flex items-center justify-between gap-2">
             <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary"><CheckCircle2 className="size-4" /> Resumen</h3>
-            <Badge variant="outline" className="rounded-lg text-[11px]">{preview.packageCount} paquetes · {preview.invoiceNumber}</Badge>
+            <Badge variant="outline" className="rounded-lg text-[11px]">{preview.referenceNumber ? `${preview.referenceNumber} · ` : ''}{preview.packageCount} paquetes · {preview.invoiceNumber}</Badge>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso proveedor</p><p className="font-black">{preview.weights.supplierWeight.toFixed(2)}</p></div>
@@ -310,7 +344,11 @@ export function Reconciliation() {
         <Card className="rounded-2xl border-emerald-300 bg-emerald-50 p-4 shadow-sm dark:bg-emerald-950/20">
           <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-600"><CheckCircle2 className="size-4" /> Conciliación registrada</h3>
           <p className="mt-2 text-sm">
-            Factura de proveedor <b>{result.invoice.number}</b> (${Number(result.invoice.total || 0).toFixed(2)}) con <b>{result.linkedPackages}</b> paquete(s). Los paquetes ya no aparecen en el listado de conciliación.
+            {result.invoice ? (
+              <>Factura de proveedor <b>{result.invoice.number}</b> (${Number(result.invoice.total || 0).toFixed(2)}) con <b>{result.linkedPackages}</b> paquete(s). Los paquetes ya no aparecen en el listado de conciliación.</>
+            ) : (
+              <>Referencia sin proveedor: se omitió la factura de compra. <b>{result.linkedPackages}</b> paquete(s) vinculados como comprados.</>
+            )}
           </p>
           <Button variant="outline" className="mt-3 rounded-xl text-xs" onClick={reset}>Nueva conciliación</Button>
         </Card>

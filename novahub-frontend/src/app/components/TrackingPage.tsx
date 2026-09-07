@@ -42,17 +42,19 @@ import {
   type TrackingEvent,
 } from '../services/tracking.service';
 import { ReceptionWizard } from './tracking/ReceptionWizard';
+import { BatchReception } from './tracking/BatchReception';
 import { ReceivedPackages } from './tracking/ReceivedPackages';
 import { Reconciliation } from './tracking/Reconciliation';
 import { Billing } from './tracking/Billing';
 import { LogisticsConfig } from './tracking/LogisticsConfig';
 import { TrackingViewTutorial } from './tracking/TrackingViewTutorial';
 
-type TrackingTab = 'transit' | 'reception' | 'packages' | 'reconciliation' | 'billing' | 'config';
+type TrackingTab = 'transit' | 'reception' | 'batches' | 'packages' | 'reconciliation' | 'billing' | 'config';
 
 const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
   { id: 'transit', label: 'En tránsito' },
   { id: 'reception', label: 'Recepción de paquetes' },
+  { id: 'batches', label: 'Recepción en lote' },
   { id: 'packages', label: 'Paquetes recibidos' },
   { id: 'reconciliation', label: 'Conciliación de compras' },
   { id: 'billing', label: 'Disponibles para facturar' },
@@ -261,7 +263,6 @@ export function TrackingPage() {
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Ship className="size-5" /></div>
           <div>
-            <h1 className="text-lg font-black tracking-tight">Tracking de Importaciones</h1>
             <p className="text-xs text-muted-foreground">Envíos de agencia por código de tracking · {user?.clientTenant?.name || ''}</p>
           </div>
         </div>
@@ -542,6 +543,8 @@ export function TrackingPage() {
     </div>
       ) : tab === 'reception' ? (
         <ReceptionWizard onDone={() => setTab('packages')} />
+      ) : tab === 'batches' ? (
+        <BatchReception />
       ) : tab === 'packages' ? (
         <ReceivedPackages />
       ) : tab === 'reconciliation' ? (
