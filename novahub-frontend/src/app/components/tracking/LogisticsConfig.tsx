@@ -186,7 +186,6 @@ export function LogisticsConfig() {
     { id: 'warehouses', label: 'Bodegas / País' },
     { id: 'subagencies', label: 'Subagencias' },
     { id: 'modes', label: 'Tipos de envío' },
-    { id: 'prefixes', label: 'Prefijos' },
     { id: 'fields', label: 'Campos personalizados' },
   ];
 
@@ -223,10 +222,12 @@ export function LogisticsConfig() {
       {tab === 'warehouses' && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
           <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Bodegas por país</h3>
+          <p className="mt-1 text-[11px] text-muted-foreground">El Nº / código se guarda aquí y se reutiliza automáticamente en cada paquete de Recepción.</p>
           {whEditId && <p className="mt-1 text-[11px] font-black text-primary">Editando bodega…</p>}
-          <div className="mt-4 grid gap-2 sm:grid-cols-6">
+          <div className="mt-4 grid gap-2 sm:grid-cols-7">
             <Input placeholder="País *" value={whForm.country || ''} onChange={(e) => setWhForm((f) => ({ ...f, country: e.target.value }))} className="rounded-xl" />
             <Input placeholder="Nombre *" value={whForm.name || ''} onChange={(e) => setWhForm((f) => ({ ...f, name: e.target.value }))} className="rounded-xl" />
+            <Input placeholder="Nº / código" value={whForm.code || ''} onChange={(e) => setWhForm((f) => ({ ...f, code: e.target.value }))} className="rounded-xl font-mono" />
             <select value={whForm.provider || ''} onChange={(e) => setWhForm((f) => ({ ...f, provider: e.target.value }))} className="rounded-xl border border-input bg-background px-3 py-2 text-sm">
               <option value="">Sin proveedor</option>
               {suppliers.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
@@ -249,11 +250,11 @@ export function LogisticsConfig() {
             {warehouses.map((w) => (
               <div key={w.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-black">{w.name} · {w.country}</p>
+                  <p className="text-sm font-black">{w.name} · {w.country}{w.code ? ` · ${w.code}` : ''}</p>
                   <p className="text-[11px] text-muted-foreground">{w.provider || 'Sin proveedor'} · {w.unitOfMeasure} · {WAREHOUSE_STRATEGY_LABELS[w.strategy]}{w.strategy === 'TRACKING_LAST_N' ? ` (N=${w.trackingLastN})` : ''}</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={() => { setWhEditId(w.id); setWhForm({ country: w.country, name: w.name, provider: w.provider || '', unitOfMeasure: w.unitOfMeasure, strategy: w.strategy as WarehouseStrategy, trackingLastN: w.trackingLastN }); }}><Pencil className="size-4" /></Button>
+                  <Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={() => { setWhEditId(w.id); setWhForm({ country: w.country, name: w.name, code: w.code || '', provider: w.provider || '', unitOfMeasure: w.unitOfMeasure, strategy: w.strategy as WarehouseStrategy, trackingLastN: w.trackingLastN }); }}><Pencil className="size-4" /></Button>
                   <Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={async () => { if (!window.confirm('¿Eliminar esta bodega?')) return; try { await logisticsService.deleteWarehouse(w.id); await load(); toast.success('Bodega eliminada'); } catch (error) { toast.error(getApiErrorMessage(error, 'No se pudo eliminar')); } }}><Trash2 className="size-4" /></Button>
                 </div>
               </div>

@@ -290,7 +290,7 @@ export function BatchReception() {
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ReceiptText className="size-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-black tracking-tight">{batch.number}</h1>
+              <h1 className="text-lg font-black tracking-tight">{batch.sourceTicket ? `${batch.sourceTicket} · ${batch.number}` : batch.number}</h1>
               <Badge variant="outline" className={`rounded-lg text-[10px] ring-1 ${open ? 'ring-amber-300 text-amber-600' : 'ring-emerald-300 text-emerald-600'}`}>
                 {open ? 'Abierta' : 'Confirmada'}
               </Badge>
@@ -530,7 +530,7 @@ export function BatchReception() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="relative min-w-56 flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar por número, proveedor o factura…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="rounded-xl pl-9" />
+            <Input placeholder="Buscar por ticket, referencia, proveedor o factura…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="rounded-xl pl-9" />
           </div>
           <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} className="rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
             <option value="">Todas</option>
@@ -548,7 +548,7 @@ export function BatchReception() {
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow>
-              <TableHead className="text-[10px] font-black uppercase tracking-widest">Referencia</TableHead>
+              <TableHead className="text-[10px] font-black uppercase tracking-widest">Ticket / referencia</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Proveedor</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha</TableHead>
@@ -569,7 +569,7 @@ export function BatchReception() {
               </TableCell></TableRow>
             ) : data!.items.map((b) => (
               <TableRow key={b.id} className="cursor-pointer hover:bg-muted/40" onClick={() => void openDetail(b.id)}>
-                <TableCell className="py-3 text-xs font-black text-primary">{b.number}</TableCell>
+                <TableCell className="py-3 text-xs font-black text-primary"><span>{b.sourceTicket || b.number}</span>{b.sourceTicket && <span className="ml-1 text-[10px] font-normal text-muted-foreground">· {b.number}</span>}</TableCell>
                 <TableCell className="py-3 text-xs font-semibold">{b.provider || '—'}</TableCell>
                 <TableCell className="py-3 text-xs text-muted-foreground">{b.warehouseName || '—'}</TableCell>
                 <TableCell className="py-3 text-xs text-muted-foreground">{formatDate(b.date)}</TableCell>
@@ -627,7 +627,7 @@ export function BatchReception() {
               <Input value={createForm.notes} onChange={(e) => setCreateForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Opcional" className="rounded-xl text-xs" />
             </div>
             <p className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
-              Número automático <b>REF-######</b>. Al confirmar, los paquetes pasan a <b>Conciliación de compras</b> como comprados.
+              Número interno <b>REF-######</b>. El ticket del proveedor queda guardado para rastrear y agrupar los paquetes.
             </p>
           </div>
           <SheetFooter className="flex-row justify-end gap-2 border-t border-border/50 px-5 py-3">

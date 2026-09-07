@@ -29,6 +29,7 @@ export interface LogisticsWarehouse {
   tenantId: string;
   country: string;
   name: string;
+  code?: string;
   provider?: string;
   unitOfMeasure: string;
   strategy: WarehouseStrategy;
@@ -455,7 +456,7 @@ export const logisticsService = {
     return api.get('/logistics/batches', { params }) as Promise<PaginatedSimple<ReceptionBatch>>;
   },
 
-  async createBatch(data: { provider?: string; supplierId?: string; warehouseId?: string; date?: string; notes?: string }) {
+  async createBatch(data: { sourceTicket?: string; provider?: string; supplierId?: string; warehouseId?: string; date?: string; notes?: string }) {
     return api.post('/logistics/batches', data) as Promise<ReceptionBatch>;
   },
 
@@ -672,6 +673,7 @@ export interface ReceptionBatch {
   id: string;
   tenantId: string;
   number: string;
+  sourceTicket?: string | null;
   provider?: string | null;
   supplierId?: string | null;
   warehouseId?: string | null;
@@ -696,6 +698,7 @@ export interface ReceptionBatch {
 
 export interface BatchPackageRow {
   line?: number;
+  warehouseId?: string;
   trackingCode?: string;
   shipmentModeCode?: string;
   item?: string;
@@ -717,6 +720,7 @@ export interface PdfPreviewRow extends BatchPackageRow {
 
 export interface PdfPreviewResult {
   format: 'AWBOX' | 'OGLOBAL' | null;
+  ticketNumber?: string;
   rows: BatchPackageRow[];
   warnings: string[];
   fileName: string;
