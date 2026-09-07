@@ -34,7 +34,7 @@ export function QuickReception({ defaults, onImported }: QuickReceptionProps) {
       const importedCount = res.imported;
       const errors = res.rows.filter((r) => r.result === 'ERROR');
       if (importedCount > 0) toast.success(`${importedCount} paquete(s) registrado(s)`);
-      if (errors.length > 0) toast.error(`${errors.length} con error (duplicados/invÃ¡lidos)`);
+      if (errors.length > 0) toast.error(`${errors.length} con error (duplicados/inválidos)`);
       setRows([{ tracking: '', weight: '' }]);
       onImported();
       setTimeout(() => trackingRef.current?.focus(), 50);
@@ -61,12 +61,12 @@ export function QuickReception({ defaults, onImported }: QuickReceptionProps) {
   return (
     <div className="space-y-3">
       <Card className="rounded-2xl border-primary/20 bg-primary/5 p-4">
-        <p className="flex items-center gap-1.5 text-xs font-black text-primary"><Zap className="size-4" /> ConfiguraciÃ³n fija (se mantiene entre paquetes)</p>
+        <p className="flex items-center gap-1.5 text-xs font-black text-primary"><Zap className="size-4" /> Configuración fija (se mantiene entre paquetes)</p>
         <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
           <Badge variant="outline" className="rounded-lg text-[10px]">Tipo: {defaults.shipmentModeCode || 'Custom'}</Badge>
           <Badge variant="outline" className="rounded-lg text-[10px]">SKU: {defaults.sku || 'SIN-SKU'}</Badge>
           <Badge variant="outline" className="rounded-lg text-[10px]">Bodega: {defaults.warehouseId ? 'Configurada' : 'Sin bodega'}</Badge>
-          <Badge variant="outline" className="rounded-lg text-[10px]">Agencia: {defaults.agency?.name || 'â€”'}</Badge>
+          <Badge variant="outline" className="rounded-lg text-[10px]">Agencia: {defaults.agency?.name || '—'}</Badge>
         </div>
       </Card>
 
@@ -76,7 +76,7 @@ export function QuickReception({ defaults, onImported }: QuickReceptionProps) {
             <Input
               id={`qt-${index}`}
               ref={index === 0 ? trackingRef : undefined}
-              placeholder="Tracking (escÃ¡ner â†’ ENTER)"
+              placeholder="Tracking (escáner → ENTER)"
               value={row.tracking}
               onChange={(e) => setRows((rs) => rs.map((r, i) => (i === index ? { ...r, tracking: e.target.value } : r)))}
               onKeyDown={(e) => handleKey(e, index, 'tracking')}
@@ -108,7 +108,7 @@ export function QuickReception({ defaults, onImported }: QuickReceptionProps) {
         <button className="text-xs font-bold text-primary" onClick={() => setRows((rs) => [...rs, { tracking: '', weight: '' }])}>+ Agregar fila</button>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">Flujo por paquete: Escanear â†’ Peso â†’ ENTER. Al terminar se limpian los campos y se mantiene la configuraciÃ³n.</p>
+      <p className="text-[11px] text-muted-foreground">Flujo por paquete: Escanear → Peso → ENTER. Al terminar se limpian los campos y se mantiene la configuración.</p>
     </div>
   );
 }

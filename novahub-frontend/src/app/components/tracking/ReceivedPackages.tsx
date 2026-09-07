@@ -30,6 +30,7 @@ import { authService } from '../../services/auth.service';
 import { usersService } from '../../services/users.service';
 import {
   logisticsService,
+  RECEIVED_PACKAGE_STATUS_LABELS,
   type ImportDefaults,
   type ReceivedPackage,
   type ReceivedPackageListResult,
@@ -90,7 +91,7 @@ export function ReceivedPackages() {
         warehouseId: d.warehouseId || ctx.warehouses[0]?.id,
       }));
     } catch {
-      /* contexto no crÃ­tico para el listado */
+      /* contexto no crítico para el listado */
     }
   }, []);
 
@@ -132,8 +133,8 @@ export function ReceivedPackages() {
       {/* KPIs (respetan filtros activos) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <KpiCard label="Total paquetes" value={kpis?.total} icon={<PackageSearch className="size-4 text-primary" />} />
-        <KpiCard label="Libras aÃ©reo" value={kpis?.librasAereo} icon={<Ship className="size-4 text-sky-500" />} suffix="lb" />
-        <KpiCard label="Libras marÃ­timo" value={kpis?.librasMaritimo} icon={<Anchor className="size-4 text-cyan-500" />} suffix="lb" />
+        <KpiCard label="Libras aéreo" value={kpis?.librasAereo} icon={<Ship className="size-4 text-sky-500" />} suffix="lb" />
+        <KpiCard label="Libras marítimo" value={kpis?.librasMaritimo} icon={<Anchor className="size-4 text-cyan-500" />} suffix="lb" />
         <KpiCard label="Unidades Custom" value={kpis?.unidadesCustom} icon={<Boxes className="size-4 text-amber-500" />} />
         <KpiCard label="Pendientes de compra" value={kpis?.pendingPurchase} icon={<FileText className="size-4 text-rose-500" />} />
         <KpiCard label="Disponibles para facturar" value={kpis?.availableToInvoice} icon={<CheckCircle2 className="size-4 text-emerald-500" />} />
@@ -144,13 +145,13 @@ export function ReceivedPackages() {
         <div className="relative min-w-56 flex-1">
           <PackageSearch className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar: tracking, dÃ­gitos, warehouse, SKU, cliente, agenciaâ€¦"
+            placeholder="Buscar: tracking, dígitos, warehouse, SKU, cliente, agencia…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="rounded-xl pl-9"
           />
         </div>
-        <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')}><Zap className="size-4" /> RecepciÃ³n rÃ¡pida</Button>
+        <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')}><Zap className="size-4" /> Recepción rápida</Button>
         <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')}><Download className="size-4" /> Importar Excel</Button>
       </div>
 
@@ -183,8 +184,8 @@ export function ReceivedPackages() {
       {view !== 'list' && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-black">{view === 'quick' ? 'RecepciÃ³n rÃ¡pida' : 'ImportaciÃ³n masiva'}</h3>
-            <button className="text-xs font-bold text-muted-foreground" onClick={() => setView('list')}>Cerrar âœ•</button>
+            <h3 className="text-sm font-black">{view === 'quick' ? 'Recepción rápida' : 'Importación masiva'}</h3>
+            <button className="text-xs font-bold text-muted-foreground" onClick={() => setView('list')}>Cerrar ×</button>
           </div>
           {view === 'quick' ? (
             <QuickReception defaults={defaults} fixed={{ sku: defaults.sku, warehouseId: defaults.warehouseId, shipmentModeCode: defaults.shipmentModeCode }} onImported={load} />
@@ -204,7 +205,7 @@ export function ReceivedPackages() {
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Usuario</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Tipo</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">SKU</TableHead>
-              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso fÃ­sico</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso físico</TableHead>
               <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso facturable</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Tracking</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Warehouse</TableHead>
@@ -215,26 +216,26 @@ export function ReceivedPackages() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={12} className="py-10 text-center text-xs text-muted-foreground">Cargando paquetesâ€¦</TableCell></TableRow>
+              <TableRow><TableCell colSpan={12} className="py-10 text-center text-xs text-muted-foreground">Cargando paquetes…</TableCell></TableRow>
             ) : !result || result.items.length === 0 ? (
               <TableRow><TableCell colSpan={12} className="py-10 text-center">
                 <PackageSearch className="mx-auto size-8 text-muted-foreground/40" />
                 <p className="mt-2 text-sm font-bold">Sin paquetes recibidos</p>
-                <p className="text-xs text-muted-foreground">Registra una recepciÃ³n o importa un archivo.</p>
+                <p className="text-xs text-muted-foreground">Registra una recepción o importa un archivo.</p>
               </TableCell></TableRow>
             ) : result.items.map((pkg) => (
               <TableRow key={pkg.id} className="cursor-pointer" onClick={() => openDetail(pkg)}>
                 <TableCell className="text-xs">{format(new Date(pkg.receivedAt), "d MMM yy, HH:mm", { locale: es })}</TableCell>
-                <TableCell className="text-xs">{pkg.branchName || 'â€”'}</TableCell>
-                <TableCell className="text-xs">{pkg.receivedByName || 'â€”'}</TableCell>
+                <TableCell className="text-xs">{pkg.branchName || '—'}</TableCell>
+                <TableCell className="text-xs">{pkg.receivedByName || '—'}</TableCell>
                 <TableCell className="text-xs font-semibold">{pkg.shipmentModeName}</TableCell>
                 <TableCell className="text-xs font-mono">{pkg.sku}</TableCell>
                 <TableCell className="text-right text-xs">{formatWeight(pkg.physicalWeight, pkg.weightUnit)}</TableCell>
                 <TableCell className="text-right text-xs font-black">{formatWeight(pkg.billableWeight, pkg.weightUnit)}</TableCell>
                 <TableCell className="font-mono text-xs font-bold text-primary">{pkg.trackingCode}</TableCell>
-                <TableCell className="text-xs">{pkg.warehouseValue || pkg.warehouseName || 'â€”'}</TableCell>
-                <TableCell className="text-xs">{pkg.subagencyName || 'â€”'}</TableCell>
-                <TableCell><Badge variant="outline" className="rounded-lg text-[10px] text-emerald-600">{pkg.status}</Badge></TableCell>
+                <TableCell className="text-xs">{pkg.warehouseValue || pkg.warehouseName || '—'}</TableCell>
+                <TableCell className="text-xs">{pkg.subagencyName || '—'}</TableCell>
+                <TableCell><Badge variant="outline" className="rounded-lg text-[10px] text-emerald-600">{RECEIVED_PACKAGE_STATUS_LABELS[pkg.status] || pkg.status}</Badge></TableCell>
                 <TableCell className="text-right"><Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={(e) => { e.stopPropagation(); openDetail(pkg); }}><Eye className="size-4" /> Ver</Button></TableCell>
               </TableRow>
             ))}
@@ -242,10 +243,10 @@ export function ReceivedPackages() {
         </Table>
       </Card>
 
-      {/* Cards mÃ³viles */}
+      {/* Cards móviles */}
       <div className="space-y-3 lg:hidden">
         {loading ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">Cargandoâ€¦</p>
+          <p className="py-8 text-center text-xs text-muted-foreground">Cargando…</p>
         ) : !result || result.items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border/60 p-8 text-center text-sm text-muted-foreground">Sin paquetes recibidos</div>
         ) : result.items.map((pkg) => (
@@ -253,23 +254,23 @@ export function ReceivedPackages() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-mono text-xs font-bold text-primary">{pkg.trackingCode}</p>
-                <p className="text-xs text-muted-foreground">{pkg.sku} Â· {pkg.shipmentModeName} Â· {formatWeight(pkg.billableWeight, pkg.weightUnit)}</p>
+                <p className="text-xs text-muted-foreground">{pkg.sku} · {pkg.shipmentModeName} · {formatWeight(pkg.billableWeight, pkg.weightUnit)}</p>
               </div>
-              <Badge variant="outline" className="rounded-lg text-[10px] text-emerald-600">{pkg.status}</Badge>
+              <Badge variant="outline" className="rounded-lg text-[10px] text-emerald-600">{RECEIVED_PACKAGE_STATUS_LABELS[pkg.status] || pkg.status}</Badge>
             </div>
           </div>
         ))}
       </div>
 
-      {/* PaginaciÃ³n server-side */}
+      {/* Paginación server-side */}
       {result && result.total > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
           <p className="text-muted-foreground">
-            Mostrando {(result.page - 1) * result.pageSize + 1}â€“{Math.min(result.page * result.pageSize, result.total)} de {result.total}
+            Mostrando {(result.page - 1) * result.pageSize + 1}–{Math.min(result.page * result.pageSize, result.total)} de {result.total}
           </p>
           <div className="flex items-center gap-2">
             <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="rounded-xl border border-input bg-background px-2 py-1.5 text-xs">
-              {PAGE_SIZES.map((s) => <option key={s} value={s}>{s} por pÃ¡gina</option>)}
+              {PAGE_SIZES.map((s) => <option key={s} value={s}>{s} por página</option>)}
             </select>
             <Button variant="outline" size="sm" className="rounded-lg text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
             <span className="font-bold">{result.page}</span>
@@ -292,7 +293,7 @@ function KpiCard({ label, value, icon, suffix }: { label: string; value?: number
   return (
     <Card className="rounded-2xl border-border/60 bg-card p-3 shadow-sm">
       <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">{icon}{label}</div>
-      <p className="mt-1 text-xl font-black">{value ?? 'â€”'}{suffix ? <span className="text-xs font-semibold text-muted-foreground"> {suffix}</span> : null}</p>
+      <p className="mt-1 text-xl font-black">{value ?? '—'}{suffix ? <span className="text-xs font-semibold text-muted-foreground"> {suffix}</span> : null}</p>
     </Card>
   );
 }
@@ -323,22 +324,22 @@ function PackageDetail({ pkg }: { pkg: ReceivedPackage }) {
         <SheetDescription className="font-mono text-xs text-primary">{pkg.trackingCode}</SheetDescription>
       </SheetHeader>
       <div className="mt-4 space-y-4 px-4 py-4">
-        <DetailSection title="IdentificaciÃ³n">
+        <DetailSection title="Identificación">
           <DetailRow label="Tracking" value={pkg.trackingCode} />
           <DetailRow label="Warehouse" value={pkg.warehouseValue || pkg.warehouseName} />
           <DetailRow label="SKU" value={pkg.sku} />
           <DetailRow label="Tipo" value={pkg.shipmentModeName} />
           <DetailRow label="Prefijo" value={pkg.prefixCode} />
         </DetailSection>
-        <DetailSection title="RecepciÃ³n">
+        <DetailSection title="Recepción">
           <DetailRow label="Fecha / hora" value={format(new Date(pkg.receivedAt), "d MMM yyyy, HH:mm 'h'", { locale: es })} />
           <DetailRow label="Sucursal" value={pkg.branchName} />
           <DetailRow label="Usuario" value={pkg.receivedByName} />
-          <DetailRow label="Bodega / PaÃ­s" value={pkg.warehouseName} />
+          <DetailRow label="Bodega / País" value={pkg.warehouseName} />
           <DetailRow label="Proveedor" value={pkg.provider} />
         </DetailSection>
         <DetailSection title="Peso">
-          <DetailRow label="Peso fÃ­sico" value={formatWeight(pkg.physicalWeight, pkg.weightUnit)} />
+          <DetailRow label="Peso físico" value={formatWeight(pkg.physicalWeight, pkg.weightUnit)} />
           <DetailRow label="Peso proveedor" value={formatWeight(pkg.supplierWeight, pkg.weightUnit)} />
           <DetailRow label="Peso facturable" value={formatWeight(pkg.billableWeight, pkg.weightUnit)} />
           <DetailRow label="Unidad" value={pkg.weightUnit} />
@@ -357,9 +358,9 @@ function PackageDetail({ pkg }: { pkg: ReceivedPackage }) {
           <DetailRow label="Estado" value={pkg.saleStatus === 'NONE' ? 'Sin venta' : 'Facturado'} />
           <DetailRow label="Factura relacionada" value={pkg.salePrice ? `$${pkg.salePrice}` : undefined} />
         </DetailSection>
-        <DetailSection title="AuditorÃ­a">
-          <DetailRow label="CreaciÃ³n" value={format(new Date(pkg.createdAt), "d MMM yyyy, HH:mm 'h'", { locale: es })} />
-          <DetailRow label="ModificaciÃ³n" value={format(new Date(pkg.updatedAt), "d MMM yyyy, HH:mm 'h'", { locale: es })} />
+        <DetailSection title="Auditoría">
+          <DetailRow label="Creación" value={format(new Date(pkg.createdAt), "d MMM yyyy, HH:mm 'h'", { locale: es })} />
+          <DetailRow label="Modificación" value={format(new Date(pkg.updatedAt), "d MMM yyyy, HH:mm 'h'", { locale: es })} />
         </DetailSection>
       </div>
     </>

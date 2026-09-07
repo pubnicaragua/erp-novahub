@@ -75,7 +75,7 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
         };
       }).filter((r) => r.tracking || r.sku || r.weight);
       if (mapped.length === 0) {
-        toast.error('El archivo no contiene filas vÃ¡lidas. Verifica los encabezados (SKU, PESO DEL PAQUETE, TRACKING, â€¦)');
+        toast.error('El archivo no contiene filas válidas. Verifica los encabezados (SKU, PESO DEL PAQUETE, TRACKING, …)');
         return;
       }
       setRows(mapped);
@@ -132,7 +132,7 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
       {summary && !result && (
         <div className="flex flex-wrap gap-2 text-xs">
           <Badge variant="outline" className="rounded-lg">{summary.total} analizadas</Badge>
-          <Badge variant="outline" className="rounded-lg text-emerald-600">{summary.valid} vÃ¡lidas</Badge>
+          <Badge variant="outline" className="rounded-lg text-emerald-600">{summary.valid} válidas</Badge>
           <Badge variant="outline" className="rounded-lg text-amber-600">{summary.warnings} advertencias</Badge>
           <Badge variant="outline" className="rounded-lg text-destructive">{summary.errors} errores</Badge>
         </div>
@@ -140,8 +140,8 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
 
       {result && (
         <Card className="rounded-2xl border-emerald-500/30 bg-emerald-500/5 p-4 text-center">
-          <p className="text-sm font-black text-emerald-600">ImportaciÃ³n completada</p>
-          <p className="mt-1 text-xs text-muted-foreground">{result.imported} importados Â· {result.skipped} duplicados omitidos</p>
+          <p className="text-sm font-black text-emerald-600">Importación completada</p>
+          <p className="mt-1 text-xs text-muted-foreground">{result.imported} importados · {result.skipped} duplicados omitidos</p>
         </Card>
       )}
 
@@ -153,14 +153,14 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
                 <th className="px-3 py-2 text-left font-black uppercase tracking-widest">Fila</th>
                 <th className="px-3 py-2 text-left font-black uppercase tracking-widest">Tracking</th>
                 <th className="px-3 py-2 text-left font-black uppercase tracking-widest">Resultado</th>
-                <th className="px-3 py-2 text-left font-black uppercase tracking-widest">ObservaciÃ³n</th>
+                <th className="px-3 py-2 text-left font-black uppercase tracking-widest">Observación</th>
               </tr>
             </thead>
             <tbody>
               {preview.map((r) => (
                 <tr key={r.row} className="border-t border-border/40">
                   <td className="px-3 py-1.5">{r.row}</td>
-                  <td className="px-3 py-1.5 font-mono">{r.tracking || 'â€”'}</td>
+                  <td className="px-3 py-1.5 font-mono">{r.tracking || '—'}</td>
                   <td className="px-3 py-1.5">
                     <Badge variant="outline" className={`rounded-lg text-[10px] ${r.result === 'OK' ? 'text-emerald-600' : r.result === 'WARNING' ? 'text-amber-600' : 'text-destructive'}`}>{r.result}</Badge>
                   </td>

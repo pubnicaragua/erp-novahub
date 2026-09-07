@@ -71,7 +71,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
         const list = Array.isArray(productsData) ? productsData : productsData?.items || [];
         setProducts(list.map((p: any) => ({ code: p.code, name: p.name })));
       } catch (error) {
-        toast.error(getApiErrorMessage(error, 'No se pudo cargar la configuraciÃ³n logÃ­stica'));
+        toast.error(getApiErrorMessage(error, 'No se pudo cargar la configuración logística'));
       }
     })();
   }, []);
@@ -91,7 +91,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
     try {
       const check = await logisticsService.receptionCheck(code);
       if (check.alreadyReceived) {
-        setCheckState({ status: 'duplicate', message: 'Este tracking ya estÃ¡ registrado' });
+        setCheckState({ status: 'duplicate', message: 'Este tracking ya está registrado' });
       } else {
         setCheckState({ status: 'preload' });
         if (check.inTransit?.providerWeight && !form.physicalWeight) {
@@ -159,7 +159,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
     } catch (error: any) {
       const body = error?.response?.data;
       if (body?.code === 'TRACKING_ALREADY_RECEIVED') {
-        setCheckState({ status: 'duplicate', message: 'Este tracking ya estÃ¡ registrado' });
+        setCheckState({ status: 'duplicate', message: 'Este tracking ya está registrado' });
         setStep(3);
       }
       toast.error(getApiErrorMessage(error, 'No se pudo registrar el paquete'));
@@ -178,7 +178,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
   };
 
   if (!ctx || !settings) {
-    return <div className="p-10 text-center text-sm text-muted-foreground">Cargando configuraciÃ³n logÃ­sticaâ€¦</div>;
+    return <div className="p-10 text-center text-sm text-muted-foreground">Cargando configuración logística…</div>;
   }
 
   const warehouse = (ctx.warehouses || []).find((w) => w.id === form.warehouseId);
@@ -188,7 +188,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
   const stepsMeta = [
     { n: 1, label: 'Tipo y sucursal' },
     { n: 2, label: 'Peso' },
-    { n: 3, label: 'IdentificaciÃ³n' },
+    { n: 3, label: 'Identificación' },
     { n: 4, label: 'Propietario y bodega' },
   ];
 
@@ -206,12 +206,12 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
 
       {step === 1 && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-black"><Truck className="size-4 text-primary" /> Paso 1 Â· Tipo y sucursal</h3>
+          <h3 className="flex items-center gap-2 text-sm font-black"><Truck className="size-4 text-primary" /> Paso 1 · Tipo y sucursal</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de envÃ­o *</label>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de envío *</label>
               <select value={form.shipmentModeCode} onChange={(e) => setForm((f) => ({ ...f, shipmentModeCode: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
-                <option value="">Seleccionaâ€¦</option>
+                <option value="">Selecciona…</option>
                 {ctx.shipmentModes.map((m) => <option key={m.id} value={m.code}>{m.name}</option>)}
               </select>
             </div>
@@ -238,10 +238,10 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
 
       {step === 2 && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Paso 2 Â· Peso</h3>
+          <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Paso 2 · Peso</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Peso fÃ­sico (lb) *</label>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Peso físico (lb) *</label>
               <Input id="reception-weight" type="number" step="0.01" min="0" value={form.physicalWeight} onChange={(e) => setForm((f) => ({ ...f, physicalWeight: e.target.value }))} className="rounded-xl" />
             </div>
             <div>
@@ -257,11 +257,11 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
           </div>
           {billablePreview !== undefined && (
             <p className="mt-3 rounded-xl bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-              Peso facturable: <b className="text-foreground">{billablePreview} {form.weightUnit}</b> Â· mÃ­nimo {settings.minimumBillableWeight} {settings.defaultUnitOfMeasure}, incremento {settings.weightRoundingIncrement} {settings.defaultUnitOfMeasure}
+              Peso facturable: <b className="text-foreground">{billablePreview} {form.weightUnit}</b> · mínimo {settings.minimumBillableWeight} {settings.defaultUnitOfMeasure}, incremento {settings.weightRoundingIncrement} {settings.defaultUnitOfMeasure}
             </p>
           )}
           <div className="mt-5 flex justify-between">
-            <Button variant="outline" className="rounded-xl" onClick={() => setStep(1)}><ArrowLeft className="size-4" /> AtrÃ¡s</Button>
+            <Button variant="outline" className="rounded-xl" onClick={() => setStep(1)}><ArrowLeft className="size-4" /> Atrás</Button>
             <Button className="rounded-xl" onClick={() => setStep(3)} disabled={!canNext()}>Siguiente</Button>
           </div>
         </Card>
@@ -269,20 +269,20 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
 
       {step === 3 && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-black"><Search className="size-4 text-primary" /> Paso 3 Â· IdentificaciÃ³n</h3>
+          <h3 className="flex items-center gap-2 text-sm font-black"><Search className="size-4 text-primary" /> Paso 3 · Identificación</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {ctx.trackingPrefixes.length > 0 && (
               <div>
                 <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Prefijo</label>
                 <select value={form.prefixCode} onChange={(e) => setForm((f) => ({ ...f, prefixCode: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
                   <option value="">Sin prefijo</option>
-                  {ctx.trackingPrefixes.map((p) => <option key={p.id} value={p.code}>{p.code} Â· {p.name}</option>)}
+                  {ctx.trackingPrefixes.map((p) => <option key={p.id} value={p.code}>{p.code} · {p.name}</option>)}
                 </select>
               </div>
             )}
             <div className={ctx.trackingPrefixes.length > 0 ? 'sm:col-span-1' : 'sm:col-span-2'}>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tracking * (escÃ¡ner USB â†’ ENTER)</label>
-              <Input ref={trackingRef} value={form.trackingCode} onChange={(e) => { setForm((f) => ({ ...f, trackingCode: e.target.value })); setCheckState({ status: 'idle' }); }} onKeyDown={handleTrackingKey} placeholder="Escanea o escribe el cÃ³digoâ€¦" className="rounded-xl font-mono" autoFocus />
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tracking * (escáner USB → ENTER)</label>
+              <Input ref={trackingRef} value={form.trackingCode} onChange={(e) => { setForm((f) => ({ ...f, trackingCode: e.target.value })); setCheckState({ status: 'idle' }); }} onKeyDown={handleTrackingKey} placeholder="Escanea o escribe el código…" className="rounded-xl font-mono" autoFocus />
             </div>
           </div>
           {checkState.status === 'duplicate' && (
@@ -293,11 +293,11 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
               )}
             </div>
           )}
-          {checkState.status === 'checking' && <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Verificando trackingâ€¦</p>}
-          {checkState.status === 'preload' && <p className="mt-3 text-xs text-emerald-600">Tracking nuevo Â· se precargÃ³ informaciÃ³n del trÃ¡nsito si existÃ­a.</p>}
-          {checkState.status === 'clean' && <p className="mt-3 text-xs text-muted-foreground">Tracking nuevo Â· puede recibirse directamente.</p>}
+          {checkState.status === 'checking' && <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Verificando tracking…</p>}
+          {checkState.status === 'preload' && <p className="mt-3 text-xs text-emerald-600">Tracking nuevo · se precargó información del tránsito si existía.</p>}
+          {checkState.status === 'clean' && <p className="mt-3 text-xs text-muted-foreground">Tracking nuevo · puede recibirse directamente.</p>}
           <div className="mt-5 flex justify-between">
-            <Button variant="outline" className="rounded-xl" onClick={() => setStep(2)}><ArrowLeft className="size-4" /> AtrÃ¡s</Button>
+            <Button variant="outline" className="rounded-xl" onClick={() => setStep(2)}><ArrowLeft className="size-4" /> Atrás</Button>
             <Button className="rounded-xl" onClick={() => { checkTracking(); setStep(4); }} disabled={!canNext()}>Siguiente</Button>
           </div>
         </Card>
@@ -305,7 +305,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
 
       {step === 4 && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Paso 4 Â· Propietario y bodega</h3>
+          <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Paso 4 · Propietario y bodega</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Propietario *</label>
@@ -340,10 +340,10 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
               </>
             )}
             <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodega / PaÃ­s</label>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodega / País</label>
               <select value={form.warehouseId} onChange={(e) => setForm((f) => ({ ...f, warehouseId: e.target.value, warehouseValue: '' }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
                 <option value="">Sin bodega</option>
-                {ctx.warehouses.map((w) => <option key={w.id} value={w.id}>{w.name} Â· {w.country} ({w.strategy})</option>)}
+                {ctx.warehouses.map((w) => <option key={w.id} value={w.id}>{w.name} · {w.country} ({w.strategy})</option>)}
               </select>
             </div>
             {warehouse && needsManualWarehouse && (
@@ -353,7 +353,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
               </div>
             )}
             {warehouse && lastNWarehouse && (
-              <p className="text-xs text-muted-foreground">Warehouse automÃ¡tico: Ãºltimos {warehouse.trackingLastN} del tracking â†’ <b>{form.trackingCode.slice(-warehouse.trackingLastN) || 'â€”'}</b></p>
+              <p className="text-xs text-muted-foreground">Warehouse automático: últimos {warehouse.trackingLastN} del tracking → <b>{form.trackingCode.slice(-warehouse.trackingLastN) || '—'}</b></p>
             )}
           </div>
 
@@ -368,13 +368,13 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
                     </label>
                     {field.inputType === 'SELECT' ? (
                       <select value={(customValues[field.key] as string) || ''} onChange={(e) => setCustomValues((v) => ({ ...v, [field.key]: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
-                        <option value="">â€”</option>
+                        <option value="">—</option>
                         {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : field.inputType === 'BOOLEAN' ? (
                       <select value={String(customValues[field.key] ?? '')} onChange={(e) => setCustomValues((v) => ({ ...v, [field.key]: e.target.value === 'true' }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
-                        <option value="">â€”</option>
-                        <option value="true">SÃ­</option>
+                        <option value="">—</option>
+                        <option value="true">Sí</option>
                         <option value="false">No</option>
                       </select>
                     ) : field.inputType === 'TEXTAREA' ? (
@@ -389,7 +389,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
           )}
 
           <div className="mt-5 flex justify-between">
-            <Button variant="outline" className="rounded-xl" onClick={() => setStep(3)}><ArrowLeft className="size-4" /> AtrÃ¡s</Button>
+            <Button variant="outline" className="rounded-xl" onClick={() => setStep(3)}><ArrowLeft className="size-4" /> Atrás</Button>
             <Button className="rounded-xl" onClick={() => setStep('confirm')}>Revisar y confirmar</Button>
           </div>
         </Card>
@@ -397,20 +397,20 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
 
       {step === 'confirm' && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-black"><PackageCheck className="size-4 text-primary" /> ConfirmaciÃ³n</h3>
+          <h3 className="flex items-center gap-2 text-sm font-black"><PackageCheck className="size-4 text-primary" /> Confirmación</h3>
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Tipo</p><p className="font-semibold">{ctx.shipmentModes.find((m) => m.code === form.shipmentModeCode)?.name || form.shipmentModeCode}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Sucursal</p><p className="font-semibold">{form.branchName || 'No disponible'}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">SKU</p><p className="font-semibold">{form.sku}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Tracking</p><p className="font-mono font-semibold">{form.prefixCode}{form.trackingCode}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Warehouse</p><p className="font-semibold">{form.warehouseValue || warehouse?.name || 'No disponible'}</p></div>
-            <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso fÃ­sico</p><p className="font-semibold">{form.physicalWeight} {form.weightUnit}</p></div>
-            <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso facturable</p><p className="font-semibold">{billablePreview ?? 'â€”'} {form.weightUnit}</p></div>
+            <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso físico</p><p className="font-semibold">{form.physicalWeight} {form.weightUnit}</p></div>
+            <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso facturable</p><p className="font-semibold">{billablePreview ?? '—'} {form.weightUnit}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Propietario</p><p className="font-semibold">{form.ownerType === 'CUSTOMER' ? form.customerName : form.ownerType === 'AGENCY' ? form.agencyName : `${form.agencyName} / ${form.subagencyName}` || 'No disponible'}</p></div>
-            <div><p className="text-[10px] font-black uppercase text-muted-foreground">Bodega/PaÃ­s</p><p className="font-semibold">{warehouse ? `${warehouse.name} Â· ${warehouse.country}` : 'No disponible'}</p></div>
+            <div><p className="text-[10px] font-black uppercase text-muted-foreground">Bodega/País</p><p className="font-semibold">{warehouse ? `${warehouse.name} · ${warehouse.country}` : 'No disponible'}</p></div>
           </div>
           <div className="mt-5 flex justify-between">
-            <Button variant="outline" className="rounded-xl" onClick={() => setStep(4)}><ArrowLeft className="size-4" /> AtrÃ¡s</Button>
+            <Button variant="outline" className="rounded-xl" onClick={() => setStep(4)}><ArrowLeft className="size-4" /> Atrás</Button>
             <Button className="rounded-xl" onClick={submit} disabled={submitting}>
               {submitting ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar paquete
             </Button>
@@ -429,7 +429,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
             <Button variant="outline" className="rounded-xl" onClick={() => { onDone?.(created.trackingCode); }}>Ir a Compras</Button>
             <Button variant="ghost" className="rounded-xl" onClick={() => { setCreated(null); setStep(1); }}>Cerrar</Button>
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">"Ir a Compras" no crea automÃ¡ticamente una compra.</p>
+          <p className="mt-3 text-[11px] text-muted-foreground">"Ir a Compras" no crea automáticamente una compra.</p>
         </Card>
       )}
 

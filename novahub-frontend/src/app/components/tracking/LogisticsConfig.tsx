@@ -45,7 +45,7 @@ export function LogisticsConfig() {
       setPrefixes(p);
       setFields(f);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'No se pudo cargar la configuraciÃ³n'));
+      toast.error(getApiErrorMessage(error, 'No se pudo cargar la configuración'));
     }
   }, []);
 
@@ -64,7 +64,7 @@ export function LogisticsConfig() {
         defaultCountry: settingsForm.defaultCountry,
       });
       setSettings(updated);
-      toast.success('ConfiguraciÃ³n guardada');
+      toast.success('Configuración guardada');
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo guardar'));
     } finally { setBusy(false); }
@@ -72,7 +72,7 @@ export function LogisticsConfig() {
 
   const [whForm, setWhForm] = useState<Partial<LogisticsWarehouse>>({});
   const addWarehouse = async () => {
-    if (!whForm.country || !whForm.name) { toast.error('PaÃ­s y nombre de bodega son obligatorios'); return; }
+    if (!whForm.country || !whForm.name) { toast.error('País y nombre de bodega son obligatorios'); return; }
     setBusy(true);
     try {
       await logisticsService.createWarehouse({ ...whForm, strategy: (whForm.strategy || 'NONE') as WarehouseStrategy, trackingLastN: whForm.trackingLastN || 6 });
@@ -84,19 +84,19 @@ export function LogisticsConfig() {
 
   const [modeForm, setModeForm] = useState<Partial<ShipmentMode>>({});
   const addMode = async () => {
-    if (!modeForm.code || !modeForm.name) { toast.error('CÃ³digo y nombre son obligatorios'); return; }
+    if (!modeForm.code || !modeForm.name) { toast.error('Código y nombre son obligatorios'); return; }
     setBusy(true);
     try {
       await logisticsService.createShipmentMode(modeForm);
       setModeForm({});
-      toast.success('Tipo de envÃ­o creado');
+      toast.success('Tipo de envío creado');
       await load();
     } catch (error) { toast.error(getApiErrorMessage(error, 'No se pudo crear')); } finally { setBusy(false); }
   };
 
   const [prefixForm, setPrefixForm] = useState<Partial<TrackingPrefix>>({});
   const addPrefix = async () => {
-    if (!prefixForm.code || !prefixForm.name) { toast.error('CÃ³digo y nombre son obligatorios'); return; }
+    if (!prefixForm.code || !prefixForm.name) { toast.error('Código y nombre son obligatorios'); return; }
     setBusy(true);
     try {
       await logisticsService.createTrackingPrefix(prefixForm);
@@ -128,8 +128,8 @@ export function LogisticsConfig() {
 
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: 'settings', label: 'Reglas de peso' },
-    { id: 'warehouses', label: 'Bodegas / PaÃ­s' },
-    { id: 'modes', label: 'Tipos de envÃ­o' },
+    { id: 'warehouses', label: 'Bodegas / País' },
+    { id: 'modes', label: 'Tipos de envío' },
     { id: 'prefixes', label: 'Prefijos' },
     { id: 'fields', label: 'Campos personalizados' },
   ];
@@ -148,7 +148,7 @@ export function LogisticsConfig() {
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
           <h3 className="flex items-center gap-2 text-sm font-black"><Settings2 className="size-4 text-primary" /> Reglas de peso facturable</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
-            <div><label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">MÃ­nimo facturable</label>
+            <div><label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mínimo facturable</label>
               <Input type="number" step="0.01" value={settingsForm.minimumBillableWeight ?? settings.minimumBillableWeight} onChange={(e) => setSettingsForm((f) => ({ ...f, minimumBillableWeight: Number(e.target.value) }))} className="rounded-xl" /></div>
             <div><label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Incremento de redondeo</label>
               <Input type="number" step="0.01" value={settingsForm.weightRoundingIncrement ?? settings.weightRoundingIncrement} onChange={(e) => setSettingsForm((f) => ({ ...f, weightRoundingIncrement: Number(e.target.value) }))} className="rounded-xl" /></div>
@@ -156,19 +156,19 @@ export function LogisticsConfig() {
               <select value={settingsForm.defaultUnitOfMeasure ?? settings.defaultUnitOfMeasure} onChange={(e) => setSettingsForm((f) => ({ ...f, defaultUnitOfMeasure: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
                 {['lb', 'kg', 'oz', 'unidades'].map((u) => <option key={u} value={u}>{u}</option>)}
               </select></div>
-            <div><label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">PaÃ­s por defecto</label>
+            <div><label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">País por defecto</label>
               <Input value={settingsForm.defaultCountry ?? settings.defaultCountry ?? ''} onChange={(e) => setSettingsForm((f) => ({ ...f, defaultCountry: e.target.value }))} className="rounded-xl" /></div>
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">Ej: 0.13 â†’ 0.50 Â· 1.13 â†’ 1.20 Â· 3.87 â†’ 3.90 (redondeo siempre hacia arriba).</p>
+          <p className="mt-3 text-[11px] text-muted-foreground">Ej: 0.13 → 0.50 · 1.13 → 1.20 · 3.87 → 3.90 (redondeo siempre hacia arriba).</p>
           <div className="mt-4"><Button className="rounded-xl" onClick={saveSettings} disabled={busy}><Save className="size-4" /> Guardar</Button></div>
         </Card>
       )}
 
       {tab === 'warehouses' && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Bodegas por paÃ­s</h3>
+          <h3 className="flex items-center gap-2 text-sm font-black"><Warehouse className="size-4 text-primary" /> Bodegas por país</h3>
           <div className="mt-4 grid gap-2 sm:grid-cols-6">
-            <Input placeholder="PaÃ­s *" value={whForm.country || ''} onChange={(e) => setWhForm((f) => ({ ...f, country: e.target.value }))} className="rounded-xl" />
+            <Input placeholder="País *" value={whForm.country || ''} onChange={(e) => setWhForm((f) => ({ ...f, country: e.target.value }))} className="rounded-xl" />
             <Input placeholder="Nombre *" value={whForm.name || ''} onChange={(e) => setWhForm((f) => ({ ...f, name: e.target.value }))} className="rounded-xl" />
             <Input placeholder="Proveedor" value={whForm.provider || ''} onChange={(e) => setWhForm((f) => ({ ...f, provider: e.target.value }))} className="rounded-xl" />
             <select value={whForm.unitOfMeasure || 'lb'} onChange={(e) => setWhForm((f) => ({ ...f, unitOfMeasure: e.target.value }))} className="rounded-xl border border-input bg-background px-3 py-2 text-sm">
@@ -184,8 +184,8 @@ export function LogisticsConfig() {
             {warehouses.map((w) => (
               <div key={w.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-black">{w.name} Â· {w.country}</p>
-                  <p className="text-[11px] text-muted-foreground">{w.provider || 'Sin proveedor'} Â· {w.unitOfMeasure} Â· {WAREHOUSE_STRATEGY_LABELS[w.strategy]}{w.strategy === 'TRACKING_LAST_N' ? ` (N=${w.trackingLastN})` : ''}</p>
+                  <p className="text-sm font-black">{w.name} · {w.country}</p>
+                  <p className="text-[11px] text-muted-foreground">{w.provider || 'Sin proveedor'} · {w.unitOfMeasure} · {WAREHOUSE_STRATEGY_LABELS[w.strategy]}{w.strategy === 'TRACKING_LAST_N' ? ` (N=${w.trackingLastN})` : ''}</p>
                 </div>
                 <Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={async () => { await logisticsService.deleteWarehouse(w.id); await load(); toast.success('Bodega eliminada'); }}><Trash2 className="size-4" /></Button>
               </div>
@@ -196,10 +196,10 @@ export function LogisticsConfig() {
 
       {tab === 'modes' && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="text-sm font-black">Tipos de envÃ­o configurables</h3>
+          <h3 className="text-sm font-black">Tipos de envío configurables</h3>
           <div className="mt-4 flex gap-2">
-            <Input placeholder="CÃ³digo (ej. AEREO)" value={modeForm.code || ''} onChange={(e) => setModeForm((f) => ({ ...f, code: e.target.value }))} className="rounded-xl" />
-            <Input placeholder="Nombre (ej. AÃ©reo)" value={modeForm.name || ''} onChange={(e) => setModeForm((f) => ({ ...f, name: e.target.value }))} className="rounded-xl" />
+            <Input placeholder="Código (ej. AEREO)" value={modeForm.code || ''} onChange={(e) => setModeForm((f) => ({ ...f, code: e.target.value }))} className="rounded-xl" />
+            <Input placeholder="Nombre (ej. Aéreo)" value={modeForm.name || ''} onChange={(e) => setModeForm((f) => ({ ...f, name: e.target.value }))} className="rounded-xl" />
             <Button className="rounded-xl" onClick={addMode} disabled={busy}><Plus className="size-4" /></Button>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -216,10 +216,10 @@ export function LogisticsConfig() {
 
       {tab === 'prefixes' && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
-          <h3 className="text-sm font-black">Prefijos de tracking (catÃ¡logo opcional)</h3>
-          <p className="mt-1 text-[11px] text-muted-foreground">El prefijo se guarda sin interpretar ni eliminar. Si no hay prefijos, el campo se oculta en la recepciÃ³n.</p>
+          <h3 className="text-sm font-black">Prefijos de tracking (catálogo opcional)</h3>
+          <p className="mt-1 text-[11px] text-muted-foreground">El prefijo se guarda sin interpretar ni eliminar. Si no hay prefijos, el campo se oculta en la recepción.</p>
           <div className="mt-4 flex gap-2">
-            <Input placeholder="CÃ³digo (ej. GFUS)" value={prefixForm.code || ''} onChange={(e) => setPrefixForm((f) => ({ ...f, code: e.target.value }))} className="rounded-xl" />
+            <Input placeholder="Código (ej. GFUS)" value={prefixForm.code || ''} onChange={(e) => setPrefixForm((f) => ({ ...f, code: e.target.value }))} className="rounded-xl" />
             <Input placeholder="Nombre" value={prefixForm.name || ''} onChange={(e) => setPrefixForm((f) => ({ ...f, name: e.target.value }))} className="rounded-xl" />
             <Button className="rounded-xl" onClick={addPrefix} disabled={busy}><Plus className="size-4" /></Button>
           </div>
@@ -245,7 +245,7 @@ export function LogisticsConfig() {
               {Object.entries(CUSTOM_FIELD_INPUT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
             <select value={fieldForm.context || 'RECEPTION'} onChange={(e) => setFieldForm((f) => ({ ...f, context: e.target.value }))} className="rounded-xl border border-input bg-background px-3 py-2 text-sm">
-              <option value="RECEPTION">RecepciÃ³n</option>
+              <option value="RECEPTION">Recepción</option>
               <option value="WAREHOUSE">Bodega</option>
             </select>
             <label className="flex items-center gap-2 text-xs font-semibold">
@@ -261,7 +261,7 @@ export function LogisticsConfig() {
               <div key={field.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 px-3 py-2">
                 <div>
                   <p className="text-sm font-black">{field.label} <Badge variant="outline" className="ml-1 rounded-lg text-[10px]">{CUSTOM_FIELD_INPUT_LABELS[field.inputType]}</Badge>{field.required && <span className="ml-1 text-[10px] text-destructive">*</span>}</p>
-                  <p className="text-[11px] text-muted-foreground">key: {field.key} Â· {field.context}{field.inputType === 'SELECT' ? ` Â· ${(field.options || []).join(', ')}` : ''}</p>
+                  <p className="text-[11px] text-muted-foreground">key: {field.key} · {field.context}{field.inputType === 'SELECT' ? ` · ${(field.options || []).join(', ')}` : ''}</p>
                 </div>
                 <Button variant="ghost" size="sm" className="rounded-lg text-xs" onClick={async () => { await logisticsService.deleteCustomFieldDefinition(field.id); await load(); }}><Trash2 className="size-4" /></Button>
               </div>

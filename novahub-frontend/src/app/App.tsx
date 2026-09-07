@@ -21,6 +21,7 @@ import { ActionClickGuard } from './components/ui/ActionClickGuard';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
+import { PublicTrackingPage } from './components/public/PublicTrackingPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
@@ -575,6 +576,7 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', readPersistedDarkMode());
   }, []);
 
+  if (location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
   if (location.pathname.startsWith('/restaurant/menu/')) {

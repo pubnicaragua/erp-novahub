@@ -28,6 +28,17 @@ export interface LogisticsWarehouse {
   isActive: boolean;
 }
 
+export const RECEIVED_PACKAGE_STATUS_LABELS: Record<string, string> = {
+  RECEIVED: 'Recibido',
+  AVAILABLE: 'Disponible',
+  BILLED: 'Facturado',
+  DELIVERED: 'Entregado',
+  ON_HOLD: 'En retención',
+  RETURNED: 'Devuelto',
+  LOST: 'Extraviado',
+  CANCELLED: 'Cancelado',
+};
+
 export interface ShipmentMode {
   id: string;
   tenantId: string;

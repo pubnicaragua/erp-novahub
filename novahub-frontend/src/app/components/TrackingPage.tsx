@@ -3,7 +3,6 @@ import {
   Anchor,
   Boxes,
   CheckCircle2,
-  ClipboardCopy,
   Clock3,
   FileText,
   MapPin,
@@ -46,8 +45,9 @@ import { ReceptionWizard } from './tracking/ReceptionWizard';
 import { ReceivedPackages } from './tracking/ReceivedPackages';
 import { Reconciliation } from './tracking/Reconciliation';
 import { Billing } from './tracking/Billing';
+import { LogisticsConfig } from './tracking/LogisticsConfig';
 
-type TrackingTab = 'transit' | 'reception' | 'packages' | 'reconciliation' | 'billing';
+type TrackingTab = 'transit' | 'reception' | 'packages' | 'reconciliation' | 'billing' | 'config';
 
 const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
   { id: 'transit', label: 'En tránsito' },
@@ -55,84 +55,10 @@ const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
   { id: 'packages', label: 'Paquetes recibidos' },
   { id: 'reconciliation', label: 'Conciliación de compras' },
   { id: 'billing', label: 'Disponibles para facturar' },
+  { id: 'config', label: 'Configuración' },
 ];
 
 const STATUS_OPTIONS = Object.keys(TRACKING_STATUS_LABELS) as TrackingStatus[];
-
-const TRD_TEXT = `TRD - MODULO TRACKING DE IMPORTACIONES (NovaHub ERP)
-====================================================
-
-1. OBJETIVO
-Gestionar envios de importacion de agencias logisticas: cada envio se
-identifica por un CODIGO DE TRACKING (numero de ticket del transportista)
-y muestra TODOS los estados posibles del envio en un historial cronologico.
-
-2. ALCANCE
-- Agencias de importacion/aduana que importan mercancia (p.ej. desde China
-  o EE.UU. hacia LATAM).
-- Usuarios: administrador de la empresa y personal asignado al modulo.
-
-3. FLUJO PRINCIPAL
-3.1 El agente crea un TICKET: ingresa codigo de tracking (obligatorio),
-    transportista, cliente, origen, destino, descripcion y fecha estimada.
-    El sistema genera un numero de ticket interno (TKT-XXXXXXXX).
-3.2 El sistema registra el estado inicial: PENDIENTE DE RECEPCION.
-3.3 El estado avanza por eventos: manuales (el agente registra) o
-    AUTOMATICOS (sincronizados desde el API del transportista).
-3.4 El cliente puede consultar su envio por el codigo de tracking y ver
-    el historial completo de estados.
-
-4. ESTADOS POSIBLES (catalogo)
-1) PENDING          - Pendiente de recepcion
-2) RECEIVED         - Recibido en agencia
-3) IN_TRANSIT       - En transito
-4) CUSTOMS          - En aduana
-5) OUT_FOR_DELIVERY - En reparto
-6) DELIVERED        - Entregado (estado final)
-7) RETURNED         - Devuelto (estado final)
-8) ON_HOLD          - En retencion
-9) LOST             - Extraviado (estado final)
-10) CANCELLED       - Cancelado (estado final)
-
-5. INTEGRACION CON TRANSPORTISTA
-- Proveedor oficial recomendado: AfterShip API (https://www.aftership.com)
-  que agrega +1000 transportistas incluyendo CargoTrack y aduanales.
-- Configuracion: variables de entorno del backend
-  CARGO_TRACK_API_URL (o AFTERSHIP_API_URL) y CARGO_TRACK_API_KEY (o AFTERSHIP_API_KEY).
-- La sincronizacion lee los checkpoints del transportista y crea eventos
-  automaticos; el estado mas reciente actualiza el ticket.
-- Si no hay credenciales, el modulo funciona en modo MANUAL (eventos
-  registrados por el agente).
-
-6. HABILITACION
-- Super Admin activa el modulo TRACKING desde Suscripciones para la
-  empresa (por empresa o grupo empresarial).
-
-7. PERMISOS (Roles)
-- view / create / edit / delete sobre el modulo TRACKING.
-
-8. ENDPOINTS
-- GET  /tracking/shipments            (lista + busqueda)
-- GET  /tracking/shipments/code/:code (consulta por tracking)
-- POST /tracking/shipments            (crear ticket)
-- POST /tracking/shipments/:id/events (evento manual)
-- POST /tracking/shipments/code/:code/sync (sync transportista)
-- DELETE /tracking/shipments/:id      (eliminar)
-- GET  /tracking/statuses             (catalogo de estados)
-
-9. REGLAS DE NEGOCIO
-- El codigo de tracking es unico por empresa.
-- Estados finales: DELIVERED, RETURNED, LOST, CANCELLED.
-- Cada evento guarda fecha, ubicacion, descripcion y origen (manual/API).
-- La fecha de entrega se fija automaticamente al pasar a DELIVERED.
-
-10. ENTREGABLES DEL PROFESIONAL
-- CRUD de tickets con busqueda por codigo.
-- Timeline de estados con colores por estado.
-- Boton sincronizar por ticket.
-- Catalogo de estados visible en la interfaz.
-- Consulta publica por codigo (opcional fase 2).
-`;
 
 const INITIAL_FORM = {
   trackingCode: '',
@@ -303,10 +229,7 @@ export function TrackingPage() {
     }
   };
 
-  const copyTrd = () => {
-    navigator.clipboard.writeText(TRD_TEXT);
-    toast.success('TRD copiado al portapapeles');
-  };
+  
 
   const formatDate = (value?: string) => value ? format(new Date(value), "d MMM yyyy, HH:mm 'h'", { locale: es }) : '—';
 
@@ -339,7 +262,7 @@ export function TrackingPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" className="rounded-xl text-xs" onClick={copyTrd}><ClipboardCopy className="size-4" /> Copiar TRD</Button>
+          
           <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)}><Plus className="size-4" /> Nuevo ticket</Button>
         </div>
       </header>
@@ -588,6 +511,9 @@ export function TrackingPage() {
                 </Card>
 
                 <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => { const url = `${window.location.origin}/public/tracking/${encodeURIComponent(selected.trackingCode)}`; navigator.clipboard.writeText(url); toast.success('Enlace público copiado: ' + url); }}>
+                    <Truck className="size-4" /> Copiar enlace público
+                  </Button>
                   <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>
                     <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar con transportista
                   </Button>
@@ -602,7 +528,7 @@ export function TrackingPage() {
                   <Button variant="destructive" className="rounded-xl text-xs" onClick={handleDelete}><Trash2 className="size-4" /></Button>
                 </div>
                 <p className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-center text-[11px] text-muted-foreground">
-                  Consultar tracking no representa una recepción física. La acción <b>Recibir paquete</b> se habilitará en la siguiente etapa.
+                  Consultar tracking no representa una recepción física. Para registrar la llegada usa la pestaña <b>Recepción de paquetes</b>.
                 </p>
               </div>
             </>
@@ -616,8 +542,10 @@ export function TrackingPage() {
         <ReceivedPackages />
       ) : tab === 'reconciliation' ? (
         <Reconciliation />
-      ) : (
+      ) : tab === 'billing' ? (
         <Billing />
+      ) : (
+        <LogisticsConfig />
       )}
     </>
   );
