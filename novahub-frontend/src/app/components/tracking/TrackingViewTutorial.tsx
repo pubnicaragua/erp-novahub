@@ -3,7 +3,7 @@ import { CircleHelp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
-export type TrackingTutorialView = 'transit' | 'reception' | 'batches' | 'packages' | 'reconciliation' | 'billing' | 'config';
+export type TrackingTutorialView = 'transit' | 'reception' | 'packages' | 'reconciliation' | 'billing' | 'config';
 
 type TrackingTutorial = { label: string; title: string; steps: GuidedTourStep[] };
 
@@ -20,22 +20,12 @@ const TUTORIALS: Record<TrackingTutorialView, TrackingTutorial> = {
   },
   reception: {
     label: 'Cómo usar Recepción',
-    title: 'Recepción de paquetes · paso a paso',
+    title: 'Recepción · paso a paso',
     steps: [
-      { target: '[data-tour="log-reception-title"]', title: 'Recepción de paquetes', description: 'Aquí registras los paquetes que llegan a tu bodega, con un asistente de 4 pasos.', placement: 'bottom' },
-      { target: '[data-tour="log-reception-wizard"]', title: '1. Asistente de 4 pasos', description: 'Tipo y sucursal → Peso → Identificación (código de tracking) → Propietario y bodega. Pulsa Siguiente en cada paso.', placement: 'bottom' },
-      { target: '[data-tour="log-reception-save"]', title: '2. Guardar', description: 'Al final pulsa Registrar paquete: queda registrado. Si el código ya existía, el sistema avisa y no lo duplica.', placement: 'top' },
-    ],
-  },
-  batches: {
-    label: 'Cómo usar Recepción en lote',
-    title: 'Recepción en lote · paso a paso',
-    steps: [
-      { target: '[data-tour="log-batch-list"]', title: 'Referencias', description: 'Una referencia es la compra al proveedor (AWBOX u OGLOBAL) con su ticket. Cada referencia tiene número propio REF-###### y agrupa los paquetes de ese ticket.', placement: 'bottom' },
-      { target: '[data-tour="log-batch-new"]', title: '1. Nueva referencia', description: 'Crea la referencia eligiendo el proveedor (bodega) y la fecha. Si la referencia tiene proveedor, al confirmar se genera la factura de compra en Contabilidad; si no, se omite la factura.', placement: 'bottom' },
-      { target: '[data-tour="log-batch-import"]', title: '2. Importar PDF', description: 'Sube el PDF del ticket (AWBOX o OGLOBAL). Una fila del PDF es un paquete; si la fila trae varios códigos de tracking, el sistema la divide en varios paquetes.', placement: 'bottom' },
-      { target: '[data-tour="log-batch-grid"]', title: '3. Revisar la grilla', description: 'Cada fila tiene item, precio, peso, bodega y tracking. El tracking puede quedar vacío y completarse después. Puedes agregar varias tandas antes de confirmar.', placement: 'bottom' },
-      { target: '[data-tour="log-batch-confirm"]', title: '4. Confirmar referencia', description: 'Al confirmar, los paquetes pasan a comprados y se genera la factura del proveedor en Contabilidad (si la referencia tiene proveedor).', placement: 'bottom' },
+      { target: '[data-tour="log-reception-title"]', title: 'Recepción', description: 'Aquí registras los paquetes que llegan a tu bodega, todo en una sola vista.', placement: 'bottom' },
+      { target: '[data-tour="log-reception-wizard"]', title: '1. Registrar uno', description: 'Llena tipo de envío, tracking, peso, subagencia y bodega en un solo formulario y pulsa Registrar paquete. Sin pasos intermedios.', placement: 'bottom' },
+      { target: '[data-tour="log-reception-save"]', title: '2. Guardar', description: 'Pulsa Registrar paquete: queda registrado. Si el código ya existía, el sistema avisa y no lo duplica.', placement: 'top' },
+      { target: '[data-tour="log-wizard-open-batch"]', title: '3. Varios / PDF', description: 'Pulsa Lote / PDF del proveedor: crea una referencia (REF-######), importa el PDF del ticket (AWBOX u OGLOBAL) y guarda todos los paquetes de una vez.', placement: 'bottom' },
     ],
   },
   packages: {

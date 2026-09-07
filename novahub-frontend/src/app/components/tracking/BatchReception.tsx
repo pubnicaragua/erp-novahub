@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CheckCircle2, FileText, FileUp, PackageSearch, Plus, ReceiptText, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -76,6 +76,7 @@ export function BatchReception() {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [subagencies, setSubagencies] = useState<LogisticsSubagency[]>([]);
   const [warehouses, setWarehouses] = useState<LogisticsWarehouse[]>([]);
+  const autoOpenedCreate = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -112,6 +113,13 @@ export function BatchReception() {
     const timer = setTimeout(load, 250);
     return () => clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (data && data.total === 0 && !autoOpenedCreate.current) {
+      autoOpenedCreate.current = true;
+      setCreateOpen(true);
+    }
+  }, [data]);
 
   const openDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
