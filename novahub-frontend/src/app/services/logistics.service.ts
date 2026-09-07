@@ -96,6 +96,9 @@ export interface ReceivedPackage {
   branchName?: string;
   sku: string;
   skuName?: string;
+  quantity?: number;
+  subtotal?: number;
+  discount?: number;
   physicalWeight: number;
   supplierWeight?: number;
   billableWeight: number;
@@ -698,6 +701,7 @@ export interface BatchPackageRow {
   quantity?: number;
   unitPrice?: number;
   subtotal?: number;
+  discount?: number;
   physicalWeight?: number;
   weightUnit?: string;
   warehouseValue?: string;

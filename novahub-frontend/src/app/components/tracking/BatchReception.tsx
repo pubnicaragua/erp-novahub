@@ -15,6 +15,7 @@ import {
 } from '../ui/sheet';
 import { getApiErrorMessage } from '../../services/api';
 import { suppliersService } from '../../services/compras.service';
+import { customersService } from '../../services/ventas.service';
 import {
   logisticsService,
   type BatchDetail,
@@ -44,6 +45,8 @@ const emptyRow = (index: number): GridRow => ({
   item: '',
   quantity: 1,
   unitPrice: undefined,
+  subtotal: undefined,
+  discount: undefined,
   physicalWeight: undefined,
   warehouseValue: '',
   trackingCode: '',
@@ -59,7 +62,7 @@ export function BatchReception() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createForm, setCreateForm] = useState({ provider: '', warehouseId: '', date: toInputDate(new Date()), notes: '' });
+  const [createForm, setCreateForm] = useState({ supplierId: '', provider: '', warehouseId: '', date: toInputDate(new Date()), notes: '' });
 
   const [detail, setDetail] = useState<BatchDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -76,20 +79,27 @@ export function BatchReception() {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [subagencies, setSubagencies] = useState<LogisticsSubagency[]>([]);
   const [warehouses, setWarehouses] = useState<LogisticsWarehouse[]>([]);
+  const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
+  const [commonOwner, setCommonOwner] = useState({ subagencyId: '', subagencyName: '', customerId: '', customerName: '' });
   const autoOpenedCreate = useRef(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const [sup, sub, wh] = await Promise.all([
+        const [sup, sub, wh, customerResponse] = await Promise.all([
           suppliersService.getAll({ page: 1, pageSize: 200 } as any),
           logisticsService.listSubagencies(),
           logisticsService.listWarehouses(),
+          customersService.getAll({ page: 1, pageSize: 200 } as any),
         ]);
-        const supplierList: any[] = sup?.data || (sup as any)?.items || [];
+        const supplierPayload: any = (sup as any)?.data ?? sup;
+        const supplierList: any[] = Array.isArray(supplierPayload) ? supplierPayload : supplierPayload?.items || [];
         setSuppliers(supplierList.map((s) => ({ id: s.id, name: s.name, code: s.code })));
         setSubagencies(sub.filter((s) => s.isActive));
         setWarehouses(wh.filter((w) => w.isActive));
+        const customerPayload: any = (customerResponse as any)?.data ?? customerResponse;
+        const customerList: any[] = Array.isArray(customerPayload) ? customerPayload : customerPayload?.items || [];
+        setCustomers(customerList.map((customer) => ({ id: customer.id, name: customer.name })).filter((customer) => customer.name));
       } catch {
         /* catálogos opcionales */
       }
@@ -125,7 +135,17 @@ export function BatchReception() {
     setDetailLoading(true);
     setConfirmResult(null);
     try {
-      setDetail(await logisticsService.getBatch(id));
+      const loaded = await logisticsService.getBatch(id);
+      setDetail(loaded);
+      const firstPackage = loaded.packages[0];
+      if (firstPackage) {
+        setCommonOwner({
+          subagencyId: firstPackage.subagencyId || '',
+          subagencyName: firstPackage.subagencyName || '',
+          customerId: firstPackage.customerId || '',
+          customerName: firstPackage.customerName || '',
+        });
+      }
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo abrir la referencia'));
     } finally {
@@ -154,13 +174,15 @@ export function BatchReception() {
     try {
       const batch = await logisticsService.createBatch({
         provider: createForm.provider || undefined,
+        supplierId: createForm.supplierId || undefined,
         warehouseId: createForm.warehouseId || undefined,
         date: createForm.date || undefined,
         notes: createForm.notes || undefined,
       });
       toast.success(`Referencia ${batch.number} creada`);
       setCreateOpen(false);
-      setCreateForm({ provider: '', warehouseId: '', date: toInputDate(new Date()), notes: '' });
+      setCreateForm({ supplierId: '', provider: '', warehouseId: '', date: toInputDate(new Date()), notes: '' });
+      setCommonOwner({ subagencyId: '', subagencyName: '', customerId: '', customerName: '' });
       setPage(1);
       await openDetail(batch.id);
     } catch (error) {
@@ -170,28 +192,27 @@ export function BatchReception() {
     }
   }, [createForm, openDetail]);
 
-  const onPickPdf = useCallback(async (file?: File | null) => {
-    if (!file || !detail) return;
+  const onPickPdf = useCallback(async (files: File[] = []) => {
+    if (files.length === 0 || !detail) return;
     setImporting(true);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
-        reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
-        reader.readAsDataURL(file);
-      });
-      const result = await logisticsService.pdfPreview(file.name, base64);
-      const incoming = result.rows.map((r, i) => ({ ...r, id: `${Date.now()}-${i}` }));
+      const results = await Promise.all(files.map(async (file) => {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+          reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+          reader.readAsDataURL(file);
+        });
+        return logisticsService.pdfPreview(file.name, base64);
+      }));
+      const incoming = results.flatMap((result) => result.rows).map((row, index) => ({ ...row, id: `${Date.now()}-${index}` }));
       setRows((prev) => {
-        const base = prev.length > 0 ? prev : [];
+        const base = prev.length > 0 && prev.some((row) => row.item || row.trackingCode || row.physicalWeight) ? prev : [];
         return [...base, ...incoming];
       });
-      toast.success(
-        result.format
-          ? `PDF ${result.format} procesado: ${result.rows.length} fila(s)`
-          : `PDF procesado: ${result.rows.length} fila(s) (formato no reconocido)`,
-      );
-      result.warnings.forEach((w) => toast.info(w));
+      const formats = [...new Set(results.map((result) => result.format).filter(Boolean))];
+      toast.success(`${files.length} PDF(s) procesado(s)${formats.length ? ` · ${formats.join(' + ')}` : ''}: ${incoming.length} fila(s)`);
+      results.flatMap((result) => result.warnings).forEach((warning) => toast.info(warning));
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo importar el PDF'));
     } finally {
@@ -215,11 +236,12 @@ export function BatchReception() {
       item: r.item?.trim() || undefined,
       quantity: Number(r.quantity) || 1,
       unitPrice: r.unitPrice !== undefined && r.unitPrice !== null && !Number.isNaN(r.unitPrice) ? Number(r.unitPrice) : undefined,
-      subtotal: undefined,
+      subtotal: r.subtotal !== undefined && r.subtotal !== null && !Number.isNaN(r.subtotal) ? Number(r.subtotal) : undefined,
+      discount: r.discount !== undefined && r.discount !== null && !Number.isNaN(r.discount) ? Number(r.discount) : undefined,
       physicalWeight: r.physicalWeight !== undefined && r.physicalWeight !== null && !Number.isNaN(r.physicalWeight) ? Number(r.physicalWeight) : undefined,
       warehouseValue: r.warehouseValue?.trim() || undefined,
-      subagency: r.subagencyName ? { id: r.subagencyId, name: r.subagencyName } : undefined,
-      customer: r.customerName ? { name: r.customerName } : undefined,
+      subagency: commonOwner.subagencyName ? { id: commonOwner.subagencyId || undefined, name: commonOwner.subagencyName } : undefined,
+      customer: commonOwner.customerName ? { id: commonOwner.customerId || undefined, name: commonOwner.customerName } : undefined,
     }));
     setSaving(true);
     try {
@@ -233,7 +255,7 @@ export function BatchReception() {
     } finally {
       setSaving(false);
     }
-  }, [detail, rows, refreshDetail]);
+  }, [commonOwner, detail, rows, refreshDetail]);
 
   const confirmBatch = useCallback(async () => {
     if (!detail) return;
@@ -262,7 +284,7 @@ export function BatchReception() {
 
   const totals = useMemo(() => {
     const weight = rows.reduce((s, r) => s + (Number(r.physicalWeight) || 0), 0);
-    const amount = rows.reduce((s, r) => s + (Number(r.unitPrice) || 0), 0);
+    const amount = rows.reduce((s, r) => s + (r.subtotal !== undefined ? Number(r.subtotal) || 0 : ((Number(r.unitPrice) || 0) * (Number(r.quantity) || 1))), 0);
     return { weight, amount };
   }, [rows]);
 
@@ -330,19 +352,38 @@ export function BatchReception() {
                   <FileUp className="size-4 text-primary" /> Agregar paquetes en lote
                 </h3>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Importa el PDF del ticket (AWBOX u OGLOBAL) o escribe las filas. El tracking puede quedar vacío y completarse después. Se pueden agregar varias tandas.
+                  Carga uno o varios PDF de AWBOX/OGLOBAL. El sistema los muestra de inmediato en una grilla editable; guarda la tanda cuando termines.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <label className="cursor-pointer">
-                  <input type="file" accept="application/pdf" className="hidden" onChange={(e) => { void onPickPdf(e.target.files?.[0]); e.target.value = ''; }} />
+                  <input type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => { void onPickPdf(Array.from(e.target.files || [])); e.target.value = ''; }} />
                   <Button type="button" variant="outline" className="rounded-xl text-xs" disabled={importing}>
-                    <FileText className="size-4" /> {importing ? 'Procesando…' : 'Importar PDF'}
+                    <FileText className="size-4" /> {importing ? 'Procesando…' : 'Importar PDF(s)'}
                   </Button>
                 </label>
                 <Button type="button" variant="outline" className="rounded-xl text-xs" onClick={() => setRows((prev) => [...prev, emptyRow(prev.length)])}>
                   <Plus className="size-4" /> Agregar fila
                 </Button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 rounded-xl border border-border/50 bg-background/70 p-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Agencia / subagencia</label>
+                <select value={commonOwner.subagencyId} onChange={(e) => { const subagency = subagencies.find((item) => item.id === e.target.value); setCommonOwner((owner) => ({ ...owner, subagencyId: e.target.value, subagencyName: subagency?.name || '' })); }} className="w-full rounded-xl border border-input bg-background px-2 py-2 text-xs font-semibold">
+                  <option value="">Selecciona…</option>
+                  {subagencies.map((subagency) => <option key={subagency.id} value={subagency.id}>{subagency.name}{subagency.code ? ` (${subagency.code})` : ''}</option>)}
+                </select>
+                {subagencies.length === 0 && <p className="mt-1 text-[11px] text-amber-600">Configura tus agencias en Configuración → Subagencias.</p>}
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente (opcional, una sola vez)</label>
+                <Input list="batch-reception-customers" value={commonOwner.customerName} onChange={(e) => { const customer = customers.find((item) => item.name === e.target.value); setCommonOwner((owner) => ({ ...owner, customerName: e.target.value, customerId: customer?.id || '' })); }} placeholder="Cliente final (opcional)" className="h-9 rounded-xl text-xs" />
+                <datalist id="batch-reception-customers">{customers.map((customer) => <option key={customer.id} value={customer.name} />)}</datalist>
+              </div>
+              <div className="flex items-end rounded-xl bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground">
+                Bodega de la referencia: <b className="ml-1 text-foreground">{batch.warehouseName || 'se asigna por tracking'}</b>. No se solicita de nuevo por cada paquete.
               </div>
             </div>
 
@@ -353,13 +394,14 @@ export function BatchReception() {
                     <TableHeader className="bg-muted/40">
                       <TableRow>
                         <TableHead className="w-10 text-[10px] font-black uppercase tracking-widest">#</TableHead>
-                        <TableHead className="min-w-44 text-[10px] font-black uppercase tracking-widest">Item / descripción</TableHead>
-                        <TableHead className="w-20 text-[10px] font-black uppercase tracking-widest">P.Unt</TableHead>
-                        <TableHead className="w-24 text-[10px] font-black uppercase tracking-widest">Peso (lb)</TableHead>
-                        <TableHead className="w-28 text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
+                        <TableHead className="min-w-52 text-[10px] font-black uppercase tracking-widest">Item / producto</TableHead>
+                        <TableHead className="w-28 text-[10px] font-black uppercase tracking-widest">Peso físico (lb)</TableHead>
+                        <TableHead className="w-20 text-[10px] font-black uppercase tracking-widest">Cant.</TableHead>
+                        <TableHead className="w-24 text-[10px] font-black uppercase tracking-widest">P.Unt / C.Unt</TableHead>
+                        <TableHead className="w-20 text-[10px] font-black uppercase tracking-widest">Desc.</TableHead>
+                        <TableHead className="w-24 text-[10px] font-black uppercase tracking-widest">S.Total</TableHead>
+                        {!batch.warehouseId && <TableHead className="w-28 text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>}
                         <TableHead className="min-w-44 text-[10px] font-black uppercase tracking-widest">Tracking</TableHead>
-                        <TableHead className="w-36 text-[10px] font-black uppercase tracking-widest">Subagencia</TableHead>
-                        <TableHead className="w-36 text-[10px] font-black uppercase tracking-widest">Cliente</TableHead>
                         <TableHead className="w-10" />
                       </TableRow>
                     </TableHeader>
@@ -368,17 +410,13 @@ export function BatchReception() {
                         <TableRow key={r.id} className="align-top">
                           <TableCell className="text-[11px] font-black text-muted-foreground">{i + 1}</TableCell>
                           <TableCell><Input value={r.item || ''} onChange={(e) => updateRow(r.id, { item: e.target.value })} placeholder="Ej. PAQUETERIA AEREA" className="h-8 rounded-lg text-xs" /></TableCell>
-                          <TableCell><Input type="number" min={0} step="0.01" value={r.unitPrice ?? ''} onChange={(e) => updateRow(r.id, { unitPrice: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
                           <TableCell><Input type="number" min={0} step="0.01" value={r.physicalWeight ?? ''} onChange={(e) => updateRow(r.id, { physicalWeight: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
-                          <TableCell><Input value={r.warehouseValue || ''} onChange={(e) => updateRow(r.id, { warehouseValue: e.target.value })} placeholder={detail.batch.warehouseName || 'Bodega'} className="h-8 rounded-lg text-xs" /></TableCell>
+                          <TableCell><Input type="number" min={1} step="1" value={r.quantity ?? 1} onChange={(e) => updateRow(r.id, { quantity: e.target.value === '' ? 1 : Number(e.target.value) })} className="h-8 rounded-lg text-xs" /></TableCell>
+                          <TableCell><Input type="number" min={0} step="0.01" value={r.unitPrice ?? ''} onChange={(e) => updateRow(r.id, { unitPrice: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
+                          <TableCell><Input type="number" min={0} step="0.01" value={r.discount ?? ''} onChange={(e) => updateRow(r.id, { discount: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
+                          <TableCell><Input type="number" min={0} step="0.01" value={r.subtotal ?? ''} onChange={(e) => updateRow(r.id, { subtotal: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.00" className="h-8 rounded-lg text-xs" /></TableCell>
+                          {!batch.warehouseId && <TableCell><Input value={r.warehouseValue || ''} onChange={(e) => updateRow(r.id, { warehouseValue: e.target.value })} placeholder="Bodega" className="h-8 rounded-lg text-xs" /></TableCell>}
                           <TableCell><Input value={r.trackingCode || ''} onChange={(e) => updateRow(r.id, { trackingCode: e.target.value })} placeholder="Código (puede ir vacío)" className="h-8 rounded-lg font-mono text-xs" /></TableCell>
-                          <TableCell>
-                            <select value={r.subagencyId || ''} onChange={(e) => { const sa = subagencies.find((s) => s.id === e.target.value); updateRow(r.id, { subagencyId: sa?.id, subagencyName: sa?.name || undefined }); }} className="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs font-semibold">
-                              <option value="">—</option>
-                              {subagencies.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                          </TableCell>
-                          <TableCell><Input value={r.customerName || ''} onChange={(e) => updateRow(r.id, { customerName: e.target.value })} placeholder="Cliente (opcional)" className="h-8 rounded-lg text-xs" /></TableCell>
                           <TableCell><Button variant="ghost" size="sm" className="rounded-lg" onClick={() => removeRow(r.id)}><Trash2 className="size-4 text-destructive" /></Button></TableCell>
                         </TableRow>
                       ))}
@@ -577,9 +615,9 @@ export function BatchReception() {
           <div className="space-y-3 px-4 py-4">
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proveedor (bodega)</label>
-              <select value={createForm.provider} onChange={(e) => setCreateForm((f) => ({ ...f, provider: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
+              <select value={createForm.supplierId} onChange={(e) => { const supplier = suppliers.find((item) => item.id === e.target.value); setCreateForm((f) => ({ ...f, supplierId: e.target.value, provider: supplier?.name || '' })); }} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
                 <option value="">Sin proveedor (no genera factura de compra)</option>
-                {suppliers.map((s) => <option key={s.id} value={s.name}>{s.name} ({s.code})</option>)}
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
               </select>
             </div>
             <div>
