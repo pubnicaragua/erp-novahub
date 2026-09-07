@@ -112,6 +112,8 @@ const withTarget = (navigation: NotificationNavigation, target: Partial<Notifica
 export function getNotificationNavigation(notification: NotificationLike): NotificationNavigation {
   const metadata = asRecord(notification.metadata);
   const target = extractTarget(metadata);
+  const link = String(notification.link || '').toLowerCase();
+  const ticketIdFromLink = link.match(/\/tickets\/([^/?#]+)/)?.[1];
   const text = `${notification.title || ''} ${notification.message || notification.content || ''}`.toLowerCase();
 
   // Este aviso lo genera el ciclo de facturación del tenant, no las cuentas
@@ -125,10 +127,14 @@ export function getNotificationNavigation(notification: NotificationLike): Notif
   }
 
   const explicit = normalizeNavigation(metadata.navigation || metadata.route || metadata);
-  if (explicit) return withTarget(explicit, target);
+  if (explicit) return withTarget(explicit, { ...target, targetId: target.targetId || ticketIdFromLink });
 
-  const link = String(notification.link || '').toLowerCase();
-  if (link.includes('ticket')) return withTarget({ module: 'tickets', subModule: 'tickets' }, target);
+  if (link.includes('ticket')) {
+    return withTarget({ module: 'tickets', subModule: 'tickets' }, {
+      ...target,
+      targetId: target.targetId || ticketIdFromLink,
+    });
+  }
   if (link.includes('suscrip')) return withTarget({ module: 'suscripciones' }, target);
   if (link.includes('factur')) return withTarget({ module: 'ventas', subModule: 'facturas' }, target);
 

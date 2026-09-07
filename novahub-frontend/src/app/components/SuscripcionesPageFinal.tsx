@@ -30,7 +30,7 @@ const AVAILABLE_MODULES = [
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
   { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
-  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
+  { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
-import { Headphones, TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
+import { TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TicketsView } from './support/TicketsView';
@@ -11,15 +11,9 @@ import { AgentsView } from './support/AgentsView';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 import { useAuth } from '../contexts/AuthContext';
-
-interface KnowledgeArticle {
-  id: string;
-  name: string;
-  url: string;
-  size: number;
-  mimeType: string;
-  folder?: string | null;
-}
+import { customersService } from '../services/ventas.service';
+import { invoicesService } from '../services/ventas.service';
+import { inventoryService } from '../services/inventario.service';
 
 interface SupportAgent {
   id: string;
@@ -33,7 +27,7 @@ interface SupportAgent {
 const TICKETS_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="tickets-title"]',
-    title: 'Soporte y Ayuda',
+    title: 'Gestión de tickets',
     description: 'Gestiona todos los tickets de soporte, consulta la base de conocimiento y administra los agentes de soporte desde esta vista.',
     tip: 'Los tickets pueden ser abiertos por clientes desde el portal o creados internamente.',
     placement: 'bottom',
@@ -66,32 +60,62 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
   const [internalActiveTab, setInternalActiveTab] = useState('tickets');
   const activeTab = activeSubModule || internalActiveTab;
   const [showTutorial, setShowTutorial] = useState(false);
+  const [targetTicketId, setTargetTicketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleTicketNavigation = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      if (detail.module !== 'tickets' || detail.subModule !== 'tickets' || !detail.targetId) return;
+      window.setTimeout(() => setTargetTicketId(String(detail.targetId)), 0);
+    };
+    window.addEventListener('navigate-module', handleTicketNavigation);
+    return () => window.removeEventListener('navigate-module', handleTicketNavigation);
+  }, []);
 
   useEffect(() => {
     if (visibleTabs.length === 0) return;
     const requestedTab = activeSubModule || internalActiveTab;
     if (visibleTabs.some((tab) => tab.id === requestedTab)) return;
     const fallback = visibleTabs[0].id;
-    setInternalActiveTab(fallback);
-    onSubModuleChange?.(fallback);
+    const timeout = window.setTimeout(() => {
+      setInternalActiveTab(fallback);
+      onSubModuleChange?.(fallback);
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [activeSubModule, internalActiveTab, onSubModuleChange, visibleTabs]);
 
   // Las pestañas son independientes: no cargamos tickets, artículos y agentes
   // al mismo tiempo cuando el usuario solo necesita una de ellas.
-  const ticketsQuery = useTenantQuery<Ticket[]>(['support', 'tickets'], signal => supportService.getAll(undefined, signal), {
+  const ticketsQuery = useTenantQuery<any>(['support', 'tickets'], signal => supportService.getAll({ page: 1, pageSize: 200 }, signal), {
     enabled: canViewTickets && (activeTab === 'tickets' || activeTab === 'agents'),
   });
-  const knowledgeBaseQuery = useTenantQuery<KnowledgeArticle[]>(['support', 'knowledge-base'], signal => knowledgeBaseService.getAll(undefined, signal), {
+  const knowledgeBaseQuery = useTenantQuery<any[]>(['support', 'knowledge-base'], signal => knowledgeBaseService.getAll(undefined, signal), {
     enabled: canViewKnowledge && activeTab === 'faqs',
   });
-  const agentsQuery = useTenantQuery<SupportAgent[]>(['support', 'agents'], signal => supportAgentsService.getAll(undefined, signal), {
-    enabled: canViewAgents && activeTab === 'agents',
+  const agentsQuery = useTenantQuery<SupportAgent[]>(['support', 'agents'], signal => supportAgentsService.getAll({ status: 'ACTIVE' }, signal), {
+    enabled: canViewAgents && (activeTab === 'agents' || activeTab === 'tickets'),
+  });
+  const customersQuery = useTenantQuery<any[]>(['support', 'customers'], signal => customersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal).then(asList), {
+    enabled: canViewTickets && activeTab === 'tickets',
+  });
+  const categoriesQuery = useTenantQuery<any[]>(['support', 'categories'], signal => supportService.getCategories(signal).then(asList), {
+    enabled: canViewTickets && activeTab === 'tickets',
+  });
+  const invoicesQuery = useTenantQuery<any[]>(['support', 'invoices', 'paid'], signal => invoicesService.getAll({ page: 1, pageSize: 200, status: 'PAID' }, signal).then(asList), {
+    enabled: canViewTickets && activeTab === 'tickets' && canPerform('SALES_INVOICES', 'view'),
+  });
+  const productsQuery = useTenantQuery<any[]>(['support', 'products'], signal => inventoryService.getProducts({ page: 1, pageSize: 200, includeInactive: false }, signal).then(asList), {
+    enabled: canViewTickets && activeTab === 'tickets' && canPerform('INVENTORY_PRODUCTS', 'view'),
   });
 
   const data = {
     tickets: asList(ticketsQuery.data) as Ticket[],
-    knowledgeBase: asList(knowledgeBaseQuery.data) as KnowledgeArticle[],
-    agents: asList(agentsQuery.data) as SupportAgent[],
+    customers: asList(customersQuery.data),
+    categories: asList(categoriesQuery.data),
+    agents: asList(agentsQuery.data),
+    invoices: asList(invoicesQuery.data),
+    products: asList(productsQuery.data),
+    knowledgeBase: asList(knowledgeBaseQuery.data),
   };
   const activeQuery = activeTab === 'tickets' || activeTab === 'agents' ? ticketsQuery
     : activeTab === 'faqs' ? knowledgeBaseQuery : agentsQuery;
@@ -100,7 +124,9 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
     : activeQuery.isLoading || activeQuery.isFetching;
   const fetchData = () => activeTab === 'agents'
     ? Promise.all([ticketsQuery.refetch(), agentsQuery.refetch()])
-    : activeQuery.refetch();
+    : activeTab === 'tickets'
+      ? Promise.all([ticketsQuery.refetch(), customersQuery.refetch(), categoriesQuery.refetch(), agentsQuery.refetch(), invoicesQuery.refetch(), productsQuery.refetch()])
+      : activeQuery.refetch();
 
   const handleTabChange = (value: string) => {
     if (!visibleTabs.some((tab) => tab.id === value)) return;
@@ -111,17 +137,17 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
   };
 
   return (
-    <div className="flex flex-1 bg-background w-full">
-      <main className="flex-1 relative">
-        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
+    <div className="flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
+      <main className="relative min-w-0 flex-1 overflow-x-hidden">
+        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] overflow-x-hidden p-4 sm:p-6 md:p-10">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center gap-3" data-tour="tickets-title">
               <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <Headphones className="size-9 text-primary" />
+                <TicketIcon className="size-9 text-primary" />
               </div>
               <div>
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-                  Soporte <span className="text-primary">& Ayuda</span>
+                  Gestión <span className="text-primary">de tickets</span>
                 </h1>
               </div>
             </div>
@@ -130,9 +156,9 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
             </Button>
           </div>
 
-          <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-            <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
-            <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
+          <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
+            <div className="mb-6 w-full min-w-0 max-w-full overflow-x-auto custom-scrollbar">
+            <TabsList className="flex h-auto min-w-full w-max max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
               {visibleTabs.map((tab) => (
                 <TabsTrigger 
                   key={tab.id} 
@@ -151,12 +177,13 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
+                className="min-w-0 max-w-full"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {activeTab === 'tickets' && <TicketsView data={data.tickets} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'tickets' && <TicketsView data={data.tickets} customerCatalog={data.customers} categoryCatalog={data.categories} agentCatalog={data.agents} invoiceCatalog={data.invoices} productCatalog={data.products} loading={loading} onRefresh={fetchData} targetTicketId={targetTicketId} onTargetTicketHandled={() => setTargetTicketId(null)} />}
                 {activeTab === 'faqs' && (
                   <KnowledgeBaseView data={data.knowledgeBase} loading={loading} onRefresh={fetchData} />
                 )}
@@ -167,7 +194,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
             </AnimatePresence>
           </Tabs>
         </div>
-        {showTutorial && <GuidedTour steps={TICKETS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Soporte y Ayuda" />}
+        {showTutorial && <GuidedTour steps={TICKETS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Gestión de tickets" />}
       </main>
     </div>
   );

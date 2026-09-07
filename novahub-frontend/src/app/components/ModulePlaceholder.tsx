@@ -13,7 +13,7 @@ const moduleInfo: Partial<Record<Module, { title: string; description: string }>
   clientes: { title: 'Clientes', description: 'Directorio de clientes' },
   proveedores: { title: 'Proveedores', description: 'Directorio de proveedores' },
   actividades: { title: 'Actividades', description: 'Calendario de actividades y tareas' },
-  tickets: { title: 'Tickets y Soporte', description: 'Sistema de soporte interno' },
+  tickets: { title: 'Gestión de tickets', description: 'Sistema de soporte interno' },
   documentos: { title: 'Documentos', description: 'Gestion documental' },
   notificaciones: { title: 'Notificaciones', description: 'Centro de notificaciones' },
   transferencias: { title: 'Transferencias', description: 'Transferencias entre almacenes' },
