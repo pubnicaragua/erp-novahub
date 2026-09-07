@@ -21,6 +21,7 @@ import { ActionClickGuard } from './components/ui/ActionClickGuard';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
+import { PublicTrackingPage } from './components/public/PublicTrackingPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
@@ -64,6 +65,7 @@ const InventarioPage = lazyWithChunkRecovery(async () => {
 }, 'inventario');
 const VentasPage = lazyWithChunkRecovery(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })), 'ventas');
 const RestaurantePage = lazyWithChunkRecovery(() => import('./components/RestaurantePage').then(m => ({ default: m.RestaurantePage })), 'restaurante');
+const TrackingPage = lazyWithChunkRecovery(() => import('./components/TrackingPage').then(m => ({ default: m.TrackingPage })), 'tracking');
 const ComprasPage = lazyWithChunkRecovery(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })), 'compras');
 const FinanzasPage = lazyWithChunkRecovery(() => import('./components/FinanzasPage').then(m => ({ default: m.FinanzasPage })), 'finanzas');
 const RecursosHumanosPage = lazyWithChunkRecovery(() => import('./components/RecursosHumanosPage').then(m => ({ default: m.RecursosHumanosPage })), 'rh');
@@ -406,6 +408,7 @@ function DashboardLayout() {
       case 'inventario': return <ModuleErrorBoundary moduleName="Inventario"><InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
+      case 'tracking': return <ModuleErrorBoundary moduleName="Tracking"><TrackingPage /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'finanzas': return <ModuleErrorBoundary moduleName="Finanzas"><FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
@@ -573,6 +576,7 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', readPersistedDarkMode());
   }, []);
 
+  if (location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
   if (location.pathname.startsWith('/restaurant/menu/')) {

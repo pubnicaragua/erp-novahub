@@ -9,7 +9,7 @@ import {
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned, ChevronDown,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Utensils
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -62,6 +62,7 @@ const AVAILABLE_MODULES = [
   { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
   { id: 'RESTAURANT', label: 'Restaurante POS', icon: Utensils, description: 'Salón, carta, cocina y comandas' },
+  { id: 'TRACKING', label: 'Tracking de Importaciones', icon: Ship, description: 'Envíos de agencia por código de tracking' },
   { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
   { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package, description: 'Stock, Almacenes y SKU' },
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
@@ -1005,7 +1006,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       updateConfig({ logo: logoUrl });
       await brandingService.update({ logo: logoUrl });
       await refetchConfiguration();
-      toast.success('Logo guardado en Supabase Storage âœ“');
+      toast.success('Logo guardado en Supabase Storage ✓');
     } catch (error) {
       console.error('Logo upload error:', error);
       toast.error(error instanceof Error ? error.message : 'Error al subir el logo');
@@ -1345,7 +1346,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     const childModules = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === module);
     
     if (childModules.length > 0) {
-      // Es un PADRE â†’ propagar a todos los hijos
+      // Es un PADRE → propagar a todos los hijos
       childModules.forEach(child => {
         if (!isPermissionActionAvailable(child.id, type)) return;
         const childPerm = newPerms.find(p => p.module === child.id) as any;
@@ -1367,7 +1368,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     // Verificar si es un submódulo (tiene parent)
     const submoduleDef = SUBMODULES_FOR_PERMS.find(sub => sub.id === module);
     if (submoduleDef) {
-      // Es un HIJO â†’ recalcular el estado del padre
+      // Es un HIJO → recalcular el estado del padre
       const parentPerm = newPerms.find(p => p.module === submoduleDef.parent) as any;
       if (parentPerm) {
         const siblings = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === submoduleDef.parent);
@@ -1393,7 +1394,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   return (
     <div className="space-y-6 p-4 md:p-8 pb-24 max-w-[1920px] mx-auto">
 
-      {/* â”€â”€ HEADER â”€â”€ */}
+      {/* —— HEADER —— */}
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
         className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
@@ -1412,7 +1413,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         </div>
       </motion.div>
 
-      {/* â”€â”€ TABS â”€â”€ */}
+      {/* —— TABS —— */}
       <Tabs value={activeTab} className="space-y-6" onValueChange={setActiveTab}>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
@@ -1431,7 +1432,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </TabsList>
         </motion.div>
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: BRANDING â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: BRANDING ══════════ */}
         <TabsContent value="branding" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
@@ -1601,7 +1602,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: PERSONALIZACIÓN PDF â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: PERSONALIZACIÓN PDF ══════════ */}
         <TabsContent value="documentos-pdf" className="space-y-6 mt-0">
           <PdfDocumentCustomizer
             tenantId={user?.tenantId}
@@ -1615,7 +1616,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           />
         </TabsContent>
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: EMPRESA â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: EMPRESA ══════════ */}
         {false && <TabsContent value="empresa" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-border/50 shadow-sm">
@@ -1752,7 +1753,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>}
 
-        {/* Roles se administran únicamente en Mi Empresa â†’ Mi Equipo. */}
+        {/* Roles se administran únicamente en Mi Empresa → Mi Equipo. */}
         {false && <TabsContent value="roles" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="border-border/50 shadow-sm">
@@ -1851,7 +1852,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
                           <button onClick={() => handleEditRole(role)} disabled={!canEditRoles}
                             className="w-full text-xs font-black uppercase tracking-widest py-2 rounded-xl border border-primary/20 text-primary hover:bg-primary/5 transition-all relative z-20">
-                            Editar Permisos â†’
+                            Editar Permisos →
                           </button>
                         </div>
                       );
@@ -1977,7 +1978,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </Dialog>
         </TabsContent>}
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: SEGURIDAD â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: SEGURIDAD ══════════ */}
         <TabsContent value="seguridad" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-border/50 shadow-sm">
@@ -2115,7 +2116,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: MULTI-TENANCY â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: MULTI-TENANCY ══════════ */}
         <TabsContent value="tenancy" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-border/50 shadow-sm">
@@ -2177,7 +2178,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: MONEDA & CAMBIO â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: MONEDA & CAMBIO ══════════ */}
         <TabsContent value="currency" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-border/50 shadow-sm">
@@ -2315,7 +2316,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: DOMINIOS â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: DOMINIOS ══════════ */}
         {false && <TabsContent value="dominios" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="border-border/50 shadow-sm mb-6">
@@ -2385,7 +2386,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>}
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: PRECIOS (Super Admin only) â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: PRECIOS (Super Admin only) ══════════ */}
         <TabsContent value="precios" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="border-border/50 shadow-sm">
@@ -2526,7 +2527,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: PLATAFORMA (Super Admin only) â•â•â•â•â•â•â•â•â•â• */}
+        {/* ══════════ TAB: PLATAFORMA (Super Admin only) ══════════ */}
         <TabsContent value="paises" className="space-y-6 mt-0">
           <CountriesView canEdit={canEditCountries} />
         </TabsContent>

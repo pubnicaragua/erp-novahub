@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Activity, ListTodo, CalendarDays, Bell, Database } from 'lucide-react';
+import { Activity, ListTodo, CalendarDays, Bell, Database, Sparkles } from 'lucide-react';
+import { Badge } from './ui/badge';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TareasView } from './actividades/TareasView';
@@ -100,15 +101,14 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
     <div className="flex min-w-0 max-w-full flex-1 overflow-x-hidden bg-background">
       <main className="relative min-w-0 flex-1">
         <div className="mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] p-4 sm:p-6 md:p-10">
-          <div className="mb-6 flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="mb-6 flex min-w-0 flex-col gap-4 rounded-3xl border border-border/50 bg-card/70 p-5 shadow-sm backdrop-blur-xl sm:p-6 md:flex-row md:items-center md:justify-between">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:size-[66px]">
+              <div className="flex size-12 shrink-2 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 sm:size-[66px]">
                 <Activity className="size-7 text-primary sm:size-9" />
               </div>
               <div className="min-w-0">
-                <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 break-words text-2xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
-                  Actividades
-                </h1>
+                <div className="flex flex-wrap items-center gap-2"><h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 break-words text-2xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">Actividades</h1><Badge variant="outline" className="gap-1 rounded-lg border-primary/20 bg-primary/5 text-[9px] font-black uppercase tracking-widest text-primary"><Sparkles className="size-3" /> Centro operativo</Badge></div>
+                <p className="mt-2 max-w-2xl text-xs text-muted-foreground sm:text-sm">Organiza tareas, agenda eventos, programa avisos y conserva el historial de actividad de tu equipo.</p>
               </div>
             </div>
           </div>
@@ -117,7 +117,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
 
           <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
             <div className="mb-6 w-full min-w-0 max-w-full overscroll-x-contain overflow-x-auto custom-scrollbar">
-            <TabsList className="flex h-auto w-max min-w-full max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
+            <TabsList className="flex h-auto w-max min-w-full max-w-none gap-1.5 rounded-2xl border border-border/50 bg-card/80 p-1.5 shadow-sm backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {visibleTabs.map((tab) => {
                 return (
                 <TabsTrigger 
@@ -125,7 +125,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                   value={tab.id}
                   className="flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-xs font-black uppercase tracking-widest sm:px-4
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
+                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-[background-color,color,box-shadow,transform] duration-200 active:scale-[0.98]"
                 >
                   <tab.icon className="size-4" />
                   <span className="hidden sm:inline">{tab.label}</span>

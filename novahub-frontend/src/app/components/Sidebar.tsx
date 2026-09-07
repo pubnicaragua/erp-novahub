@@ -69,6 +69,7 @@ import {
   TrendingDown,
   ChefHat,
   MapPinned,
+  Ship,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -155,6 +156,12 @@ const menuItems: MenuItem[] = [
     id: 'restaurante',
     label: 'Restaurante POS',
     icon: <ChefHat className="size-5" />,
+    section: 'Operaciones',
+  },
+  {
+    id: 'tracking',
+    label: 'Tracking de Importaciones',
+    icon: <Ship className="size-5" />,
     section: 'Operaciones',
   },
   {
@@ -504,7 +511,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     'asesoria-legal': 'LEGAL',
     'centro-capacitacion': 'HR_TRAINING',
     'soporte-tecnico': 'SUPPORT_TECH',
-    restaurante: 'RESTAURANT'
+    restaurante: 'RESTAURANT',
+    tracking: 'TRACKING'
   };
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {

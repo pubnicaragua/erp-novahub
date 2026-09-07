@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { hrService } from '../../services/hr.service';
 import { HRViewTutorial } from './HRViewTutorial';
+import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 
 type EmployeeDetailDrawerProps = {
   employeeId: string | null;
@@ -191,6 +192,11 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
                     <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">
                       <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><User className="size-4 text-primary" /> Datos personales y contacto</h3>
                       <div className="grid gap-3 sm:grid-cols-2"><InfoItem label="Correo electrónico" value={employee?.email} icon={Mail} /><InfoItem label="Teléfono" value={employee?.phone} icon={Phone} /><InfoItem label="Cédula" value={employee?.nationalId} icon={CreditCard} mono /><InfoItem label="Seguro social" value={employee?.socialSecurityNumber} icon={CreditCard} mono /><InfoItem label="Fecha de nacimiento" value={formatDate(employee?.dateOfBirth)} icon={CalendarDays} /><InfoItem label="Dirección" value={employee?.address} icon={MapPin} /><InfoItem label="Ciudad / Estado" value={[employee?.city, employee?.state].filter(Boolean).join(' · ')} icon={MapPin} /><InfoItem label="País / Código postal" value={[employee?.country, employee?.postalCode].filter(Boolean).join(' · ')} icon={MapPin} /></div>
+                      <GoogleMap
+                        query={buildMapQuery([employee?.address, employee?.city, employee?.state, employee?.country])}
+                        label={`Ubicación de ${employee ? `${employee.firstName} ${employee.lastName}` : 'empleado'}`}
+                        height={200}
+                      />
                     </Card>
 
                     <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">

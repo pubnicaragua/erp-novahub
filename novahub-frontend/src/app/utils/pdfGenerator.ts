@@ -17,6 +17,138 @@ import { formatPdfItemDescription as commercialItemDescription } from './pdf-lin
 
 type PdfRgb = [number, number, number];
 
+type ReportPdfKpi = {
+  label: unknown;
+  value: unknown;
+  detail: unknown;
+  color: readonly number[];
+};
+
+function reportPdfLines(doc: jsPDF, value: unknown, maxWidth: number, fontSize: number, maxLines = 2) {
+  doc.setFontSize(fontSize);
+  const text = String(value ?? '—');
+  const lines = doc.splitTextToSize(text, Math.max(8, maxWidth)) as string[];
+  return lines.length > maxLines ? [...lines.slice(0, maxLines - 1), `${lines[maxLines - 1].replace(/\s+$/, '')}…`] : lines;
+}
+
+/** Dibuja las tarjetas KPI de los reportes sin permitir que su texto escape. */
+export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns, gap = 4, boxHeight = 22, labelFontSize = 7.5, valueFontSize = 10, detailFontSize = 6.5 }: {
+  doc: jsPDF;
+  kpis: ReportPdfKpi[];
+  marginX: number;
+  contentWidth: number;
+  currentY: number;
+  columns: number;
+  gap?: number;
+  boxHeight?: number;
+  labelFontSize?: number;
+  valueFontSize?: number;
+  detailFontSize?: number;
+}) {
+  const boxWidth = (contentWidth - (columns - 1) * gap) / Math.max(columns, 1);
+  kpis.forEach((kpi, index) => {
+    const x = marginX + index * (boxWidth + gap);
+    const color = kpi.color;
+    doc.setFillColor(color[0] ?? 16, color[1] ?? 185, color[2] ?? 129);
+    doc.roundedRect(x, currentY, boxWidth, boxHeight, 3, 3, 'F');
+    const textWidth = boxWidth - 5;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    const labelLines = reportPdfLines(doc, kpi.label, textWidth, labelFontSize, 2);
+    doc.text(labelLines, x + boxWidth / 2, currentY + 4.5, { align: 'center', lineHeightFactor: 1.05 });
+
+    const valueLines = reportPdfLines(doc, kpi.value, textWidth, valueFontSize, 1);
+    doc.text(valueLines, x + boxWidth / 2, currentY + 13, { align: 'center', lineHeightFactor: 1 });
+
+    doc.setFont('helvetica', 'normal');
+    const detailLines = reportPdfLines(doc, kpi.detail, textWidth, detailFontSize, 2);
+    doc.text(detailLines, x + boxWidth / 2, currentY + boxHeight - (detailLines.length > 1 ? 5.8 : 3.5), { align: 'center', lineHeightFactor: 1.05 });
+  });
+  return currentY + boxHeight + 10;
+}
+
+/** Dibuja en las salidas nativas la misma información de Marca del canvas. */
+export function drawReportBrandMeta({ doc, settings, pageWidth, contentWidth, currentY }: {
+  doc: jsPDF;
+  settings: Record<string, any>;
+  pageWidth: number;
+  contentWidth: number;
+  currentY: number;
+}) {
+  const values = [settings.slogan, settings.fiscalInfo, settings.address, settings.phone, settings.email, settings.website]
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean);
+  if (!values.length) return currentY;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(120, 120, 120);
+  const lines = doc.splitTextToSize(values.join(' · '), Math.max(40, contentWidth));
+  doc.text(lines, pageWidth / 2, currentY, { align: 'center', lineHeightFactor: 1.05 });
+  return currentY + lines.length * 3.2 + 1;
+}
+
+/** Dibuja tablas del reporte con anchos contenidos y filas de altura variable. */
+export function drawReportTable({ doc, title, headers, rows, color, marginX, contentWidth, currentY, columnWidths }: {
+  doc: jsPDF;
+  title: string;
+  headers: string[];
+  rows: Array<Array<string | number | null | undefined>>;
+  color: readonly number[];
+  marginX: number;
+  contentWidth: number;
+  currentY: number;
+  columnWidths?: number[];
+}) {
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const bottomMargin = 15;
+  const startPage = () => { doc.addPage(); return 20; };
+  const rawWidths = headers.map((_, index) => Number(columnWidths?.[index]) || 1);
+  const widthTotal = rawWidths.reduce((sum, width) => sum + width, 0);
+  const widths = rawWidths.map(width => (width / widthTotal) * contentWidth);
+  const cellPadding = 4;
+  const bodyFontSize = 7.5;
+  const headerFontSize = 7.5;
+  const titleLines = reportPdfLines(doc, title, contentWidth, 12, 2);
+  const headerLines = headers.map((header, index) => reportPdfLines(doc, header, widths[index] - cellPadding, headerFontSize, 2));
+  const headerLineHeight = 3.2;
+  const headerHeight = Math.max(8, Math.max(...headerLines.map(lines => lines.length)) * headerLineHeight + 3.5);
+  const estimatedRowsHeight = rows.reduce((total, row) => {
+    const lineCount = Math.max(...headers.map((_, index) => reportPdfLines(doc, row[index], widths[index] - cellPadding, bodyFontSize, 3).length));
+    return total + Math.max(7, lineCount * 3.2 + 3);
+  }, 0);
+  if (currentY + titleLines.length * 4.5 + 7 + headerHeight + Math.min(estimatedRowsHeight, pageHeight - bottomMargin) > pageHeight - bottomMargin) currentY = startPage();
+
+  doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
+  doc.text(titleLines, marginX, currentY, { lineHeightFactor: 1.05 });
+  currentY += titleLines.length * 4.5 + 3;
+  const headerColor = color;
+  doc.setFillColor(headerColor[0] ?? 16, headerColor[1] ?? 185, headerColor[2] ?? 129);
+  doc.roundedRect(marginX, currentY, contentWidth, headerHeight, 1, 1, 'F');
+  doc.setFontSize(headerFontSize); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+  let x = marginX;
+  headers.forEach((_, index) => {
+    doc.text(headerLines[index], x + 2, currentY + 3.2, { lineHeightFactor: 1.05 });
+    x += widths[index];
+  });
+  currentY += headerHeight + 2;
+
+  rows.forEach((row, rowIndex) => {
+    const lines = headers.map((_, index) => reportPdfLines(doc, row[index], widths[index] - cellPadding, bodyFontSize, 3));
+    const rowHeight = Math.max(7, Math.max(...lines.map(value => value.length)) * 3.2 + 3);
+    if (currentY + rowHeight > pageHeight - bottomMargin) currentY = startPage();
+    if (rowIndex % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, rowHeight, 'F'); }
+    doc.setFontSize(bodyFontSize); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+    x = marginX;
+    lines.forEach((cellLines, index) => {
+      doc.text(cellLines, x + 2, currentY + 3.4, { lineHeightFactor: 1.05 });
+      x += widths[index];
+    });
+    currentY += rowHeight;
+  });
+  return currentY + 8;
+}
+
 type PdfPageSizeMm = { width: number; height: number };
 
 function basePdfPageSizeMm(paperSize: unknown): PdfPageSizeMm {
@@ -1589,13 +1721,13 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
     logo: resolvedLogo,
     company: {
       ...sourceCompany,
-      name: sourceCompany.name || settings.companyName || tenantName,
-      fiscalInfo: sourceCompany.fiscalInfo || settings.fiscalInfo,
-      address: sourceCompany.address || settings.address,
-      phone: sourceCompany.phone || settings.phone,
-      email: sourceCompany.email || settings.email,
-      slogan: sourceCompany.slogan || settings.slogan,
-      website: sourceCompany.website || settings.website,
+      name: settings.companyName || sourceCompany.name || tenantName,
+      fiscalInfo: settings.fiscalInfo || sourceCompany.fiscalInfo,
+      address: settings.address || sourceCompany.address,
+      phone: settings.phone || sourceCompany.phone,
+      email: settings.email || sourceCompany.email,
+      slogan: settings.slogan || sourceCompany.slogan,
+      website: settings.website || sourceCompany.website,
       logo: resolvedLogo,
     },
   };

@@ -51,7 +51,8 @@ import {
   Landmark,
   Scale,
   GraduationCap,
-  LifeBuoy
+  LifeBuoy,
+  Ship
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
@@ -93,6 +94,7 @@ const AVAILABLE_MODULES = [
   { id: 'TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
   { id: 'SUPPORT', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
   { id: 'NOVACHAT', label: 'Nova Suite', icon: NovaSuiteIcon, description: 'Bandeja multicanal y comunicación unificada' },
+  { id: 'TRACKING', label: 'Tracking de Importaciones', icon: Ship, description: 'Envíos de agencia por código de tracking' },
 ];
 
 const SYSTEM_ROLE_OPTIONS = [

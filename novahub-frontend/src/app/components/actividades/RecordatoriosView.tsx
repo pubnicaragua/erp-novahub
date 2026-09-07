@@ -6,9 +6,9 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Search, Bell, BellRing, BellOff, Clock } from 'lucide-react';
+import { Plus, Search, Bell, BellRing, BellOff, Clock, Eye } from 'lucide-react';
 import { remindersService } from '../../services/actividades.service';
-import { tenantsService } from '../../services/tenants.service';
+import { usersService } from '../../services/users.service';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
 import { Label } from '../ui/label';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
+import { ActivityDetailSheet } from './ActivityDetailSheet';
 
 interface RecordatoriosViewProps {
   data: Reminder[];
@@ -28,12 +29,12 @@ interface RecordatoriosViewProps {
 export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
 
-  const { user, canPerform } = useAuth();
-  const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
+  const { canPerform } = useAuth();
   const canViewHr = canPerform('HR', 'view');
-  const usersQuery = useTenantQuery<any[]>(['activities', 'users'], signal => tenantsService.getUsers(user!.tenantId!, signal), {
-    enabled: Boolean(isAddOpen && user?.tenantId && canViewCompany),
+  const usersQuery = useTenantQuery<any[]>(['activities', 'reminder-users'], signal => usersService.getAll(undefined, signal), {
+    enabled: Boolean(isAddOpen || selectedReminder),
   });
   const departmentsQuery = useTenantQuery<any[]>(['activities', 'departments'], signal => hrService.getDepartments(signal), {
     enabled: isAddOpen && canViewHr,
@@ -126,7 +127,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     <div className="w-full min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
-          <Card key={i} className="min-w-0 border-none bg-background/50 backdrop-blur-xl shadow-sm transition-all duration-300 hover:shadow-md">
+          <Card key={i} className="min-w-0 rounded-2xl border-border/50 bg-card/80 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
             <CardContent className="p-5 flex items-center gap-4">
               <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
               <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
@@ -135,7 +136,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         ))}
       </div>
 
-      <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
+      <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="min-w-0"><h2 className="break-words text-xl font-black uppercase tracking-tight">Recordatorios</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
@@ -150,29 +151,37 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
           data={filtered} 
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') ? handleUpdate : undefined} 
+          onRowClick={(row) => setSelectedReminder(row)}
           isLoading={loading} 
           onRowDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') ? async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar recordatorio'); } } : undefined} 
+          actions={(row: Reminder) => (
+            <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+              <Button type="button" variant="ghost" size="icon" title="Ver detalle del recordatorio" aria-label="Ver detalle del recordatorio" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedReminder(row)}><Eye className="size-4" /></Button>
+            </div>
+          )}
         />
       </Card>
 
+      <ActivityDetailSheet kind="reminder" item={selectedReminder} users={availableUsers} onOpenChange={(open) => { if (!open) setSelectedReminder(null); }} />
+
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto sm:max-w-[450px]">
-          <DialogHeader>
-            <DialogTitle className="font-black uppercase tracking-tight">Programar Recordatorio</DialogTitle>
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl sm:max-w-xl">
+          <DialogHeader className="border-b border-border/50 bg-gradient-to-br from-amber-500/10 via-background to-background px-6 py-5 sm:px-8">
+            <div className="flex items-start gap-3 pr-6"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600"><BellRing className="size-5" /></div><div><DialogTitle className="font-black tracking-tight sm:text-lg">Programar recordatorio</DialogTitle><p className="mt-1 text-xs text-muted-foreground">Define cuándo avisar y quién debe recibir la notificación.</p></div></div>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-5 px-6 py-6 sm:px-8">
             <div className="space-y-2">
-              <Label>Título / Asunto</Label>
-              <Input placeholder="Ej. Reunión de Equipo..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+              <Label className="text-xs font-bold">Título o asunto</Label>
+              <Input placeholder="Ej. Reunión de equipo" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="h-11 rounded-xl bg-background" />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Fecha y Hora</Label>
-                <Input type="datetime-local" value={formData.reminderDate} onChange={e => setFormData({...formData, reminderDate: e.target.value})} />
+                <Label className="text-xs font-bold">Fecha y hora</Label>
+                <Input type="datetime-local" value={formData.reminderDate} onChange={e => setFormData({...formData, reminderDate: e.target.value})} className="h-11 rounded-xl bg-background" />
               </div>
               <div className="space-y-2">
-                <Label>Alcance</Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.scope} onChange={e => setFormData({...formData, scope: e.target.value, selectedUsers: [], selectedDept: ''})}>
+                <Label className="text-xs font-bold">Alcance</Label>
+                <select className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" value={formData.scope} onChange={e => setFormData({...formData, scope: e.target.value, selectedUsers: [], selectedDept: ''})}>
                   <option value="PERSONAL">Personal</option>
                   <option value="DEPARTMENT">Departamento</option>
                   <option value="GLOBAL">Global (Todos)</option>
@@ -182,9 +191,9 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
             {formData.scope === 'PERSONAL' && (
               <div className="space-y-2">
-                <Label>Usuarios Destinatarios</Label>
-                <div className="border border-input rounded-md p-3 max-h-40 overflow-y-auto bg-background space-y-2">
-                  {availableUsers.length === 0 && <p className="text-xs text-muted-foreground">No hay usuarios disponibles</p>}
+                <Label className="text-xs font-bold">Usuarios destinatarios</Label>
+                <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl border border-input bg-muted/[0.12] p-2">
+                  {usersQuery.isLoading ? <p className="text-xs text-muted-foreground">Cargando usuarios disponibles...</p> : usersQuery.isError ? <p className="text-xs text-destructive">No se pudieron cargar los usuarios disponibles.</p> : availableUsers.length === 0 && <p className="text-xs text-muted-foreground">No hay usuarios disponibles</p>}
                   {availableUsers.map(u => (
                     <div key={u.id} className="flex items-center gap-2">
                       <input type="checkbox" id={`usr-${u.id}`} checked={formData.selectedUsers.includes(u.id)} onChange={() => {
@@ -202,8 +211,8 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
             {formData.scope === 'DEPARTMENT' && (
               <div className="space-y-2">
-                <Label>Seleccionar Departamento</Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.selectedDept} onChange={e => setFormData({...formData, selectedDept: e.target.value})}>
+                <Label className="text-xs font-bold">Seleccionar departamento</Label>
+                <select className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" value={formData.selectedDept} onChange={e => setFormData({...formData, selectedDept: e.target.value})}>
                   <option value="" disabled>Seleccione departamento...</option>
                   {availableDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
@@ -211,13 +220,13 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
             )}
 
             <div className="space-y-2">
-              <Label>Detalles Especiales</Label>
-              <Input placeholder="Descripción breve..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+              <Label className="text-xs font-bold">Detalles adicionales</Label>
+              <Input placeholder="Descripción breve..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="h-11 rounded-xl bg-background" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
-            <Button variant="default" onClick={handleAdd}>Guardar Recordatorio</Button>
+          <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8">
+            <Button variant="outline" className="rounded-xl" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
+            <Button variant="default" className="rounded-xl px-5" onClick={handleAdd}>Guardar recordatorio</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

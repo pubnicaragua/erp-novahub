@@ -40,6 +40,9 @@ export const authService = {
   login: (dto: { email: string; password: string }) =>
     api.post<AuthResponse>('/auth/login', dto),
 
+  getMyBranches: () =>
+    api.get<Array<{ id: string; name: string; slug: string; warehouses?: any[] }>>('/auth/me/branches'),
+
   registerTenant: (dto: RegisterTenantDto) =>
     api.post<AuthResponse>('/auth/register-tenant', dto),
 
