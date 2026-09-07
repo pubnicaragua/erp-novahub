@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Loader2, PackageCheck, Save, Search, Truck, Warehouse } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FileUp, Loader2, PackageCheck, Save, Search, Truck, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -7,7 +7,6 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { getApiErrorMessage } from '../../services/api';
 import { authService } from '../../services/auth.service';
-import { inventoryService } from '../../services/inventario.service';
 import { customersService } from '../../services/ventas.service';
 import { logisticsService, calculateBillableWeight, WAREHOUSE_STRATEGY_LABELS } from '../../services/logistics.service';
 
@@ -17,8 +16,6 @@ const EMPTY_FORM = {
   shipmentModeCode: '',
   branchId: '',
   branchName: '',
-  sku: '',
-  skuName: '',
   physicalWeight: '',
   supplierWeight: '',
   weightUnit: 'lb',
@@ -43,10 +40,9 @@ interface LogisticsContextData {
   subagencies: NonNullable<Awaited<ReturnType<typeof logisticsService.getContext>>>['subagencies'];
 }
 
-export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) => void }) {
+export function ReceptionWizard({ onDone, onOpenBatch }: { onDone?: (trackingCode: string) => void; onOpenBatch?: () => void }) {
   const [ctx, setCtx] = useState<LogisticsContextData | null>(null);
   const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
-  const [products, setProducts] = useState<Array<{ code: string; name: string }>>([]);
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState(EMPTY_FORM);
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
@@ -63,15 +59,12 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
   useEffect(() => {
     (async () => {
       try {
-        const [context, branchList, productsData] = await Promise.all([
+        const [context, branchList] = await Promise.all([
           logisticsService.getContext(),
           authService.getMyBranches(),
-          inventoryService.getProducts({ page: 1, pageSize: 200 } as any).catch(() => ({ items: [], total: 0 }) as any),
         ]);
         setCtx(context);
         setBranches(branchList.map((b) => ({ id: b.id, name: b.name })));
-        const list = Array.isArray(productsData) ? productsData : productsData?.items || [];
-        setProducts(list.map((p: any) => ({ code: p.code, name: p.name })));
       } catch (error) {
         toast.error(getApiErrorMessage(error, 'No se pudo cargar la configuración logística'));
       }
@@ -120,7 +113,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
   };
 
   const canNext = () => {
-    if (step === 1) return form.shipmentModeCode && form.sku.trim();
+    if (step === 1) return Boolean(form.shipmentModeCode);
     if (step === 2) return Number(form.physicalWeight) > 0;
     if (step === 3) return form.trackingCode.trim().length >= 4 && checkState.status !== 'duplicate';
     if (step === 4) return Boolean(form.subagencyName);
@@ -138,8 +131,7 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
         shipmentModeCode: form.shipmentModeCode,
         branchId: form.branchId || undefined,
         branchName: form.branchName || undefined,
-        sku: form.sku.trim(),
-        skuName: form.skuName || undefined,
+        sku: '',
         physicalWeight: Number(form.physicalWeight),
         supplierWeight: form.supplierWeight ? Number(form.supplierWeight) : undefined,
         weightUnit: form.weightUnit,
@@ -206,10 +198,27 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
         </div>
       )}
 
+      {step !== 'done' && (
+        <Card className="rounded-2xl border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><FileUp className="size-5" /></div>
+              <div>
+                <p className="text-sm font-black">¿Varios paquetes a la vez?</p>
+                <p className="text-xs text-muted-foreground">Importa el PDF del proveedor (AWBOX u OGLOBAL) o crea varios paquetes en una grilla.</p>
+              </div>
+            </div>
+            <Button className="rounded-xl text-xs" onClick={() => onOpenBatch?.()} data-tour="log-wizard-open-batch">
+              <FileUp className="size-4" /> Recepción en lote (PDF)
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {step === 1 && (
         <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
           <h3 className="flex items-center gap-2 text-sm font-black"><Truck className="size-4 text-primary" /> Paso 1 · Tipo y sucursal</h3>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de envío *</label>
               <select value={form.shipmentModeCode} onChange={(e) => setForm((f) => ({ ...f, shipmentModeCode: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
@@ -223,13 +232,6 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
                 <option value="">Sin sucursal</option>
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">SKU *</label>
-              <Input list="reception-skus" placeholder="Busca o escribe el SKU" value={form.sku} onChange={(e) => { const p = products.find((x) => x.code === e.target.value); setForm((f) => ({ ...f, sku: e.target.value, skuName: p?.name || f.skuName })); }} className="rounded-xl" />
-              <datalist id="reception-skus">
-                {products.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
-              </datalist>
             </div>
           </div>
           <div className="mt-5 flex justify-end">
@@ -394,7 +396,6 @@ export function ReceptionWizard({ onDone }: { onDone?: (trackingCode: string) =>
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Tipo</p><p className="font-semibold">{ctx.shipmentModes.find((m) => m.code === form.shipmentModeCode)?.name || form.shipmentModeCode}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Sucursal</p><p className="font-semibold">{form.branchName || 'No disponible'}</p></div>
-            <div><p className="text-[10px] font-black uppercase text-muted-foreground">SKU</p><p className="font-semibold">{form.sku}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Tracking</p><p className="font-mono font-semibold">{form.prefixCode}{form.trackingCode}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Warehouse</p><p className="font-semibold">{form.warehouseValue || warehouse?.name || 'No disponible'}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso físico</p><p className="font-semibold">{form.physicalWeight} {form.weightUnit}</p></div>

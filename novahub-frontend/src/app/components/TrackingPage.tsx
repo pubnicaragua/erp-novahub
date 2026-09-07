@@ -542,7 +542,7 @@ export function TrackingPage() {
       </Sheet>
     </div>
       ) : tab === 'reception' ? (
-        <ReceptionWizard onDone={() => setTab('packages')} />
+        <ReceptionWizard onDone={() => setTab('packages')} onOpenBatch={() => setTab('batches')} />
       ) : tab === 'batches' ? (
         <BatchReception />
       ) : tab === 'packages' ? (
