@@ -250,7 +250,7 @@ const PARENT_NAMES_ES: Record<string, string> = {
   TOOLS: 'Herramientas',
   FINANCING: 'Financiamiento PYME',
   NOVACHAT: 'Nova Suite',
-  TICKETS: 'Tickets y Soporte',
+  TICKETS: 'Gestión de tickets',
   TRAINING: 'Centro de Capacitación',
   SUPPORT_TECH: 'Soporte Técnico',
   RESTAURANT: 'Restaurante POS',

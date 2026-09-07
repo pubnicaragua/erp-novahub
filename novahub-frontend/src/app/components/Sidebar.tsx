@@ -12,7 +12,6 @@ import {
   DollarSign,
   Users,
   Truck,
-  Headphones,
   FolderOpen,
   FolderKanban,
   BellRing,
@@ -285,8 +284,8 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'tickets', 
-    label: 'Tickets y Soporte', 
-    icon: <Headphones className="size-5" />,
+    label: 'Gestión de tickets',
+    icon: <TicketIcon className="size-5" />,
     submenu: [
       { id: 'tickets', label: 'Tickets', icon: <TicketIcon className="size-4" /> },
       { id: 'faqs', label: 'Base de Conocimiento', icon: <BookOpen className="size-4" /> },

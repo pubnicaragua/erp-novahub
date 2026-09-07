@@ -70,7 +70,7 @@ const AVAILABLE_MODULES = [
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
   { id: 'FORCE_SALES', label: 'Fuerza Comercial', icon: MapPinned, description: 'Prospección, rutas, visitas y seguimiento comercial' },
-  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
+  { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
   { id: 'SUPPORT_TECH', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
   { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
@@ -586,7 +586,7 @@ const PRICING_MODULES = [
     { id: 'REPORTS', label: 'Reportes', icon: BarChart3 },
   ]},
   { category: 'Soporte', modules: [
-    { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones },
+    { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones },
     { id: 'CONFIGURATION', label: 'Configuración', icon: Settings },
   ]},
 ];

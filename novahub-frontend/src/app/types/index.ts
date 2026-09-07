@@ -1414,13 +1414,36 @@ export interface Activity {
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'open' | 'in_progress' | 'resolved' | 'closed';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'low' | 'medium' | 'high' | 'urgent';
 
+export interface TicketProductLink {
+  id: string;
+  productId: string;
+  invoiceItemId?: string | null;
+  product?: { id: string; code?: string; name: string; type?: string } | null;
+  invoiceItem?: { id: string; description: string; quantity?: number; unitPrice?: number; total?: number } | null;
+}
+
 export interface Ticket {
   id: string;
   number: string;
   subject: string;
   description: string;
   customerId?: string;
+  customer?: Pick<Customer, 'id' | 'name' | 'code' | 'email' | 'phone'> | null;
+  createdById?: string | null;
+  createdBy?: Pick<User, 'id' | 'name' | 'email'> | null;
   assignedToId?: string;
+  assignedTo?: Pick<User, 'id' | 'name' | 'email'> | null;
+  categoryId?: string | null;
+  category?: { id: string; name: string; color?: string | null } | null;
+  invoiceId?: string | null;
+  invoice?: { id: string; number: string; date?: string; total?: number; currency?: string; customerId?: string | null } | null;
+  productId?: string | null;
+  product?: { id: string; code?: string; name: string; type?: string } | null;
+  productIds?: string[];
+  ticketProducts?: TicketProductLink[];
+  resolutionNote?: string | null;
+  attachments?: Array<{ id: string; uri: string; uriStorageUri?: string; fileName: string; mimeType?: string | null; byteSize?: number; createdAt: string; uploadedBy?: Pick<User, 'id' | 'name' | 'email'> | null }>;
+  clientTenant?: { id: string; name: string; slug?: string } | null;
   status: TicketStatus;
   priority: Priority;
   slaDueAt?: string;
@@ -1442,6 +1465,7 @@ export interface TicketComment {
   ticketId: string;
   authorId: string;
   message: string;
+  isInternal?: boolean;
   createdAt: string;
   updatedAt?: string;
   author?: {

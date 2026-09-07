@@ -84,7 +84,7 @@ const AVAILABLE_MODULES = [
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados', submodules: submodulesFor('HR') },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades', submodules: submodulesFor('ACTIVITIES') },
   { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental', submodules: submodulesFor('DOCUMENTS') },
-  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
+  { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema', submodules: submodulesFor('NOTIFICATIONS') },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: submodulesFor('REPORTS') },
   { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Plan de Cuentas, Asientos y Reportes Fiscales', submodules: submodulesFor('ACCOUNTING') },

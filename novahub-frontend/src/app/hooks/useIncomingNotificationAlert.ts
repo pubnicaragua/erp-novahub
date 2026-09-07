@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { dedupeNotificationRecords, notificationEventKey } from '../services/notifications.service';
 import { isBrowserNotificationsEnabled } from '../utils/browserNotifications';
 import { toast } from 'sonner';
+import { getNotificationNavigation, navigateToNotification } from '../utils/notificationNavigation';
 
 /**
  * Detecta notificaciones entrantes nuevas (polling cada 5s) y:
@@ -14,7 +15,7 @@ import { toast } from 'sonner';
  */
 export function useIncomingNotificationAlert() {
   const { user } = useAuth();
-  const { notifications, isFetched } = useNotifications();
+  const { notifications, isFetched, markAsRead } = useNotifications();
   const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null | undefined;
   const storageKey = `nh-notification-seen:${authUser?.clientTenantId || authUser?.tenantId || 'current'}:${authUser?.id || 'current'}`;
   // Guardamos ids y claves de evento. El id cambia si un scheduler reintenta
@@ -65,10 +66,19 @@ export function useIncomingNotificationAlert() {
     try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1000))); } catch { /* optional history */ }
 
     const newest = [...fresh].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] || fresh[0];
+    const navigation = getNotificationNavigation(newest);
     playNotificationSound();
     toast.info(newest.title || 'Nueva notificación', {
       description: newest.message || 'Tienes una novedad pendiente de revisar.',
       duration: 6000,
+      position: 'top-right',
+      action: {
+        label: navigation.module === 'tickets' ? 'Abrir ticket' : 'Abrir',
+        onClick: () => {
+          void markAsRead(newest.id);
+          navigateToNotification(newest);
+        },
+      },
     });
 
     if (document.hidden && isBrowserNotificationsEnabled()) {
@@ -80,6 +90,8 @@ export function useIncomingNotificationAlert() {
         });
         notification.onclick = () => {
           window.focus();
+          void markAsRead(newest.id);
+          navigateToNotification(newest);
           notification.close();
         };
       } catch {

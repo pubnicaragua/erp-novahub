@@ -22,7 +22,7 @@ export const ENTERPRISE_MODULE_OPTIONS: EnterpriseModuleOption[] = [
   { id: 'HR', label: 'Recursos Humanos', description: 'Empleados, nómina y asistencia' },
   { id: 'HR_TRAINING', label: 'Centro de capacitación', description: 'Cursos y capacitaciones del equipo' },
   { id: 'ACTIVITIES', label: 'Actividades', description: 'Tareas, eventos y bitácora' },
-  { id: 'TICKETS', label: 'Tickets y soporte', description: 'Atención y seguimiento de incidencias' },
+  { id: 'TICKETS', label: 'Gestión de tickets', description: 'Atención y seguimiento de incidencias' },
   { id: 'SUPPORT_TECH', label: 'Soporte técnico', description: 'Soporte técnico especializado de NovaHub' },
   { id: 'LEGAL', label: 'Asesoría legal', description: 'Casos y recordatorios legales' },
   { id: 'NOVACHAT', label: 'Nova Suite', description: 'Bandeja multicanal y comunicación unificada' },

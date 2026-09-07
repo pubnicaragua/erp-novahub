@@ -1,220 +1,73 @@
-import { useMemo, useState } from 'react';
-import { Card, CardContent } from '../ui/card';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
-import { BookOpen, FileText, Plus, Search, FolderOpen, FileCheck } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BookOpen, CheckCircle2, Clock3, Edit3, Eye, FileCheck, FileText, History, Paperclip, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Input } from '../ui/input';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
+import { Textarea } from '../ui/textarea';
 import { cn } from '../ui/utils';
-import { knowledgeBaseService } from '../../services/support.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { knowledgeBaseService } from '../../services/support.service';
+import { storageService } from '../../services/storage.service';
 
-interface KnowledgeArticle {
-  id: string;
-  name: string;
-  url: string;
-  size: number;
-  mimeType: string;
-  folder?: string | null;
-}
+type ArticleStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+type ArticleType = 'ARTICLE' | 'GUIDE' | 'PROCEDURE' | 'FAQ' | 'DOCUMENTATION' | 'MANUAL' | 'PDF' | 'OTHER';
+interface KnowledgeArticle { id: string; title: string; summary?: string | null; content: string; type: ArticleType; status: ArticleStatus; module?: string | null; categoryId?: string | null; category?: { id: string; name: string } | null; author?: { id: string; name?: string | null; firstName?: string | null; lastName?: string | null; email?: string | null } | null; tags?: Array<{ id?: string; name: string; slug?: string }>; attachments?: Array<{ id: string; uri: string; fileName: string; mimeType?: string | null; byteSize?: number }>; relatedFrom?: Array<{ relatedArticle?: { id: string; title: string } }>; ticketLinks?: Array<{ ticket?: { id: string; number?: string; subject?: string } }>; createdAt: string; updatedAt: string; publishedAt?: string | null; lastReviewedAt?: string | null; reviewDueAt?: string | null; viewCount?: number; }
+interface KnowledgeCategory { id: string; name: string; description?: string | null; isActive?: boolean; }
+interface KnowledgeBaseViewProps { data: KnowledgeArticle[]; loading: boolean; onRefresh: () => void | Promise<unknown>; }
 
-interface KnowledgeBaseViewProps {
-  data: KnowledgeArticle[];
-  loading: boolean;
-  onRefresh: () => void;
-}
+const typeLabels: Record<ArticleType, string> = { ARTICLE: 'Artículo', GUIDE: 'Guía', PROCEDURE: 'Procedimiento', FAQ: 'FAQ', DOCUMENTATION: 'Documentación', MANUAL: 'Manual', PDF: 'PDF', OTHER: 'Otro' };
+const statusLabels: Record<ArticleStatus, string> = { DRAFT: 'Borrador', PUBLISHED: 'Publicado', ARCHIVED: 'Archivado' };
+const statusClass: Record<ArticleStatus, string> = { DRAFT: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300', PUBLISHED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', ARCHIVED: 'border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300' };
+const emptyForm = { title: '', summary: '', content: '', type: 'ARTICLE' as ArticleType, status: 'DRAFT' as ArticleStatus, categoryId: '', module: '', tags: '', reviewDueAt: '' };
+const authorName = (author?: KnowledgeArticle['author'] | null) => author ? [author.name, author.firstName, author.lastName].filter(Boolean).join(' ') || author.email || 'Sin autor' : 'Sin autor';
+const dateLabel = (value?: string | null) => value ? new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 
-export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, loading, onRefresh }) => {
+export const KnowledgeBaseView = ({ data, loading, onRefresh }: KnowledgeBaseViewProps) => {
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [categories, setCategories] = useState<KnowledgeCategory[]>([]);
+  const [stats, setStats] = useState<Record<string, number>>({});
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editing, setEditing] = useState<KnowledgeArticle | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<KnowledgeArticle | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [versions, setVersions] = useState<any[]>([]);
+  const [audit, setAudit] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const canCreate = canPerform('TICKETS_KNOWLEDGE_BASE', 'create');
+  const canEdit = canPerform('TICKETS_KNOWLEDGE_BASE', 'edit');
+  const canDelete = canPerform('TICKETS_KNOWLEDGE_BASE', 'delete');
 
-  const mimeTypeOptions = [
-    { value: 'text/markdown', label: 'Markdown' },
-    { value: 'text/plain', label: 'Texto' },
-    { value: 'application/pdf', label: 'PDF' },
-    { value: 'text/html', label: 'HTML' },
-    { value: 'application/json', label: 'JSON' },
-  ];
+  const loadMetadata = async () => { try { const [categoryRows, statsResponse] = await Promise.all([knowledgeBaseService.getCategories(), knowledgeBaseService.getStats()]); setCategories(categoryRows || []); setStats(statsResponse?.data || statsResponse || {}); } catch (error: any) { toast.error(error?.message || 'No se pudo cargar la configuración de la base de conocimiento'); } };
+  useEffect(() => { const timer = window.setTimeout(() => { void loadMetadata(); }, 0); return () => window.clearTimeout(timer); }, []);
+  const filtered = useMemo(() => { const query = searchTerm.trim().toLowerCase(); return data.filter((article) => { const searchable = [article.title, article.summary, article.content, article.module, article.category?.name, ...(article.tags || []).map((tag) => tag.name)].join(' ').toLowerCase(); return (!query || searchable.includes(query)) && (statusFilter === 'ALL' || article.status === statusFilter) && (typeFilter === 'ALL' || article.type === typeFilter) && (categoryFilter === 'ALL' || article.categoryId === categoryFilter); }); }, [data, searchTerm, statusFilter, typeFilter, categoryFilter]);
 
-  const columns: ColumnDef<KnowledgeArticle>[] = [
-    { key: 'name', header: 'Artículo', width: '28%', editable: canPerform('TICKETS', 'edit') },
-    { key: 'folder', header: 'Categoría', width: '16%', editable: canPerform('TICKETS', 'edit') },
-    {
-      key: 'mimeType',
-      header: 'Formato',
-      width: '14%',
-      editable: canPerform('TICKETS', 'edit'),
-      type: 'select',
-      options: mimeTypeOptions,
-      render: (val: any) => {
-        const opt = mimeTypeOptions.find((item) => item.value === val);
-        return (
-          <span className="text-[10px] font-black uppercase tracking-widest text-foreground/80">
-            {opt?.label || val || '-'}
-          </span>
-        );
-      },
-    },
-    {
-      key: 'size',
-      header: 'Tamaño',
-      width: '110px',
-      editable: canPerform('TICKETS', 'edit'),
-      type: 'number',
-      render: (val: any) => `${(Number(val || 0) / 1024).toFixed(1)} KB`,
-    },
-    {
-      key: 'url',
-      header: 'URL',
-      width: '42%',
-      editable: canPerform('TICKETS', 'edit'),
-      render: (val: any) =>
-        val ? (
-          <a
-            href={String(val)}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-blue-500 hover:text-blue-600 underline underline-offset-2"
-          >
-            {String(val)}
-          </a>
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        ),
-    },
-  ];
+  const openEditor = (article?: KnowledgeArticle) => { setEditing(article || null); setAttachmentFiles([]); setForm(article ? { title: article.title, summary: article.summary || '', content: article.content || '', type: article.type, status: article.status === 'ARCHIVED' ? 'DRAFT' : article.status, categoryId: article.categoryId || '', module: article.module || '', tags: (article.tags || []).map((tag) => tag.name).join(', '), reviewDueAt: article.reviewDueAt ? article.reviewDueAt.slice(0, 10) : '' } : emptyForm); setEditorOpen(true); };
+  const saveArticle = async () => { if (!form.title.trim() || !form.content.trim()) { toast.error('El título y el contenido son obligatorios'); return; } setSaving(true); try { const payload = { title: form.title.trim(), summary: form.summary.trim() || undefined, content: form.content, type: form.type, status: form.status, categoryId: form.categoryId || undefined, module: form.module.trim() || undefined, reviewDueAt: form.reviewDueAt ? new Date(`${form.reviewDueAt}T23:59:59`).toISOString() : undefined, tags: form.tags.split(',').map((tag) => tag.trim()).filter(Boolean) }; const saved = editing ? await knowledgeBaseService.update(editing.id, payload) : await knowledgeBaseService.create(payload); const articleId = editing?.id || saved?.data?.id || saved?.id; if (articleId && attachmentFiles.length) { for (const file of attachmentFiles) { const uploaded = await storageService.uploadFile('documents', file, { folder: `knowledge-base/${articleId}` }); await knowledgeBaseService.addAttachment(articleId, { uri: uploaded.url, fileName: file.name, mimeType: file.type, byteSize: file.size }); } } toast.success(editing ? 'Artículo actualizado' : 'Artículo creado'); setEditorOpen(false); setAttachmentFiles([]); await onRefresh(); await loadMetadata(); } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el artículo'); } finally { setSaving(false); } };
+  const openDetail = async (article: KnowledgeArticle) => { setSelected(article); setDetailLoading(true); setVersions([]); setAudit([]); try { const [full, articleVersions, articleAudit] = await Promise.all([knowledgeBaseService.getOne(article.id), knowledgeBaseService.getVersions(article.id), knowledgeBaseService.getAudit(article.id)]); setSelected(full?.data || full || article); setVersions(articleVersions?.data || articleVersions || []); setAudit(articleAudit?.data || articleAudit || []); } catch (error: any) { toast.error(error?.message || 'No se pudo abrir el artículo'); } finally { setDetailLoading(false); } };
+  const archiveArticle = async (article: KnowledgeArticle) => { if (!window.confirm(`¿Archivar "${article.title}"?`)) return; try { await knowledgeBaseService.delete(article.id); toast.success('Artículo archivado'); await onRefresh(); await loadMetadata(); if (selected?.id === article.id) setSelected(null); } catch (error: any) { toast.error(error?.message || 'No se pudo archivar el artículo'); } };
+  const uploadAttachment = async (file: File) => { if (!selected || !canEdit) return; setUploading(true); try { const uploaded = await storageService.uploadFile('documents', file, { folder: `knowledge-base/${selected.id}` }); await knowledgeBaseService.addAttachment(selected.id, { uri: uploaded.url, fileName: file.name, mimeType: file.type, byteSize: file.size }); await openDetail(selected); toast.success('Adjunto agregado'); } catch (error: any) { toast.error(error?.message || 'No se pudo cargar el adjunto'); } finally { setUploading(false); } };
+  const kpis = [{ title: 'Total', value: stats.total ?? data.length, icon: BookOpen, color: 'text-blue-500', bg: 'bg-blue-500/10' }, { title: 'Publicados', value: stats.published ?? data.filter((a) => a.status === 'PUBLISHED').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' }, { title: 'Borradores', value: stats.drafts ?? data.filter((a) => a.status === 'DRAFT').length, icon: Clock3, color: 'text-amber-500', bg: 'bg-amber-500/10' }, { title: 'PDF', value: stats.pdfs ?? data.filter((a) => a.type === 'PDF').length, icon: FileCheck, color: 'text-violet-500', bg: 'bg-violet-500/10' }];
 
-  const filtered = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return data;
-    return data.filter((item) =>
-      [item.name, item.folder, item.mimeType, item.url].some((field) =>
-        String(field || '')
-          .toLowerCase()
-          .includes(q),
-      ),
-    );
-  }, [data, searchTerm]);
-
-  const handleUpdate = async (id: string | number, updates: Partial<KnowledgeArticle>) => {
-    try {
-      await knowledgeBaseService.update(String(id), updates as any);
-      toast.success('Artículo actualizado');
-      onRefresh();
-    } catch (error: any) {
-      toast.error(error?.message || 'Error al actualizar artículo');
-    }
-  };
-
-  const handleAdd = async () => {
-    try {
-      await knowledgeBaseService.create({
-        name: 'Nuevo artículo',
-        folder: 'General',
-        mimeType: 'text/markdown',
-        size: 0,
-        url: `https://docs.novahub.local/articulo-${Date.now()}`,
-      } as any);
-      toast.success('Artículo creado');
-      onRefresh();
-    } catch (error: any) {
-      toast.error(error?.message || 'Error al crear artículo');
-    }
-  };
-
-  const kpis = [
-    {
-      title: 'Total Artículos',
-      value: data.length,
-      icon: BookOpen,
-      color: 'text-blue-500',
-      bg: 'bg-blue-500/10',
-    },
-    {
-      title: 'Documentación',
-      value: data.filter((doc) => ['text/markdown', 'text/plain', 'text/html'].includes((doc.mimeType || '').toLowerCase())).length,
-      icon: FileText,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
-    },
-    {
-      title: 'PDFs',
-      value: data.filter((doc) => (doc.mimeType || '').toLowerCase() === 'application/pdf').length,
-      icon: FileCheck,
-      color: 'text-amber-500',
-      bg: 'bg-amber-500/10',
-    },
-    {
-      title: 'Categorías',
-      value: new Set(data.map((doc) => (doc.folder || 'General').toLowerCase())).size,
-      icon: FolderOpen,
-      color: 'text-violet-500',
-      bg: 'bg-violet-500/10',
-    },
-  ];
-
-  return (
-    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <Card key={kpi.title} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn('p-3 rounded-2xl flex items-center justify-center', kpi.bg)}>
-                <kpi.icon className={cn('size-6', kpi.color)} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
-                <p className="text-2xl font-black tracking-tight">{kpi.value}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
-        <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black uppercase tracking-tight">Base de Conocimiento</h2>
-          </div>
-          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input
-                placeholder="Buscar artículo..."
-                className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            {canPerform('TICKETS', 'create') && (
-                <Button
-                  data-toolbar-role="primary"
-                onClick={handleAdd}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
-              >
-                <Plus className="size-4" />
-                Nuevo Artículo
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <EditableDataTable
-          data={filtered}
-          columns={columns}
-          onRowUpdate={handleUpdate}
-          isLoading={loading}
-          onRowDelete={canPerform('TICKETS', 'delete') ? async (id) => {
-            try {
-              await knowledgeBaseService.delete(String(id));
-              toast.success('Artículo eliminado');
-              onRefresh();
-            } catch (error: any) {
-              toast.error(error?.message || 'Error al eliminar artículo');
-            }
-          } : undefined}
-        />
-      </Card>
-    </div>
-  );
+  return <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{kpis.map((kpi) => <Card key={kpi.title} className="min-w-0 border-border/50 bg-background/70 shadow-sm"><CardContent className="flex min-w-0 items-center gap-3 p-4"><div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', kpi.bg)}><kpi.icon className={cn('size-5', kpi.color)} /></div><div className="min-w-0"><p className="truncate text-[10px] font-black uppercase tracking-widest text-muted-foreground">{kpi.title}</p><p className="text-2xl font-black">{kpi.value}</p></div></CardContent></Card>)}</div>
+    <Card className="min-w-0 overflow-hidden border-border/50 bg-background/70 shadow-sm">
+      <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between"><div className="min-w-0"><h2 className="truncate text-xl font-black uppercase tracking-tight">Base de conocimiento</h2><p className="mt-1 text-xs text-muted-foreground">Artículos internos para resolver casos y estandarizar procesos.</p></div><div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"><div className="relative min-w-0 sm:w-64"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Buscar título, contenido o etiqueta" className="h-10 w-full pl-9 text-xs" /></div>{canCreate && <Button onClick={() => openEditor()} className="h-10 gap-2 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700"><Plus className="size-4" />Nuevo artículo</Button>}</div></div>
+      <div className="grid min-w-0 grid-cols-1 gap-2 border-b border-border/50 p-4 sm:grid-cols-2 lg:grid-cols-4"><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 min-w-0 rounded-lg border border-border bg-background px-3 text-xs"><option value="ALL">Todos los estados</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="h-10 min-w-0 rounded-lg border border-border bg-background px-3 text-xs"><option value="ALL">Todos los tipos</option>{Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="h-10 min-w-0 rounded-lg border border-border bg-background px-3 text-xs"><option value="ALL">Todas las categorías</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><div className="flex items-center justify-between rounded-lg border border-dashed border-border px-3 text-xs text-muted-foreground"><span>{filtered.length} resultado{filtered.length === 1 ? '' : 's'}</span>{(searchTerm || statusFilter !== 'ALL' || typeFilter !== 'ALL' || categoryFilter !== 'ALL') && <button type="button" onClick={() => { setSearchTerm(''); setStatusFilter('ALL'); setTypeFilter('ALL'); setCategoryFilter('ALL'); }} className="inline-flex items-center gap-1 font-bold text-primary"><X className="size-3" />Limpiar</button>}</div></div>
+      <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[800px] text-left text-sm"><thead className="border-b border-border/50 bg-muted/20 text-[10px] uppercase tracking-widest text-muted-foreground"><tr><th className="px-4 py-3">Artículo</th><th className="px-4 py-3">Categoría</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Autor</th><th className="px-4 py-3">Actualizado</th><th className="px-4 py-3 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-border/40">{filtered.map((article) => <tr key={article.id} onClick={() => void openDetail(article)} className="cursor-pointer transition-colors hover:bg-muted/20"><td className="max-w-[280px] px-4 py-3"><p className="truncate font-bold">{article.title}</p><p className="truncate text-xs text-muted-foreground">{article.summary || 'Sin resumen'}</p></td><td className="px-4 py-3 text-xs">{article.category?.name || 'Sin categoría'}</td><td className="px-4 py-3 text-xs">{typeLabels[article.type] || article.type}</td><td className="px-4 py-3"><Badge variant="outline" className={cn('text-[10px] font-bold', statusClass[article.status])}>{statusLabels[article.status]}</Badge></td><td className="max-w-[140px] truncate px-4 py-3 text-xs">{authorName(article.author)}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{dateLabel(article.updatedAt)}</td><td className="px-4 py-3" onClick={(event) => event.stopPropagation()}><div className="flex justify-end gap-1">{canEdit && <Button variant="ghost" size="icon" title="Editar" onClick={() => openEditor(article)}><Edit3 className="size-4" /></Button>}{canDelete && article.status !== 'ARCHIVED' && <Button variant="ghost" size="icon" title="Archivar" onClick={() => void archiveArticle(article)}><Trash2 className="size-4 text-destructive" /></Button>}<Button variant="ghost" size="icon" title="Ver detalle" onClick={() => void openDetail(article)}><Eye className="size-4" /></Button></div></td></tr>)}</tbody></table>{!loading && filtered.length === 0 && <div className="p-10 text-center text-sm text-muted-foreground">No hay artículos que coincidan con los filtros.</div>}</div>
+      <div className="grid gap-3 p-3 md:hidden">{filtered.map((article) => <button type="button" key={article.id} onClick={() => void openDetail(article)} className="min-w-0 rounded-xl border border-border/60 bg-background p-4 text-left shadow-sm transition-colors hover:bg-muted/20"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold">{article.title}</p><p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{article.summary || 'Sin resumen'}</p></div><Badge variant="outline" className={cn('shrink-0 text-[10px]', statusClass[article.status])}>{statusLabels[article.status]}</Badge></div><div className="mt-3 flex flex-wrap gap-2 text-[10px] text-muted-foreground"><span>{article.category?.name || 'Sin categoría'}</span><span>·</span><span>{typeLabels[article.type]}</span><span>·</span><span>{dateLabel(article.updatedAt)}</span></div></button>)}{!loading && filtered.length === 0 && <div className="p-8 text-center text-sm text-muted-foreground">No hay artículos que coincidan con los filtros.</div>}</div>{loading && <div className="p-10 text-center text-sm text-muted-foreground">Cargando artículos…</div>}
+    </Card>
+    <Dialog open={editorOpen} onOpenChange={setEditorOpen}><DialogContent className="w-[calc(100%-1rem)] max-h-[92vh] max-w-3xl overflow-y-auto rounded-2xl"><DialogHeader><DialogTitle>{editing ? 'Editar artículo' : 'Nuevo artículo'}</DialogTitle><DialogDescription>Guarda el contenido como borrador o publícalo cuando esté listo.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><label className="space-y-1.5 text-xs font-bold sm:col-span-2">Título<Input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Ej. Cómo registrar una devolución" /></label><label className="space-y-1.5 text-xs font-bold sm:col-span-2">Resumen<textarea value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} className="flex min-h-16 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30" placeholder="Descripción breve del artículo" /></label><label className="space-y-1.5 text-xs font-bold sm:col-span-2">Contenido<Textarea rows={12} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} placeholder="Escribe el procedimiento, respuesta o documentación…" /></label><label className="space-y-1.5 text-xs font-bold">Tipo<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as ArticleType })} className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm">{Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="space-y-1.5 text-xs font-bold">Estado<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as ArticleStatus })} className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"><option value="DRAFT">Borrador</option><option value="PUBLISHED">Publicado</option></select></label><label className="space-y-1.5 text-xs font-bold">Categoría<select value={form.categoryId} onChange={(event) => setForm({ ...form, categoryId: event.target.value })} className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"><option value="">Sin categoría</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label className="space-y-1.5 text-xs font-bold">Módulo relacionado<Input value={form.module} onChange={(event) => setForm({ ...form, module: event.target.value })} placeholder="Ej. Ventas" /></label><label className="space-y-1.5 text-xs font-bold">Etiquetas<Input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="ventas, devoluciones, clientes" /></label><label className="space-y-1.5 text-xs font-bold">Revisión recomendada<Input type="date" value={form.reviewDueAt} onChange={(event) => setForm({ ...form, reviewDueAt: event.target.value })} /></label><label className="space-y-1.5 text-xs font-bold sm:col-span-2">Archivos adjuntos<input type="file" multiple className="mt-1 block h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-xs" onChange={(event) => setAttachmentFiles(Array.from(event.target.files || []))} /><span className="block text-[11px] font-normal text-muted-foreground">{attachmentFiles.length ? `${attachmentFiles.length} archivo(s) seleccionado(s)` : "Puedes adjuntar varios archivos al artículo."}</span></label></div><DialogFooter><Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>Cancelar</Button><Button type="button" disabled={saving} onClick={() => void saveArticle()}>{saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear artículo'}</Button></DialogFooter></DialogContent></Dialog>
+    <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}><SheetContent side="right" className="w-full overflow-hidden p-0 sm:max-w-2xl"><SheetHeader className="shrink-0 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={cn('text-[10px]', selected && statusClass[selected.status])}>{selected && statusLabels[selected.status]}</Badge><span className="text-xs text-muted-foreground">{selected && typeLabels[selected.type]}</span></div><SheetTitle className="text-xl font-black">{selected?.title || 'Detalle del artículo'}</SheetTitle><SheetDescription>{selected?.summary || 'Contenido y trazabilidad del artículo.'}</SheetDescription></SheetHeader>{selected && <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5"><div className="flex flex-wrap items-center gap-2 border-b border-border/50 pb-4 text-xs text-muted-foreground"><span>Autor: <strong className="text-foreground">{authorName(selected.author)}</strong></span><span>·</span><span>Actualizado: {dateLabel(selected.updatedAt)}</span><span>·</span><span>{selected.viewCount || 0} vistas</span></div><article className="prose prose-sm mt-5 max-w-none whitespace-pre-wrap break-words dark:prose-invert">{detailLoading ? 'Cargando detalle…' : selected.content}</article>{selected.tags && selected.tags.length > 0 && <div className="mt-6 border-t border-border/50 pt-4"><h3 className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest"><Tag className="size-3.5" />Etiquetas</h3><div className="flex flex-wrap gap-2">{selected.tags.map((tag) => <Badge key={tag.id || tag.name} variant="secondary">{tag.name}</Badge>)}</div></div>}<div className="mt-6 grid gap-3 border-t border-border/50 pt-4 text-xs sm:grid-cols-2"><div><p className="font-black uppercase tracking-widest text-muted-foreground">Fechas</p><p className="mt-2">Creado: {dateLabel(selected.createdAt)}</p><p>Publicado: {dateLabel(selected.publishedAt)}</p><p>Revisión: {dateLabel(selected.reviewDueAt)}</p></div><div><p className="font-black uppercase tracking-widest text-muted-foreground">Relaciones</p><p className="mt-2">Tickets: {selected.ticketLinks?.length || 0}</p><p>Artículos relacionados: {selected.relatedFrom?.length || 0}</p></div></div><div className="mt-6 border-t border-border/50 pt-4"><div className="flex items-center justify-between gap-2"><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest"><Paperclip className="size-3.5" />Adjuntos</h3>{canEdit && <label className="cursor-pointer text-xs font-bold text-primary">{uploading ? 'Cargando…' : 'Agregar archivo'}<input type="file" className="hidden" disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadAttachment(file); event.currentTarget.value = ''; }} /></label>}</div><div className="mt-3 space-y-2">{(selected.attachments || []).map((file) => <a key={file.id} href={file.uri} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg border border-border/50 p-2 text-xs hover:bg-muted/40"><FileText className="size-4 shrink-0 text-primary" /><span className="min-w-0 truncate">{file.fileName}</span></a>)}{!selected.attachments?.length && <p className="text-xs text-muted-foreground">Sin adjuntos.</p>}</div></div><div className="mt-6 border-t border-border/50 pt-4"><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest"><History className="size-3.5" />Historial y versiones</h3><div className="mt-3 space-y-2">{audit.slice(0, 8).map((event) => <div key={event.id} className="rounded-lg bg-muted/30 p-2 text-xs"><p className="font-bold">{event.message || event.action}</p><p className="text-muted-foreground">{dateLabel(event.createdAt)}</p></div>)}{!audit.length && <p className="text-xs text-muted-foreground">Sin eventos registrados.</p>}</div><p className="mt-3 text-xs text-muted-foreground">Versiones guardadas: {versions.length}</p></div></div>}</SheetContent></Sheet>
+  </div>;
 };
