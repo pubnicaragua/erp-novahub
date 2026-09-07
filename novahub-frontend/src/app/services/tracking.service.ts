@@ -33,6 +33,9 @@ export interface TrackingEvent {
   location?: string;
   occurredAt: string;
   source: string;
+  provider?: string;
+  externalEventId?: string;
+  eventHash?: string;
 }
 
 export interface TrackingShipment {
@@ -51,10 +54,47 @@ export interface TrackingShipment {
   deliveredAt?: string;
   lastSyncAt?: string;
   syncSource?: string;
+  provider?: string;
+  shipmentType?: string;
+  providerWeight?: number;
+  weightUnit?: string;
+  providerReceivedAt?: string;
+  lastError?: string;
   createdAt: string;
   updatedAt: string;
   events: TrackingEvent[];
 }
+
+/** Motivos de error explícitos devueltos por el backend. */
+export type TrackLookupErrorReason =
+  | 'EMPTY'
+  | 'NOT_CONFIGURED'
+  | 'NOT_FOUND'
+  | 'HTTP_ERROR'
+  | 'PARSE_ERROR'
+  | 'SAVE_ERROR';
+
+export type TrackLookupResult =
+  | {
+      tracked: true;
+      provider: string;
+      addedEvents: number;
+      shipment: TrackingShipment;
+    }
+  | {
+      tracked: false;
+      reason: TrackLookupErrorReason;
+      message: string;
+    };
+
+export const TRACK_LOOKUP_ERROR_LABELS: Record<TrackLookupErrorReason, string> = {
+  EMPTY: 'Ingresa un código de tracking',
+  NOT_CONFIGURED: 'Proveedor no configurado',
+  NOT_FOUND: 'No se encontró el envío',
+  HTTP_ERROR: 'El proveedor no respondió',
+  PARSE_ERROR: 'Respuesta inválida del proveedor',
+  SAVE_ERROR: 'No se pudo guardar el resultado',
+};
 
 export function trackingStatusTone(status: TrackingStatus): string {
   switch (status) {
@@ -77,6 +117,11 @@ export const trackingService = {
 
   async findByCode(trackingCode: string) {
     return api.get(`/tracking/shipments/code/${encodeURIComponent(trackingCode)}`) as Promise<TrackingShipment>;
+  },
+
+  /** Consulta el código en los providers (AWBOX/CargoTrack) y guarda el resultado. */
+  async lookup(trackingCode: string) {
+    return api.post('/tracking/lookup', { trackingCode }) as Promise<TrackLookupResult>;
   },
 
   async create(input: Partial<TrackingShipment> & { trackingCode: string }) {

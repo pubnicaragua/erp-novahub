@@ -7,12 +7,14 @@ import {
   Clock3,
   FileText,
   MapPin,
+  PackageCheck,
   PackageSearch,
   Plus,
   RefreshCw,
   Search,
   Ship,
   Trash2,
+  Truck,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,10 +36,26 @@ import {
   trackingService,
   trackingStatusTone,
   TRACKING_STATUS_LABELS,
+  TRACK_LOOKUP_ERROR_LABELS,
+  type TrackLookupErrorReason,
   type TrackingShipment,
   type TrackingStatus,
   type TrackingEvent,
 } from '../services/tracking.service';
+import { ReceptionWizard } from './tracking/ReceptionWizard';
+import { ReceivedPackages } from './tracking/ReceivedPackages';
+import { Reconciliation } from './tracking/Reconciliation';
+import { Billing } from './tracking/Billing';
+
+type TrackingTab = 'transit' | 'reception' | 'packages' | 'reconciliation' | 'billing';
+
+const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
+  { id: 'transit', label: 'En tránsito' },
+  { id: 'reception', label: 'Recepción de paquetes' },
+  { id: 'packages', label: 'Paquetes recibidos' },
+  { id: 'reconciliation', label: 'Conciliación de compras' },
+  { id: 'billing', label: 'Disponibles para facturar' },
+];
 
 const STATUS_OPTIONS = Object.keys(TRACKING_STATUS_LABELS) as TrackingStatus[];
 
@@ -139,6 +157,10 @@ export function TrackingPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [eventForm, setEventForm] = useState({ status: 'IN_TRANSIT' as TrackingStatus, label: '', location: '' });
+  const [lookupCode, setLookupCode] = useState('');
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupError, setLookupError] = useState<{ reason: TrackLookupErrorReason; message: string } | null>(null);
+  const [tab, setTab] = useState<TrackingTab>('transit');
 
   const load = useCallback(async () => {
     try {
@@ -166,6 +188,40 @@ export function TrackingPage() {
       toast.error(getApiErrorMessage(error, 'No se encontró el ticket'));
     }
   }, []);
+
+  /** Consulta el código de tracking en los providers y muestra el resultado. */
+  const handleLookup = useCallback(async (rawCode?: string) => {
+    const code = (rawCode ?? lookupCode).trim();
+    if (!code) {
+      setLookupError({ reason: 'EMPTY', message: TRACK_LOOKUP_ERROR_LABELS.EMPTY });
+      return;
+    }
+    setLookupBusy(true);
+    setLookupError(null);
+    try {
+      const result = await trackingService.lookup(code);
+      if (result.tracked) {
+        setSelected(result.shipment);
+        setDetailOpen(true);
+        setLookupCode('');
+        await load();
+        toast.success(
+          result.addedEvents
+            ? `Envío actualizado: ${result.addedEvents} evento(s) nuevo(s)`
+            : 'Envío actualizado (sin eventos nuevos)',
+        );
+      } else {
+        setLookupError({ reason: result.reason, message: result.message });
+        toast.error(result.message || TRACK_LOOKUP_ERROR_LABELS[result.reason]);
+      }
+    } catch (error) {
+      const message = getApiErrorMessage(error, 'No se pudo consultar el código de tracking');
+      setLookupError({ reason: 'HTTP_ERROR', message });
+      toast.error(message);
+    } finally {
+      setLookupBusy(false);
+    }
+  }, [lookupCode, load]);
 
   const counts = useMemo(() => ({
     total: shipments.length,
@@ -254,7 +310,25 @@ export function TrackingPage() {
 
   const formatDate = (value?: string) => value ? format(new Date(value), "d MMM yyyy, HH:mm 'h'", { locale: es }) : '—';
 
+  // Especificación: nunca mostrar "null"; mostrar "No disponible" u ocultar el dato.
+  const na = (value?: string | null) => (value && value.trim() ? value : 'No disponible');
+  const weightLabel = (s: TrackingShipment) =>
+    s.providerWeight != null ? `${s.providerWeight} ${(s.weightUnit || '').trim()}`.trim() : undefined;
+
   return (
+    <>
+      <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-3 sm:px-6">
+        {TRACKING_TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`rounded-t-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition-colors ${tab === t.id ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'transit' ? (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-6">
         <div className="flex items-center gap-3">
@@ -271,6 +345,37 @@ export function TrackingPage() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        <Card className="rounded-2xl border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 shadow-sm sm:p-5">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <label htmlFor="lookup-tracking" className="mb-1.5 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                <Truck className="size-3.5 text-primary" /> Tracking en tránsito
+              </label>
+              <Input
+                id="lookup-tracking"
+                value={lookupCode}
+                onChange={(e) => { setLookupCode(e.target.value); setLookupError(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleLookup(); }}
+                placeholder="Ingrese código de tracking, ej. GFUS01065222301697"
+                className="h-11 rounded-xl bg-background"
+                autoComplete="off"
+              />
+            </div>
+            <Button className="h-11 rounded-xl px-6" onClick={() => handleLookup()} disabled={lookupBusy}>
+              <Search className="size-4" /> {lookupBusy ? 'Consultando…' : 'Buscar'}
+            </Button>
+          </div>
+          {lookupError && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-destructive">
+              <X className="size-3.5 shrink-0" />
+              {lookupError.message || TRACK_LOOKUP_ERROR_LABELS[lookupError.reason]}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Consulta automática a AWBOX y CargoTrack. El resultado se guarda en el historial; la recepción física se confirma más adelante.
+          </p>
+        </Card>
+
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><PackageSearch className="size-4 text-primary" /> Tickets totales</div>
@@ -424,16 +529,20 @@ export function TrackingPage() {
               <div className="space-y-4 px-4 py-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className={`rounded-lg text-[11px] ring-1 ${trackingStatusTone(selected.status)}`}>{TRACKING_STATUS_LABELS[selected.status]}</Badge>
-                  <Badge variant="outline" className="rounded-lg text-[10px]">{selected.syncSource || 'manual'}</Badge>
+                  <Badge variant="outline" className="rounded-lg text-[10px]">{na(selected.provider || selected.syncSource) || 'manual'}</Badge>
                   {selected.lastSyncAt && <span className="text-[10px] text-muted-foreground">Sync: {formatDate(selected.lastSyncAt)}</span>}
                 </div>
 
                 <div className="rounded-2xl border border-border/50 bg-muted/20 p-4">
                   <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Origen</p><p className="font-semibold">{selected.origin || '—'}</p></div>
-                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Destino</p><p className="font-semibold">{selected.destination || '—'}</p></div>
-                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Cliente</p><p className="font-semibold">{selected.clientName || '—'}</p></div>
-                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Fecha estimada</p><p className="font-semibold">{formatDate(selected.estimatedAt)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Proveedor</p><p className="font-semibold">{na(selected.provider || selected.syncSource)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Tipo de envío</p><p className="font-semibold">{na(selected.shipmentType)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Peso</p><p className="font-semibold">{weightLabel(selected) || 'No disponible'}</p></div>
+                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Fecha estimada</p><p className="font-semibold">{formatDate(selected.estimatedAt) === '—' ? 'No disponible' : formatDate(selected.estimatedAt)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Origen</p><p className="font-semibold">{na(selected.origin)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Destino</p><p className="font-semibold">{na(selected.destination)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Cliente</p><p className="font-semibold">{na(selected.clientName)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase text-muted-foreground">Última consulta</p><p className="font-semibold">{formatDate(selected.lastSyncAt)}</p></div>
                   </div>
                   {selected.description && <p className="mt-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">{selected.description}</p>}
                 </div>
@@ -482,13 +591,34 @@ export function TrackingPage() {
                   <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>
                     <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar con transportista
                   </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 rounded-xl text-xs"
+                    title="Disponible en la siguiente etapa del módulo"
+                    disabled
+                  >
+                    <PackageCheck className="size-4" /> Recibir paquete
+                  </Button>
                   <Button variant="destructive" className="rounded-xl text-xs" onClick={handleDelete}><Trash2 className="size-4" /></Button>
                 </div>
+                <p className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-center text-[11px] text-muted-foreground">
+                  Consultar tracking no representa una recepción física. La acción <b>Recibir paquete</b> se habilitará en la siguiente etapa.
+                </p>
               </div>
             </>
           )}
         </SheetContent>
       </Sheet>
     </div>
+      ) : tab === 'reception' ? (
+        <ReceptionWizard onDone={() => setTab('packages')} />
+      ) : tab === 'packages' ? (
+        <ReceivedPackages />
+      ) : tab === 'reconciliation' ? (
+        <Reconciliation />
+      ) : (
+        <Billing />
+      )}
+    </>
   );
 }
