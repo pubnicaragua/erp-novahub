@@ -12,7 +12,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, RefreshCw, UserMinus } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { getBase64Image } from '../../utils/reportExportUtils';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -165,6 +166,14 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
         if (configured) return;
         const primaryHex = String(pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981');
         let currentY = 20;
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.subscriptions');
+        if (logoUrl) {
+          const logoBase64 = await getBase64Image(logoUrl);
+          if (logoBase64) {
+            doc.addImage(logoBase64, 'PNG', (doc.internal.pageSize.getWidth() - 30) / 2, currentY, 30, 30, undefined, 'FAST');
+            currentY += 35;
+          }
+        }
 
         doc.setFontSize(18);
         doc.text("Reporte de Suscripciones SaaS", 14, currentY);
@@ -400,4 +409,3 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
   );
 });
 SubscriptionsReportTab.displayName = 'SubscriptionsReportTab';
-

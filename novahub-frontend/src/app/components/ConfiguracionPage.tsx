@@ -1097,7 +1097,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (branding?.portalPrimaryColor) setPortalPrimaryHex(branding.portalPrimaryColor);
     if (branding?.portalAccentColor) setPortalAccentHex(branding.portalAccentColor);
     if (branding?.companyName) setCompanyName(branding.companyName);
-    if (branding?.logo) setLogoPreview(branding.logo);
+    if (branding) setLogoPreview(branding.logo || null);
     if (branding?.industry) setCompanyIndustry(branding.industry);
     // El tema personal tiene prioridad sobre los colores corporativos. Si aún
     // no existe, la marca del tenant se usa como fallback visual.
@@ -1147,6 +1147,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setRoles(rolesList);
     setEnabledModules(modulesList);
   }, [configurationData]);
+
+  const corporateLogo = (configurationData?.branding as any)?.logo || (logoFile ? logoPreview : null) || themeConfig.logo || null;
 
   const handleCreateRole = () => {
     if (!canCreateRoles) {
@@ -1585,7 +1587,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
             branchName={userBranches.find((branch) => branch.id === user?.clientTenantId)?.name || user?.clientTenant?.name || user?.tenantName || ''}
             companyName={companyName || user?.tenantName || ''}
             corporateColor={themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981'}
-            logo={logoPreview || themeConfig.logo}
+            logo={corporateLogo}
             canEdit={canEditPdf}
             canCreate={canCreatePdf}
             canDelete={canDeletePdf}

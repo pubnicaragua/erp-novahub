@@ -11,7 +11,7 @@ import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
-import { createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
+import { createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 
@@ -185,6 +185,26 @@ export async function getPdfDesign(targetKey: string) {
   try {
     const target = getPdfTemplateTarget(targetKey);
     const savedDesign = await pdfDocumentDesignService.active(target.key);
+    const designTypes = Array.isArray(savedDesign?.documentTypes)
+      ? savedDesign.documentTypes.map(type => getPdfTemplateTarget(type).key)
+      : [];
+    const ownsTarget = designTypes.length === 1 && designTypes[0] === target.key;
+    if (savedDesign && !ownsTarget && designTypes.length !== 0) {
+      // Algunas versiones del endpoint devolvían una plantilla compartida o
+      // la primera plantilla del módulo. Preferimos el registro exclusivo del
+      // destino antes de renderizar para no propagar sus logos.
+      const designs = await pdfDocumentDesignService.list();
+      const exactDesign = (designs || []).find(design => design.isActive
+        && Array.isArray(design.documentTypes)
+        && design.documentTypes.length === 1
+        && getPdfTemplateTarget(design.documentTypes[0]).key === target.key);
+      if (exactDesign) return exactDesign;
+    }
+    if (savedDesign && !ownsTarget) {
+      // No existe un diseño propio para esta salida. Usamos su predeterminado
+      // y no el registro de otra vista, aunque el endpoint lo haya devuelto.
+      return createSystemDefaultPdfDesign(target.key);
+    }
     if (savedDesign) {
       // Diseños SYSTEM de versiones anteriores solo guardaban settings. Los
       // elevamos al contrato semántico para que también sean editables y no
@@ -217,6 +237,66 @@ export async function getPdfDesign(targetKey: string) {
 export async function getPdfDesignSettings(targetKey: string) {
   const design = await getPdfDesign(targetKey);
   return (design?.settings || {}) as Record<string, any>;
+}
+
+/**
+ * Los reportes globales tienen una estructura propia. De una plantilla
+ * configurada solo heredan identidad, marca y colores; no heredan la tabla,
+ * bloques de entidad individual, posiciones ni otros elementos del documento.
+ */
+export function getGlobalReportSettings(source: Record<string, any> | undefined, tenantName: string, tenantLogo?: string | null, targetKey = 'compras.list') {
+  const defaults = (createSystemDefaultPdfDesign(targetKey).settings || {}) as Record<string, any>;
+  const fallbackLogo = tenantLogo || rememberedPdfSessionLogo() || undefined;
+  const value = (key: string, fallback: unknown) => source?.[key] === undefined || source?.[key] === '' ? fallback : source[key];
+  const sourceTarget = typeof source?.templateLogoTarget === 'string' ? getPdfTemplateTarget(source.templateLogoTarget).key : '';
+  const requestedTarget = getPdfTemplateTarget(targetKey).key;
+  // Las plantillas guardadas antes de separar los logos no tenían marcador de
+  // destino. Como `source` proviene del diseño resuelto para `targetKey`, ese
+  // logo es seguro de usar aquí; si el diseño trae marcador, sí exigimos que
+  // coincida para no cruzar logos entre plantillas.
+  const ownsSourceLogo = !sourceTarget || sourceTarget === requestedTarget;
+  const templateLogoUrl = ownsSourceLogo && typeof source?.templateLogoUrl === 'string' && source.templateLogoUrl.trim()
+    ? source.templateLogoUrl
+    : undefined;
+  const templateLogoUri = ownsSourceLogo && typeof source?.templateLogoUri === 'string' && source.templateLogoUri.trim()
+    ? source.templateLogoUri
+    : undefined;
+  const templateLogo = templateLogoUrl || templateLogoUri;
+  return {
+    ...defaults,
+    companyName: value('companyName', tenantName),
+    // Solo el logo personalizado de esta plantilla puede reemplazar al
+    // corporativo. logoUrl queda como salida calculada para el renderizador.
+    templateLogoUrl,
+    templateLogoUri,
+    templateLogoTarget: templateLogo ? requestedTarget : undefined,
+    logoUrl: templateLogo || fallbackLogo || defaults.logoUrl,
+    slogan: value('slogan', defaults.slogan),
+    fiscalInfo: value('fiscalInfo', defaults.fiscalInfo),
+    address: value('address', defaults.address),
+    phone: value('phone', defaults.phone),
+    email: value('email', defaults.email),
+    website: value('website', defaults.website),
+    showCompanyName: value('showCompanyName', defaults.showCompanyName),
+    primaryColor: value('primaryColor', defaults.primaryColor),
+    secondaryColor: value('secondaryColor', defaults.secondaryColor),
+    textColor: value('textColor', defaults.textColor),
+    lineColor: value('lineColor', defaults.lineColor),
+    backgroundColor: value('backgroundColor', defaults.backgroundColor),
+  };
+}
+
+function templateLogoFromSettings(settings: Record<string, any> | undefined) {
+  const logo = settings?.templateLogoUrl || settings?.templateLogoUri;
+  return typeof logo === 'string' && logo.trim() ? logo : '';
+}
+
+/** Logo de la plantilla actual, con el corporativo como fallback. */
+export function getPdfTemplateLogo(settings: Record<string, any> | undefined, tenantLogo?: string | null, targetKey?: string) {
+  const requestedTarget = targetKey ? getPdfTemplateTarget(targetKey).key : '';
+  const sourceTarget = typeof settings?.templateLogoTarget === 'string' ? getPdfTemplateTarget(settings.templateLogoTarget).key : '';
+  const templateLogo = (!sourceTarget || !requestedTarget || sourceTarget === requestedTarget) ? templateLogoFromSettings(settings) : '';
+  return templateLogo || tenantLogo || rememberedPdfSessionLogo() || '';
 }
 
 export function pdfDesignColor(value: unknown, fallback: PdfRgb): PdfRgb {
@@ -395,12 +475,12 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
   const rows = (items.length ? items : [{ description: 'Sin productos', quantity: 0, unitPrice: 0, total: 0 }]).map((item: any, index: number) => `<div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 5 : 8}px;border-top:${tableBorder};border-radius:${tableLayout === 'cards' ? 4 : 0}px;background:${['striped', 'ledger', 'accent'].includes(tableLayout) && index % 2 ? '#f8fafc' : '#fff'};"><span style="white-space:pre-line">${escapeHtml(commercialItemDescription(item))}</span><span>${escapeHtml(item.quantity || 0)}</span><span>${escapeHtml(formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate))}</span><strong style="color:${tableLayout === 'accent' ? primary : text}">${escapeHtml(formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate))}</strong></div>`).join('');
   const headerBackground = bannerHeader ? primary : '#f7fbf9';
   const headerBorder = bannerHeader ? 'none' : `1px solid ${line}`;
-  const logoSource = design.logoUrl || tenantLogo || NOVAHUB_LOGO_DATA_URL;
+  const logoSource = templateLogoFromSettings(design) || tenantLogo || NOVAHUB_LOGO_DATA_URL;
   const logo = `<img src="${escapeHtml(logoSource)}" alt="NovaHub" style="position:absolute;left:${design.logoPosition === 'right' ? '78%' : design.logoPosition === 'center' ? '42%' : '8%'};top:4.5%;width:${Math.min(Number(design.logoSize) || 42, 78) / 2}%;max-height:10%;object-fit:contain;" />`;
   const additionalChargesHtml = getSalesPdfAdditionalCharges(estimate)
     .map((charge) => `<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>${escapeHtml(charge.label)}</span><span>${escapeHtml(formatAmount(charge.amount, estimate.currency, estimate.exchangeRate))}</span></div>`)
     .join('');
-  const totalsHtml = `<div style="font-size:.78em;text-align:right;background:#f7fbf9;border-radius:6px;padding:10px 12px;"><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div>${additionalChargesHtml}<div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:7px;margin-top:6px;color:${primary};font-size:1.18em;font-weight:800;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`;
+  const totalsHtml = `<div style="font-size:.78em;text-align:right;background:#f7fbf9;border-radius:6px;padding:10px 12px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div>${additionalChargesHtml}<div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:4px;margin-top:2px;color:${primary};font-size:1.18em;font-weight:800;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`;
   const pageHtml = `<div id="pdf-template-canvas" style="position:relative;width:${pageWidthPx}px;height:${pageHeightPx}px;overflow:hidden;background:#fff;color:${text};font-family:${escapeHtml(design.fontFamily || 'Arial')};font-size:${Number(design.fontSize) || 9}px;box-sizing:border-box;">
     <div style="position:absolute;inset:0 0 auto;height:29%;background:${headerBackground};border-top:6px solid ${primary};border-bottom:${headerBorder};${headerLayout === 'double-band' ? `border-bottom:10px solid ${line};` : ''}${headerLayout === 'sidebar' ? `border-left:10px solid ${primary};` : ''}${headerLayout === 'boxed' ? `inset:2%;height:25%;border:1px solid ${line};border-radius:10px;` : ''}"></div>${design.watermark ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.06;transform:rotate(-25deg);font-size:64px;font-weight:800;color:#64748b;">${escapeHtml(design.watermark)}</div>` : ''}${logo}
     ${zone('company', `<strong>${escapeHtml(values.company)}</strong>`, 'font-size:1.18em;letter-spacing:.01em;')}
@@ -486,8 +566,8 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       extraCharges.length ? `Cargos adicionales: ${extraCharges.join(' · ')}` : '',
     ].filter(Boolean).join(' · ');
     const data: PdfTemplateData = {
-      logo: design.logoUrl || resolvedTenantLogo,
-      company: { name: design.companyName || tenantName, fiscalInfo: design.fiscalInfo, address: design.address, phone: design.phone, email: design.email, logo: design.logoUrl || resolvedTenantLogo },
+      logo: templateLogoFromSettings(design) || resolvedTenantLogo,
+      company: { name: design.companyName || tenantName, fiscalInfo: design.fiscalInfo, address: design.address, phone: design.phone, email: design.email, logo: templateLogoFromSettings(design) || resolvedTenantLogo },
       document: { title: ({ estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', 'credit-note': 'NOTA DE CRÉDITO' } as Record<string, string>)[documentType] || documentType.toUpperCase(), number: estimate.number || 'N/A', date: estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : 'N/A', status: estimate.status || '', notes: configuredNotes, terms: design.terms || '', legal: design.legalText || '' },
       customer: { name: estimate.customer?.name || estimate.client?.name || 'Cliente sin registrar', taxId: estimate.customer?.taxId || estimate.customer?.ruc || '', address: estimate.customer?.address || estimate.client?.address || '', phone: estimate.customer?.phone || estimate.customer?.telephone || estimate.client?.phone || '', email: estimate.customer?.email || estimate.client?.email || '', contact: estimate.customer?.contact || estimate.customer?.contactName || estimate.client?.contact || '' },
       items: configuredItems.map((item: any) => ({ description: commercialItemDescription(item), quantity: item.quantity || 0, unitPrice: formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate), total: formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate) })),
@@ -528,7 +608,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const headerLayout = design.headerLayout || 'split';
   const logoMaxWidth = Math.max(18, Math.min(70, Number(design.logoSize) || 42));
   const logoMaxHeight = headerLayout === 'compact' ? 17 : 21;
-  const designLogo = design.logoUrl || resolvedTenantLogo;
+  const designLogo = templateLogoFromSettings(design) || resolvedTenantLogo;
   const tableLayout = design.tableLayout || 'standard';
   const isBannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);
   const isCenteredHeader = ['centered', 'editorial'].includes(headerLayout);
@@ -1026,8 +1106,8 @@ async function generateSalesPaymentVoucherPDF({
   const fontName = selectedFont.includes('serif') ? 'times' : selectedFont.includes('mono') || selectedFont.includes('courier') ? 'courier' : 'helvetica';
   const companyName = String(settings.companyName || tenantName || 'Nuestra Empresa');
   const logo = isRoll
-    ? await toGrayscaleImageSource(settings.logoUrl || tenantLogo)
-    : settings.logoUrl || tenantLogo;
+    ? await toGrayscaleImageSource(templateLogoFromSettings(settings) || tenantLogo)
+    : templateLogoFromSettings(settings) || tenantLogo;
 
   const methodRows = rows.map((row: any) => {
     const rowCurrency = currencyCode(row.currency || voucherCurrency);
@@ -1408,7 +1488,7 @@ async function generateSalesTicketPDF({
   const currency = transaction.currency;
   const rate = transaction.exchangeRate;
   const money = (value: unknown) => formatAmount(Number(value || 0), currency, rate);
-  const logo = await toGrayscaleImageSource(settings.logoUrl || tenantLogo);
+  const logo = await toGrayscaleImageSource(templateLogoFromSettings(settings) || tenantLogo);
   const logoSize = logo ? fitPdfImage(doc, logo, width - margin * 2, width === 58 ? 16 : 20) : { width: 0, height: 0 };
   let y = margin;
 
@@ -1713,7 +1793,7 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
   const baseSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
   const settings = configuredHistoryPaper(baseSettings, format);
   const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...settings };
-  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : '';
+  const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
   const resolvedLogo = configuredLogo || tenantLogo || (typeof data.company?.logo === 'string' ? data.company.logo : undefined);
   const sourceCompany = data.company || {};
   const enrichedData: PdfTemplateData = {
@@ -1735,16 +1815,32 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
 }
 
 export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; fileName: string; designOverride?: any }) {
+  const design = designOverride || await getPdfDesign(targetKey);
+  if (!design || (design as any).isSystemDefault || String((design as any).id || '').startsWith('system-default:') || !design.layoutZones?.definition) return null;
+  const sourceSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
+  const settings = getGlobalReportSettings(sourceSettings, tenantName, tenantLogo, targetKey);
+  const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
   const mappedRows = rows.map(row => {
     const mapped: Record<string, unknown> = { description: columns[0] ? columns[0].value(row) : '', quantity: columns[1] ? columns[1].value(row) : '', unitPrice: columns[2] ? columns[2].value(row) : '', total: columns[3] ? columns[3].value(row) : '' };
     columns.forEach((column, index) => { mapped[`column-${index}`] = column.value(row); mapped[column.header.toLowerCase().replace(/\s+/g, '_')] = column.value(row); });
     return mapped;
   });
-  const rendered = await renderConfiguredDefinition({ targetKey, tenantName, tenantLogo, fileName, designOverride, data: {
-    company: { name: tenantName }, document: { title, number: `${rows.length} registro(s)` }, rows: mappedRows, totals: totals || {}, items: mappedRows,
-    tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' })),
-  } });
-  return rendered?.doc || null;
+  const rendered = await renderPdfTemplateToPdf({
+    definition: createDefaultTemplateDefinition(targetKey, settings),
+    settings,
+    targetKey,
+    data: {
+      company: { name: settings.companyName || tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: configuredLogo || tenantLogo || rememberedPdfSessionLogo() },
+      document: { title, number: `${rows.length} registro(s)` },
+      rows: mappedRows,
+      totals: totals || {},
+      items: mappedRows,
+      tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' })),
+    },
+    fileName,
+    save: true,
+  });
+  return rendered.doc;
 }
 
 export interface ConfiguredReportSectionInput {
@@ -1787,8 +1883,8 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   if (!design || (design as any).isSystemDefault || String((design as any).id || '').startsWith('system-default:') || !design.layoutZones?.definition) return null;
 
   const baseSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
-  const settings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...baseSettings };
-  const definition = sanitizeTemplateDefinition(design.layoutZones.definition, targetKey, settings);
+  const settings = getGlobalReportSettings(baseSettings, tenantName, tenantLogo, targetKey);
+  const definition = createDefaultTemplateDefinition(targetKey, settings);
   if (!definition.nodes.some(node => (node.type === 'table' || node.type === 'report-sections') && node.enabled !== false)) return null;
 
   const reportSections: PdfTemplateReportSection[] = sections.filter(section => section && section.title && section.headers.length > 0).map((section, sectionIndex) => {
@@ -1804,8 +1900,8 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   });
   if (!reportSections.length) return null;
 
-  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : '';
-  const resolvedLogo = configuredLogo || tenantLogo || undefined;
+  const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
+  const resolvedLogo = configuredLogo || tenantLogo || rememberedPdfSessionLogo() || undefined;
   // El diseño no debe fabricar indicadores si la vista no los envía. La
   // plantilla queda limpia y cada reporte conserva sus valores reales.
   const reportKpis = kpis?.length ? kpis : [];
@@ -1912,7 +2008,7 @@ export async function generateProductLabelsPDF({ products, configs, tenantName, 
     }));
   });
   const definition = sanitizeTemplateDefinition(design?.layoutZones?.definition, targetKey, settings);
-  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : '';
+  const configuredLogo = templateLogoFromSettings(settings);
   const resolvedLogo = configuredLogo || tenantLogo || undefined;
   const rendered = await renderPdfTemplateToPdf({
     definition,
@@ -1951,7 +2047,7 @@ export const generateConfiguredHistoryPDF = async ({
       columns.forEach((column, index) => { mapped[`column-${index}`] = column.value(row); mapped[column.header.toLowerCase().replace(/\s+/g, '_')] = column.value(row); });
       return mapped;
     });
-    const configuredLogo = typeof renderSettings.logoUrl === 'string' ? renderSettings.logoUrl : '';
+    const configuredLogo = templateLogoFromSettings(renderSettings);
     const resolvedLogo = configuredLogo || tenantLogo || undefined;
     const subject = { ...(subjectData || {}), name: subjectName };
     const company = {
@@ -2002,7 +2098,7 @@ export const generateConfiguredHistoryPDF = async ({
   const headerHeight = isCenteredHeader ? 68 : headerLayout === 'compact' ? 45 : isBannerHeader ? 52 : 58;
   const headerTextColor: PdfRgb = isBannerHeader ? [255, 255, 255] : textColor;
   const companyName = settings.showCompanyName === false ? '' : String(settings.companyName || tenantName || 'Nuestra Empresa');
-  const logoSource = String(settings.logoUrl || tenantLogo || '');
+  const logoSource = String(templateLogoFromSettings(settings) || tenantLogo || '');
   const logo = logoSource.startsWith('data:') ? logoSource : logoSource ? await getBase64Image(logoSource) : null;
   const logoSize = logo ? fitPdfImage(doc, logo, Math.max(18, Math.min(70, Number(settings.logoSize) || 42)), headerLayout === 'compact' ? 17 : 22) : { width: 0, height: 0 };
   const logoPosition = String(settings.logoPosition || 'left');

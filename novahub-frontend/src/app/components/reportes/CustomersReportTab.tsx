@@ -13,7 +13,7 @@ import { Users, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, Wallet,
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -207,7 +207,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
-        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.customers');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1,3), 16), parseInt(primaryHex.slice(3,5), 16), parseInt(primaryHex.slice(5,7), 16)] : [16, 185, 129];
@@ -292,9 +292,10 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportExcel: async () => {
       try {
         toast.info("Generando Excel (Clientes)...");
+        const pdfSettings = await getPdfDesignSettings('reportes.customers');
         const wb = new ExcelJS.Workbook();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const logoUrl = themeConfig.logo || '';
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.customers');
         const primaryHex = (themeConfig.colors.primary || '#10b981').replace('#', '');
         const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
         const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };

@@ -17,7 +17,7 @@ import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, GraduationCap, F
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -985,7 +985,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
-        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.hr');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -1197,6 +1197,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     exportExcel: async () => {
       toast.info("Generando Excel (RRHH)...");
       try {
+        const pdfSettings = await getPdfDesignSettings('reportes.hr');
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('RRHH');
         const companyName = themeConfig.tenantName || 'Mi Empresa';
@@ -1211,8 +1212,9 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
 
         let currentRow = 1;
 
-        if (themeConfig.logo) {
-          const base64Logo = await getBase64Image(themeConfig.logo);
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.hr');
+        if (logoUrl) {
+          const base64Logo = await getBase64Image(logoUrl);
           if (base64Logo) {
             const logoId = wb.addImage({ base64: base64Logo, extension: 'png' });
             ws.addImage(logoId, { tl: { col: 1.5, row: 0 }, ext: { width: 100, height: 100 } });

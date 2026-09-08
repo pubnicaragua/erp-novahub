@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64Image } from './reportExportUtils';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { formatCurrencyDescriptor } from './currency';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
@@ -167,7 +167,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;
   let currentY = 15;
-  const logo = options.tenantLogo ? await getBase64Image(options.tenantLogo) : null;
+  const logo = await getBase64Image(getPdfTemplateLogo(settings, options.tenantLogo, 'reportes.sales'));
   if (logo) {
     try { doc.addImage(logo, 'PNG', margin, currentY, 20, 20, undefined, 'FAST'); currentY += 23; } catch { /* el reporte continúa sin logo incompatible */ }
   }
