@@ -12,6 +12,7 @@ export const suppliersService = {
   create: (data: Partial<Supplier>) => api.post<Supplier>('/purchases/suppliers', data),
   importMassive: (data: { rows: Array<Partial<Supplier> & { paymentTerms?: string }> }) => api.post<{ total: number; created: number; skipped: number; errors: string[]; warnings: string[] }>('/purchases/suppliers/import', data),
   update: (id: string, data: Partial<Supplier>) => api.patch<Supplier>(`/purchases/suppliers/${id}`, data),
+  setStatus: (id: string, status: string) => api.patch<Supplier>(`/purchases/suppliers/${id}/status`, { status }),
   delete: (id: string) => api.delete<void>(`/purchases/suppliers/${id}`),
   recalculateBalance: (id: string) => api.patch<any>(`/purchases/suppliers/${id}/recalculate-balance`, {}),
 };

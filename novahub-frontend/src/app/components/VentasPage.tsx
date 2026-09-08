@@ -14,7 +14,6 @@ import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import type { PurchaseAlertDetail, PurchaseAlertItem } from './compras/PurchaseAlertsButton';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { ShoppingBag } from 'lucide-react';
 import { 
   customersService, 
   estimatesService, 
@@ -493,34 +492,21 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   return (
     <div className="sales-module flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
       <main className="min-w-0 max-w-full flex-1 relative overflow-x-hidden">
-        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <ShoppingBag className="size-9 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-                  Ventas <span className="text-primary">& CRM</span>
-                </h1>
-                <div className="flex items-center gap-2 mt-2">
-                  <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                    {customersListQuery.data?.meta?.total ?? data.clientes.length} clientes · {invoicesQuery.data?.meta?.total ?? data.facturas.length} facturas
-                  </Badge>
-                  {isRestricted && (
-                    <Badge variant="outline" className="rounded-md border-amber-500/30 text-amber-600 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                      {accessibleBranches.length} sucursal(es)
-                    </Badge>
-                  )}
-                </div>
-              </div>
+        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+          {(isRestricted || accessibleBranches.length > 1) && (
+            <div className="mb-3 flex justify-end">
+              {isRestricted && (
+                <Badge variant="outline" className="rounded-md border-amber-500/30 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                  {accessibleBranches.length} sucursal(es)
+                </Badge>
+              )}
+              <BranchScopeFilter className="ml-auto" showLabel={false} />
             </div>
-            <BranchScopeFilter className="ml-auto" showLabel={false} />
-          </div>
-          <CurrencyValuationBanner className="mb-5" />
+          )}
+          <CurrencyValuationBanner className="mb-3" />
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { if (!canViewSalesSection(val)) return; setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
-            <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
+            <div className={cn("w-full overflow-x-auto custom-scrollbar mb-4", !isSidebarCollapsed && "hidden lg:hidden")}>
             <TabsList ref={tabsRef} className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {VISIBLE_SALES_SECTIONS.map((section) => {
                 if (!canViewSalesSection(section.id)) return null;

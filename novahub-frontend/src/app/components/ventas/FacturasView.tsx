@@ -2192,10 +2192,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         fitContent
           layoutMode={layoutMode}
           highlightedRowId={highlightedAlertId}
-          isRowSelectable={isInvoiceCancellableFromList}
+          showSelection={canPerform('SALES_INVOICES', 'delete')}
+          isRowSelectable={(invoice) => canPerform('SALES_INVOICES', 'delete') && isInvoiceCancellableFromList(invoice)}
           onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
           onRowClick={(row) => { void openInvoiceDetail(row); }}
-          onBulkDelete={async (ids) => {
+          onBulkDelete={canPerform('SALES_INVOICES', 'delete') ? async (ids) => {
             const rowsToCancel = data.filter((invoice) => ids.includes(invoice.id) && isInvoiceCancellableFromList(invoice));
             const skippedCount = ids.length - rowsToCancel.length;
             if (!rowsToCancel.length) {
@@ -2213,10 +2214,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'No se pudieron anular las facturas', { id: bulkCancelToastId });
             }
-          }}
+          } : undefined}
           bulkAction="cancel"
           isLoading={loading}
-          bulkActions={() => null}
+          bulkActions={canPerform('SALES_INVOICES', 'delete') ? () => null : undefined}
           actions={(row) => (
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 pr-1 xl:min-w-max xl:flex-nowrap">
               <WhatsAppActionButton
@@ -2280,6 +2281,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         onOpenInvoice={(invoice) => { setDetailInvoice(null); setEditingId(invoice.id); }}
         onDownloadPdf={(invoice, format) => { void handleDownloadInvoicePdf(invoice, format); }}
         onDownloadPayment={(payment, invoice, format, remainingOverride) => { void handleDownloadPaymentVoucher(payment, invoice, format, remainingOverride); }}
+        canExport={canPerform('SALES_INVOICES', 'export')}
         getPaymentRemaining={getHistoricalPaymentRemaining}
         getBalance={getInvoiceBalance}
         formatAmount={formatInvoiceAmount}

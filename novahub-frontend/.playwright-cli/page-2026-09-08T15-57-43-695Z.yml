@@ -1,0 +1,397 @@
+- generic [ref=f19e2]:
+  - generic [ref=f19e3]:
+    - complementary [ref=f19e4]:
+      - generic [ref=f19e5]:
+        - generic [ref=f19e7]:
+          - generic "Logo de NOVAHUB" [ref=f19e8]:
+            - img "Logo de NOVAHUB" [ref=f19e9]
+          - generic [ref=f19e10]:
+            - generic [ref=f19e11]: NOVAHUB
+            - generic [ref=f19e12]: NovaHub ERP
+        - navigation [ref=f19e18]:
+          - generic [ref=f19e19]: General
+          - link "Dashboard" [ref=f19e22] [cursor=pointer]:
+            - /url: /
+          - generic [ref=f19e30]: Operaciones
+          - generic [ref=f19e32]:
+            - button "Ventas" [expanded] [active] [ref=f19e33]
+            - generic [ref=f19e988]:
+              - link "Clientes" [ref=f19e989] [cursor=pointer]:
+                - /url: /?m=ventas&sm=clientes
+              - link "Cotizaciones" [ref=f19e995] [cursor=pointer]:
+                - /url: /?m=ventas&sm=estimaciones
+              - link "Órdenes de venta" [ref=f19e1000] [cursor=pointer]:
+                - /url: /?m=ventas&sm=ordenes-venta
+              - link "Facturas" [ref=f19e1005] [cursor=pointer]:
+                - /url: /?m=ventas&sm=facturas
+              - link "Facturas recurrentes" [ref=f19e1010] [cursor=pointer]:
+                - /url: /?m=ventas&sm=facturas-recurrentes
+              - link "Pagos recibidos" [ref=f19e1015] [cursor=pointer]:
+                - /url: /?m=ventas&sm=pagos-recibidos
+              - link "Notas de crédito" [ref=f19e1019] [cursor=pointer]:
+                - /url: /?m=ventas&sm=devoluciones-venta
+              - link "Créditos" [ref=f19e1027] [cursor=pointer]:
+                - /url: /?m=ventas&sm=notas-credito
+              - link "Listas de precios" [ref=f19e1032] [cursor=pointer]:
+                - /url: /?m=ventas&sm=listas-precios
+              - link "Facturación por caja" [ref=f19e1038] [cursor=pointer]:
+                - /url: /?m=ventas&sm=facturacion-caja
+              - link "Control de Caja" [ref=f19e1042] [cursor=pointer]:
+                - /url: /?m=ventas&sm=control-caja
+          - button "Compras" [ref=f19e43]
+          - button "Restaurante POS" [ref=f19e54]
+          - button "Tracking de Importaciones" [ref=f19e63]
+          - button "Inventario de Mercancías" [ref=f19e74]
+          - generic [ref=f19e84]: Administración
+          - button "Finanzas" [ref=f19e87]
+          - button "Contabilidad" [ref=f19e96]
+          - button "Reportes" [ref=f19e105]
+          - button "Recursos Humanos" [ref=f19e114]
+          - generic [ref=f19e125]: Herramientas
+          - button "Actividades" [ref=f19e128]
+          - button "Gestión de tickets" [ref=f19e138]
+          - generic [ref=f19e146]: Ayuda
+          - link "Centro de capacitación" [ref=f19e149] [cursor=pointer]:
+            - /url: /?m=centro-capacitacion
+          - link "Soporte técnico" [ref=f19e156] [cursor=pointer]:
+            - /url: /?m=soporte-tecnico
+          - button "Asesoría legal" [ref=f19e167]
+          - button "Financiamiento PYME" [ref=f19e178]
+          - link "Nova Suite" [ref=f19e187] [cursor=pointer]:
+            - /url: /?m=novachat
+          - button "Nova Cloud" [ref=f19e196]
+          - button "Notificaciones" [ref=f19e205]
+          - generic [ref=f19e216]: Sistema
+          - button "Mi Sucursal" [ref=f19e219]
+          - button "Configuración" [ref=f19e230]
+        - generic [ref=f19e240]:
+          - generic [ref=f19e241]: G
+          - generic [ref=f19e242]:
+            - paragraph [ref=f19e243]: Gabriel Tinoco
+            - paragraph [ref=f19e245]: Administrador
+    - generic [ref=f19e246]:
+      - banner [ref=f19e248]:
+        - button "Contraer/Expandir menú" [ref=f19e851]
+        - searchbox "Buscar módulos y secciones" [ref=f19e255]
+        - generic [ref=f19e256]:
+          - button "Caja" [ref=f19e257]
+          - generic "Moneda de presentación y modo de valoración" [ref=f19e852]:
+            - button "NIO" [ref=f19e853]
+            - button "Cambiar modo de valoración" [ref=f19e855]
+          - button "Cambiar a tema oscuro" [ref=f19e856]
+          - button "Notificaciones" [ref=f19e259]
+          - button "Menú de usuario" [ref=f19e260]:
+            - generic [ref=f19e261]: GT
+            - generic [ref=f19e857]:
+              - generic [ref=f19e858]: Gabriel Tinoco
+              - generic [ref=f19e859]: Administrador
+      - main [ref=f19e263]:
+        - generic [ref=f19e264]:
+          - generic [ref=f19e265]:
+            - heading "Resumen operativo" [level=1] [ref=f19e267]
+            - generic [ref=f19e268]:
+              - combobox [ref=f19e269]:
+                - generic: Este Mes
+              - button "Exportar" [ref=f19e270]
+              - button "Configuración" [ref=f19e271]
+          - generic [ref=f19e272]:
+            - paragraph [ref=f19e273]: "Período: Septiembre 2026 · 4 KPIs activos"
+            - paragraph [ref=f19e274]: Los indicadores usan el mismo resumen; abrir una tarjeta no genera otra consulta.
+          - generic [ref=f19e275]:
+            - button "Ingresos Totales C$ 1,985.60 Abrir módulo" [ref=f19e277] [cursor=pointer]:
+              - generic [ref=f19e278]:
+                - generic [ref=f19e279]: Ingresos Totales
+                - paragraph [ref=f19e284]: C$ 1,985.60
+                - generic [ref=f19e286]: Abrir módulo
+            - button "Gastos Totales C$ 0.00 Abrir módulo" [ref=f19e292] [cursor=pointer]:
+              - generic [ref=f19e293]:
+                - generic [ref=f19e294]: Gastos Totales
+                - paragraph [ref=f19e300]: C$ 0.00
+                - generic [ref=f19e302]: Abrir módulo
+            - button "Órdenes de venta 3 9 pendientes por despacho Abrir módulo" [ref=f19e308] [cursor=pointer]:
+              - generic [ref=f19e309]:
+                - generic [ref=f19e310]: Órdenes de venta
+                - paragraph [ref=f19e317]: "3"
+                - paragraph [ref=f19e318]: 9 pendientes por despacho
+                - generic [ref=f19e319]: Abrir módulo
+            - button "Margen de utilidad neta 100.0% Rentabilidad óptima Abrir módulo" [ref=f19e325] [cursor=pointer]:
+              - generic [ref=f19e326]:
+                - generic [ref=f19e327]: Margen de utilidad neta
+                - paragraph [ref=f19e334]: 100.0%
+                - paragraph [ref=f19e335]: Rentabilidad óptima
+                - generic [ref=f19e336]: Abrir módulo
+          - generic [ref=f19e341]:
+            - heading "Rendimiento de Productos en Caja" [level=2] [ref=f19e345]
+            - paragraph [ref=f19e346]: Monitoreo por volumen de ventas, margen de utilidad ganada e inventario sin salida.
+            - generic [ref=f19e347]: Análisis en Tiempo Real
+            - generic [ref=f19e351]:
+              - generic [ref=f19e352]:
+                - generic [ref=f19e353]:
+                  - generic [ref=f19e354]: Más vendidos
+                  - generic [ref=f19e360]: Unid.
+                - generic [ref=f19e361]:
+                  - generic [ref=f19e362]:
+                    - generic [ref=f19e363]:
+                      - paragraph [ref=f19e364]: Camisa
+                      - paragraph [ref=f19e365]: "Total: C$ 690.00"
+                    - generic [ref=f19e366]: 1 uds
+                  - generic [ref=f19e367]:
+                    - generic [ref=f19e368]:
+                      - paragraph [ref=f19e369]: Mantenimiento de equipo
+                      - paragraph [ref=f19e370]: "Total: C$ 350.00"
+                    - generic [ref=f19e371]: 1 uds
+                  - generic [ref=f19e372]:
+                    - generic [ref=f19e373]:
+                      - paragraph [ref=f19e374]: Zapatos
+                      - paragraph [ref=f19e375]: "Total: C$ 437.00"
+                    - generic [ref=f19e376]: 1 uds
+                  - generic [ref=f19e377]:
+                    - generic [ref=f19e378]:
+                      - paragraph [ref=f19e379]: Cable HDMI 2.1 de 2 metros · Estándar 0010
+                      - paragraph [ref=f19e380]: "Total: C$ 336.10"
+                    - generic [ref=f19e381]: 1 uds
+                  - generic [ref=f19e382]:
+                    - generic [ref=f19e383]:
+                      - paragraph [ref=f19e384]: Camisa
+                      - paragraph [ref=f19e385]: "Total: C$ 150.00"
+                    - generic [ref=f19e386]: 1 uds
+              - generic [ref=f19e387]:
+                - generic [ref=f19e388]:
+                  - generic [ref=f19e389]: Mayor utilidad
+                  - generic [ref=f19e397]: Ganancia
+                - generic [ref=f19e398]:
+                  - generic [ref=f19e399]:
+                    - generic [ref=f19e400]:
+                      - paragraph [ref=f19e401]: Camisa
+                      - paragraph [ref=f19e402]: +C$ 250.00
+                    - generic [ref=f19e403]: 50%
+                  - generic [ref=f19e404]:
+                    - generic [ref=f19e405]:
+                      - paragraph [ref=f19e406]: Mantenimiento de equipo
+                      - paragraph [ref=f19e407]: +C$ 170.00
+                    - generic [ref=f19e408]: 49%
+                  - generic [ref=f19e409]:
+                    - generic [ref=f19e410]:
+                      - paragraph [ref=f19e411]: Zapatos
+                      - paragraph [ref=f19e412]: +C$ 160.00
+                    - generic [ref=f19e413]: 42%
+                  - generic [ref=f19e414]:
+                    - generic [ref=f19e415]:
+                      - paragraph [ref=f19e416]: Cable HDMI 2.1 de 2 metros · Estándar 0010
+                      - paragraph [ref=f19e417]: +C$ 100.54
+                    - generic [ref=f19e418]: 34%
+                  - generic [ref=f19e419]:
+                    - generic [ref=f19e420]:
+                      - paragraph [ref=f19e421]: Camisa
+                      - paragraph [ref=f19e422]: +C$ 50.00
+                    - generic [ref=f19e423]: 33%
+              - generic [ref=f19e424]:
+                - generic [ref=f19e425]:
+                  - generic [ref=f19e426]: Sin venta
+                  - generic [ref=f19e432]: Stock Parado
+                - generic [ref=f19e433]:
+                  - generic [ref=f19e434]:
+                    - generic [ref=f19e435]:
+                      - paragraph [ref=f19e436]: Laptop Lenovo IdeaPad 3 15 · Estándar 0001
+                      - paragraph [ref=f19e437]: Sin salidas
+                    - generic [ref=f19e438]: 6 stck
+                  - generic [ref=f19e439]:
+                    - generic [ref=f19e440]:
+                      - paragraph [ref=f19e441]: Intel Core i3 12100 · Estándar 0002
+                      - paragraph [ref=f19e442]: Sin salidas
+                    - generic [ref=f19e443]: 21 stck
+                  - generic [ref=f19e444]:
+                    - generic [ref=f19e445]:
+                      - paragraph [ref=f19e446]: ASUS Prime B550M-A · Estándar 0003
+                      - paragraph [ref=f19e447]: Sin salidas
+                    - generic [ref=f19e448]: 32 stck
+                  - generic [ref=f19e449]:
+                    - generic [ref=f19e450]:
+                      - paragraph [ref=f19e451]: Kingston Fury Beast 8GB DDR4 · Estándar 0004
+                      - paragraph [ref=f19e452]: Sin salidas
+                    - generic [ref=f19e453]: 45 stck
+                  - generic [ref=f19e454]:
+                    - generic [ref=f19e455]:
+                      - paragraph [ref=f19e456]: SSD Kingston NV2 500GB NVMe · Estándar 0005
+                      - paragraph [ref=f19e457]: Sin salidas
+                    - generic [ref=f19e458]: 12 stck
+          - generic [ref=f19e459]:
+            - generic [ref=f19e461]:
+              - generic [ref=f19e466]:
+                - heading "Transacciones recientes" [level=4] [ref=f19e467]
+                - paragraph [ref=f19e468]: Últimos movimientos registrados.
+              - combobox [ref=f19e469]:
+                - generic: Ver historial
+            - table [ref=f19e473]:
+              - rowgroup [ref=f19e860]:
+                - row [ref=f19e861]:
+                  - columnheader "Documento" [ref=f19e862]
+                  - columnheader "Origen" [ref=f19e863]
+                  - columnheader "Cliente / Proveedor" [ref=f19e864]
+                  - columnheader "Monto" [ref=f19e865]
+                  - columnheader "IVA" [ref=f19e866]
+              - rowgroup [ref=f19e474]:
+                - row [ref=f19e867] [cursor=pointer]:
+                  - cell "QA-REC-8811025329" [ref=f19e868]
+                  - cell "FACTURA DE COMPRA" [ref=f19e869]
+                  - cell "Aceites y Lubricantes Express" [ref=f19e870]
+                  - cell "C$ 10.00" [ref=f19e871]
+                  - cell "EXENTO" [ref=f19e872]
+                - row [ref=f19e873] [cursor=pointer]:
+                  - cell "QA-REF-8811025329" [ref=f19e874]
+                  - cell "FACTURA DE COMPRA" [ref=f19e875]
+                  - cell "Aceites y Lubricantes Express" [ref=f19e876]
+                  - cell "C$ 13.50" [ref=f19e877]
+                  - cell "EXENTO" [ref=f19e878]
+                - row [ref=f19e879] [cursor=pointer]:
+                  - cell "QA-REC-8810226364" [ref=f19e880]
+                  - cell "FACTURA DE COMPRA" [ref=f19e881]
+                  - cell "Aceites y Lubricantes Express" [ref=f19e882]
+                  - cell "C$ 10.00" [ref=f19e883]
+                  - cell "EXENTO" [ref=f19e884]
+                - row [ref=f19e885] [cursor=pointer]:
+                  - cell "QA-REF-8810226364" [ref=f19e886]
+                  - cell "FACTURA DE COMPRA" [ref=f19e887]
+                  - cell "Aceites y Lubricantes Express" [ref=f19e888]
+                  - cell "C$ 13.50" [ref=f19e889]
+                  - cell "EXENTO" [ref=f19e890]
+                - row [ref=f19e891] [cursor=pointer]:
+                  - cell "ORD-009" [ref=f19e892]
+                  - cell "ORDEN DE VENTA" [ref=f19e893]
+                  - cell "Andrea Rosales" [ref=f19e894]
+                  - cell "C$ 4,349.00" [ref=f19e895]
+                  - cell "EXENTO" [ref=f19e896]
+                - row [ref=f19e897] [cursor=pointer]:
+                  - cell "OC-B4-153363-2" [ref=f19e898]
+                  - cell "ORDEN DE COMPRA" [ref=f19e899]
+                  - cell "Prov Bodega 2 153363" [ref=f19e900]
+                  - cell "C$ 0.00" [ref=f19e901]
+                  - cell "EXENTO" [ref=f19e902]
+                - row [ref=f19e903] [cursor=pointer]:
+                  - cell "OC-B4-153363-1" [ref=f19e904]
+                  - cell "ORDEN DE COMPRA" [ref=f19e905]
+                  - cell "Prov Bodega 1 153363" [ref=f19e906]
+                  - cell "C$ 0.00" [ref=f19e907]
+                  - cell "EXENTO" [ref=f19e908]
+                - row [ref=f19e909] [cursor=pointer]:
+                  - cell "OC-B4-078267-2" [ref=f19e910]
+                  - cell "ORDEN DE COMPRA" [ref=f19e911]
+                  - cell "Prov Bodega 2 078267" [ref=f19e912]
+                  - cell "C$ 0.00" [ref=f19e913]
+                  - cell "EXENTO" [ref=f19e914]
+                - row [ref=f19e915] [cursor=pointer]:
+                  - cell "OC-B4-078267-1" [ref=f19e916]
+                  - cell "ORDEN DE COMPRA" [ref=f19e917]
+                  - cell "Prov Bodega 1 078267" [ref=f19e918]
+                  - cell "C$ 0.00" [ref=f19e919]
+                  - cell "EXENTO" [ref=f19e920]
+                - row [ref=f19e921] [cursor=pointer]:
+                  - cell "OC-B4-101216-2" [ref=f19e922]
+                  - cell "ORDEN DE COMPRA" [ref=f19e923]
+                  - cell "Prov Bodega 2 101216" [ref=f19e924]
+                  - cell "C$ 0.00" [ref=f19e925]
+                  - cell "EXENTO" [ref=f19e926]
+                - row [ref=f19e927] [cursor=pointer]:
+                  - cell "OC-B4-101216-1" [ref=f19e928]
+                  - cell "ORDEN DE COMPRA" [ref=f19e929]
+                  - cell "Prov Bodega 1 101216" [ref=f19e930]
+                  - cell "C$ 0.00" [ref=f19e931]
+                  - cell "EXENTO" [ref=f19e932]
+                - row [ref=f19e933] [cursor=pointer]:
+                  - cell "OC-QA-MTQL4WQU" [ref=f19e934]
+                  - cell "ORDEN DE COMPRA" [ref=f19e935]
+                  - cell "QA Prov MTQL4WQU" [ref=f19e936]
+                  - cell "C$ 0.00" [ref=f19e937]
+                  - cell "EXENTO" [ref=f19e938]
+                - row [ref=f19e939] [cursor=pointer]:
+                  - cell "OC-QA-MTQFDL98" [ref=f19e940]
+                  - cell "ORDEN DE COMPRA" [ref=f19e941]
+                  - cell "QA Prov MTQFDL98" [ref=f19e942]
+                  - cell "C$ 0.00" [ref=f19e943]
+                  - cell "EXENTO" [ref=f19e944]
+                - row [ref=f19e945] [cursor=pointer]:
+                  - cell "OC-QA-mtqfcsfe" [ref=f19e946]
+                  - cell "ORDEN DE COMPRA" [ref=f19e947]
+                  - cell "QA Prov mtqfcsfe" [ref=f19e948]
+                  - cell "C$ 0.00" [ref=f19e949]
+                  - cell "EXENTO" [ref=f19e950]
+                - row [ref=f19e951] [cursor=pointer]:
+                  - cell "OC-QA-mtqfbyl6" [ref=f19e952]
+                  - cell "ORDEN DE COMPRA" [ref=f19e953]
+                  - cell "QA Prov mtqfbyl6" [ref=f19e954]
+                  - cell "C$ 0.00" [ref=f19e955]
+                  - cell "EXENTO" [ref=f19e956]
+                - row [ref=f19e957] [cursor=pointer]:
+                  - cell "OC-QA-mtqfbd7w" [ref=f19e958]
+                  - cell "ORDEN DE COMPRA" [ref=f19e959]
+                  - cell "QA Prov mtqfbd7w" [ref=f19e960]
+                  - cell "C$ 0.00" [ref=f19e961]
+                  - cell "EXENTO" [ref=f19e962]
+                - row [ref=f19e963] [cursor=pointer]:
+                  - cell "OC-QA-mtqfap1n" [ref=f19e964]
+                  - cell "ORDEN DE COMPRA" [ref=f19e965]
+                  - cell "QA Prov mtqfap1n" [ref=f19e966]
+                  - cell "C$ 0.00" [ref=f19e967]
+                  - cell "EXENTO" [ref=f19e968]
+                - row [ref=f19e969] [cursor=pointer]:
+                  - cell "OC-B4-800193-2" [ref=f19e970]
+                  - cell "ORDEN DE COMPRA" [ref=f19e971]
+                  - cell "Prov Bodega 2 800193" [ref=f19e972]
+                  - cell "C$ 0.00" [ref=f19e973]
+                  - cell "EXENTO" [ref=f19e974]
+                - row [ref=f19e975] [cursor=pointer]:
+                  - cell "OC-B4-800193-1" [ref=f19e976]
+                  - cell "ORDEN DE COMPRA" [ref=f19e977]
+                  - cell "Prov Bodega 1 800193" [ref=f19e978]
+                  - cell "C$ 0.00" [ref=f19e979]
+                  - cell "EXENTO" [ref=f19e980]
+                - row [ref=f19e981] [cursor=pointer]:
+                  - cell "OC-B4-725149-2" [ref=f19e982]
+                  - cell "ORDEN DE COMPRA" [ref=f19e983]
+                  - cell "Prov Bodega 2 725149" [ref=f19e984]
+                  - cell "C$ 0.00" [ref=f19e985]
+                  - cell "EXENTO" [ref=f19e986]
+          - generic [ref=f19e775]:
+            - generic [ref=f19e776]:
+              - generic [ref=f19e778]:
+                - heading "Ventas por Cajas" [level=4] [ref=f19e779]
+                - button "Ver todo" [ref=f19e782]
+              - generic [ref=f19e785] [cursor=pointer]:
+                - generic [ref=f19e786]: Caja 1
+                - generic [ref=f19e793]: C$ 1,376.10
+            - generic [ref=f19e796]:
+              - heading "Alertas de Inventario" [level=4] [ref=f19e798]
+              - generic [ref=f19e803]:
+                - generic [ref=f19e804] [cursor=pointer]:
+                  - generic [ref=f19e807]:
+                    - paragraph [ref=f19e808]: Corsair Vengeance 32GB DDR5 · Pro 0112
+                    - paragraph [ref=f19e809]: Reordenar (9)
+                  - generic [ref=f19e810]: Reordenar
+                - generic [ref=f19e811] [cursor=pointer]:
+                  - generic [ref=f19e814]:
+                    - paragraph [ref=f19e815]: Motorola Edge 50 Pro
+                    - paragraph [ref=f19e816]: Reordenar (2)
+                  - generic [ref=f19e817]: Reordenar
+                - generic [ref=f19e818] [cursor=pointer]:
+                  - generic [ref=f19e821]:
+                    - paragraph [ref=f19e822]: Apple AirPods Pro 2 USB-C
+                    - paragraph [ref=f19e823]: Reordenar (2)
+                  - generic [ref=f19e824]: Reordenar
+                - generic [ref=f19e825] [cursor=pointer]:
+                  - generic [ref=f19e828]:
+                    - paragraph [ref=f19e829]: Samsung Galaxy Watch7
+                    - paragraph [ref=f19e830]: Reordenar (1)
+                  - generic [ref=f19e831]: Reordenar
+                - generic [ref=f19e832] [cursor=pointer]:
+                  - generic [ref=f19e835]:
+                    - paragraph [ref=f19e836]: Apple iPad 10ª generación
+                    - paragraph [ref=f19e837]: Reordenar (2)
+                  - generic [ref=f19e838]: Reordenar
+                - generic [ref=f19e839] [cursor=pointer]:
+                  - generic [ref=f19e842]:
+                    - paragraph [ref=f19e843]: Xiaomi Smart Band 9
+                    - paragraph [ref=f19e844]: Reordenar (1)
+                  - generic [ref=f19e845]: Reordenar
+    - region "Notifications alt+T"
+    - button "Abrir asistente de capacitación" [ref=f19e846]
+  - region "Notifications alt+T"

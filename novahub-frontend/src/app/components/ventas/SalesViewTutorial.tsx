@@ -103,13 +103,16 @@ export function SalesViewTutorial({ view, context = 'list', className }: { view:
     <>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
+        size="icon"
         onClick={() => setOpen(true)}
         data-toolbar-role="help"
-        className={className || 'h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest'}
+        data-tutorial-trigger="true"
+        title={buttonLabel}
+        className={`size-8 shrink-0 rounded-lg text-muted-foreground ${className || ''}`}
         aria-label={buttonLabel}
       >
-        <CircleHelp className="mr-2 size-4" /> {buttonLabel}
+        <CircleHelp className="size-4" />
       </Button>
       {open && <GuidedTour steps={steps} onClose={() => setOpen(false)} title={context === 'form' ? tutorial.form.label : tutorial.title} allowTargetInteraction />}
     </>

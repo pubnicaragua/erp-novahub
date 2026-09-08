@@ -5,7 +5,6 @@ import {
   Bell,
   Menu,
   LogOut,
-  User,
   Settings as SettingsIcon,
   Sun,
   Moon,
@@ -137,14 +136,9 @@ function getNotificationDetail(
 }
 
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
-  const { user, logout, canPerform } = useAuth();
+  const { user, logout, hasAccess, canPerform } = useAuth();
   const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
   const isBranchManagerSession = Boolean(isImpersonating && branch);
-  const workspaceName = isBranchManagerSession
-    ? branch?.name
-    : user?.isPlatformAdmin
-      ? 'NovaHub Platform'
-      : (user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'Nova Hub');
   const [dismissedSupervisorBranchId, setDismissedSupervisorBranchId] = useState<string | null>(null);
   const showSupervisorNotice = Boolean(
     isBranchManagerSession
@@ -201,6 +195,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   }, [billingTenantId, hasOverdueSubscriptionNotice, notificationsOpen]);
 
   const overdueInvoices = billingHistory?.history;
+  const hasConfigurationAccess = hasAccess('configuracion');
 
   const SEARCH_CATALOG = [
     { label: 'Facturas de Venta', description: 'Emisión, cobro y anulación de facturas', module: 'ventas', subModule: 'facturas', keywords: ['factura', 'venta', 'cobro', 'cliente'], group: 'Ventas' },
@@ -242,7 +237,8 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     if (!query.trim()) return [];
     const q = query.toLowerCase().trim();
     return SEARCH_CATALOG
-      .filter(entry => 
+      .filter(entry => entry.module !== 'configuracion' || hasConfigurationAccess)
+      .filter(entry =>
         entry.label.toLowerCase().includes(q) ||
         entry.description.toLowerCase().includes(q) ||
         entry.keywords.some(k => k.includes(q))
@@ -433,15 +429,6 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
   const getRoleLabel = (role: string) => ROLE_LABELS[role?.toLowerCase()] || role;
 
-  const getRoleBadge = (role: string) => {
-    switch (role?.toLowerCase()) {
-      case 'superadmin': return <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Super Admin</Badge>;
-      case 'partner': return <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Partner</Badge>;
-      case 'admin': return <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Administrador</Badge>;
-      default: return <Badge variant="outline" className="rounded-md px-1 py-0 text-[10px]">{getRoleLabel(role)}</Badge>;
-    }
-  };
-
   return (
     <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <TrialCountdownBanner />
@@ -491,14 +478,6 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
       {/* Search */}
       <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-4">
-        {/* Tenancy Indicator: el logo vive únicamente en el Sidebar. */}
-        <div className="hidden min-w-0 items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-1.5 sm:flex">
-          <span className="max-w-[150px] truncate text-xs font-medium">{workspaceName}</span>
-          {isBranchManagerSession
-            ? <Badge className="rounded-md border-amber-500/20 bg-amber-500/10 px-1 py-0 text-[10px] text-amber-600 dark:text-amber-400">Modo supervisor</Badge>
-            : getRoleBadge(user?.role || '')}
-        </div>
-
         <div className="relative min-w-0 w-12 shrink-0 transition-[width] duration-200 focus-within:w-48 sm:w-[min(32vw,20rem)] sm:focus-within:w-[min(32vw,20rem)] lg:w-full lg:max-w-sm" ref={searchRef}>
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -816,14 +795,12 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onNavigate('configuracion')}>
-              <User className="mr-2 size-4 text-primary" />
-              <span>Mi Perfil</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleSettings}>
-              <SettingsIcon className="mr-2 size-4 text-primary" />
-              <span>Configuración</span>
-            </DropdownMenuItem>
+            {hasConfigurationAccess && (
+              <DropdownMenuItem onClick={handleSettings}>
+                <SettingsIcon className="mr-2 size-4 text-primary" />
+                <span>Configuración</span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => setShowPasswordModal(true)}>
               <Lock className="mr-2 size-4 text-primary" />
               <span>Cambiar Contraseña</span>

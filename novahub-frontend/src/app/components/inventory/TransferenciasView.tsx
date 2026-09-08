@@ -647,8 +647,8 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                 <Settings2 className="mr-1 size-3.5" /> Configurar cuentas
               </Button>
             )}
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-10 w-full rounded-xl md:w-auto">
-              <CircleHelp className="size-3.5 mr-1" /> Cómo transferir inventario
+            <Button type="button" variant="ghost" size="icon" onClick={() => setShowTutorial(true)} className="size-8 shrink-0 rounded-lg text-muted-foreground" aria-label="Cómo transferir inventario" title="Cómo transferir inventario">
+              <CircleHelp className="size-4" />
             </Button>
             {canCreateTransfer && <Button 
               size="sm" 

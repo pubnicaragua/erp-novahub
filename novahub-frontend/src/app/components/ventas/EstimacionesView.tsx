@@ -1168,7 +1168,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           data={filteredData}
           pagination={pagination}
           columns={columns}
-          isRowSelectable={(row) => ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(row.status))}
+          showSelection={false}
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setDetailEstimate(row)}
           highlightedRowId={highlightedAlertId}
@@ -1200,7 +1200,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <Button variant="ghost" title="Ver cotización completa" aria-label="Ver cotización completa" size="icon" className={actionButtonClass} onClick={() => { setDetailEstimate(null); setEditingId(row.id); }}>
                 <Eye className={actionIconClass} />
               </Button>
-              {canPerform('SALES_QUOTES', 'edit') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(row.status)) && (
+              {canPerform('SALES_QUOTES', 'delete') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(row.status)) && (
                 <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className={actionButtonClass} onClick={() => setPendingCancelId(row.id)}>
                   <Ban className={actionIconClass} />
                 </Button>
@@ -1222,7 +1222,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           setDetailEstimate(null);
           setEditingId(detailEstimate.id);
         }}
-        onDownloadPdf={(format) => { if (detailEstimate) void handleExportPDF(detailEstimate, format); }}
+        onDownloadPdf={canPerform('SALES_QUOTES', 'export') ? (format) => { if (detailEstimate) void handleExportPDF(detailEstimate, format); } : undefined}
       />
 
       <ConfirmDialog
@@ -1238,7 +1238,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           const cancelToastId = toast.loading('Cancelando cotización...');
           try {
             setCancelLoading(true);
-            await estimatesService.update(pendingCancelId, { status: 'CANCELLED' as any });
+            await estimatesService.cancel(pendingCancelId);
             toast.success('Cotización cancelada', { id: cancelToastId });
             clearSalesEditorDraft(salesDraftStorageKey);
             localDraftRef.current = null;

@@ -81,6 +81,21 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           name: product.name,
           description: product.description || '',
           commercialNote: product.commercialNote || '',
+          sku: product.sku || product.code || '',
+          barcode: product.barcode || '',
+          brand: product.brand || '',
+          model: product.model || '',
+          color: product.color || '',
+          weight: product.weight ?? '',
+          weightUnit: product.weightUnit || '',
+          dimensions: product.dimensions || '',
+          width: product.width ?? '',
+          height: product.height ?? '',
+          depth: product.depth ?? '',
+          dimensionUnit: product.dimensionUnit || '',
+          warranty: product.warranty || '',
+          lastPurchasePrice: product.lastPurchasePrice ?? '',
+          trackBatch: Boolean(product.trackBatch),
           categoryId: product.categoryId || '',
           priceCurrency: baseCurrency || 'NIO',
           salePrice: Number(product.salePrice) || 0,
@@ -243,7 +258,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
         });
         uploadedImageUri = uploaded.uri;
       }
-      const nextImageUrl = uploadedImageUri ?? (draft.removeImage ? null : draft.imageStorageUri);
+      const nextImageUrl = uploadedImageUri ?? (draft.removeImage ? null : (draft.imageStorageUri || draft.imageUrl));
 
       const rate = draft.priceCurrency !== baseCurrency ? 
                     (draft.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate)) 
@@ -260,7 +275,22 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
         itemType: draft.itemType || 'PRODUCT',
         isVariable: Boolean(draft.isVariable),
         isActive: draft.isActive !== false,
-        unit: draft.unit,
+         unit: draft.unit,
+         sku: draft.sku || draft.code,
+         barcode: draft.barcode || '',
+         brand: draft.brand || '',
+         model: draft.model || '',
+         color: draft.color || '',
+         weight: draft.weight === '' ? null : Number(draft.weight),
+         weightUnit: draft.weightUnit || '',
+         dimensions: draft.dimensions || '',
+         width: draft.width === '' ? null : Number(draft.width),
+         height: draft.height === '' ? null : Number(draft.height),
+         depth: draft.depth === '' ? null : Number(draft.depth),
+         dimensionUnit: draft.dimensionUnit || '',
+         warranty: draft.warranty || '',
+         ...(canViewInventoryCost ? { lastPurchasePrice: draft.lastPurchasePrice === '' ? null : Number(draft.lastPurchasePrice) } : {}),
+         trackBatch: Boolean(draft.trackBatch),
         minStock: draft.minStock,
         maxStock: draft.maxStock,
          ...(draft.itemType === 'SERVICE' ? {} : { warehouseId: undefined }),
@@ -387,6 +417,16 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                 />
               </div>
 
+              <div className="sm:col-span-2">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Marca</label>
+                <Input
+                  value={draft.brand || ''}
+                  onChange={e => handleUpdate('brand', e.target.value)}
+                  className="h-8 text-xs mt-1"
+                  placeholder="Marca del producto"
+                />
+              </div>
+
               <div className="sm:col-span-2 md:col-span-5">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción</label>
                 <Input
@@ -417,6 +457,63 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                   </SelectContent>
                 </Select>
               </div>
+
+              {!isService && (
+                <div className="sm:col-span-2 md:col-span-5 grid grid-cols-1 gap-3 rounded-lg border border-border/60 bg-background/60 p-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Código/SKU interno</label>
+                    <Input value={draft.sku || ''} onChange={e => handleUpdate('sku', e.target.value)} className="mt-1 h-8 text-xs font-mono" placeholder="SKU-001" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Código de barras</label>
+                    <Input value={draft.barcode || ''} onChange={e => handleUpdate('barcode', e.target.value)} className="mt-1 h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Modelo</label>
+                    <Input value={draft.model || ''} onChange={e => handleUpdate('model', e.target.value)} className="mt-1 h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Color</label>
+                    <Input value={draft.color || ''} onChange={e => handleUpdate('color', e.target.value)} className="mt-1 h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Peso</label>
+                    <Input type="number" min={0} step="any" value={draft.weight ?? ''} onChange={e => handleUpdate('weight', e.target.value)} className="mt-1 h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad de peso</label>
+                    <Input value={draft.weightUnit || ''} onChange={e => handleUpdate('weightUnit', e.target.value)} className="mt-1 h-8 text-xs" placeholder="kg, g..." />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Dimensiones</label>
+                    <Input value={draft.dimensions || ''} onChange={e => handleUpdate('dimensions', e.target.value)} className="mt-1 h-8 text-xs" placeholder="Descripción o formato libre" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Ancho</label>
+                    <Input type="number" min={0} step="any" value={draft.width ?? ''} onChange={e => handleUpdate('width', e.target.value)} className="mt-1 h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Alto</label>
+                    <Input type="number" min={0} step="any" value={draft.height ?? ''} onChange={e => handleUpdate('height', e.target.value)} className="mt-1 h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Profundidad</label>
+                    <Input type="number" min={0} step="any" value={draft.depth ?? ''} onChange={e => handleUpdate('depth', e.target.value)} className="mt-1 h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad de dimensión</label>
+                    <Input value={draft.dimensionUnit || ''} onChange={e => handleUpdate('dimensionUnit', e.target.value)} className="mt-1 h-8 text-xs" placeholder="cm, m..." />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Garantía</label>
+                    <Input value={draft.warranty || ''} onChange={e => handleUpdate('warranty', e.target.value)} className="mt-1 h-8 text-xs" />
+                  </div>
+                  {canViewInventoryCost && <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Último costo de compra</label>
+                    <Input type="number" min={0} step="any" value={draft.lastPurchasePrice ?? ''} onChange={e => handleUpdate('lastPurchasePrice', e.target.value)} className="mt-1 h-8 text-xs text-right" />
+                  </div>}
+                </div>
+              )}
 
               <div className="sm:col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
@@ -471,6 +568,19 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                   disabled={isSaving}
                 >
                   {draft.trackSerialNumbers ? 'Sí' : 'No'}
+                </Button>
+              </div>}
+
+              {!isService && <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Lotes</label>
+                <Button
+                  type="button"
+                  variant={draft.trackBatch ? 'default' : 'outline'}
+                  className="h-8 w-full mt-1 text-[10px] uppercase tracking-wider"
+                  onClick={() => handleUpdate('trackBatch', !draft.trackBatch)}
+                  disabled={isSaving}
+                >
+                  {draft.trackBatch ? 'Sí' : 'No'}
                 </Button>
               </div>}
 

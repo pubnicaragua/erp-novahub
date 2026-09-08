@@ -1323,17 +1323,8 @@ export function PrismaSchemaPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <Database className="size-6 text-primary" />
-            Prisma Schema - Dev Tool
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Modelo de datos completo para NestJS + Prisma ORM
-          </p>
-        </div>
+    <div className="space-y-6 bg-background p-4 md:px-6 md:pb-6 md:pt-4">
+      <div className="flex justify-end">
         <Button onClick={copyFullSchema} className="gap-2">
           <Copy className="size-4" />
           Copiar Schema Completo

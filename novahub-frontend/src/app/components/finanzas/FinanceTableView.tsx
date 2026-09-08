@@ -501,7 +501,6 @@ export function FinanceTableView({
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
           <h3 className="shrink-0 text-lg font-black uppercase tracking-tight text-foreground md:text-xl">{title}</h3>
-          <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-primary/30 text-primary hidden sm:inline-flex">LIVE SYNC</Badge>
         </div>
         <div className="erp-list-toolbar grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
           <div className="relative col-span-2 w-full sm:flex-1 lg:w-auto">

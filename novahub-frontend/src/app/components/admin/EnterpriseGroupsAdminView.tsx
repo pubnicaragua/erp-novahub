@@ -61,19 +61,8 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
     return <EnterpriseGroupSetupView mode={workspace.mode} initialGroup={selectedGroup} onBack={() => setWorkspace(null)} onChanged={() => query.refetch()} />;
   }
   const content = (
-    <section className="space-y-8">
-      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Building2 className="size-9" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">Nueva jerarquía</p>
-            <h1 className="text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
-              Grupos <span className="text-primary">empresariales</span>
-            </h1>
-          </div>
-        </div>
+    <section className="space-y-6">
+      <div className="flex min-w-0 justify-end">
         <div className="flex flex-wrap gap-2 md:justify-end">
           <Badge variant="outline" className="rounded-md px-3 py-1 text-xs">
             {data?.groups?.length || 0} grupos · {data?.unassignedBranches?.length || 0} pendientes
@@ -174,7 +163,7 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
 
   return (
     <div className="master-console-module min-w-0 max-w-full overflow-x-hidden bg-background">
-      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
         {content}
       </div>
     </div>
@@ -211,7 +200,9 @@ function LegacyUsersPanel({ data, loading, onExtend }: { data?: { cutoff: string
 
 function GroupCard({ group, onOpenWorkspace, onChanged }: { group: any; onOpenWorkspace: () => void; onChanged: () => void }) {
   const units = group.businessUnits || [];
-  const warehouses = group.warehouses || [];
+  const warehouses = (group.warehouses || []).filter(
+    (warehouse: any) => warehouse.scopeType === 'BUSINESS_UNIT' && !warehouse.clientTenantId,
+  );
   const branches = Array.isArray(group.branches) ? group.branches : [];
   return (
     <Card className="rounded-3xl border-border/60 bg-card/60 shadow-sm transition-shadow hover:shadow-md">

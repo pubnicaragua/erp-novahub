@@ -968,8 +968,9 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
           data={filteredData}
           pagination={pagination}
           bulkAction="cancel"
-          isRowSelectable={(row) => normalizeStatus(row.status) === 'DRAFT'}
-          onBulkDelete={async (ids) => {
+          showSelection={canPerform('SALES_CREDIT_NOTES', 'delete')}
+          isRowSelectable={(row) => canPerform('SALES_CREDIT_NOTES', 'delete') && normalizeStatus(row.status) === 'DRAFT'}
+          onBulkDelete={canPerform('SALES_CREDIT_NOTES', 'delete') ? async (ids) => {
             const id = toast.loading(`Cancelando ${ids.length} crédito${ids.length === 1 ? '' : 's'}...`);
             try {
               for (const recordId of ids) await creditNotesService.cancel(recordId as string);
@@ -978,7 +979,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
             } catch (error: any) {
               toast.error(error?.response?.data?.message || error?.message || 'No se pudieron cancelar', { id });
             }
-          }}
+          } : undefined}
           columns={columns}
           onRowUpdate={async () => {}}
           onRowClick={(row) => setDetailCredit(row)}
@@ -1012,7 +1013,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
           setDetailCredit(null);
           startEdit(detailCredit.id);
         }}
-        onDownloadPdf={(format) => { if (detailCredit) void handleExportPDF(detailCredit, format); }}
+        onDownloadPdf={canPerform('SALES_CREDIT_NOTES', 'export') ? (format) => { if (detailCredit) void handleExportPDF(detailCredit, format); } : undefined}
       />
 
       <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Cancelar crédito?" description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos pendientes de aprobación; los emitidos, aplicados o pagados no se modifican." confirmLabel="Cancelar crédito" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!pendingDeleteId) return; const id = toast.loading('Cancelando crédito...'); try { setDeleteLoading(true); await creditNotesService.cancel(pendingDeleteId); toast.success('Crédito cancelado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />

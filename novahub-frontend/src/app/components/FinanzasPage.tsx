@@ -528,29 +528,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   ];
 
   return (
-    <div className="finance-module mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-3 pb-20 sm:p-6 md:p-10">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <DollarSign className="size-9 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-              Finanzas <span className="text-primary">Empresariales</span>
-            </h1>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {formatCurrentAmount(totalIncome, displayCurrency)} ingresos · {formatCurrentAmount(totalExpense, displayCurrency)} gastos{showValuationLegend ? ` · ${valuationModeLabel}` : ''}
-              </Badge>
-              {isRestricted && (
-                <Badge variant="outline" className="rounded-md border-amber-500/30 text-amber-600 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                  {accessibleBranches.length} sucursal(es)
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="finance-module mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-3 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
 
       <CurrencyValuationBanner />
 

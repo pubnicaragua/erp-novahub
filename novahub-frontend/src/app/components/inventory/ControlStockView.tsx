@@ -639,8 +639,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
           </>}
           {canPerform('INVENTORY_ADJUSTMENTS', 'create') && (
             <>
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl">
-                <CircleHelp className="size-3.5 mr-1" /> Cómo ajustar inventario
+              <Button type="button" variant="ghost" size="icon" onClick={() => setShowTutorial(true)} className="size-8 shrink-0 rounded-lg text-muted-foreground" aria-label="Cómo ajustar inventario" title="Cómo ajustar inventario">
+                <CircleHelp className="size-4" />
               </Button>
               <Button
                 type="button"

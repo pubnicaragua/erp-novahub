@@ -58,13 +58,10 @@ export function AdminOverview() {
 
   return (
     <div className="master-console-module min-w-0 max-w-full overflow-x-hidden bg-background">
-      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">
-      <div className="space-y-8 animate-in fade-in duration-700">
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+      <div className="space-y-6 animate-in fade-in duration-700">
       {/* Header Section */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-        <div>
-          <h1 className="text-3xl font-black uppercase italic leading-none tracking-tighter text-foreground sm:text-4xl">Console Master <span className="text-primary">Admin</span></h1>
-        </div>
+      <div className="flex justify-end">
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 gap-1.5 font-bold uppercase tracking-widest text-[10px]">
             <div className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />

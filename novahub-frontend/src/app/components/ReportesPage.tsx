@@ -117,25 +117,8 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
-      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-center justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <BarChart3 className="size-9 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-              Reportes <span className="text-primary">Analíticos</span>
-            </h1>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                Resultados y cuadros de mando interactivos
-              </Badge>
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex min-w-0 flex-wrap items-center gap-2 mt-4 md:mt-0">
+    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <Select value={dateRange} onValueChange={setDateRange}>
             <SelectTrigger className="w-full max-w-full bg-background sm:w-[180px]">
               <SelectValue placeholder="Periodo" />
@@ -155,13 +138,12 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
           <Button variant="default" size="sm" onClick={handleExportExcel} disabled={!canExportActiveReport} className="gap-2">
             <FileSpreadsheet className="w-4 h-4" /> Excel
           </Button>
-        </div>
       </div>
 
       <CurrencyValuationBanner />
 
       <Tabs value={activeTab} onValueChange={handleReportTabChange} className="w-full">
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-4 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {visibleReportTabs.map((tab) => {
             return (
               <TabsTrigger 

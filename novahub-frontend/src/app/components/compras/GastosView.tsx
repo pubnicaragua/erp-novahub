@@ -649,7 +649,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 </Button>
               </div>
             )}
-            <PdfDownloadButton label="Exportar" onDownload={(format) => void handleDownloadExpensePdf(localDoc as Expense, format)} />
+            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" onDownload={(format) => void handleDownloadExpensePdf(localDoc as Expense, format)} />}
           </div>
         </div>
 
@@ -917,8 +917,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2></div>
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
-            <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
-            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
+            <PurchaseViewTutorial view="expenses" />
+            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
@@ -955,7 +955,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 </PopoverContent>
               </Popover>
             </div>
-            {canPerform('PURCHASES_EXPENSES', 'create') && (
+            {canPerform('PURCHASES_EXPENSES', 'import') && (
               <Button
                 variant="outline"
                 onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); setImportFileStats(null); }}
@@ -1007,7 +1007,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         </div>
         <div className="min-w-0">
           <div className="min-w-0">
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} onRowClick={(row) => setSelectedExpenseDetail(row)}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} showSelection={canPerform('PURCHASES_EXPENSES', 'delete')} onRowClick={(row) => setSelectedExpenseDetail(row)}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'}...`);
             try {
@@ -1044,7 +1044,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
               {canPerform('PURCHASES_EXPENSES', 'delete') && status !== 'PAID' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
             </>;
           })()}
-          onDownloadPdf={(format) => detailExpense ? void handleDownloadExpensePdf(detailExpense, format) : undefined}
+          onDownloadPdf={canPerform('PURCHASES_EXPENSES', 'export') ? (format) => detailExpense ? void handleDownloadExpensePdf(detailExpense, format) : undefined : undefined}
         />
         </div>
         <ConfirmDialog

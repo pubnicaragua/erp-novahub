@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
-import { inventoryService, type SimilarProductGroup } from '../../services/inventario.service';
+import { inventoryService, type SimilarProductGroup, type SimilarityResolution, type SimilarProductMatch } from '../../services/inventario.service';
 import { purchaseRequestsService } from '../../services/compras.service';
 import { employeesService } from '../../services/rh.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -80,6 +80,13 @@ const normalizePriceListImportKey = (value: unknown) => String(value ?? '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
   .trim()
+  .toLowerCase();
+
+const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .replace(/\s+/g, ' ')
   .toLowerCase();
 
 const getImportCurrencySymbol = (currency: string) => String(currency || '').toUpperCase() === 'USD' ? '$' : 'C$';
@@ -1075,6 +1082,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [initialImportConfirmText, setInitialImportConfirmText] = useState('');
   const [initialImportReimportMode, setInitialImportReimportMode] = useState<InitialImportReimportMode>('REJECT');
   const [similarImportGroups, setSimilarImportGroups] = useState<SimilarProductGroup[]>([]);
+  const [similarImportResolutions, setSimilarImportResolutions] = useState<Record<string, SimilarityResolution>>({});
+  const [similarImportResolvingKey, setSimilarImportResolvingKey] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
   const [variantManagerProduct, setVariantManagerProduct] = useState<any | null>(null);
@@ -3332,9 +3341,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
   }, [imageArchiveEntries, isServiceView]);
 
-  const handleFinalInitialImport = useCallback(async (skipSimilarityCheck = false) => {
+  const handleFinalInitialImport = useCallback(async (skipSimilarityCheck = false, resolutionList?: SimilarityResolution[]) => {
     const valid = importData.filter((row) => !row._hasError);
     if (initialImportConfirmText !== 'IMPORTAR' || valid.length === 0) return;
+    const effectiveSimilarityResolutions = resolutionList || Object.values(similarImportResolutions);
     if (!skipSimilarityCheck) {
       try {
         const similarityItems = valid.map((row) => ({
@@ -3459,17 +3469,20 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
        const results = isServiceView
          ? await inventoryService.importServices({ items, currency: importCurrency, exchangeRate: importExchangeRate, reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' })
          : advancedCatalogPayload
-           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: effectiveImportCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' })
-           : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' });
+           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: effectiveImportCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: initialImportReimportMode, similarityResolutions: effectiveSimilarityResolutions, confirmText: 'IMPORTAR' })
+           : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', reimportMode: initialImportReimportMode, similarityResolutions: effectiveSimilarityResolutions, confirmText: 'IMPORTAR' });
       setImportProgress(55);
       await uploadInitialImportImages(valid, setImportProgress);
       setImportProgress(100);
       setImportResults({ success: (results.success || 0) + (results.updatedProductCount || 0) + (results.updatedServiceCount || 0), skipped: (importData.length - valid.length) + (results.skipped || 0), failed: results.errors?.length || 0, errors: results.errors || [], warnings: results.warnings || [] });
       setImportModalOpen(false);
-      setInitialImportConfirmOpen(false);
-      setImportPreviewOpen(false);
-      setInitialImportConfirmText('');
-      setInitialImportReimportMode('REJECT');
+       setInitialImportConfirmOpen(false);
+       setImportPreviewOpen(false);
+       setInitialImportConfirmText('');
+       setInitialImportReimportMode('REJECT');
+       setSimilarImportGroups([]);
+       setSimilarImportResolutions({});
+       setSimilarImportResolvingKey(null);
       setImportData([]);
       setAdvancedImportCatalog(null);
       setImportFileName('');
@@ -3477,12 +3490,54 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       onRefresh();
       window.setTimeout(() => setImportResults(null), 2600);
     } catch (e: any) {
-      toast.error('Error durante la importación: ' + (e.message || 'Error'));
+      const responseData = e?.data || e?.response?.data;
+      if (responseData?.code === 'PRODUCT_SIMILAR_MATCH' && Array.isArray(responseData.matches) && responseData.matches.length > 0) {
+        setSimilarImportGroups(responseData.matches);
+        setSimilarImportConfirmOpen(false);
+        toast.warning('La validación detectó otra coincidencia. Revisa la alerta antes de continuar.');
+      } else {
+        toast.error('Error durante la importación: ' + (e.message || 'Error'));
+      }
     } finally {
       setImporting(false);
       setImportProgress(0);
     }
-  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView]);
+  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView, similarImportResolutions]);
+
+  const resolveImportSimilarity = useCallback(async (group: SimilarProductGroup, action: SimilarityResolution['action'], match?: SimilarProductMatch) => {
+    const inputKey = normalizeSimilarityInputKey(group.inputKey);
+    if (!inputKey) return;
+    if (action === 'CREATE_NEW') {
+      const exactSku = group.matches.some((candidate) => [candidate.code, candidate.sku]
+        .some((value) => normalizeSimilarityInputKey(value) === inputKey));
+      if (exactSku) {
+        toast.error('Ese SKU ya existe. Cambia el SKU o selecciona el producto existente.');
+        return;
+      }
+    }
+    if (action === 'USE_EXISTING' && !match?.id) {
+      toast.error('Selecciona un producto válido para continuar.');
+      return;
+    }
+    setSimilarImportResolvingKey(`${group.inputKey}:${action === 'USE_EXISTING' ? match?.id : 'CREATE_NEW'}`);
+    const nextResolutions: Record<string, SimilarityResolution> = {
+      ...similarImportResolutions,
+      [inputKey]: { inputKey: group.inputKey, action, ...(match?.id ? { productId: match.id } : {}) },
+    };
+    const remainingGroups = similarImportGroups.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== inputKey);
+    setSimilarImportResolutions(nextResolutions);
+    setSimilarImportGroups(remainingGroups);
+    if (remainingGroups.length > 0) {
+      setSimilarImportResolvingKey(null);
+      return;
+    }
+    try {
+      toast.info('Coincidencias resueltas. Continuando con la importación…');
+      await handleFinalInitialImport(true, Object.values(nextResolutions));
+    } finally {
+      setSimilarImportResolvingKey(null);
+    }
+  }, [handleFinalInitialImport, similarImportGroups, similarImportResolutions]);
 
   const handleBulkImageArchiveSelected = useCallback(async (file: File) => {
     if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
@@ -3807,8 +3862,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <Plus className="mr-2 size-4" /> Nuevo
             </Button>
           )}
-          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-2 size-4" /> Cómo usar la vista de {isServiceView ? 'servicios' : 'productos'}
+          <Button type="button" size="icon" variant="ghost" data-toolbar-role="help" data-tutorial-trigger="true" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)}>
+            <CircleHelp className="size-4" />
           </Button>
           {canPerform('INVENTORY', 'edit') && (
             <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title={`Importar ${isServiceView ? 'servicios' : 'el catálogo inicial'} desde una plantilla`}>
@@ -4431,13 +4486,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         open={similarImportGroups.length > 0}
         groups={similarImportGroups}
         title="Observación: la importación contiene posibles coincidencias"
-        description={`Revisa nombre, marca, SKU, atributos, precios y costos. ${initialImportReimportMode === 'MERGE' ? 'Los SKU existentes se actualizarán conservando ID, historial y existencias.' : 'Los SKU existentes se omitirán y aparecerán como incidencias; no se actualizarán automáticamente.'}`}
-        continueLabel={initialImportReimportMode === 'MERGE' ? 'Actualizar existentes' : 'Continuar sin actualizar'}
-        onOpenChange={(value) => { if (!value) setSimilarImportGroups([]); }}
-        onContinue={() => {
-          setSimilarImportGroups([]);
-          void handleFinalInitialImport(true);
-        }}
+        description={`Revisa nombre, marca, SKU, atributos, precios y costos. Selecciona el registro correcto o confirma crear como nuevo para cada coincidencia. Al seleccionar un existente, los datos compatibles de la plantilla se aplican a ese registro conservando su ID, historial y existencias; el stock inicial no se suma.`}
+        onOpenChange={(value) => { if (!value) { setSimilarImportGroups([]); setSimilarImportResolutions({}); setSimilarImportResolvingKey(null); } }}
+        resolvingKey={similarImportResolvingKey}
+        onSelectExisting={(group, match) => { void resolveImportSimilarity(group, 'USE_EXISTING', match); }}
+        onCreateNew={(group) => { void resolveImportSimilarity(group, 'CREATE_NEW'); }}
       />
       <AddProductsModal
         open={createModalOpen}
@@ -4446,6 +4499,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         warehouses={warehouses}
         priceLists={importPriceLists}
         onRefresh={onRefresh}
+        onSelectExistingProduct={(match) => {
+          setCreateModalOpen(false);
+          void inventoryService.getProduct(match.id)
+            .then((product) => setModalProduct(product))
+            .catch(() => setModalProduct(match));
+        }}
         itemType={catalogItemType}
       />
       <Dialog open={bulkImageModalOpen} onOpenChange={(open) => {

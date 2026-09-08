@@ -26,6 +26,18 @@ export interface ApiFilters {
   codes?: string;
   categoryId?: string;
   brand?: string;
+  barcode?: string | null;
+  model?: string | null;
+  color?: string | null;
+  weight?: number | null;
+  weightUnit?: string | null;
+  dimensions?: string | null;
+  width?: number | null;
+  height?: number | null;
+  depth?: number | null;
+  dimensionUnit?: string | null;
+  warranty?: string | null;
+  trackBatch?: boolean;
   type?: string;
   warehouseId?: string;
   branchId?: string;

@@ -107,17 +107,9 @@ export function ClientesPage() {
   };
 
   return (
-    <div className="space-y-6 bg-background p-4 md:p-6">
+    <div className="space-y-6 bg-background p-4 md:px-6 md:pb-6 md:pt-4">
       <CurrencyValuationBanner />
-      <div className="flex min-w-0 flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="p-2.5 bg-primary/10 rounded-lg">
-            <UserCircle className="size-6 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">Directorio de clientes</h1>
-          </div>
-        </div>
+      <div className="flex min-w-0 justify-end">
         <div className="flex flex-wrap items-center gap-2">
           {canPerform('SALES_CLIENTS', 'export') && (
             <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>

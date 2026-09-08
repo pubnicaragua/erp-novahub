@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck
+  ArrowRight, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -28,6 +28,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
+import { PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, permissionValue } from '../../utils/permissions';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../../utils/accountValidation';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { pendingUserCreate, clearPendingUserCreate } from '../../utils/pendingUserCreate';
@@ -68,6 +69,33 @@ const userGroupingDepartments = (user: any) => {
   return user?.department && (!user.department.type || user.department.type === 'ACCESS') ? [user.department] : [];
 };
 
+const USER_PERMISSION_ACTIONS = [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS];
+const BASIC_PERMISSION_ACTIONS = new Set(['read', 'create', 'edit', 'delete']);
+
+const getDirectRolePermissions = (role: any) => {
+  const permissionMap = new Map<string, any>();
+  normalizePermissions(role?.permissions).forEach((permission: any) => {
+    const module = String(permission?.module || '').toUpperCase();
+    if (!module || !ALL_PERM_MODULES.some((entry: any) => entry.id === module)) return;
+    const current = permissionMap.get(module) || { module };
+    USER_PERMISSION_ACTIONS.forEach(({ key }) => {
+      current[key] = Boolean(current[key]) || permissionValue(permission, key);
+    });
+    permissionMap.set(module, current);
+  });
+
+  const moduleOrder = new Map(ALL_PERM_MODULES.map((module: any, index: number) => [module.id, index]));
+  const activePermissions = [...permissionMap.values()]
+    .filter((permission: any) => USER_PERMISSION_ACTIONS.some(({ key }) => permissionValue(permission, key)))
+    .sort((left: any, right: any) => (moduleOrder.get(left.module) ?? Number.MAX_SAFE_INTEGER) - (moduleOrder.get(right.module) ?? Number.MAX_SAFE_INTEGER));
+  const activeChildParents = new Set(activePermissions.map((permission: any) => ALL_PERM_MODULES.find((module: any) => module.id === permission.module)?.parent).filter(Boolean));
+
+  return activePermissions.filter((permission: any) => {
+    const module = ALL_PERM_MODULES.find((entry: any) => entry.id === permission.module);
+    return Boolean(module?.parent) || !activeChildParents.has(module?.id);
+  });
+};
+
 export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleChange, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
   const { updateConfig } = useTheme();
   const { user: currentUser, canPerform, refreshProfile } = useAuth();
@@ -96,6 +124,8 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [roleHighlightRequest, setRoleHighlightRequest] = useState<{ roleId: string; token: number } | null>(null);
+  const roleHighlightTimeoutRef = useRef<number | null>(null);
   const [linkingUser, setLinkingUser] = useState<any>(null);
   const [linkingEmployeeId, setLinkingEmployeeId] = useState('');
   const [selectedModule, setSelectedModule] = useState<any>(null);
@@ -124,6 +154,11 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const isCompactTeamViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveTeamUsersLayout: ViewLayoutMode = isCompactTeamViewport ? 'cards' : teamUsersLayout;
   const isCurrentUserPrincipalAdmin = users.some((user) => user.id === currentUser?.id && user.isPrincipalAdmin);
+  const selectedDirectRole = selectedUser?.customRole || customRoles.find((role: any) => role.id === selectedUser?.customRoleId) || null;
+
+  useEffect(() => () => {
+    if (roleHighlightTimeoutRef.current !== null) window.clearTimeout(roleHighlightTimeoutRef.current);
+  }, []);
 
   const { data: tenantData, isLoading: tenantDataLoading, refetch: refetchTenantData } = useTenantQuery(
     ['my-company-detail', tenant?.id || 'none'],
@@ -310,6 +345,20 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     setIsPermsDialogOpen(true);
   };
 
+  const handleGoToDirectRole = () => {
+    if (!canViewRoles || !selectedDirectRole?.id) return;
+    if (roleHighlightTimeoutRef.current !== null) window.clearTimeout(roleHighlightTimeoutRef.current);
+    const roleId = String(selectedDirectRole.id);
+    setRoleHighlightRequest({ roleId, token: Date.now() });
+    setIsPermsDialogOpen(false);
+    setActiveTab('roles');
+    onSubModuleChange?.('roles');
+    roleHighlightTimeoutRef.current = window.setTimeout(() => {
+      setRoleHighlightRequest(null);
+      roleHighlightTimeoutRef.current = null;
+    }, 4500);
+  };
+
   const handleOpenChangePassword = (user: any) => {
     if (!canEditUsers) return;
     setSelectedUser(user);
@@ -450,26 +499,14 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-7xl mx-auto min-h-screen">
-      {/* Header */}
-      <motion.div 
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-      >
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">
-            <Building2 className="size-10 text-primary" />
-             Mi Sucursal
-          </h1>
-        </div>
-        
+    <div className="p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4 space-y-6 max-w-7xl mx-auto min-h-screen">
+      <div className="flex justify-end">
         <div className="flex items-center gap-3">
           <Badge variant="outline" className={cn("text-[12px] font-black uppercase tracking-widest px-4 py-1.5 h-10 flex items-center", getPlanColor(tenant.plan))}>
             Plan {tenant.plan}
           </Badge>
         </div>
-      </motion.div>
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 16 }}
@@ -491,7 +528,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                       : undefined,
         );
       }} className="w-full">
-        <TabsList className="mb-8 flex h-auto min-h-12 max-w-full flex-nowrap overflow-x-auto border border-border/50 bg-muted/20 p-1">
+        <TabsList className="mb-4 flex h-auto min-h-12 max-w-full flex-nowrap overflow-x-auto border border-border/50 bg-muted/20 p-1">
           {canViewCompany && <TabsTrigger value="general" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Building2 className="size-4" /> General
           </TabsTrigger>}
@@ -734,8 +771,8 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
          <TabsContent value="team" className="space-y-4">
             <div className="flex flex-wrap justify-end">
              <div className="flex flex-wrap items-center justify-end gap-2">
-              {canViewUsers && <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
-                <CircleHelp className="size-4" /> Tutorial
+              {canViewUsers && <Button data-tour="team-tutorial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTeamTutorial(true)} aria-label="Cómo gestionar Mi Equipo" title="Cómo gestionar Mi Equipo">
+                <CircleHelp className="size-4" />
               </Button>}
             </div>
            </div>
@@ -839,6 +876,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
              canCreateRoles={canPerform('CONFIG_ROLES', 'create')}
              canEditRoles={canPerform('CONFIG_ROLES', 'edit')}
              canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')}
+             roleHighlightRequest={roleHighlightRequest}
            />
          </TabsContent>
          <TabsContent value="departamentos" className="space-y-6">
@@ -868,12 +906,12 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
               Permisos de {selectedUser?.name}
             </DialogTitle>
             <DialogDescription>
-              Accesos efectivos del usuario según su rol directo. Los departamentos solo sirven para agrupar y no otorgan permisos. {selectedUser?.employee ? `Empleado vinculado: ${selectedUser.employee.firstName} ${selectedUser.employee.lastName}.` : 'No hay empleado vinculado.'}
+              Solo se muestran los permisos asignados directamente mediante el rol personalizado del usuario. {selectedDirectRole ? `Rol directo: ${selectedDirectRole.name}.` : 'Este usuario no tiene un rol personalizado directo.'}
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4">
-            <div className="rounded-xl border border-border overflow-hidden max-h-[60vh] overflow-y-auto">
+            <div className="max-h-[60vh] overflow-auto rounded-xl border border-border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 border-b border-border sticky top-0">
                   <tr>
@@ -882,66 +920,62 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                     <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Crear</th>
                     <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Editar</th>
                     <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Eliminar</th>
+                    <th className="text-left p-3 font-black uppercase text-[10px] tracking-widest">Especiales</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {(() => {
-                    const directRole = selectedUser?.customRole || customRoles.find(r => r.id === selectedUser?.customRoleId);
-                    const roleSources = [directRole].filter(Boolean);
-                    const permissionMap = new Map<string, any>();
-                    roleSources.flatMap((role: any) => normalizePermissions(role.permissions)).forEach((permission: any) => {
-                      const current = permissionMap.get(permission.module) || { module: permission.module };
-                      ['read', 'write', 'create', 'edit', 'delete'].forEach((action) => { current[action] = !!current[action] || !!permission[action]; });
-                      permissionMap.set(permission.module, current);
-                    });
-                    const rolePermissions = [...permissionMap.values()];
-                    
+                    const rolePermissions = getDirectRolePermissions(selectedDirectRole);
+
                     if (rolePermissions.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={5} className="p-8 text-center text-muted-foreground italic">
-                            {selectedUser?.role?.toUpperCase() === 'ADMIN' 
+                          <td colSpan={6} className="p-8 text-center text-muted-foreground italic">
+                            {selectedUser?.role?.toUpperCase() === 'ADMIN'
                               ? 'Este usuario es Administrador y tiene acceso total a todos los módulos.'
-                            : 'Este usuario no tiene permisos efectivos. Asígnale un rol directo.'}
+                              : selectedDirectRole
+                                ? `El rol directo ${selectedDirectRole.name} no tiene permisos activos.`
+                                : 'Este usuario no tiene permisos directos. Asígnale un rol personalizado.'}
                           </td>
                         </tr>
                       );
                     }
 
-                    return ALL_PERM_MODULES.map((mod) => {
-                      const p = rolePermissions.find((perm: any) => perm.module === mod.id);
-                      if (!p) return null;
-                      const hasAny = p.read || p.create || p.edit || p.delete || p.write;
-                      if (!hasAny) return null;
-                      
+                    return rolePermissions.map((permission: any) => {
+                      const mod = ALL_PERM_MODULES.find((entry: any) => entry.id === permission.module);
+                      if (!mod) return null;
                       const isSubmodule = 'parent' in mod;
                       const Icon = mod.icon;
+                      const specialActions = USER_PERMISSION_ACTIONS.filter(({ key }) => !BASIC_PERMISSION_ACTIONS.has(key) && permissionValue(permission, key));
 
                       return (
                         <tr key={mod.id} className={cn(
-                          "hover:bg-muted/10 transition-colors",
-                          isSubmodule ? "bg-muted/5 opacity-90" : "bg-card border-t border-border/50"
+                          'hover:bg-muted/10 transition-colors',
+                          isSubmodule ? 'bg-muted/5 opacity-90' : 'bg-card border-t border-border/50',
                         )}>
                           <td className="p-3">
-                            <div className={cn("flex items-center gap-3", isSubmodule && "pl-8")}>
+                            <div className={cn('flex items-center gap-3', isSubmodule && 'pl-8')}>
                               <div className={cn(
-                                "size-6 rounded-lg flex items-center justify-center flex-shrink-0",
-                                isSubmodule ? "bg-muted/20" : "bg-primary/10"
+                                'flex size-6 shrink-0 items-center justify-center rounded-lg',
+                                isSubmodule ? 'bg-muted/20' : 'bg-primary/10',
                               )}>
-                                {Icon && <Icon className={cn("size-3", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
+                                {Icon && <Icon className={cn('size-3', isSubmodule ? 'text-muted-foreground' : 'text-primary')} />}
                               </div>
                               <div>
-                                <p className={cn("font-bold", isSubmodule ? "text-xs text-muted-foreground" : "text-sm text-foreground")}>
+                                <p className={cn('font-bold', isSubmodule ? 'text-xs text-muted-foreground' : 'text-sm text-foreground')}>
                                   {mod.label}
-                                  {isSubmodule && <span className="ml-2 text-[9px] font-black text-muted-foreground/50 uppercase">VISTA</span>}
+                                  {isSubmodule && <span className="ml-2 text-[9px] font-black uppercase text-muted-foreground/50">VISTA</span>}
                                 </p>
                               </div>
                             </div>
                           </td>
-                          <td className="p-3 text-center">{p.read ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
-                          <td className="p-3 text-center">{(p.create ?? p.write) ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
-                          <td className="p-3 text-center">{(p.edit ?? p.write) ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
-                          <td className="p-3 text-center">{p.delete ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
+                          <td className="p-3 text-center">{permissionValue(permission, 'read') ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
+                          <td className="p-3 text-center">{permissionValue(permission, 'create') ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
+                          <td className="p-3 text-center">{permissionValue(permission, 'edit') ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
+                          <td className="p-3 text-center">{permissionValue(permission, 'delete') ? <Check className="mx-auto size-4 text-primary" /> : <X className="mx-auto size-4 text-muted-foreground/30" />}</td>
+                          <td className="p-3">
+                            {specialActions.length > 0 ? <div className="flex flex-wrap gap-1">{specialActions.map(({ key, label }) => <Badge key={key} variant="outline" className="text-[9px] font-bold">{label}</Badge>)}</div> : <span className="text-muted-foreground/30">—</span>}
+                          </td>
                         </tr>
                       );
                     });
@@ -952,6 +986,9 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
           </div>
 
           <DialogFooter>
+            {canViewRoles && selectedDirectRole?.id && <Button variant="outline" className="mr-auto gap-2 border-primary/20 text-primary hover:bg-primary/10" onClick={handleGoToDirectRole}>
+              <ArrowRight className="size-4" /> Ir a Roles y marcar este rol
+            </Button>}
             <Button variant="outline" onClick={() => setIsPermsDialogOpen(false)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>

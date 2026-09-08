@@ -1513,7 +1513,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           onRowClick={(row) => setDetailOrder(row)}
           highlightedRowId={highlightedAlertId}
           isLoading={loading}
-          isRowSelectable={(row) => ['DRAFT', 'IN_PROCESS'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber}
            actions={(row) => (
              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 pr-1 xl:min-w-max xl:flex-nowrap" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                 <WhatsAppActionButton
@@ -1573,7 +1572,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           setDetailOrder(null);
           setEditingId(detailOrder.id);
         }}
-        onDownloadPdf={(format) => { if (detailOrder) void handleExportPDF(detailOrder, format); }}
+        onDownloadPdf={canPerform('SALES_ORDERS', 'export') ? (format) => { if (detailOrder) void handleExportPDF(detailOrder, format); } : undefined}
       />
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
@@ -1622,7 +1621,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           const cancelToastId = toast.loading('Cancelando orden de venta...');
           try {
             setCancelLoading(true);
-            await salesOrdersService.update(pendingCancelId, { status: 'CANCELLED' as any });
+            await salesOrdersService.cancel(pendingCancelId);
             toast.success('Orden cancelada', { id: cancelToastId });
             clearSalesEditorDraft(salesDraftStorageKey);
             localDocRef.current = null;

@@ -160,7 +160,7 @@ export function PurchaseViewTutorial({ view, context = 'list', className = '', l
         { target: '[data-tour="purchases-list-kpis"]', title: 'KPIs: indicadores y filtros', description: tutorial.kpis, placement: 'bottom' },
         { target: '[data-tour="purchases-list-actions"]', title: 'Búsqueda, filtros y acciones', description: tutorial.filters, placement: 'bottom' },
         { target: '[data-tour="sales-data-table"]', title: 'Tabla y acciones', description: tutorial.actions, tip: tutorial.tip, placement: 'top' },
-        { target: '[data-tour="purchases-list-pagination"]', title: 'Paginación y cantidad de registros', description: tutorial.pagination, placement: 'top' },
+        { target: '[data-tour="sales-list-pagination"]', title: 'Paginación y cantidad de registros', description: tutorial.pagination, placement: 'top' },
       ];
   const buttonLabel = context === 'form' ? formLabel : tutorial.listLabel;
 
@@ -168,13 +168,16 @@ export function PurchaseViewTutorial({ view, context = 'list', className = '', l
     <>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
+        size="icon"
         onClick={() => setOpen(true)}
         data-toolbar-role="help"
-        className={`h-10 min-w-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest ${className}`}
+        data-tutorial-trigger="true"
+        title={buttonLabel}
+        className={`size-8 shrink-0 rounded-lg text-muted-foreground ${className}`}
         aria-label={buttonLabel}
       >
-        <CircleHelp className="mr-2 size-4" /> {buttonLabel}
+        <CircleHelp className="size-4" />
       </Button>
       {open && <GuidedTour steps={steps} onClose={() => setOpen(false)} title={context === 'form' ? formLabel : tutorial.title} allowTargetInteraction />}
     </>

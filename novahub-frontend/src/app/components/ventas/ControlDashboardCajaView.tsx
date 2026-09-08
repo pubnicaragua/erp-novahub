@@ -22,6 +22,7 @@ import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { HistoricalCashReport } from './caja/HistoricalCashReport';
+import { useAuth } from '../../contexts/AuthContext';
 
 type SectionType = 'dashboard' | 'session' | 'history' | 'report' | 'normas' | 'deficits';
 
@@ -63,6 +64,14 @@ export function ControlDashboardCajaView({
   const [savingCharge, setSavingCharge] = useState<string | null>(null);
 
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
+  const { canPerform } = useAuth();
+  const canEditCash = canPerform('RETAIL_CASH_CONTROL', 'edit');
+  const canApproveCash = canPerform('RETAIL_CASH_CONTROL', 'approve');
+  const canExportCash = canPerform('RETAIL_CASH_CONTROL', 'export');
+  const canManageRegisters = canPerform('RETAIL_CASH_CONTROL', 'create')
+    || canPerform('RETAIL_CASH_CONTROL', 'edit')
+    || canPerform('RETAIL_CASH_CONTROL', 'delete');
+  const canResolveDeficits = canPerform('RETAIL_CASH_CONTROL', 'approve');
   const isUSD = displayCurrency === 'USD';
   const symbol = isUSD ? '$' : 'C$';
 
@@ -191,17 +200,17 @@ export function ControlDashboardCajaView({
             <h2 className="text-xl font-black tracking-tight flex items-center gap-2" data-tour="cash-control-title">
               <Coins className="size-5 text-primary" /> Control de Caja
             </h2>
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-7 rounded-full px-3 text-[10px] font-black uppercase tracking-widest">
-              <CircleHelp className="mr-1.5 size-3" /> Cómo controlar caja
+            <Button type="button" variant="ghost" size="icon" onClick={() => setShowTutorial(true)} className="size-8 shrink-0 rounded-lg text-muted-foreground" aria-label="Cómo controlar caja" title="Cómo controlar caja">
+              <CircleHelp className="size-4" />
             </Button>
-            <Button 
+            {canManageRegisters && <Button
               size="sm" 
               onClick={() => setManageCajasOpen(true)}
               data-tour="cash-control-manage"
               className="h-7 px-3 gap-1.5 text-[10px] font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90 transition-all rounded-full shadow-sm"
             >
               <Settings2 className="size-3" /> Administrar Cajas
-            </Button>
+            </Button>}
           </div>
 
           <Tabs value={activeSection} onValueChange={(v: any) => setActiveSection(v)} className="w-full mt-4">
@@ -292,13 +301,14 @@ export function ControlDashboardCajaView({
               selectedRegister={selectedRegister}
               onSelectRegister={setSelectedRegister}
               onRegistersChanged={loadRegisters}
-              onOpenManageCajas={() => setManageCajasOpen(true)}
+              onOpenManageCajas={() => { if (canManageRegisters) setManageCajasOpen(true); }}
             />
 
             {sessionStep === 'idle' && (
               <AperturaCajaStep 
                 selectedRegister={selectedRegister} 
                 onOpenSession={openSession} 
+                canOperate={canEditCash}
               />
             )}
 
@@ -314,6 +324,9 @@ export function ControlDashboardCajaView({
                 onSubmitCount={savePartialCount}
                 onConfirmClose={closeSession} 
                 onNavigateToFacturacion={onNavigateToFacturacion}
+                canEdit={canEditCash}
+                canApprove={canApproveCash}
+                canExport={canExportCash}
               />
             )}
           </div>
@@ -368,12 +381,12 @@ export function ControlDashboardCajaView({
                                   ))}
                                 </SelectContent>
                               </Select>
-                              <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white" disabled={savingCharge === charge.id} onClick={() => void resolveDeficitCharge(charge.id, 'COLLECTED')}>
+                              {canResolveDeficits && <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white" disabled={savingCharge === charge.id} onClick={() => void resolveDeficitCharge(charge.id, 'COLLECTED')}>
                                 {savingCharge === charge.id ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Cobrar
-                              </Button>
-                              <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" disabled={savingCharge === charge.id} onClick={() => void resolveDeficitCharge(charge.id, 'WRITTEN_OFF')}>
+                              </Button>}
+                              {canResolveDeficits && <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" disabled={savingCharge === charge.id} onClick={() => void resolveDeficitCharge(charge.id, 'WRITTEN_OFF')}>
                                 {savingCharge === charge.id ? <Loader2 className="size-3.5 animate-spin" /> : <XCircle className="size-3.5" />} Condonar
-                              </Button>
+                              </Button>}
                             </div>
                           )}
                         </div>
@@ -693,7 +706,7 @@ export function ControlDashboardCajaView({
         )}
 
         {activeSection === 'report' && (
-          <HistoricalCashReport initialRegisterId={selectedRegister === 'ALL' ? undefined : selectedRegister} />
+          <HistoricalCashReport initialRegisterId={selectedRegister === 'ALL' ? undefined : selectedRegister} canExport={canPerform('RETAIL_CASH_CONTROL', 'export')} />
         )}
 
       </div>
@@ -703,6 +716,7 @@ export function ControlDashboardCajaView({
         open={manageCajasOpen} 
         onOpenChange={setManageCajasOpen}
         onRegistersChanged={loadRegisters}
+        permissionModule="RETAIL_CASH_CONTROL"
       />
     </div>
   );

@@ -180,20 +180,8 @@ export function TrainingHubView() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:p-10">
-      {/* Header Original */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <GraduationCap className="size-9 text-primary" />
-          </div>
-          <div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-            Centro de <span className="text-primary">Capacitación</span>
-          </h1>
-          </div>
-        </div>
-
+    <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+      <div className="flex justify-end">
         {isSuperAdmin && (
           <Button 
             onClick={() => setShowUploadModal(true)}

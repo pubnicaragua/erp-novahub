@@ -99,7 +99,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const { user, canPerform } = useAuth();
   const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
   const canApproveRequests = canPerform('PURCHASES_REQUESTS', 'approve');
-  const canCancelRequests = canPerform('PURCHASES_REQUESTS', 'cancel');
+  const canCancelRequests = canPerform('PURCHASES_REQUESTS', 'delete');
   // La gestión ocurre dentro de la vista Solicitudes; no es una vista
   // independiente del sidebar ni necesita una fila propia en la matriz.
   const canApproveManagement = canPerform('PURCHASES_REQUESTS', 'approve');

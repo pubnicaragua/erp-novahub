@@ -8,7 +8,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  ClipboardCheck,
   Circle,
   Contact,
   FolderTree,
@@ -283,8 +282,8 @@ export function ImplementationGuideView({ onNavigate }: ImplementationGuideViewP
 
   return (
     <div data-implementation-guide className="min-w-0 max-w-full overflow-x-hidden bg-background">
-      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1500px] min-w-0 p-4 sm:p-6 md:p-10">
-        <div className="space-y-6 sm:space-y-8">
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1500px] min-w-0 p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+        <div className="space-y-6">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -299,13 +298,6 @@ export function ImplementationGuideView({ onNavigate }: ImplementationGuideViewP
                   Implementación ERP
                 </Badge>
               </div>
-              <h1 className="flex min-w-0 flex-wrap items-center gap-3 text-3xl font-black uppercase italic leading-none tracking-tighter text-foreground sm:text-4xl">
-                <ClipboardCheck className="size-9 shrink-0 text-primary sm:size-10" />
-                Guía de <span className="text-primary">implementación</span>
-              </h1>
-              <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-                Ruta recomendada para preparar una empresa en NovaHub respetando las dependencias entre configuración, estructura, catálogo y operación.
-              </p>
             </div>
             <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-border/60 bg-card/70 p-3 shadow-sm">
               <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">

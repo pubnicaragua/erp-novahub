@@ -52,6 +52,8 @@ import { parseVariantImportWorkbook, type VariantImportCatalog } from '../../uti
 import { downloadCanonicalVariantImportTemplate } from '../../utils/variant-import-template';
 import { priceListsService } from '../../services/price-lists.service';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
+import { ProductSimilarityAlert } from '../inventory/ProductSimilarityAlert';
+import type { SimilarProductGroup, SimilarProductMatch } from '../../services/inventario.service';
 
 interface Props {
   data: PurchaseOrder[];
@@ -83,7 +85,11 @@ type PurchaseImportRow = {
   productId?: string;
   variantId?: string;
   skuResolution?: 'LINK_EXISTING' | 'MANUAL';
+  similarityResolution?: 'USE_EXISTING' | 'CREATE_NEW';
+  similarityProductId?: string;
   description: string;
+  brand?: string;
+  attributes?: Array<{ attributeName?: string; name?: string; value: string }>;
   commercialNoteSnapshot?: string | null;
   category: string;
   categoryId?: string;
@@ -142,6 +148,13 @@ const getCurrencyLabel = (currency?: string) => {
 const getCurrencySymbol = (currency?: string) => String(currency || 'NIO').toUpperCase() === 'USD' ? '$' : 'C$';
 
 const normalizePurchaseCurrency = (currency?: string): 'NIO' | 'USD' => String(currency || 'NIO').toUpperCase() === 'USD' ? 'USD' : 'NIO';
+
+const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
 
 const convertPurchaseAmount = (amount: unknown, fromCurrency: string, toCurrency: string, rate: number) => {
   const value = Number(amount);
@@ -753,8 +766,10 @@ const buildPurchaseImportRowsFromAdvancedCatalog = (catalog: VariantImportCatalo
         description: `${product.name || product.code}${variantLabel ? ` · ${variantLabel}` : ''}`.trim(),
         variantLabel: variant ? variantLabel : undefined,
         parentProductCode: variant ? String(product.code || '').trim() : undefined,
-        commercialNoteSnapshot: product.commercialNote || null,
-        category: product.category || '',
+         commercialNoteSnapshot: product.commercialNote || null,
+         brand: product.brand || '',
+         attributes: variant?.attributes || [],
+         category: product.category || '',
         quantity: requestedQuantity,
         unitPrice: Number.isFinite(effectiveCost) ? effectiveCost : 0,
         taxType: 'GRAVADO',
@@ -789,9 +804,11 @@ const buildPendingPurchaseCatalog = (catalog: VariantImportCatalog, row: Purchas
   const productCost = Number(product.costPrice);
   const rowCost = Number(row.unitPrice);
 
-  return {
-    format: 'NOVAHUB_PURCHASE_PENDING_V1',
-    product: {
+   return {
+     format: 'NOVAHUB_PURCHASE_PENDING_V1',
+     similarityResolution: row.similarityResolution || 'CREATE_NEW',
+     allowSimilarProductCreate: row.similarityResolution === 'CREATE_NEW',
+     product: {
       code: product.code,
       name: product.name,
       category: row.category || product.category,
@@ -830,6 +847,26 @@ const buildPendingPurchaseCatalog = (catalog: VariantImportCatalog, row: Purchas
     } : null,
   };
 };
+
+const buildPendingPurchaseCatalogFromRow = (row: PurchaseImportRow) => ({
+  format: 'NOVAHUB_PURCHASE_PENDING_V1',
+  similarityResolution: row.similarityResolution || 'CREATE_NEW',
+  allowSimilarProductCreate: row.similarityResolution === 'CREATE_NEW',
+  product: {
+    code: row.sku,
+    name: row.description || row.sku,
+    category: row.category,
+    categoryId: row.categoryId || undefined,
+    description: row.description || null,
+    brand: row.brand || null,
+    unit: 'unidad',
+    costPrice: Number(row.unitPrice || 0),
+    trackInventory: true,
+    trackBatch: false,
+    trackSeries: false,
+  },
+  variant: null,
+});
 
 export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
@@ -888,6 +925,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [importConfirmText, setImportConfirmText] = useState('');
   const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[] } | null>(null);
+  const [similarPurchaseGroups, setSimilarPurchaseGroups] = useState<SimilarProductGroup[]>([]);
+  const [similarPurchaseResolvingKey, setSimilarPurchaseResolvingKey] = useState<string | null>(null);
   const availableWarehouseCatalog = useMemo(() => {
     const currentWarehouse = localDoc?.warehouse;
     const entries = currentWarehouse?.id
@@ -967,9 +1006,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     return rows.map((sourceRow): PurchaseImportRow => {
       const row = { ...sourceRow };
       const sku = String(row.sku || '').trim();
-      const match = findImportProductMatch(sku, catalog);
+      const selectedProduct = row.similarityResolution === 'USE_EXISTING' && row.similarityProductId
+        ? catalog.find((candidate: any) => String(candidate.id) === String(row.similarityProductId))
+        : undefined;
+      const selectedVariant = selectedProduct?.variants?.find((variant: any) => String(variant.id) === String(row.variantId))
+        || selectedProduct?.variants?.find((variant: any) => normalizeSimilarityInputKey(variant.sku) === normalizeSimilarityInputKey(sku));
+      const match = selectedProduct
+        ? { product: selectedProduct, variant: selectedVariant }
+        : findImportProductMatch(sku, catalog);
       const product = match?.product;
-      const forceManualSku = row.skuResolution === 'MANUAL';
+      const forceManualSku = row.skuResolution === 'MANUAL' || row.similarityResolution === 'CREATE_NEW';
       const linkedProduct = forceManualSku ? undefined : product;
       const linkedVariant = forceManualSku ? undefined : match?.variant;
       const quantity = Number(row.quantity);
@@ -995,7 +1041,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       const withholdingBase = withholdingType === 'NONE' ? 0 : lineTotal;
       const errors = [
         !sku ? 'SKU requerido' : existingOrderSkus.has(sku.toLowerCase()) ? 'SKU ya está en esta orden' : skuCounts.get(sku.toLowerCase())! > 1 ? 'SKU duplicado en el archivo' : '',
-        match && forceManualSku ? 'Este SKU ya está usado; escribe otro SKU para crear un producto nuevo' : '',
+        match && forceManualSku && row.similarityResolution !== 'CREATE_NEW' ? 'Este SKU ya está usado; escribe otro SKU para crear un producto nuevo' : '',
         !String(row.description || '').trim() && !linkedProduct ? 'Descripción requerida para SKU no encontrado' : '',
         !categoryName ? 'Categoría requerida' : !resolvedCategoryId && !canCreateCategoryOnImport ? 'Categoría no encontrada; selecciona una existente o créala' : '',
         !Number.isFinite(quantity) || quantity <= 0 ? 'Cantidad debe ser mayor que cero' : '',
@@ -1057,7 +1103,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         _warningMessage: warningParts.join(' · '),
         _skuStatus: (skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : product ? 'found' : sku ? 'missing' : undefined) as PurchaseImportRow['_skuStatus'],
         _skuMessage: product
-          ? (forceManualSku ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${linkedName || product.code || sku}`)
+          ? (forceManualSku && row.similarityResolution !== 'CREATE_NEW' ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${linkedName || product.code || sku}`)
           : sku
             ? row._advanced && row.variantLabel
               ? `Variante pendiente · producto padre: ${row.parentProductCode || '—'}`
@@ -1194,8 +1240,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           const fieldAliases: Record<string, string[]> = {
             sku: ['sku', 'codigo / sku', 'codigo', 'código', 'code', 'product code'],
             description: ['descripcion', 'descripción', 'description', 'nombre', 'producto'],
-            commercialNote: ['notas', 'nota', 'nota comercial', 'notas comerciales', 'commercial note', 'commercialnote'],
-            category: ['categoria', 'categoría', 'category'],
+             commercialNote: ['notas', 'nota', 'nota comercial', 'notas comerciales', 'commercial note', 'commercialnote'],
+             brand: ['marca', 'brand'],
+             category: ['categoria', 'categoría', 'category'],
             quantity: ['cantidad', 'quantity', 'qty'],
             unitPrice: ['precio unitario', 'precio', 'unit price', 'cost price'],
             taxType: ['tipo iva', 'tipo de iva', 'iva', 'tax type'],
@@ -1221,8 +1268,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             .map((row) => ({
               sku: text(row, 'sku'),
             description: text(row, 'description'),
-              commercialNoteSnapshot: text(row, 'commercialNote'),
-              category: text(row, 'category'),
+               commercialNoteSnapshot: text(row, 'commercialNote'),
+               brand: text(row, 'brand'),
+               category: text(row, 'category'),
               quantity: number(row, 'quantity', 0),
               unitPrice: number(row, 'unitPrice', 0),
               taxType: normalizeImportCatalogValue(text(row, 'taxType', 'GRAVADO'), mergeImportCatalogOptions(taxOptions, FALLBACK_IMPORT_TAX_OPTIONS), 'GRAVADO'),
@@ -1272,6 +1320,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setImportData((current) => validateImportRows(current.map((row, rowIndex) => {
       if (rowIndex !== index) return row;
       const nextRow = { ...row, [field]: value } as PurchaseImportRow;
+      if (field === 'sku' || field === 'description' || field === 'brand' || field === 'attributes') {
+        nextRow.similarityResolution = undefined;
+        nextRow.similarityProductId = undefined;
+      }
       const lineTotal = Number(nextRow.quantity || 0) * Number(nextRow.unitPrice || 0);
       if (field === 'taxType') {
         const selected = taxOptions.find((option) => option.code === String(value || '').toUpperCase());
@@ -1373,13 +1425,102 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     toast.success('Reporte de incidencias descargado');
   }, [importData]);
 
-  const handlePurchaseImportConfirm = () => {
+  const handlePurchaseImportConfirm = async () => {
     const validRows = importData.filter((row) => !row._hasError);
     if (!validRows.length) return toast.error('No hay filas válidas para importar');
     if (validRows.length !== importData.length) toast.warning(`Se omitirán ${importData.length - validRows.length} fila(s) con errores`);
+    const rowsToReview = validRows.filter((row) => row.similarityResolution !== 'USE_EXISTING' && row.similarityResolution !== 'CREATE_NEW');
+    if (rowsToReview.length > 0) {
+      try {
+        const response = await inventoryService.checkSimilarProducts(rowsToReview.map((row) => ({
+          code: row.sku,
+          sku: row.sku,
+          name: row.description,
+          description: row.description,
+          brand: row.brand,
+          attributes: row.attributes,
+        })));
+        if (response?.matches?.length) {
+          setSimilarPurchaseGroups(response.matches);
+          setImportConfirmOpen(false);
+          return;
+        }
+        setImportData((current) => validateImportRows(current.map((row) => (
+          !row.productId && rowsToReview.some((candidate) => normalizeSimilarityInputKey(candidate.sku || candidate.description) === normalizeSimilarityInputKey(row.sku || row.description))
+            ? { ...row, similarityResolution: 'CREATE_NEW', similarityProductId: undefined }
+            : row
+        ))));
+      } catch (error: any) {
+        toast.error(error?.message || 'No se pudo validar si los productos de la orden ya existen.');
+        return;
+      }
+    }
     setImportConfirmText('');
     setImportConfirmOpen(true);
   };
+
+  const resolvePurchaseSimilarity = useCallback((group: SimilarProductGroup, match?: SimilarProductMatch, variant?: { id: string; sku: string }) => {
+    if (!match?.id) return;
+    if (!variant && (match.variants?.length || 0) > 1) {
+      toast.warning('Este producto tiene varias variantes. Selecciona la variante exacta para agregarla a la orden.');
+      return;
+    }
+    const groupKey = normalizeSimilarityInputKey(group.inputKey);
+    const rowIndex = importData.findIndex((row) => [row.sku, row.description, row.parentProductCode]
+      .some((value) => normalizeSimilarityInputKey(value) === groupKey));
+    if (rowIndex < 0) {
+      toast.error('La fila importada ya no está disponible; vuelve a cargar la previsualización.');
+      return;
+    }
+    setSimilarPurchaseResolvingKey(`${group.inputKey}:${match.id}`);
+    const selectedProduct = products.find((product: any) => String(product.id) === String(match.id));
+    const selectedCatalogProduct = selectedProduct || {
+      ...match,
+      category: match.category ? { name: match.category } : undefined,
+      costPrice: match.costPrice ?? 0,
+      variants: match.variants || [],
+    };
+    const selectedVariant = variant
+      || selectedProduct?.variants?.find((candidate: any) => String(candidate.id) === String(importData[rowIndex]?.variantId))
+      || selectedProduct?.variants?.find((candidate: any) => normalizeSimilarityInputKey(candidate.sku) === normalizeSimilarityInputKey(importData[rowIndex]?.sku))
+      || (match.variants?.length === 1 ? match.variants[0] : undefined);
+    setProducts((current) => [...current.filter((product: any) => String(product.id) !== String(match.id)), selectedCatalogProduct]);
+    setImportData((current) => validateImportRows(current.map((row, index) => index === rowIndex
+      ? {
+        ...row,
+        similarityResolution: 'USE_EXISTING',
+        similarityProductId: match.id,
+        skuResolution: 'LINK_EXISTING',
+        productId: match.id,
+        variantId: selectedVariant?.id,
+        sku: selectedVariant?.sku || selectedProduct?.code || match.sku || match.code || row.sku,
+        description: row.description || match.name,
+        category: row.category || selectedProduct?.category?.name || selectedProduct?.category || match.category || '',
+        categoryId: row.categoryId || selectedProduct?.categoryId || selectedProduct?.category?.id || '',
+      }
+      : row), [...products.filter((product: any) => String(product.id) !== String(match.id)), selectedCatalogProduct]));
+    setSimilarPurchaseGroups((current) => current.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== groupKey));
+    setSimilarPurchaseResolvingKey(null);
+    toast.success(`Se seleccionó ${selectedVariant ? `la variante ${selectedVariant.sku}` : `el producto ${match.name || match.code}`}.`);
+  }, [importData, products, validateImportRows]);
+
+  const createPurchaseSimilarityAsNew = useCallback((group: SimilarProductGroup) => {
+    const groupKey = normalizeSimilarityInputKey(group.inputKey);
+    const exactSku = group.matches.some((match) => [match.code, match.sku]
+      .some((value) => normalizeSimilarityInputKey(value) === groupKey));
+    if (exactSku) {
+      toast.error('Ese SKU ya existe. Cambia el SKU o selecciona el producto existente.');
+      return;
+    }
+    const rowIndex = importData.findIndex((row) => [row.sku, row.description, row.parentProductCode]
+      .some((value) => normalizeSimilarityInputKey(value) === groupKey));
+    if (rowIndex < 0) return;
+    setImportData((current) => validateImportRows(current.map((row, index) => index === rowIndex
+      ? { ...row, similarityResolution: 'CREATE_NEW', similarityProductId: undefined, productId: undefined, variantId: undefined }
+      : row)));
+    setSimilarPurchaseGroups((current) => current.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== groupKey));
+    toast.info('La fila se creará como un producto nuevo al recepcionar la orden.');
+  }, [importData, validateImportRows]);
 
   const handleFinalPurchaseImport = async () => {
     if (importConfirmText !== 'IMPORTAR' || !localDoc) return;
@@ -1425,7 +1566,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         withholdingBase: Number(withholding.withholdingBase.toFixed(2)),
         withholdingTotal: Number(withholding.withholdingTotal.toFixed(2)),
         total: Number((quantity * unitPrice).toFixed(2)),
-        pendingCatalog: advancedImportCatalog ? buildPendingPurchaseCatalog(advancedImportCatalog, row) : undefined,
+        pendingCatalog: row.productId
+          ? undefined
+          : advancedImportCatalog
+            ? buildPendingPurchaseCatalog(advancedImportCatalog, row)
+            : buildPendingPurchaseCatalogFromRow(row),
       };
       });
       const currentItems = (localDoc.items || []) as any[];
@@ -1846,7 +1991,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         setPreviewOrder(null);
         setEditingId(String(previewOrder.id));
       }}
-      onDownloadPdf={(format) => previewOrder ? void handleDownloadOrderPdf(previewOrder, format) : undefined}
+      onDownloadPdf={canPerform('PURCHASES_ORDERS', 'export') ? (format) => previewOrder ? void handleDownloadOrderPdf(previewOrder, format) : undefined : undefined}
     />
   );
 
@@ -2135,6 +2280,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   if (importPreviewOpen) {
     return (
       <>
+        <ProductSimilarityAlert
+          open={similarPurchaseGroups.length > 0}
+          groups={similarPurchaseGroups}
+          title="Observación: posible producto existente en la orden"
+          description="Revisa los productos encontrados. Puedes seleccionar el producto o la variante correcta, o confirmar que esta fila debe crearse como un producto nuevo al recepcionar."
+          resolvingKey={similarPurchaseResolvingKey}
+          onOpenChange={(value) => { if (!value) { setSimilarPurchaseGroups([]); setSimilarPurchaseResolvingKey(null); } }}
+          onSelectExisting={(group, match, variant) => resolvePurchaseSimilarity(group, match, variant)}
+          onCreateNew={(group) => createPurchaseSimilarityAsNew(group)}
+        />
         <PurchaseImportPreview
           rows={importData}
           fileName={importFileName}
@@ -2473,7 +2628,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           <CardContent className="p-6">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Ítems de Orden</p>
-              {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && <div className="flex flex-wrap items-center gap-2">
+              {canPerform('PURCHASES_ORDERS', 'import') && ((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => setImportIntroOpen(true)} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest">
                   <Upload className="mr-2 size-3" /> Importar productos
                 </Button>
@@ -2861,7 +3016,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
-            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
+            {canPerform('PURCHASES_ORDERS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
             <PurchaseViewTutorial view="orders" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes de compra" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
@@ -2871,7 +3026,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setPreviewOrder(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel" showHorizontalControls actionsWidth="w-56" fitContent
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setPreviewOrder(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_ORDERS', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel" showHorizontalControls actionsWidth="w-56" fitContent
           onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => {
               if (id.startsWith('new-')) return false;

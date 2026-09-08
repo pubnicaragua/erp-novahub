@@ -131,19 +131,8 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:p-10">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <LifeBuoy className="size-9 text-primary" />
-          </div>
-          <div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-            Soporte <span className="text-primary">Técnico</span>
-          </h1>
-          </div>
-        </div>
+    <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+      <div className="flex justify-end">
         {canCreateSupport && <Button data-testid="support-tech-new-ticket" onClick={() => setShowCreateModal(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 py-6 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all">
           <Plus className="size-5 mr-2" /> Nuevo Ticket
         </Button>}

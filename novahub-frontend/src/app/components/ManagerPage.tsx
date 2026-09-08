@@ -353,8 +353,8 @@ export function ManagerPage() {
       onReportCurrencyChange={setManagerReportCurrency}
     >
       <div className="min-w-0 space-y-6">
-        {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && section !== 'reports' && section !== 'hr' && <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2></div>
+        {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && section !== 'reports' && section !== 'hr' && <div className="flex min-w-0 justify-end">
+          <div className="hidden min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2></div>
           <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(buildDownloadFileName(['resumen', activeTitle || section], 'csv'), (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
         </div>}
 

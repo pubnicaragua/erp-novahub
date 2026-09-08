@@ -457,8 +457,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
         <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <WarehouseSupplyPanel />
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="order-1 h-10 min-w-0 w-full rounded-xl px-3 sm:order-none sm:w-auto">
-            <CircleHelp className="size-3.5 mr-1" /> Cómo gestionar bodegas
+          <Button type="button" variant="ghost" size="icon" onClick={() => setShowTutorial(true)} className="order-1 size-8 shrink-0 rounded-lg text-muted-foreground sm:order-none" aria-label="Cómo gestionar bodegas" title="Cómo gestionar bodegas">
+            <CircleHelp className="size-4" />
           </Button>
 
           {canCreateWarehouse && <Button 

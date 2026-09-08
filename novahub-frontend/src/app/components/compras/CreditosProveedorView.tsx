@@ -954,9 +954,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                         <button type="button" onClick={() => setItemTypeFilter('PRODUCT')} className={cn('flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-widest transition-colors', itemTypeFilter === 'PRODUCT' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}><Boxes className="size-3" /> Producto</button>
                         <button type="button" onClick={() => setItemTypeFilter('SERVICE')} className={cn('flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-widest transition-colors', itemTypeFilter === 'SERVICE' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}><Wrench className="size-3" /> Servicio</button>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                      {canPerform('PURCHASES_RETURNS', 'import') && <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                         <Upload className="size-3 mr-1.5" /> Importar
-                      </Button>
+                      </Button>}
                       <Button variant="outline" size="sm" onClick={downloadCreditTemplate} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                         <FileSpreadsheet className="size-3 mr-1.5" /> Plantilla
                       </Button>
@@ -1172,7 +1172,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
-            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
+            {canPerform('PURCHASES_RETURNS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos de proveedor" />
             <div className="max-w-md rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-[10px] font-semibold text-muted-foreground">
               Los créditos se crean desde una recepción recibida, con sus artículos y cantidades verificadas.
@@ -1182,7 +1182,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar por número, proveedor o factura..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} pagination={pagination} showSelection={false} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           actions={(row) => {
             return (
              <div className="flex items-center gap-1">
@@ -1220,7 +1220,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             {canPerform('PURCHASES_RETURNS', 'delete') && ['DRAFT', 'ISSUED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingVoidId(detailCredit.id)}><Ban className="size-4" /> Anular</Button>}
           </>;
         })()}
-        onDownloadPdf={(format) => detailCredit ? void handleDownloadCreditPdf(detailCredit, format) : undefined}
+        onDownloadPdf={canPerform('PURCHASES_RETURNS', 'export') ? (format) => detailCredit ? void handleDownloadCreditPdf(detailCredit, format) : undefined : undefined}
       />
 
       <ConfirmDialog

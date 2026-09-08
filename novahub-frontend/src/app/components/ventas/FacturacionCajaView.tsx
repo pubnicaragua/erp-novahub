@@ -315,7 +315,7 @@ const POS_TOUR_STEPS: GuidedTourStep[] = [
     target: '[data-tour="pos-history"]',
     title: '8. Verifica la operación en el historial',
     description: 'Después de emitir, la factura aparecerá aquí con su número, cliente, fecha, estado y total. El historial cambia cuando seleccionas otra caja.',
-    tip: 'Ya conoces el flujo completo. Puedes volver a abrir este tutorial cuando quieras desde el botón “Cómo facturar”.',
+    tip: 'Ya conoces el flujo completo. Puedes volver a abrir esta guía cuando quieras desde el icono de ayuda.',
     placement: 'left',
   },
 ];
@@ -434,6 +434,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const { formatConvertedAmount: formatCurrency, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const canPayPos = canPerform('RETAIL_POS', 'pay');
+  const canClaimPosQueue = canPerform('RETAIL_POS', 'edit');
+  const canReleasePosQueue = canPerform('RETAIL_POS', 'delete');
+  const canReconcilePosQueue = canPerform('RETAIL_POS', 'approve');
+  const canCreatePosHold = canPerform('RETAIL_POS', 'create');
+  const canManagePosRegisters = canPerform('RETAIL_POS', 'create')
+    || canPerform('RETAIL_POS', 'edit')
+    || canPerform('RETAIL_POS', 'delete');
   // El comprobante se genera localmente después de un cobro POS exitoso.
   // Todo usuario que puede cobrar debe poder imprimir su voucher/ticket,
   // aunque su rol granular no tenga el flag histórico `print`.
@@ -654,6 +661,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   }, [hasOpenCashSession, loadCashQueue, user?.tenantId]);
 
   const handleClaimCashQueue = async (queue: InvoiceCashQueue) => {
+    if (!canClaimPosQueue) return;
     if (queueClaimingRef.current) return;
     if (!selectedRegisterId || !activeSession) {
       toast.error('Apertura una sesión de caja para tomar la factura.');
@@ -683,6 +691,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   };
 
   const handleReleaseCashQueue = async (queue: InvoiceCashQueue) => {
+    if (!canReleasePosQueue) return;
     if (queueReleasingRef.current) return;
     queueReleasingRef.current = queue.id;
     setQueueReleasingId(queue.id);
@@ -707,6 +716,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   };
 
   const handleReconcileCashQueue = async () => {
+    if (!canReconcilePosQueue) return;
     if (reconcilingQueueRef.current) return;
     reconcilingQueueRef.current = true;
     setReconcilingQueue(true);
@@ -724,7 +734,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   };
 
   useEffect(() => {
-    if (!queueInvoice || !activeSession || !selectedRegisterId || !queueInvoice.claimToken) return;
+    if (!canClaimPosQueue || !queueInvoice || !activeSession || !selectedRegisterId || !queueInvoice.claimToken) return;
     let disposed = false;
     const heartbeat = async () => {
       try {
@@ -752,7 +762,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [activeSession, loadCashQueue, queueInvoice?.claimToken, queueInvoice?.id, selectedRegisterId]);
+  }, [activeSession, canClaimPosQueue, loadCashQueue, queueInvoice?.claimToken, queueInvoice?.id, selectedRegisterId]);
 
   const getQueuePaymentSummary = () => {
     if (!queueInvoice || !activeSession) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0, changeUnsupported: false };
@@ -793,6 +803,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   };
 
   const submitCashQueuePayment = async () => {
+    if (!canPayPos) return;
     if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmittingRef.current) return;
     const queueReceipt = queueInvoice;
     const document = getQueueDocument(queueReceipt);
@@ -1504,6 +1515,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   }, [selectedWarehouseId, productSearch]);
 
   const handleHoldReservation = async (selection: HoldReservationSelection) => {
+    if (!canCreatePosHold || (selection.payNow && !canPayPos)) return;
     if (holdSubmittingRef.current) return;
     if (!availabilityProduct) return;
     if (!selectedRegisterId) {
@@ -1592,6 +1604,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   };
 
   const submitHoldCreatePayment = async () => {
+    if (!canPayPos) return;
     if (!holdCreateDto || !activeSession || submittingRef.current) return;
     const holdTotal = calculateInvoiceSummary(
       holdCreateDto.items.map((item) => ({
@@ -2038,9 +2051,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           <p className="text-muted-foreground max-w-md mb-6">
             {availabilityMessage.description}
           </p>
-          <Button onClick={() => setManageCajasOpen(true)} className="gap-2 rounded-xl font-bold">
+          {canManagePosRegisters && <Button onClick={() => setManageCajasOpen(true)} className="gap-2 rounded-xl font-bold">
             <Settings2 className="size-4" /> Configurar caja
-          </Button>
+          </Button>}
         </div>
       </>
     );
@@ -2060,7 +2073,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               <Badge className="border-none bg-primary/15 text-primary">{cashQueue.length}</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {(['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()} disabled={reconcilingQueue} title="Libera reservas vencidas y marca como procesadas las entradas cuyo documento ya fue pagado" aria-label="Reconciliar cola de caja">{reconcilingQueue ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} {reconcilingQueue ? 'Reconciliando…' : 'Reconciliar'}</Button>}
+              {canReconcilePosQueue && (['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()} disabled={reconcilingQueue} title="Libera reservas vencidas y marca como procesadas las entradas cuyo documento ya fue pagado" aria-label="Reconciliar cola de caja">{reconcilingQueue ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} {reconcilingQueue ? 'Reconciliando…' : 'Reconciliar'}</Button>}
               <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>
                 <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar
               </Button>
@@ -2098,9 +2111,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       {queue.status === 'CLAIMED' && queue.claimExpiresAt && <p className="mt-1 text-[10px] font-semibold text-primary">Reserva hasta {new Date(queue.claimExpiresAt).toLocaleTimeString('es-NI')}</p>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black text-primary-foreground hover:bg-primary/90" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : `Tomar ${isCreditQueue ? 'crédito' : 'factura'}`}</Button>}
-                       {queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-primary/40 text-xs font-black text-primary" onClick={() => void handleReleaseCashQueue(queue)} disabled={queueReleasingId !== null}>{queueReleasingId === queue.id ? 'Liberando…' : 'Liberar'}</Button>}
-                      {isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); }}>Cobrar ahora</Button>}
+                      {canClaimPosQueue && queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black text-primary-foreground hover:bg-primary/90" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : `Tomar ${isCreditQueue ? 'crédito' : 'factura'}`}</Button>}
+                       {canReleasePosQueue && queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-primary/40 text-xs font-black text-primary" onClick={() => void handleReleaseCashQueue(queue)} disabled={queueReleasingId !== null}>{queueReleasingId === queue.id ? 'Liberando…' : 'Liberar'}</Button>}
+                      {canPayPos && isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); }}>Cobrar ahora</Button>}
                     </div>
                   </div>
                 );
@@ -2784,12 +2797,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   </h3>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setShowTutorial(true)}
-                    className="h-9 shrink-0 rounded-xl border-primary/30 bg-background/80 px-3 text-[10px] font-black text-primary shadow-sm hover:bg-primary/10"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground"
                     aria-label="Abrir guía Cómo facturar"
+                    title="Cómo facturar"
                   >
-                    <CircleHelp className="mr-1.5 size-3.5" /> Cómo facturar
+                    <CircleHelp className="size-4" />
                   </Button>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
@@ -3251,6 +3266,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         loading={availabilityLoading}
         submitting={holdSubmitting}
         onSubmit={(selection) => void handleHoldReservation(selection)}
+        canCreateHold={canCreatePosHold}
+        canPayNow={canPayPos}
       />
       <AdministrarCajasModal
         open={manageCajasOpen}
@@ -3259,6 +3276,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           loadInitialData();
           setActiveSession(null);
         }}
+        permissionModule="RETAIL_POS"
       />
     </div>
   );

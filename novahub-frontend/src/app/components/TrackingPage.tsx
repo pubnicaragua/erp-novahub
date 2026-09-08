@@ -303,15 +303,8 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       </div>
       {tab === 'transit' ? (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-6" data-tour="log-transit-title">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Ship className="size-5" /></div>
-          <div>
-            <p className="text-xs text-muted-foreground">Envíos de agencia por código de tracking · {user?.clientTenant?.name || ''}</p>
-          </div>
-        </div>
+      <header className="flex flex-wrap items-center justify-end gap-3 border-b border-border/60 px-4 py-3 sm:px-6" data-tour="log-transit-title">
         <div className="flex flex-wrap items-center gap-2">
-          
           {canPerform('TRACKING_TRANSIT', 'create') && <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)} data-tour="log-transit-create" data-testid="tracking-new-ticket"><Plus className="size-4" /> Nuevo ticket</Button>}
         </div>
       </header>

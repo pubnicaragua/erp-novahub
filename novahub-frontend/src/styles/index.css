@@ -10,6 +10,23 @@ main[class*='module-'] :is(button, a[role='button'], [role='tab']) {
   border-radius: 0 !important;
 }
 
+/* La superficie y cada opción de los selects usan el mismo borde recto,
+   incluso cuando una vista antigua les pase una clase redondeada. */
+[data-slot='select-content'],
+[data-slot='select-item'] {
+  border-radius: 0 !important;
+}
+
+/* Los popups conservan su superficie redondeada, pero sus opciones siguen
+   la geometría rectangular del sistema, aunque una vista antigua les pase
+   rounded-lg/rounded-xl. */
+[data-slot='dropdown-menu-item'],
+[data-slot='dropdown-menu-checkbox-item'],
+[data-slot='dropdown-menu-radio-item'],
+[data-slot='dropdown-menu-sub-trigger'] {
+  border-radius: 0 !important;
+}
+
 /*
    One-shot protection for server actions. The component guard adds the
    attribute on the first click and the API client keeps it active until the
@@ -223,6 +240,35 @@ select.erp-filter-select,
   }
 }
 
+/* El contenido de los módulos Manager comparte la misma relación con su
+   topbar que los módulos operativos: el encabezado decorativo desaparece,
+   las acciones siguen alineadas a la derecha y el primer bloque útil empieza
+   con un margen superior corto. */
+.manager-shell main {
+  padding-top: 1rem !important;
+}
+
+.manager-shell main:has(> .inventory-module, > .sales-module, > .purchases-module, > .finance-module, > .accounting-module, > .manager-reports-module, > .manager-hr-module) {
+  padding-top: 0 !important;
+}
+
+.manager-shell main > :is(.inventory-module, .sales-module, .purchases-module, .finance-module, .accounting-module, .manager-reports-module, .manager-hr-module) {
+  padding-top: 1rem !important;
+}
+
+.manager-shell main > :is(.inventory-module, .sales-module, .purchases-module, .finance-module, .accounting-module, .manager-reports-module, .manager-hr-module) > div:first-child:has(h1) {
+  align-items: flex-end !important;
+  justify-content: flex-end !important;
+}
+
+.manager-shell main > :is(.inventory-module, .sales-module, .purchases-module, .finance-module, .accounting-module, .manager-reports-module, .manager-hr-module) > div:first-child > div:nth-child(2) {
+  justify-content: flex-end !important;
+}
+
+.manager-shell main > :is(.inventory-module, .sales-module, .purchases-module, .finance-module, .accounting-module, .manager-reports-module, .manager-hr-module) > div:first-child > div:first-child:has(h1) {
+  display: none !important;
+}
+
 /* Corporate ERP visual baseline.
  * The application has legacy utility classes in many modules, so this
  * contract deliberately lives at the shell level and normalizes them in one
@@ -380,8 +426,10 @@ main.module-overview [data-slot="card-description"] {
   background: var(--muted) !important;
   background-image: none !important;
   box-shadow: none !important;
+  justify-content: flex-start !important;
   gap: 2px !important;
   padding: 4px !important;
+  scroll-padding-inline: 8px;
 }
 
 :is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="tabs-trigger"] {
@@ -1990,6 +2038,41 @@ th .column-filter-menu .column-filter-icon,
   max-width: 100%;
 }
 
+/* Todos los campos dentro de un modal o panel deben conservar la geometría
+   rectangular del formulario, aunque la vista les pase rounded-xl/rounded-2xl.
+   Se excluyen checkbox, radio y range porque su forma es parte del control. */
+:is(
+  [data-overlay-surface="novahub-modal"],
+  [data-overlay-surface="novahub-panel"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="sheet-content"],
+  [data-slot="drawer-content"],
+  [role="dialog"],
+  .nh-modal-surface
+) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea,
+  [data-slot="select-trigger"],
+  [role="combobox"]
+) {
+  border-radius: 0 !important;
+}
+
+:is(
+  [data-overlay-surface="novahub-modal"],
+  [data-overlay-surface="novahub-panel"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="sheet-content"],
+  [data-slot="drawer-content"],
+  [role="dialog"],
+  .nh-modal-surface
+) input::file-selector-button {
+  border-radius: 0 !important;
+}
+
 [data-overlay-section="header"] {
   min-width: 0;
 }
@@ -1998,6 +2081,59 @@ th .column-filter-menu .column-filter-icon,
 [data-overlay-section="footer"] > * {
   min-width: 0;
   max-width: 100%;
+}
+
+/* El tutorial de un modal/panel comparte la línea del texto contextual: al
+   final del subtítulo cuando existe, o del título cuando no existe. Se
+   limita a triggers directos del encabezado para no alterar los tutoriales
+   que viven en las barras de acciones de las vistas. */
+[data-overlay-section="header"]:has(> [data-tutorial-trigger="true"]) {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 0.75rem;
+  row-gap: 0.35rem;
+  align-items: center;
+}
+
+[data-overlay-section="header"]:has(> [data-tutorial-trigger="true"]) > [data-slot$="-title"] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+[data-overlay-section="header"]:has(> [data-tutorial-trigger="true"]) > [data-slot$="-description"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+[data-overlay-section="header"]:has(> [data-tutorial-trigger="true"]) > [data-tutorial-trigger="true"] {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+}
+
+[data-overlay-section="header"]:has(> [data-tutorial-trigger="true"]):has(> [data-slot$="-description"]) > [data-tutorial-trigger="true"] {
+  grid-row: 2;
+}
+
+/* Algunos modales agrupan título y subtítulo en un contenedor propio. En
+   esos casos el icono se mantiene al extremo de ese bloque, sin crear una
+   tercera fila ni desplazar las acciones del encabezado. */
+[data-overlay-section="header"]:has(> [data-tutorial-trigger="true"]):has(> :not([data-tutorial-trigger="true"]):has([data-slot$="-title"])) {
+  display: flex !important;
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+[data-overlay-section="header"]:has(> [data-tutorial-trigger="true"]) > :not([data-tutorial-trigger="true"]):has([data-slot$="-title"]) {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+[data-overlay-section="header"]:has(> [data-tutorial-trigger="true"]) > [data-tutorial-trigger="true"] {
+  flex: 0 0 auto;
 }
 
 [data-overlay-section="footer"] {

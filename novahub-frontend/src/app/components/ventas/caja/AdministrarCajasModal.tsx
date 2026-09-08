@@ -11,11 +11,13 @@ import { toast } from 'sonner';
 import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
 import { getApiErrorMessage } from '../../../services/api';
 import { SalesViewTutorial } from '../SalesViewTutorial';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface AdministrarCajasModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRegistersChanged?: () => void;
+  permissionModule?: 'RETAIL_POS' | 'RETAIL_CASH_CONTROL';
 }
 
 function toCajaPayload(form: Partial<CashRegister>) {
@@ -27,7 +29,11 @@ function toCajaPayload(form: Partial<CashRegister>) {
   };
 }
 
-export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }: AdministrarCajasModalProps) {
+export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, permissionModule = 'RETAIL_CASH_CONTROL' }: AdministrarCajasModalProps) {
+  const { canPerform } = useAuth();
+  const canCreateRegister = canPerform(permissionModule, 'create');
+  const canEditRegister = canPerform(permissionModule, 'edit');
+  const canDeleteRegister = canPerform(permissionModule, 'delete');
   const [cajasList, setCajasList] = useState<CashRegister[]>([]);
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
@@ -109,13 +115,13 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
               </DialogTitle>
               <DialogDescription>Crea y gestiona las cajas para el sistema POS</DialogDescription>
             </div>
-            <Button onClick={() => {
+            {canCreateRegister && <Button onClick={() => {
               onOpenChange(false);
               setCajaForm({ isActive: true });
               setIsCajaFormOpen(true);
             }} className="gap-2 mt-0 mr-8">
               <Plus className="size-4" /> Nueva Caja
-            </Button>
+            </Button>}
           </DialogHeader>
           
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-4">
@@ -147,10 +153,10 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
                           </td>
                            <td data-actions-column="compact" className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <Button variant="ghost" size="icon" title="Gestionar accesos" onClick={() => handleManageAccess(caja)}>
+                              {canEditRegister && <Button variant="ghost" size="icon" title="Gestionar accesos" onClick={() => handleManageAccess(caja)}>
                                 <Users className="size-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" title="Editar caja" onClick={() => {
+                              </Button>}
+                              {canEditRegister && <Button variant="ghost" size="icon" title="Editar caja" onClick={() => {
                                 onOpenChange(false);
                                 setCajaForm({
                                   id: caja.id,
@@ -162,8 +168,8 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
                                 setIsCajaFormOpen(true);
                               }}>
                                 <Edit2 className="size-4" />
-                              </Button>
-                              <Button
+                              </Button>}
+                              {canDeleteRegister && <Button
                                 variant="ghost"
                                 size="icon"
                                 className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
@@ -172,7 +178,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
                                 onClick={() => void toggleCajaStatus(caja)}
                               >
                                 <Ban className="size-4" />
-                              </Button>
+                              </Button>}
                             </div>
                           </td>
                         </tr>
@@ -233,7 +239,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
           </div>
           <DialogFooter data-tour="sales-form-actions">
             <Button variant="outline" onClick={() => setIsCajaFormOpen(false)}>Cancelar</Button>
-            <Button onClick={async () => {
+            {(cajaForm.id ? canEditRegister : canCreateRegister) && <Button onClick={async () => {
               if (!cajaForm.name || !cajaForm.code) return toast.error('Nombre y código son obligatorios');
               try {
                 const payload = toCajaPayload(cajaForm);
@@ -251,7 +257,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
               } catch (e: any) {
                 toast.error(getApiErrorMessage(e, 'Error al guardar la caja'));
               }
-            }}>Guardar Caja</Button>
+            }}>Guardar Caja</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -320,7 +326,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAccessModalOpen(false)} disabled={accessLoading}>Cancelar</Button>
-            <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>
+            {canEditRegister && <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

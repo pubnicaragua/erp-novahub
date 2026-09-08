@@ -37,6 +37,9 @@ interface SesionActivaStepProps {
   onSubmitCount: (dto: any) => Promise<any>;
   onConfirmClose: (dto: any) => Promise<void>;
   onNavigateToFacturacion?: () => void;
+  canEdit?: boolean;
+  canApprove?: boolean;
+  canExport?: boolean;
 }
 
 export function SesionActivaStep({ 
@@ -49,7 +52,10 @@ export function SesionActivaStep({
   onAddMovement, 
   onSubmitCount,
   onConfirmClose,
-  onNavigateToFacturacion 
+  onNavigateToFacturacion,
+  canEdit = true,
+  canApprove = true,
+  canExport = true,
 }: SesionActivaStepProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [isCloseAlertOpen, setIsCloseAlertOpen] = useState(false);
@@ -440,9 +446,9 @@ export function SesionActivaStep({
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => setModalOpen(true)} variant="outline" className="h-8 text-xs font-bold shadow-sm border-border hover:bg-muted/60">
+            {canEdit && <Button onClick={() => setModalOpen(true)} variant="outline" className="h-8 text-xs font-bold shadow-sm border-border hover:bg-muted/60">
               <Plus className="size-3 mr-1" /> MOVIMIENTO
-            </Button>
+            </Button>}
             <Button 
               onClick={() => {
                 if (onNavigateToFacturacion) {
@@ -514,9 +520,9 @@ export function SesionActivaStep({
           </ScrollArea>
           <div className="p-4 border-t border-border/40 flex flex-wrap gap-3 justify-between items-center bg-muted/10 rounded-b-xl text-xs text-muted-foreground">
             <span className="min-w-0">Tip: Revisa los gastos detalladamente antes del cierre.</span>
-            <Button variant="outline" size="sm" className="h-7 text-[11px] font-bold" onClick={handlePrintSummary}>
+            {canExport && <Button variant="outline" size="sm" className="h-7 text-[11px] font-bold" onClick={handlePrintSummary}>
               <Printer className="size-3 mr-2" /> Imprimir Resumen
-            </Button>
+            </Button>}
           </div>
         </CardContent>
       </Card>
@@ -569,24 +575,24 @@ export function SesionActivaStep({
             </div>
           )}
 
-          {isBlind && !hasSubmittedBlindCount ? (
+          {canApprove && isBlind && !hasSubmittedBlindCount ? (
             <Button onClick={submitBlindCount} className="w-full h-12 mt-4 font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-all rounded-xl">
               <Lock className="size-4 mr-2" /> ENVIAR ARQUEO A CIEGAS
             </Button>
-          ) : isBlind && isRecounting ? (
+          ) : canApprove && isBlind && isRecounting ? (
             <Button onClick={submitBlindCount} className="w-full h-12 mt-4 font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-all rounded-xl">
               <Lock className="size-4 mr-2" /> GUARDAR RECONTEO
             </Button>
           ) : (
             <div className="space-y-2 mt-4">
-              {canRecount && (
+              {canApprove && canRecount && (
                 <Button onClick={startRecount} variant="outline" className="w-full h-10 font-bold rounded-xl">
                   <Calculator className="size-4 mr-2" /> RECONTAR CAJA (OPCIONAL)
                 </Button>
               )}
-              <Button onClick={handleClose} className="w-full h-12 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all rounded-xl">
+              {canApprove && <Button onClick={handleClose} className="w-full h-12 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all rounded-xl">
                 <Lock className="size-4 mr-2" /> {isBlind ? 'CERRAR CAJA CON ESTE CONTEO' : 'INICIAR CIERRE DE CAJA'}
-              </Button>
+              </Button>}
             </div>
           )}
         </CardContent>

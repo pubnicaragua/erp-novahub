@@ -453,7 +453,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="invoices" context="form" />
-             {!isNew && (
+             {!isNew && canPerform('PURCHASES_RECEIPTS', 'export') && (
                <Button
                  variant="outline"
                  className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
@@ -468,7 +468,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                  <Download className="size-3 mr-2" /> Descargar
                </Button>
              )}
-                {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
+                {!isNew && canPerform('PURCHASES_RECEIPTS', 'delete') && (
                   <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                     onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
                     <Ban className="mr-2 size-3.5" /> Anular
@@ -483,7 +483,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <Banknote className="size-3 mr-2" /> Registrar Pago
                 </Button>
               )}
-            {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
+            {((isNew && canPerform('PURCHASES_RECEIPTS', 'create')) || (!isNew && canPerform('PURCHASES_RECEIPTS', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Factura
               </Button>
@@ -508,7 +508,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                     options={suppliers
                       .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                       .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -525,7 +525,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                     type="date" 
                     value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
@@ -535,7 +535,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Vencimiento</p>
                   <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                     type="date" 
                     value={localDoc.dueDate ? new Date(localDoc.dueDate).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, dueDate: new Date(e.target.value).toISOString() })} 
@@ -551,7 +551,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   baseCurrency={baseCurrency}
                   exchangeRate={globalRate}
                   label="Moneda"
-                  disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                  disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                   onChange={(nextCurrency) => {
                     const sourceCurrency = localDoc.currency || baseCurrency;
                     const sourceRate = Number(localDoc.exchangeRate || (sourceCurrency === baseCurrency ? 1 : globalRate));
@@ -626,7 +626,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems a Facturar</p>
-              {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
+              {((isNew && canPerform('PURCHASES_RECEIPTS', 'create')) || (!isNew && canPerform('PURCHASES_RECEIPTS', 'edit'))) && (
                 <Button variant="outline" size="sm" onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, accountId: '', total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
@@ -643,14 +643,14 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     <div className="flex-1 min-w-0">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">Descripción</p>
                       <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                         value={item.description || ''} 
                         onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
                         className="h-8 text-xs" 
                         placeholder="Concepto o servicio facturado" 
                       />
                     </div>
-                    {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
+                    {((isNew && canPerform('PURCHASES_RECEIPTS', 'create')) || (!isNew && canPerform('PURCHASES_RECEIPTS', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground/40 hover:bg-rose-500/10 hover:text-rose-500 rounded-xl opacity-0 group-hover:opacity-100 transition-all" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -660,7 +660,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cant.</p>
                       <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                         type="number" min="0" 
                         value={item.quantity === 0 ? '' : item.quantity} 
                         onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
@@ -670,7 +670,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Precio U.</p>
                       <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                         type="text" inputMode="decimal" min="0"
                         value={item.unitPrice === 0 ? '' : formatDecimalInput(item.unitPrice)}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
@@ -742,14 +742,14 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <div key={attachment.id} className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
                     <FileDown className="size-4 shrink-0 text-primary" />
                     <button type="button" className="min-w-0 flex-1 truncate text-left text-xs font-bold hover:text-primary" onClick={() => openInvoiceAttachment(attachment)}>{attachment.fileName}</button>
-                    {!isNew && canPerform('PURCHASES_INVOICES', 'edit') && (
+                    {!isNew && canPerform('PURCHASES_RECEIPTS', 'edit') && (
                       <Button variant="ghost" size="icon" className="size-7 shrink-0 text-rose-500" aria-label={`Eliminar ${attachment.fileName}`} onClick={async () => { try { await billsService.removeAttachment(String(editingId), attachment.id); setLocalDoc((prev: any) => prev ? { ...prev, attachments: (prev.attachments || []).filter((item: any) => item.id !== attachment.id) } : prev); toast.success('Comprobante eliminado'); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el comprobante'); } }}><Trash2 className="size-3.5" /></Button>
                     )}
                   </div>
                 ))}
               </div>
             )}
-            {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
+            {((isNew && canPerform('PURCHASES_RECEIPTS', 'create')) || (!isNew && canPerform('PURCHASES_RECEIPTS', 'edit'))) && (
               <Input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv" onChange={(event) => setAttachmentFiles(Array.from(event.target.files || []))} className="h-9 text-xs" />
             )}
             {attachmentFiles.length > 0 && <p className="text-xs text-muted-foreground">Pendientes por subir: {attachmentFiles.map(file => file.name).join(', ')}</p>}
@@ -803,8 +803,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
-          onBulkDelete={canPerform('PURCHASES_INVOICES', 'delete') ? async (ids) => {
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_RECEIPTS', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+          onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
             const cancelToastId = toast.loading(`Anulando ${ids.length} factura${ids.length === 1 ? '' : 's'} de proveedor...`);
             try {
               for (const id of ids) {
@@ -819,7 +819,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_INVOICES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_INVOICES', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
+              <Button title={canPerform('PURCHASES_RECEIPTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_RECEIPTS', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
               {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && onRegisterPaymentFromInvoice && (
                 <Button
                   title="Registrar Pago"
@@ -842,7 +842,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 </Button>
               )}
               <PurchaseAuditButton entity="SUPPLIER_INVOICE" entityId={row.id} title="Auditoria de la Factura" />
-              {canPerform('PURCHASES_INVOICES', 'delete') && (
+              {canPerform('PURCHASES_RECEIPTS', 'delete') && (
                 <Button title="Anular factura" aria-label="Anular factura" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
               )}
             </div>

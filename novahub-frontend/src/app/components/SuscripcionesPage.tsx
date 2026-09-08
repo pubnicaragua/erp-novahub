@@ -635,28 +635,8 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
     || tenantDetails?.users?.[0];
 
   return (
-    <div className="p-6 space-y-8 max-w-7xl mx-auto min-h-screen">
-      {/* --- HEADER --- */}
-      <motion.div 
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-      >
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">
-            <Zap className="size-10 text-primary fill-primary/20" />
-            Control <span className="text-primary">Nova</span>Hub
-          </h1>
-          <div className="flex items-center gap-2 mt-2">
-            <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-              Tenancy Master Console
-            </Badge>
-            <span className="text-muted-foreground text-xs font-medium">
-              V 2.4.0 — Aprovisionamiento Real
-            </span>
-          </div>
-        </div>
-
+    <div className="p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4 space-y-6 max-w-7xl mx-auto min-h-screen">
+      <div className="flex justify-end">
         <div className="flex items-center gap-3">
           <Dialog open={isTenantDialogOpen} onOpenChange={setIsTenantDialogOpen}>
             <DialogTrigger asChild>
@@ -819,7 +799,7 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
             </DialogContent>
           </Dialog>
         </div>
-      </motion.div>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[

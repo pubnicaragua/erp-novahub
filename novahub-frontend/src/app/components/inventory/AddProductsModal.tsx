@@ -16,7 +16,7 @@ import { storageService } from '@/app/services/storage.service';
 import { toast } from 'sonner';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { ProductSimilarityAlert } from './ProductSimilarityAlert';
-import type { SimilarProductGroup } from '@/app/services/inventario.service';
+import type { SimilarProductGroup, SimilarProductMatch } from '@/app/services/inventario.service';
 import { priceListsService, type PriceList } from '@/app/services/price-lists.service';
 import { resolveStandardProductPriceLists } from '@/app/utils/product-price-lists';
 
@@ -28,6 +28,7 @@ interface AddProductsModalProps {
   brands?: string[];
   priceLists?: Array<Pick<PriceList, 'code' | 'name'>>;
   onRefresh: () => void;
+  onSelectExistingProduct?: (match: SimilarProductMatch) => void;
   itemType?: 'PRODUCT' | 'SERVICE';
   presentation?: 'dialog' | 'page';
 }
@@ -70,6 +71,9 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   variantMinStocks: {} as Record<string, number | string>,
   variantMaxStocks: {} as Record<string, number | string>,
   initialWarehouseId: '',
+  warehouseIds: [] as string[],
+  variantWarehouses: {} as Record<string, string>,
+  imageUrl: '',
   imageFile: null as File | null,
   imagePreviewUrl: '',
   isVariable: false,
@@ -103,7 +107,14 @@ const getVariantStockTotal = (product: any) =>
     0,
   );
 
-export function AddProductsModal({ open, onOpenChange, categories, warehouses, brands = [], priceLists, onRefresh, itemType = 'PRODUCT', presentation = 'dialog' }: AddProductsModalProps) {
+const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
+
+export function AddProductsModal({ open, onOpenChange, categories, warehouses, brands = [], priceLists, onRefresh, onSelectExistingProduct, itemType = 'PRODUCT', presentation = 'dialog' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
@@ -169,6 +180,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
   const [similarGroups, setSimilarGroups] = useState<SimilarProductGroup[]>([]);
+  const [similarPendingProducts, setSimilarPendingProducts] = useState<any[]>([]);
+  const [similarResolutions, setSimilarResolutions] = useState<Record<string, { action: 'USE_EXISTING' | 'CREATE_NEW'; match?: SimilarProductMatch }>>({});
   const [attributesStepExpanded, setAttributesStepExpanded] = useState(true);
   const [valuesStepExpanded, setValuesStepExpanded] = useState(true);
   const [expandedAttributeId, setExpandedAttributeId] = useState<string | null>(null);
@@ -289,6 +302,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     setDraftProduct((prev: any) => ({
       ...prev,
       [field]: { ...(prev[field] || {}), [key]: value },
+    }));
+  };
+
+  const updateVariantWarehouse = (combination: VariantCombination, warehouseId: string) => {
+    const key = variantCombinationKey(combination);
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      variantWarehouses: { ...(prev.variantWarehouses || {}), [key]: warehouseId },
+      warehouseIds: Array.from(new Set([...(prev.warehouseIds || []), warehouseId].filter(Boolean))),
     }));
   };
 
@@ -432,6 +454,14 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     }
   };
 
+  const handleInitialWarehouseChange = (warehouseId: string) => {
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      initialWarehouseId: warehouseId,
+      warehouseIds: Array.from(new Set([...(prev.warehouseIds || []), warehouseId].filter(Boolean))),
+    }));
+  };
+
   const validateStockCosts = (product: any) => {
     const isProduct = String(product.itemType || 'PRODUCT').toUpperCase() === 'PRODUCT';
     const stock = product.isVariable ? getVariantStockTotal(product) : Number(product.initialStock || 0);
@@ -480,7 +510,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     });
     if (stockProducts.length === 0) return true;
 
-    const warehouseIds = [...new Set(stockProducts.map((product) => String(product.initialWarehouseId || '').trim()).filter(Boolean))];
+    const warehouseIds = [...new Set(stockProducts.flatMap((product) => {
+      const primaryWarehouse = String(product.initialWarehouseId || '').trim();
+      const variantWarehouses = product.isVariable
+        ? buildVariantCombinations(product.linkedAttributes)
+          .filter((combination) => Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0) > 0)
+          .map((combination) => String(product.variantWarehouses?.[variantCombinationKey(combination)] || primaryWarehouse).trim())
+        : [];
+      return [primaryWarehouse, ...variantWarehouses].filter(Boolean);
+    }))];
     if (stockProducts.some((product) => !String(product.initialWarehouseId || '').trim())) {
       toast.error('Cada producto con stock inicial debe tener una bodega destino seleccionada.');
       return false;
@@ -584,7 +622,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           name: product.name,
           categoryId: product.categoryId,
           type: product.itemType || 'PRODUCT',
-          ...(product.itemType === 'PRODUCT' ? { warehouseId: product.initialWarehouseId || undefined, warehouseIds: product.initialWarehouseId ? [product.initialWarehouseId] : [] } : {}),
+           ...(product.itemType === 'PRODUCT' ? { warehouseId: product.initialWarehouseId || undefined, warehouseIds: Array.from(new Set([...(product.warehouseIds || []), product.initialWarehouseId].filter(Boolean))) } : {}),
           trackInventory: product.itemType === 'PRODUCT',
           trackSeries: Boolean(product.trackSerialNumbers),
           trackBatch: Boolean(product.trackBatch),
@@ -610,7 +648,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           height: product.height === '' ? undefined : Number(product.height),
           depth: product.depth === '' ? undefined : Number(product.depth),
           dimensionUnit: product.dimensionUnit || undefined,
-          warranty: product.warranty || undefined,
+           warranty: product.warranty || undefined,
+           ...(canViewInventoryCost ? { lastPurchasePrice: product.lastPurchasePrice === '' ? undefined : Number(product.lastPurchasePrice) } : {}),
           unit: product.unit || 'unidad',
           minStock: Number(product.minStock || 0),
           maxStock: product.maxStock === '' ? undefined : Number(product.maxStock),
@@ -620,7 +659,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
             ? buildVariantCombinations(product.linkedAttributes).map((combination) => ({
               attributes: combination,
               quantity: Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
-              warehouseId: product.initialWarehouseId || undefined,
+               warehouseId: product.variantWarehouses?.[variantCombinationKey(combination)] || product.initialWarehouseId || undefined,
               minStock: Number(product.variantMinStocks?.[variantCombinationKey(combination)] || 0),
               maxStock: product.variantMaxStocks?.[variantCombinationKey(combination)] === undefined || product.variantMaxStocks?.[variantCombinationKey(combination)] === ''
                 ? undefined
@@ -636,9 +675,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               })(),
             }))
             : undefined,
-          imageUrl: uploadedImageUri || undefined,
+           imageUrl: uploadedImageUri || product.imageUrl || undefined,
           isVariable: Boolean(product.isVariable),
           linkedAttributes: product.isVariable ? product.linkedAttributes : undefined,
+          allowSimilarProductCreate: product.allowSimilarProductCreate === true,
         } as any);
 
         const created = (createdResponse as any)?.data || createdResponse;
@@ -687,8 +727,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         return;
       }
       if (skuError) {
-        toast.warning('Observación: el SKU ya está utilizado. Usa el producto existente o registra otro código antes de guardar.');
-        return;
+        toast.info('El SKU ya está utilizado; se abrirá una decisión para seleccionar el producto existente o revisar el código.');
       }
       if (draftProduct.isVariable) {
         if (draftProduct.linkedAttributes.length === 0) {
@@ -734,6 +773,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       const groups = response?.matches || [];
       if (groups.length > 0) {
         setSimilarGroups(groups);
+        setSimilarPendingProducts(listToSave);
+        setSimilarResolutions({});
+        toast.warning('Se encontraron posibles productos existentes. Elige uno existente o confirma la creación de cada fila.');
         return;
       }
     } catch (error: any) {
@@ -741,6 +783,34 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       return;
     }
     await persistProducts(listToSave);
+  };
+
+  const resolveSimilarGroup = async (group: SimilarProductGroup, resolution: { action: 'USE_EXISTING' | 'CREATE_NEW'; match?: SimilarProductMatch }) => {
+    if (resolution.action === 'CREATE_NEW') {
+      const inputKey = normalizeSimilarityInputKey(group.inputKey);
+      const exactSku = group.matches.some((match) => [match.code, match.sku].some((value) => normalizeSimilarityInputKey(value) === inputKey));
+      if (exactSku) {
+        toast.error('Ese SKU ya existe. Cambia el SKU o selecciona el producto existente.');
+        return;
+      }
+    }
+    const nextResolutions = { ...similarResolutions, [normalizeSimilarityInputKey(group.inputKey)]: resolution };
+    const remainingGroups = similarGroups.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== normalizeSimilarityInputKey(group.inputKey));
+    setSimilarResolutions(nextResolutions);
+    setSimilarGroups(remainingGroups);
+    if (remainingGroups.length > 0) return;
+
+    const selected = Object.values(nextResolutions).find((entry) => entry.action === 'USE_EXISTING' && entry.match)?.match;
+    const similarityGroupKeys = new Set(similarGroups.map((candidate) => normalizeSimilarityInputKey(candidate.inputKey)));
+    const productsToCreate = similarPendingProducts.filter((product) => {
+      const key = normalizeSimilarityInputKey(product.code || product.sku || product.name);
+      return !similarityGroupKeys.has(key) || nextResolutions[key]?.action === 'CREATE_NEW';
+    }).map((product) => ({ ...product, allowSimilarProductCreate: true }));
+    setSimilarPendingProducts([]);
+    setSimilarResolutions({});
+    if (selected && onSelectExistingProduct) onSelectExistingProduct(selected);
+    if (productsToCreate.length > 0) await persistProducts(productsToCreate);
+    else if (selected) onOpenChange(false);
   };
 
   return (
@@ -751,6 +821,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       title="Observación: posible producto existente"
       description="No se creó el producto. Revisa el registro encontrado y sus nombres, SKU, marca, descripción y atributos antes de continuar para evitar duplicados."
       onOpenChange={(value) => { if (!value) setSimilarGroups([]); }}
+      onSelectExisting={(group, match) => { void resolveSimilarGroup(group, { action: 'USE_EXISTING', match }); }}
+      onCreateNew={(group) => { void resolveSimilarGroup(group, { action: 'CREATE_NEW' }); }}
     />
     <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
       <DialogContent className={presentation === 'page'
@@ -931,8 +1003,68 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     className={isPagePresentation ? 'mt-1 min-h-12 text-xs' : 'mt-1 min-h-14 text-xs'}
                     placeholder="Nota visible en ventas, compras y facturas"
                   />
-                  <p className="mt-0.5 text-right text-[10px] text-muted-foreground">{Array.from(String(draftProduct.commercialNote || '')).length}/100</p>
-                </div>
+                   <p className="mt-0.5 text-right text-[10px] text-muted-foreground">{Array.from(String(draftProduct.commercialNote || '')).length}/100</p>
+                   {catalogItemType !== 'SERVICE' && (
+                     <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 rounded-lg border border-border/60 bg-background/60 p-3 sm:grid-cols-2 lg:grid-cols-4">
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">SKU interno</label>
+                         <Input value={draftProduct.code} disabled className="mt-1 h-8 text-xs font-mono" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Código de barras</label>
+                         <Input value={draftProduct.barcode || ''} onChange={e => handleUpdateDraft('barcode', e.target.value)} className="mt-1 h-8 text-xs" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Modelo</label>
+                         <Input value={draftProduct.model || ''} onChange={e => handleUpdateDraft('model', e.target.value)} className="mt-1 h-8 text-xs" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Color</label>
+                         <Input value={draftProduct.color || ''} onChange={e => handleUpdateDraft('color', e.target.value)} className="mt-1 h-8 text-xs" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Peso</label>
+                         <Input type="number" min={0} step="any" value={draftProduct.weight ?? ''} onChange={e => handleUpdateDraft('weight', e.target.value)} className="mt-1 h-8 text-xs" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad de peso</label>
+                         <Input value={draftProduct.weightUnit || ''} onChange={e => handleUpdateDraft('weightUnit', e.target.value)} className="mt-1 h-8 text-xs" placeholder="kg, g..." />
+                       </div>
+                       <div className="sm:col-span-2">
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Dimensiones</label>
+                         <Input value={draftProduct.dimensions || ''} onChange={e => handleUpdateDraft('dimensions', e.target.value)} className="mt-1 h-8 text-xs" placeholder="Descripción o formato libre" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Ancho</label>
+                         <Input type="number" min={0} step="any" value={draftProduct.width ?? ''} onChange={e => handleUpdateDraft('width', e.target.value)} className="mt-1 h-8 text-xs" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Alto</label>
+                         <Input type="number" min={0} step="any" value={draftProduct.height ?? ''} onChange={e => handleUpdateDraft('height', e.target.value)} className="mt-1 h-8 text-xs" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Profundidad</label>
+                         <Input type="number" min={0} step="any" value={draftProduct.depth ?? ''} onChange={e => handleUpdateDraft('depth', e.target.value)} className="mt-1 h-8 text-xs" />
+                       </div>
+                       <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad de dimensión</label>
+                         <Input value={draftProduct.dimensionUnit || ''} onChange={e => handleUpdateDraft('dimensionUnit', e.target.value)} className="mt-1 h-8 text-xs" placeholder="cm, m..." />
+                       </div>
+                       <div className="sm:col-span-2">
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Garantía</label>
+                         <Input value={draftProduct.warranty || ''} onChange={e => handleUpdateDraft('warranty', e.target.value)} className="mt-1 h-8 text-xs" />
+                       </div>
+                       {canViewInventoryCost && <div>
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Último costo de compra</label>
+                         <Input type="number" min={0} step="any" value={draftProduct.lastPurchasePrice ?? ''} onChange={e => handleUpdateDraft('lastPurchasePrice', e.target.value)} className="mt-1 h-8 text-xs text-right" />
+                       </div>}
+                       <div className="sm:col-span-2 lg:col-span-4">
+                         <label className="text-[10px] uppercase font-bold text-muted-foreground">URL de imagen (opcional)</label>
+                         <Input value={draftProduct.imageUrl || ''} onChange={e => handleUpdateDraft('imageUrl', e.target.value)} className="mt-1 h-8 text-xs" placeholder="https://... o referencia storage://" />
+                       </div>
+                     </div>
+                   )}
+                 </div>
               </div>
               {!itemType && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-1' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Tipo</label>
@@ -1012,17 +1144,28 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   placeholder="0.00" 
                 />
               </div>}
-              {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
+               {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
+                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
                 <Button
                   type="button"
                   variant={draftProduct.trackSerialNumbers ? 'default' : 'outline'}
                   className={`h-8 w-full mt-1 text-[10px] uppercase tracking-wider ${draftProduct.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
                   onClick={() => handleUpdateDraft('trackSerialNumbers', !draftProduct.trackSerialNumbers)}
                 >
-                  {draftProduct.trackSerialNumbers ? 'Sí' : 'No'}
-                </Button>
-              </div>}
+                 {draftProduct.trackSerialNumbers ? 'Sí' : 'No'}
+                 </Button>
+               </div>}
+               {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
+                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Lotes</label>
+                 <Button
+                   type="button"
+                   variant={draftProduct.trackBatch ? 'default' : 'outline'}
+                   className={`h-8 w-full mt-1 text-[10px] uppercase tracking-wider ${draftProduct.trackBatch ? 'bg-primary text-primary-foreground' : ''}`}
+                   onClick={() => handleUpdateDraft('trackBatch', !draftProduct.trackBatch)}
+                 >
+                   {draftProduct.trackBatch ? 'Sí' : 'No'}
+                 </Button>
+               </div>}
 
               {catalogItemType !== 'SERVICE' && draftProduct.trackSerialNumbers && (
               <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
@@ -1042,13 +1185,31 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   <div className={isPagePresentation ? 'sm:col-span-2 md:row-start-5 md:col-span-4' : 'sm:col-span-2'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega (Stock Inicial)</label>
                     <div data-testid="inventory-product-warehouse">
-                    <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
+                    <Select value={draftProduct.initialWarehouseId} onValueChange={handleInitialWarehouseChange}>
                       <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue placeholder="Bodega para ingreso" /></SelectTrigger>
-                      <SelectContent className="!rounded-none">
-                        {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                      </SelectContent>
+                    <SelectContent className="!rounded-none">
+                      {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    </SelectContent>
                     </Select>
-                    </div>
+                    {effectiveWarehouses.length > 1 && (
+                      <div className="mt-2 rounded-lg border border-border/60 bg-background/60 p-2">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Distribuir catálogo en otras bodegas</p>
+                        <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                          {effectiveWarehouses.map((warehouse: any) => (
+                            <label key={warehouse.id} className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                checked={(draftProduct.warehouseIds || []).includes(warehouse.id)}
+                                onChange={(event) => setDraftProduct((prev: any) => ({ ...prev, warehouseIds: event.target.checked ? Array.from(new Set([...(prev.warehouseIds || []), warehouse.id])) : (prev.warehouseIds || []).filter((id: string) => id !== warehouse.id || id === prev.initialWarehouseId) }))}
+                                className="accent-primary"
+                              />
+                              <span className="min-w-0 truncate">{warehouse.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   </div>
                   <div className={isPagePresentation ? 'col-span-1 md:row-start-5 md:col-span-2' : 'col-span-1'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Inicial</label>
@@ -1074,12 +1235,18 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 <>
                   <div className={isPagePresentation ? 'sm:col-span-2 md:row-start-5 md:col-span-4' : 'sm:col-span-2 md:col-span-4'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega *</label>
-                    <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
+                    <Select value={draftProduct.initialWarehouseId} onValueChange={handleInitialWarehouseChange}>
                       <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue placeholder="Bodega del producto" /></SelectTrigger>
-                      <SelectContent className="!rounded-none">
-                        {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                      </SelectContent>
+                    <SelectContent className="!rounded-none">
+                      {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    </SelectContent>
                     </Select>
+                    {effectiveWarehouses.length > 1 && (
+                      <div className="mt-2 rounded-lg border border-border/60 bg-background/60 p-2">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Distribuir stock por variante</p>
+                        <p className="mt-1 text-[9px] text-muted-foreground">Cada variante puede usar una bodega distinta.</p>
+                      </div>
+                    )}
                   </div>
                   <div className={isPagePresentation ? 'col-span-1 sm:col-span-2 md:row-start-5 md:col-span-8' : 'col-span-1 sm:col-span-2 md:col-span-2'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock total de variantes</label>
@@ -1324,10 +1491,19 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                                 </div>
                                 <Badge variant="outline" className="shrink-0 text-[9px]">Variante</Badge>
                               </div>
-                              <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+                              <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
                                 <div className="min-w-0">
                                   <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Stock</span>
                                   <Input type="number" min={0} step="1" value={draftProduct.variantInitialStocks?.[key] || ''} onChange={(e) => updateVariantInitialStock(combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock inicial para ${combinationLabel}`} />
+                                </div>
+                                <div className="col-span-2 min-w-0 sm:col-span-2 xl:col-span-1">
+                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Bodega</span>
+                                  <Select value={draftProduct.variantWarehouses?.[key] || draftProduct.initialWarehouseId || ''} onValueChange={(value) => updateVariantWarehouse(combination, value)}>
+                                    <SelectTrigger className="h-8 w-full !rounded-none text-[10px]"><SelectValue placeholder="Bodega" /></SelectTrigger>
+                                    <SelectContent className="!rounded-none">
+                                      {effectiveWarehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                                 <div className="min-w-0">
                                   <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Mín.</span>

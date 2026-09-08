@@ -876,8 +876,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         <EditableDataTable data={filtered}
           pagination={pagination}
           bulkAction="cancel"
-          isRowSelectable={(row) => ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())}
-          onBulkDelete={async (ids) => { const cancelToastId = toast.loading(`Cancelando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.cancel(id as string); } toast.success('Facturas recurrentes canceladas', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron cancelar', { id: cancelToastId }); } }}
+          showSelection={canPerform('SALES_RECURRING', 'delete')}
+          isRowSelectable={(row) => canPerform('SALES_RECURRING', 'delete') && ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())}
+          onBulkDelete={canPerform('SALES_RECURRING', 'delete') ? async (ids) => { const cancelToastId = toast.loading(`Cancelando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.cancel(id as string); } toast.success('Facturas recurrentes canceladas', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron cancelar', { id: cancelToastId }); } } : undefined}
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailRecurring(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           highlightedRowId={highlightedAlertId}
@@ -909,7 +910,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           setDetailRecurring(null);
           setEditingId(detailRecurring.id);
         }}
-        onDownloadPdf={(format) => { if (detailRecurring) void handleExportPDF(detailRecurring, format); }}
+        onDownloadPdf={canPerform('SALES_RECURRING', 'export') ? (format) => { if (detailRecurring) void handleExportPDF(detailRecurring, format); } : undefined}
       />
       <ConfirmDialog
               open={pendingDeleteId !== null}

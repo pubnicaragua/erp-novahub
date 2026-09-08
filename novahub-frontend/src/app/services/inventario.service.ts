@@ -14,11 +14,25 @@ export interface SimilarProductMatch {
   prices?: Array<{ list: string; price: number; currency?: string; variantId?: string | null }>;
   costPrice?: number | null;
   reasons?: string[];
+  variants?: Array<{
+    id: string;
+    sku: string;
+    name?: string | null;
+    attributes?: Array<{ name: string; value: string }>;
+  }>;
 }
 
 export interface SimilarProductGroup {
   inputKey: string;
   matches: SimilarProductMatch[];
+}
+
+export type SimilarityResolutionAction = 'USE_EXISTING' | 'CREATE_NEW';
+
+export interface SimilarityResolution {
+  inputKey: string;
+  action: SimilarityResolutionAction;
+  productId?: string;
 }
 
 export const inventoryService = {
@@ -33,6 +47,7 @@ export const inventoryService = {
   },
   createProduct: (data: Partial<Product> & {
     initialStock?: number;
+    allowSimilarProductCreate?: boolean;
     variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; warehouseId?: string; prices?: Record<string, number | string> }>;
   }) => api.post<Product>('/inventory/products', data),
   previewProductStockAccounting: (warehouseIds: string[]) =>
@@ -128,7 +143,7 @@ export const inventoryService = {
   regenerateVariants: (productId: string) => api.post<any[]>(`/inventory/products/${productId}/variants/regenerate`),
 
   // ==================== BULK IMPORT ====================
-  bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>, onProgress?: (done: number, total: number) => void) => {
+  bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number; allowSimilarProductCreate?: boolean }>, onProgress?: (done: number, total: number) => void) => {
     const results: { success: number; skipped: number; failed: number; errors: string[] } = { success: 0, skipped: 0, failed: 0, errors: [] };
     const total = items.length;
     onProgress?.(0, total);
@@ -146,7 +161,7 @@ export const inventoryService = {
     return results;
   },
   getInitialImportStatus: (signal?: AbortSignal) => api.get<{ completed: boolean; importedAt?: string | null; productCount?: number; priceListCode?: string | null; currency?: string | null; exchangeRate?: number | null; blockedByExistingProducts?: boolean }>('/inventory/initial-import/status', { signal }),
-  importInitialCatalog: (data: { items?: any[]; catalog?: any; currency: string; exchangeRate?: number; priceListCode?: string; createMissingAttributes?: boolean; allowExistingParentVariantExtension?: boolean; reimportMode?: 'MERGE' | 'REJECT'; catalogPurpose?: 'INVENTORY' | 'PURCHASE_ORDER' | 'MANAGER'; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
+  importInitialCatalog: (data: { items?: any[]; catalog?: any; currency: string; exchangeRate?: number; priceListCode?: string; createMissingAttributes?: boolean; allowExistingParentVariantExtension?: boolean; reimportMode?: 'MERGE' | 'REJECT'; catalogPurpose?: 'INVENTORY' | 'PURCHASE_ORDER' | 'MANAGER'; similarityResolutions?: SimilarityResolution[]; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
   importServices: (data: { items: any[]; currency: string; exchangeRate?: number; reimportMode?: 'MERGE' | 'REJECT'; confirmText: string }) => api.post<any>('/inventory/services/import', data),
   updateProductImages: (items: Array<{ code: string; imageUrl: string }>) => api.patch<{ updated: number }>('/inventory/products/images/batch', { items }),
   deactivateProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),

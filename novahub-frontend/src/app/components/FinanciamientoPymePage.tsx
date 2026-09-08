@@ -143,33 +143,16 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: F
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-        <div className="flex items-center gap-3" data-tour="financing-title">
-          <div className="p-3 bg-primary/10 rounded-xl">
-            <Landmark className="size-9 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-              Financiamiento <span className="text-primary">PyME</span>
-            </h1>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {applications.length} solicitudes
-              </Badge>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="size-3.5 mr-1" /> Tutorial
+    <div className="p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
+      <div className="mb-3 flex justify-end gap-2">
+          <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo usar Financiamiento PyME" title="Cómo usar Financiamiento PyME">
+            <CircleHelp className="size-4" />
           </Button>
           {!selectedApp && activeTab === 'solicitudes' && canPerform('FINANCING_APPLICATIONS', 'create') && (
             <Button onClick={() => setShowWizard(true)} className="rounded-xl gap-2 font-bold" data-tour="financing-new-btn">
               <Plus className="size-4" /> Nueva Solicitud
             </Button>
           )}
-        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -184,7 +167,7 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: F
         ) : (
           <motion.div key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6" data-tour="financing-tabs [&>button]:flex-none">
+              <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-4" data-tour="financing-tabs [&>button]:flex-none">
                 {visibleTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80

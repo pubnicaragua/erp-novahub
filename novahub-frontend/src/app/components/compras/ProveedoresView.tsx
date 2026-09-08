@@ -363,7 +363,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         );
       }
     },
-    { key: 'status', header: 'Estado', width: '120px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), type: 'select', options: statusOptions,
+    { key: 'status', header: 'Estado', width: '120px', editable: canPerform('PURCHASES_PROVIDERS', 'delete'), type: 'select', options: statusOptions,
       headerExtra: <ColumnFilterMenu label="Estado" options={statusOptions.map((option) => ({ value: option.value, label: option.label, count: filteredAndSorted.filter((supplier) => (isSupplierInactive(supplier) ? 'INACTIVE' : 'ACTIVE') === option.value).length }))} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
@@ -374,6 +374,14 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   const handleUpdate = async (id: string | number, updates: Partial<Supplier>) => {
     try { 
+      const status = String((updates as any).status || '').toUpperCase();
+      const isStatusMutation = Boolean(status) && Object.keys(updates).every((key) => key === 'status' || key === 'isActive');
+      if (isStatusMutation) {
+        await suppliersService.setStatus(String(id), status);
+        toast.success(status === 'ACTIVE' ? 'Proveedor activado' : 'Proveedor desactivado');
+        onRefresh();
+        return;
+      }
       const sanitized: any = { ...updates };
       if (sanitized.status) sanitized.isActive = String(sanitized.status).toUpperCase() === 'ACTIVE';
       if (sanitized.email === '') sanitized.email = undefined;
@@ -511,13 +519,13 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="suppliers" />
-            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
+            {canPerform('PURCHASES_PROVIDERS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de proveedores" />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar proveedor..." className="pl-9 h-10 w-60 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} />
             </div>
-            {canPerform('PURCHASES_PROVIDERS', 'create') && (
+            {canPerform('PURCHASES_PROVIDERS', 'import') && (
               <Button
                 variant="outline"
                 onClick={() => { setImportOpen(true); setImportPreviewOpen(false); setImportRows([]); setImportFile(null); setImportResult(null); }}
@@ -533,23 +541,23 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} onRowDoubleClick={(row) => handleOpenEdit(row)} editOnPencilOnly isLoading={loading} pagination={pagination} actionsWidth="w-28" fitContent showHorizontalControls layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} onRowDoubleClick={canPerform('PURCHASES_PROVIDERS', 'edit') ? (row) => handleOpenEdit(row) : undefined} editOnPencilOnly isLoading={loading} pagination={pagination} actionsWidth="w-28" fitContent showHorizontalControls showSelection={canPerform('PURCHASES_PROVIDERS', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onAddRow={canPerform('PURCHASES_PROVIDERS', 'create') ? handleAdd : undefined}
-          bulkActions={(ids) => (
+          bulkActions={canPerform('PURCHASES_PROVIDERS', 'delete') ? (ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
               onClick={async () => {
-                await Promise.all(ids.map(id => handleUpdate(id, { isActive: false, status: 'INACTIVE' } as any)));
+                await Promise.all(ids.map(id => suppliersService.setStatus(String(id), 'INACTIVE')));
                 toast.success(`${ids.length} proveedor(es) desactivado(s)`);
                 onRefresh();
               }}
             >
               <Ban className="size-3 mr-2" /> Desactivar {ids.length}
             </Button>
-          )}
+          ) : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" title="Ver detalle" aria-label="Ver detalle del proveedor" className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierDetail(row)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_PROVIDERS', 'edit') && (
+              {canPerform('PURCHASES_PROVIDERS', 'delete') && (
                 <Button variant="ghost" size="icon" title="Editar proveedor" aria-label="Editar proveedor" className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEdit(row)}><Pencil className="size-4" /></Button>
               )}
               {canPerform('PURCHASES_PROVIDERS', 'edit') && (
@@ -677,6 +685,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       <SupplierDetailDrawer
         supplierId={selectedSupplierDetail?.id ?? null}
         supplierSnapshot={selectedSupplierDetail}
+        canExport={canPerform('PURCHASES_PROVIDERS', 'export')}
         onOpenChange={(open) => !open && setSelectedSupplierDetail(null)}
       />
     </div>

@@ -42,13 +42,16 @@ export function HRViewTutorial({
     <>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
+        size="icon"
         onClick={() => setOpen(true)}
         data-toolbar-role="help"
-        className={`h-10 min-w-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest ${className}`}
+        data-tutorial-trigger="true"
+        title={label}
+        className={`size-8 shrink-0 rounded-lg text-muted-foreground ${className}`}
         aria-label={label}
       >
-        <CircleHelp className="mr-2 size-4" /> {label}
+        <CircleHelp className="size-4" />
       </Button>
       {open && <GuidedTour steps={steps} onClose={() => setOpen(false)} title={label} allowTargetInteraction />}
     </>

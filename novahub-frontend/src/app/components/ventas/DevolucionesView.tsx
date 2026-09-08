@@ -597,8 +597,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         <EditableDataTable data={filteredData}
           pagination={pagination}
           bulkAction="reject"
-          isRowSelectable={(row) => String(row.status || '').toUpperCase() === 'PENDING'}
-          onBulkDelete={async (ids) => { const rejectToastId = toast.loading(`Rechazando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.reject(id as string); } toast.success('Notas de crédito rechazadas', { id: rejectToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron rechazar', { id: rejectToastId }); } }}
+          showSelection={canPerform('SALES_RETURNS', 'delete')}
+          isRowSelectable={(row) => canPerform('SALES_RETURNS', 'delete') && String(row.status || '').toUpperCase() === 'PENDING'}
+          onBulkDelete={canPerform('SALES_RETURNS', 'delete') ? async (ids) => { const rejectToastId = toast.loading(`Rechazando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.reject(id as string); } toast.success('Notas de crédito rechazadas', { id: rejectToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron rechazar', { id: rejectToastId }); } } : undefined}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailReturn(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           highlightedRowId={highlightedAlertId}
@@ -630,7 +631,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           setDetailReturn(null);
           startEdit(detailReturn.id);
         }}
-        onDownloadPdf={(format) => { if (detailReturn) void handleExportPDF(detailReturn, format); }}
+        onDownloadPdf={canPerform('SALES_RETURNS', 'export') ? (format) => { if (detailReturn) void handleExportPDF(detailReturn, format); } : undefined}
       />
 
       <ConfirmDialog

@@ -445,30 +445,18 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   return (
     <div className="flex flex-1 w-full bg-background">
       <main className="relative flex-1">
-        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
-          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <ChefHat className="size-9 text-primary" />
-              </div>
-              <div>
-                <h1 className="flex flex-wrap items-center gap-x-3 text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
-                  Restaurante <span className="text-primary">POS</span>
-                </h1>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+          <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
               <select value={selectedBranchId || ''} onChange={(event) => setSelectedBranchId(event.target.value || null)} className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary">
                 <option value="">Todas las sucursales</option>
                 {accessibleBranches.map((branch: { id: string; name: string }) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </select>
               <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'size-4 animate-spin' : 'size-4'} />Actualizar</Button>
-            </div>
           </div>
 
-          <CurrencyValuationBanner className="mb-6" />
+          <CurrencyValuationBanner className="mb-3" />
 
-          <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
               ['Mesas activas', openTables, `de ${tables.length}`],
               ['Comandas hoy', summary?.orders || 0, 'operativas'],
@@ -488,7 +476,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
             setTab(value as RestaurantTab);
             if (value === 'comandas') setNewOrdersCount(0);
           }}>
-            <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
+            <div className="mb-4 w-full overflow-x-auto custom-scrollbar">
               <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
                 {visibleTabs.map(({ id, label, icon: Icon }) => (
                   <TabsTrigger key={id} value={id} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">

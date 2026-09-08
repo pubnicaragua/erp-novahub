@@ -95,6 +95,7 @@ interface CustomerDetailDrawerProps {
   customerId: string | null;
   onOpenChange: (open: boolean) => void;
   customerSnapshot?: Customer | null;
+  canExport?: boolean;
 }
 
 type TabKey = 'general' | 'movimientos' | 'historial';
@@ -201,6 +202,7 @@ export function CustomerDetailDrawer({
   customerId,
   onOpenChange,
   customerSnapshot,
+  canExport = true,
 }: CustomerDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
   const { user } = useAuth();
@@ -545,16 +547,18 @@ export function CustomerDetailDrawer({
             </div>
 
             <div className="flex justify-end" data-tour="customer-detail-actions">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={openHistoryExportDialog}
-                disabled={!customer || loadingRelated || exportingHistory || relatedTransactions.length === 0}
-                className="max-w-full gap-1.5 rounded-xl text-xs font-bold"
-              >
-                <Download className="size-4 shrink-0 text-primary" />
-                <span className="truncate">Exportar historial del cliente</span>
-              </Button>
+              {canExport && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={openHistoryExportDialog}
+                  disabled={!customer || loadingRelated || exportingHistory || relatedTransactions.length === 0}
+                  className="max-w-full gap-1.5 rounded-xl text-xs font-bold"
+                >
+                  <Download className="size-4 shrink-0 text-primary" />
+                  <span className="truncate">Exportar historial del cliente</span>
+                </Button>
+              )}
             </div>
 
             <TabsList className="w-full justify-start h-9 overflow-x-auto bg-muted/40 p-1 rounded-xl border border-border/40 font-bold text-xs">

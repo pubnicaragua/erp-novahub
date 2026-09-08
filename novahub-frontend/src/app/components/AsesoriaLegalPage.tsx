@@ -9,7 +9,7 @@ interface AsesoriaLegalPageProps {
 export function AsesoriaLegalPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: AsesoriaLegalPageProps) {
   return (
     <div className="min-h-full bg-background">
-      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
         <AsesoriaLegalView activeSubModule={activeSubModule} onSubModuleChange={onSubModuleChange} isSidebarCollapsed={isSidebarCollapsed} />
       </div>
     </div>

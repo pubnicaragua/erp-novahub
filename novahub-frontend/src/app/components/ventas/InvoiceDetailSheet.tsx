@@ -26,6 +26,7 @@ interface InvoiceDetailSheetProps {
   onOpenInvoice: (invoice: Invoice) => void;
   onDownloadPdf: (invoice: Invoice, format: PdfDownloadFormat) => void;
   onDownloadPayment: (payment: PaymentReceived, invoice: Invoice, format: PdfDownloadFormat, remainingOverride?: number) => void;
+  canExport?: boolean;
   getPaymentRemaining: (payment: PaymentReceived, invoice: Invoice) => number;
   getBalance: (invoice: Invoice) => number;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
@@ -72,6 +73,7 @@ export function InvoiceDetailSheet({
   onOpenInvoice,
   onDownloadPdf,
   onDownloadPayment,
+  canExport = true,
   getPaymentRemaining,
   getBalance,
   formatAmount,
@@ -139,7 +141,7 @@ export function InvoiceDetailSheet({
             <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => onOpenInvoice(invoice)}>
               <Eye className="size-4 shrink-0 text-primary" /> Ver factura completa
             </Button>
-            <PdfDownloadButton onDownload={(format) => onDownloadPdf(invoice, format)} />
+            {canExport && <PdfDownloadButton onDownload={(format) => onDownloadPdf(invoice, format)} />}
           </section>
 
           <section className="rounded-2xl border border-border/50 p-4">
@@ -239,13 +241,13 @@ export function InvoiceDetailSheet({
                             </div>
                             <Badge className={`mt-2 border-none px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${paymentStatus.className}`}>{paymentStatus.label}</Badge>
                           </div>
-                          <PdfDownloadButton onDownload={(format) => onDownloadPayment(payment, invoice, format, remainingAfterPayment)} />
+                          {canExport && <PdfDownloadButton onDownload={(format) => onDownloadPayment(payment, invoice, format, remainingAfterPayment)} />}
                         </div>
                       );
                     })}
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
                       <span className="text-xs font-bold text-muted-foreground">Descargar historial completo de pagos</span>
-                      <PdfDownloadButton onDownload={(format) => onDownloadPayment({ ...invoice.payments![0], payments: invoice.payments } as PaymentReceived, invoice, format)} />
+                      {canExport && <PdfDownloadButton onDownload={(format) => onDownloadPayment({ ...invoice.payments![0], payments: invoice.payments } as PaymentReceived, invoice, format)} />}
                     </div>
                   </div>
                 ) : <p className="mt-3 text-sm text-muted-foreground">Todavía no hay pagos recibidos para esta factura.</p>}

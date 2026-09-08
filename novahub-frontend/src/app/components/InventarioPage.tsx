@@ -528,26 +528,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   };
 
   return (
-    <div className="inventory-module mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-3 pb-20 sm:p-6 md:p-10">
-      {/* Header */}
-      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Package className="size-9 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-              Inventario <span className="text-primary">de Mercancías</span>
-            </h1>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {productItems.length} productos · {serviceItems.length} servicios · {data.warehouses.length} bodegas
-              </Badge>
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
+    <div className="inventory-module mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-3 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
+      <div className="flex w-full flex-wrap items-center justify-end gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -569,7 +551,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             Exportar
           </Button>
         </div>
-      </div>
 
       <CurrencyValuationBanner />
 
@@ -588,7 +569,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           if (onSubModuleChange) onSubModuleChange(nextTab);
         }}
       >
-        <div className={cn("mb-6 w-full overflow-x-auto custom-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
+        <div className={cn("mb-4 w-full overflow-x-auto custom-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
         <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground sm:min-w-0">
           {INVENTORY_SECTIONS.map((section) => {
             if (!canViewInventorySection(section.id)) return null;

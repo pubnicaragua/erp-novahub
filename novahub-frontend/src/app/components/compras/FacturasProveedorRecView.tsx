@@ -628,7 +628,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-invoices" />
-            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
+            {canPerform('PURCHASES_INVOICES_REC', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de compras recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES_REC', 'create') && (
@@ -636,7 +636,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_INVOICES_REC', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Anulando ${ids.length} compra${ids.length === 1 ? '' : 's'} recurrente${ids.length === 1 ? '' : 's'}...`);
             try {
@@ -692,7 +692,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
               {canPerform('PURCHASES_INVOICES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailInvoice.id)}><Ban className="size-4" /> Anular</Button>}
             </>;
           })()}
-          onDownloadPdf={(format) => detailInvoice ? void handleDownloadRecurringInvoicePdf(detailInvoice, format) : undefined}
+          onDownloadPdf={canPerform('PURCHASES_INVOICES_REC', 'export') ? (format) => detailInvoice ? void handleDownloadRecurringInvoicePdf(detailInvoice, format) : undefined : undefined}
         />
       </div>
     </div>

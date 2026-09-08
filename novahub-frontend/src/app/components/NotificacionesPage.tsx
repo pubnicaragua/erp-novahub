@@ -104,16 +104,10 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
 
   return (
     <div className="min-h-full bg-background">
-      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
-        <header className="mb-6 flex items-center gap-3" data-tour="notificaciones-title">
-          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Bell className="size-9 text-primary" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter uppercase italic leading-none">Notificaciones</h1>
-          </div>
-          <Button variant="outline" size="icon" className="size-11 rounded-xl shrink-0" onClick={() => setShowTour(true)}>
-            <CircleHelp className="size-5" />
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+        <header className="mb-3 flex justify-end" data-tour="notificaciones-title">
+          <Button variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTour(true)} aria-label="Cómo usar Notificaciones" title="Cómo usar Notificaciones">
+            <CircleHelp className="size-4" />
           </Button>
         </header>
 
@@ -138,7 +132,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
             onSubModuleChange?.(value);
           }}
         >
-          <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
+          <div className={cn("w-full overflow-x-auto custom-scrollbar mb-4", !isSidebarCollapsed && "hidden lg:hidden")}>
           <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="notificaciones-tabs">
             {visibleTabs.map((tab) => (
               <TabsTrigger

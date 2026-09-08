@@ -375,6 +375,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
   const handleUpdate = async (id: string | number, updates: Partial<Customer>) => {
     try {
+      if (updates.status !== undefined && Object.keys(updates).length === 1) {
+        await customersService.setStatus(id.toString(), updates.status);
+        toast.success('Estado del cliente actualizado');
+        await onRefresh();
+        return;
+      }
       const effectiveUpdates = updates.creditLimit !== undefined && updates.creditLimitCurrency === undefined
         ? { ...updates, creditLimitCurrency: displayCurrency }
         : updates;
@@ -666,7 +672,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       key: 'status', 
       header: 'Estado', 
       width: '110px',
-      editable: canPerform('SALES_CLIENTS', 'edit'),
+      editable: canPerform('SALES_CLIENTS', 'delete'),
       type: 'select',
       options: [
         { label: 'Activo', value: 'ACTIVE', color: 'bg-primary/10 text-primary' },
@@ -772,7 +778,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución" dataTour="customers-layout" />
-            {canPerform('SALES_CLIENTS', 'create') && (
+            {canPerform('SALES_CLIENTS', 'import') && (
               <Button
                 variant="outline"
                 onClick={() => { setImportOpen(true); setImportResult(null); }}
@@ -802,8 +808,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               columns={visibleColumns}
               onRowUpdate={handleUpdate}
               onRowClick={(row) => setSelectedCustomerDetail(row)}
-              onRowDoubleClick={(row) => openEditCustomer(row)}
+              onRowDoubleClick={canPerform('SALES_CLIENTS', 'edit') ? (row) => openEditCustomer(row) : undefined}
               editOnPencilOnly
+              showSelection={canPerform('SALES_CLIENTS', 'delete')}
               isLoading={loading}
               pagination={pagination}
               showClearSelection={false}
@@ -817,12 +824,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                    {canPerform('SALES_CLIENTS', 'edit') && (
                      <Button variant="ghost" size="icon" title="Editar cliente" aria-label="Editar cliente" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => openEditCustomer(row)}><Pencil className="size-4" /></Button>
                    )}
-                   {canPerform('SALES_CLIENTS', 'edit') && (
+                   {canPerform('SALES_CLIENTS', 'delete') && (
                    <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setPendingStatusChange(row)}><Ban className="size-4" /></Button>
                    )}
                 </div>
               )}
-              bulkActions={(selectedIds) => (
+              bulkActions={canPerform('SALES_CLIENTS', 'delete') ? (selectedIds) => (
                 <Button
                   variant="outline"
                   size="sm"
@@ -831,7 +838,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 >
                   <Ban className="mr-2 size-3" /> Desactivar clientes
                 </Button>
-              )}
+              ) : undefined}
             />
           </CardContent>
         </Card>
@@ -852,7 +859,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
           const nextStatus = String(pendingStatusChange.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
           try {
             setStatusChanging(true);
-            await handleUpdate(pendingStatusChange.id, { status: nextStatus } as Partial<Customer>);
+            await customersService.setStatus(String(pendingStatusChange.id), nextStatus);
+            toast.success('Estado del cliente actualizado');
+            await onRefresh();
             setPendingStatusChange(null);
           } finally {
             setStatusChanging(false);
@@ -884,6 +893,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         customerId={selectedCustomerDetail?.id ?? null}
         onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}
         customerSnapshot={selectedCustomerDetail}
+        canExport={canPerform('SALES_CLIENTS', 'export')}
       />
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>

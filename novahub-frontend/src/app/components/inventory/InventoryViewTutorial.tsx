@@ -16,12 +16,11 @@ const DEFAULT_COPY: Record<InventoryFormStep, InventoryTutorialCopy> = {
 
 export function InventoryViewTutorial({
   label,
-  context = 'form',
+  context: _context = 'form',
   targetPrefix = 'inventory-form',
   stepKeys = ['title', 'data', 'actions'],
   copy = {},
   className = '',
-  compact = false,
 }: {
   label: string;
   context?: 'form';
@@ -48,16 +47,16 @@ export function InventoryViewTutorial({
     <>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
+        size="icon"
         onClick={() => setOpen(true)}
         data-toolbar-role="help"
+        data-tutorial-trigger="true"
         title={label}
-        className={compact
-          ? `h-8 w-8 shrink-0 rounded-lg border-border/50 bg-background/50 p-0 text-muted-foreground ${className}`
-          : `h-10 min-w-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest ${className}`}
+        className={`size-8 shrink-0 rounded-lg text-muted-foreground ${className}`}
         aria-label={label}
       >
-        <CircleHelp className={`${compact ? 'mx-auto' : 'mr-2'} size-4`} /> {!compact && label}
+        <CircleHelp className="size-4" />
       </Button>
       {open && <GuidedTour steps={steps} onClose={() => setOpen(false)} title={label} allowTargetInteraction />}
     </>

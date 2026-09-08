@@ -79,13 +79,26 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
   }, [currentStep]);
 
   useEffect(() => {
-    const element = findVisibleTarget(currentStep?.target || '');
+    const targetSelector = currentStep?.target || '';
+    const element = findVisibleTarget(targetSelector);
     element?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
     const timer = window.setTimeout(updateHighlight, 320);
     const frame = window.requestAnimationFrame(updateHighlight);
+    const observer = new MutationObserver(() => {
+      if (!findVisibleTarget(targetSelector)) return;
+      updateHighlight();
+      observer.disconnect();
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['aria-hidden', 'class', 'hidden', 'style'],
+    });
     return () => {
       window.clearTimeout(timer);
       window.cancelAnimationFrame(frame);
+      observer.disconnect();
     };
   }, [currentStep, updateHighlight]);
 
@@ -142,15 +155,22 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
 
   const tooltipStyle = (() => {
     const maxHeight = Math.max(120, viewport.height - 24);
+    const width = Math.min(TOOLTIP_WIDTH, viewport.width - 24);
+    const centeredLeft = Math.max(12, (viewport.width - width) / 2);
 
-    if (viewport.width < 640 || !highlight) {
+    if (viewport.width < 640) {
       return { left: 12, right: 12, bottom: 12, maxHeight };
     }
 
-    const width = Math.min(TOOLTIP_WIDTH, viewport.width - 24);
+    // Keep the tutorial compact even when a target is temporarily missing.
+    // A missing target must not turn the step into a full-width bottom sheet.
+    if (!highlight) {
+      return { left: centeredLeft, bottom: 12, width, maxHeight };
+    }
+
     const height = Math.min(tooltipSize.height || TOOLTIP_ESTIMATED_HEIGHT, maxHeight);
     const maxLeft = viewport.width - width - 12;
-    const centeredLeft = clamp(highlight.left + highlight.width / 2 - width / 2, 12, maxLeft);
+    const highlightCenteredLeft = clamp(highlight.left + highlight.width / 2 - width / 2, 12, maxLeft);
     const maxTop = Math.max(12, viewport.height - height - 12);
     const placements = [...new Set([currentStep?.placement, 'right', 'left', 'bottom', 'top'].filter(Boolean))];
 
@@ -162,14 +182,14 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
         return { left: highlight.left - width - TOOLTIP_GAP, top: clamp(highlight.top, 12, maxTop), width, maxHeight };
       }
       if (placement === 'bottom' && viewport.height - highlight.bottom >= height + TOOLTIP_GAP) {
-        return { left: centeredLeft, top: highlight.bottom + TOOLTIP_GAP, width, maxHeight };
+        return { left: highlightCenteredLeft, top: highlight.bottom + TOOLTIP_GAP, width, maxHeight };
       }
       if (placement === 'top' && highlight.top >= height + TOOLTIP_GAP) {
-        return { left: centeredLeft, top: highlight.top - height - TOOLTIP_GAP, width, maxHeight };
+        return { left: highlightCenteredLeft, top: highlight.top - height - TOOLTIP_GAP, width, maxHeight };
       }
     }
 
-    return { left: centeredLeft, top: clamp(highlight.bottom + TOOLTIP_GAP, 12, maxTop), width, maxHeight };
+    return { left: highlightCenteredLeft, top: clamp(highlight.bottom + TOOLTIP_GAP, 12, maxTop), width, maxHeight };
   })();
 
   if (!currentStep || typeof document === 'undefined') return null;

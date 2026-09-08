@@ -430,8 +430,8 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           </p>
         </div>
         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
-          <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-1 size-3.5" /> Cómo configurar inventario
+          <Button variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo configurar inventario" title="Cómo configurar inventario">
+            <CircleHelp className="size-4" />
           </Button>
           <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={refresh} disabled={refreshing}>
             <RefreshCw className={cn('mr-1 size-3.5', refreshing && 'animate-spin')} /> Actualizar

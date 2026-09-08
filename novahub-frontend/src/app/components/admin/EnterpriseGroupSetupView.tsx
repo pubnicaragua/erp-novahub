@@ -465,7 +465,12 @@ export function EnterpriseGroupSetupView({
   });
 
   const units = group?.businessUnits || [];
-  const warehouses = group?.warehouses || [];
+  // El endpoint de esta pantalla administra únicamente almacenes corporativos.
+  // La API también protege esta frontera, pero el filtro evita ofrecer una
+  // bodega de sucursal como si pudiera editarse desde aquí.
+  const warehouses = (group?.warehouses || []).filter(
+    (warehouse: any) => warehouse.scopeType === "BUSINESS_UNIT" && !warehouse.clientTenantId,
+  );
   const branches = group?.branches || [];
   const manager = draftManager || group?.managerAssignments?.[0]?.user;
 
@@ -1057,8 +1062,8 @@ export function EnterpriseGroupSetupView({
 
   return (
     <div className="enterprise-group-setup min-w-0 max-w-full overflow-x-hidden bg-background">
-      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">
-        <div className="mb-8 flex min-w-0 flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+        <div className="mb-4 flex min-w-0 flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <Button
               variant="outline"
@@ -1069,7 +1074,7 @@ export function EnterpriseGroupSetupView({
             >
               <ArrowLeft className="size-4" />
             </Button>
-            <div className="min-w-0">
+            <div className="hidden min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">
                 Configuración avanzada ·{" "}
                 {mode === "create" ? "Nuevo grupo" : "Grupo empresarial"}
@@ -1584,7 +1589,7 @@ function GroupConfigurationView({
   };
   return (
     <div className="enterprise-group-configuration min-w-0 max-w-full overflow-x-hidden bg-background">
-      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 space-y-6 p-4 sm:p-6 md:p-10">
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 space-y-6 p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
         <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <Button
@@ -1596,7 +1601,7 @@ function GroupConfigurationView({
             >
               <ArrowLeft className="size-4" />
             </Button>
-            <div className="min-w-0">
+            <div className="hidden min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">
                 Configuración del grupo
               </p>

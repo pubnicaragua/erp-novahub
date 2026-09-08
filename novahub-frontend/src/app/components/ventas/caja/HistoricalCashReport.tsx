@@ -27,7 +27,7 @@ const emptyReport: HistoricalCashReportData = {
 const amount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const signedAmount = (value: unknown) => `${Number(value || 0) >= 0 ? '+' : ''}${amount(value)}`;
 
-export function HistoricalCashReport({ initialRegisterId }: { initialRegisterId?: string }) {
+export function HistoricalCashReport({ initialRegisterId, canExport = true }: { initialRegisterId?: string; canExport?: boolean }) {
   const { user } = useAuth();
   const [filters, setFilters] = useState({
     dateFrom: inputDate(thirtyDaysAgo),
@@ -129,9 +129,9 @@ export function HistoricalCashReport({ initialRegisterId }: { initialRegisterId?
               <Button variant="outline" className="gap-2" onClick={() => void loadReport()} disabled={loading}>
                 <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} /> Actualizar
               </Button>
-              <Button className="gap-2" onClick={() => void exportPdf()} disabled={exporting || loading || report.items.length === 0}>
+              {canExport && <Button className="gap-2" onClick={() => void exportPdf()} disabled={exporting || loading || report.items.length === 0}>
                 {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Generar PDF
-              </Button>
+              </Button>}
             </div>
           </div>
         </CardHeader>
@@ -194,7 +194,7 @@ export function HistoricalCashReport({ initialRegisterId }: { initialRegisterId?
               <p className="mt-1 text-sm text-muted-foreground">{sessionDetail.session.branch?.name || 'Sin sucursal'} · {sessionDetail.session.register?.code || 'Sin caja'} · {new Date(sessionDetail.session.openedAt).toLocaleDateString('es-NI')}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button className="gap-2" onClick={() => void exportSessionDetail()} disabled={detailExporting}><Download className="size-4" /> {detailExporting ? 'Generando…' : 'PDF 16:9'}</Button>
+              {canExport && <Button className="gap-2" onClick={() => void exportSessionDetail()} disabled={detailExporting}><Download className="size-4" /> {detailExporting ? 'Generando…' : 'PDF 16:9'}</Button>}
               <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar detalle" title="Cerrar" onClick={() => { setSessionDetail(null); setSelectedSessionId(''); }}><X className="size-4" /></Button>
             </div>
           </div>

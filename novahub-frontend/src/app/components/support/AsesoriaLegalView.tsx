@@ -90,24 +90,6 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5 shadow-sm">
-        <CardContent className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-center md:p-8">
-          <div className="max-w-3xl space-y-4">
-            <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
-              Módulo Legal
-            </Badge>
-            <div>
-              <h2 className="text-2xl font-black uppercase italic tracking-tight sm:text-3xl">
-                Asesoría <span className="text-primary">Legal</span>
-              </h2>
-            </div>
-          </div>
-          <div className="flex size-20 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
-            <Scale className="size-10 text-primary" />
-          </div>
-        </CardContent>
-      </Card>
-
       <AnimatePresence mode="wait">
         {selectedCase ? (
           <motion.div key="detail" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
@@ -120,7 +102,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
         ) : (
           <motion.div key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
+              <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-4 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
                 {canViewCases && <TabsTrigger value="cases"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80

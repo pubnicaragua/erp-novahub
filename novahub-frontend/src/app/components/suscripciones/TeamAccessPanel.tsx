@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronsDown, ChevronsUp, Edit2, Eye, Info, ListChecks, Plus, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronsDown, ChevronsUp, CircleHelp, Edit2, Eye, ListChecks, Plus, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -7,7 +7,6 @@ import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { toast } from 'sonner';
 import { rolesService } from '../../services/roles.service';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
@@ -18,6 +17,7 @@ import { HIDDEN_PERMISSION_MODULE_IDS, PERMISSION_SUBMODULES, SIDEBAR_PERMISSION
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 interface TeamAccessPanelProps {
   tenantId: string;
@@ -29,6 +29,7 @@ interface TeamAccessPanelProps {
   canCreateRoles?: boolean;
   canEditRoles?: boolean;
   canDeleteRoles?: boolean;
+  roleHighlightRequest?: { roleId: string; token: number } | null;
 }
 
 const permissionActions = [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS];
@@ -91,32 +92,37 @@ const getViewActionDescription = (module: any, action: PermissionMatrixAction) =
   return permissionActions.find((item) => item.key === action)?.description || `Permite ejecutar ${getActionLabel(action).toLowerCase()} en ${module.label}.`;
 };
 
-function PermissionHelp() {
+const ROLE_PERMISSIONS_TOUR_STEPS: Record<'preview' | 'editor', GuidedTourStep[]> = {
+  preview: [
+    { target: '[data-tour="role-preview-permissions"]', title: 'Permisos directos', description: 'Aquí se muestran únicamente las vistas y acciones activas del rol seleccionado.', placement: 'bottom' },
+    { target: '[data-tour="role-preview-groups"]', title: 'Módulos y vistas', description: 'Abre un módulo para revisar sus vistas y las acciones habilitadas en cada una.', placement: 'top' },
+  ],
+  editor: [
+    { target: '[data-tour="role-permissions"]', title: 'Permisos del rol', description: 'Configura el acceso directo de este rol por módulo, vista y acción.', placement: 'bottom' },
+    { target: '[data-tour="role-permission-actions"]', title: 'Acciones rápidas', description: 'Puedes expandir todo, contraer todo o marcar y desmarcar los permisos disponibles.', placement: 'bottom' },
+  ],
+};
+
+function RolePermissionsTutorial({ mode }: { mode: 'preview' | 'editor' }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary" aria-label="Información sobre las acciones de permisos">
-          <Info className="size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] p-0">
-        <div className="border-b border-border/60 bg-muted/30 px-4 py-3">
-          <p className="text-xs font-black uppercase tracking-widest">¿Qué incluye cada acción?</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Las acciones se aplican a la vista de cada tarjeta. "Aprobar" solo aparece donde existe un flujo de aprobación o transición.</p>
-        </div>
-        <div className="space-y-3 p-4">
-          {permissionActions.map(({ key, label, description }) => (
-            <div key={key} className="flex items-start gap-2.5">
-              <span className={key === 'approve' ? 'mt-0.5 size-2 shrink-0 rounded-full bg-emerald-500' : 'mt-0.5 size-2 shrink-0 rounded-full bg-primary/60'} />
-              <div className="min-w-0">
-                <p className="text-xs font-bold">{label}</p>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">{description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        data-toolbar-role="help"
+        data-tutorial-trigger="true"
+        className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+        onClick={() => setOpen(true)}
+        aria-label="Abrir tutorial de permisos"
+        title="Abrir tutorial de permisos"
+      >
+        <CircleHelp className="size-4" />
+      </Button>
+      {open && <GuidedTour steps={ROLE_PERMISSIONS_TOUR_STEPS[mode]} onClose={() => setOpen(false)} title="Permisos del rol" allowTargetInteraction />}
+    </>
   );
 }
 
@@ -135,7 +141,7 @@ function hydratePermissions(role: any) {
   return hydrated;
 }
 
-export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesChange, canViewRoles = true, canCreateRoles = true, canEditRoles = true, canDeleteRoles = true }: TeamAccessPanelProps) {
+export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesChange, canViewRoles = true, canCreateRoles = true, canEditRoles = true, canDeleteRoles = true, roleHighlightRequest = null }: TeamAccessPanelProps) {
   const [roleView, setRoleView] = useState<'list' | 'editor' | 'preview'>('list');
   const [roleSaving, setRoleSaving] = useState(false);
   const [editingRole, setEditingRole] = useState<any | null>(null);
@@ -146,6 +152,16 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
   const [rolesLayout, setRolesLayout] = useState<ViewLayoutMode>('table');
   const isCompactRolesViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveRolesLayout: ViewLayoutMode = isCompactRolesViewport ? 'cards' : rolesLayout;
+
+  useEffect(() => {
+    if (!roleHighlightRequest?.roleId) return;
+    const timer = window.setTimeout(() => {
+      const roleElement = Array.from(document.querySelectorAll<HTMLElement>('[data-role-id]'))
+        .find((element) => element.dataset.roleId === roleHighlightRequest.roleId);
+      roleElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [roleHighlightRequest?.roleId, roleHighlightRequest?.token]);
 
   const { data: teamData, refetch: refetchTeam } = useTenantQuery(
     ['my-company-team-access', tenantId],
@@ -467,7 +483,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
         <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" /><p>Los permisos se organizan por módulos y, cuando existen, por sus vistas internas. Puedes revisar un rol o editarlo en una vista completa sin perder el contexto de la empresa.</p></div>
 
-        <Card className="min-w-0 border-border/50">
+        <Card data-tour="role-preview-permissions" className="min-w-0 border-border/50">
           <CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><UserCog className="size-4 text-primary" /> Catálogo de roles</CardTitle><CardDescription className="mt-1 text-xs">Define los permisos que tendrá cada grupo de usuarios.</CardDescription></div>
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
@@ -488,7 +504,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
                     ? `No se puede eliminar: ${linkedUsers} usuario${linkedUsers === 1 ? '' : 's'} vinculado${linkedUsers === 1 ? '' : 's'}`
                     : 'Eliminar rol';
                 const isRoleCard = effectiveRolesLayout === 'cards';
-                return <div key={role.id || role.name} className={cn('flex min-w-0 gap-3', isRoleCard ? 'h-full flex-col rounded-2xl border border-border/50 bg-card p-4 shadow-sm transition-colors hover:border-primary/30' : 'flex-col rounded-xl border border-border/50 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between')}>
+                return <div key={role.id || role.name} data-role-id={role.id} className={cn('flex min-w-0 gap-3', isRoleCard ? 'h-full flex-col rounded-2xl border border-border/50 bg-card p-4 shadow-sm transition-colors hover:border-primary/30' : 'flex-col rounded-xl border border-border/50 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between', roleHighlightRequest?.roleId === String(role.id) && 'border-primary bg-primary/10 shadow-lg shadow-primary/20 ring-2 ring-primary/40')}>
                 <div className="min-w-0 flex-1"><p className={cn('text-sm font-bold', isRoleCard ? 'break-words' : 'truncate')}>{role.name}</p><p className={cn('text-xs text-muted-foreground', isRoleCard ? 'break-words' : 'truncate')}>{role.description || 'Sin descripción'}</p></div>
                 <div className={cn('flex min-w-0 flex-wrap items-center gap-1.5', isRoleCard && 'mt-auto pt-1')}>
                   <Badge variant="secondary" className="text-[9px]">{normalizePermissions(role.permissions).filter((permission: any) => permission.read).length} vistas</Badge>
@@ -514,9 +530,10 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
           {canEditRoles && <Button className="w-fit gap-2" onClick={() => openEditRole(viewingRole)}><Edit2 className="size-4" /> Editar rol</Button>}
         </div>
         <Card className="min-w-0 border-border/50">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b border-border/30 bg-muted/10"><div><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Eye className="size-4 text-primary" /> Módulos y vistas habilitadas</CardTitle><CardDescription className="mt-1 text-xs">Revisa las acciones efectivas de este rol. Cada módulo se puede desplegar o contraer.</CardDescription></div><PermissionHelp /></CardHeader>
+          <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b border-border/30 bg-muted/10"><div><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Eye className="size-4 text-primary" /> Módulos y vistas habilitadas</CardTitle><CardDescription className="mt-1 text-xs">Revisa las acciones efectivas de este rol. Cada módulo se puede desplegar o contraer.</CardDescription></div><RolePermissionsTutorial mode="preview" /></CardHeader>
           <CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
             <AuditHistoryDisclosure entity="ROLE" entityId={String(viewingRole.id)} createdAt={viewingRole.createdAt} />
+            <div data-tour="role-preview-groups" className="space-y-3">
             {Object.entries(groupedModules).map(([group, modules]) => {
               const expanded = expandedSections[group] ?? false;
               return <section key={group} className="overflow-hidden rounded-xl border border-border/60">
@@ -524,6 +541,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
                 {expanded && <div className="overflow-x-auto"><div className="min-w-[1040px]"><div className="grid items-center gap-1.5 border-t border-border/40 bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span>Vista</span>{permissionActions.map(({ key, label }) => <span key={key} className="text-center">{label}</span>)}</div>{(modules as any[]).map((module: any) => { const permission = normalizePermissions(viewingRole.permissions).find((item: any) => item.module === module.id) || {}; return <div key={module.id} className="grid items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>{permissionActions.map(({ key }) => <div key={key} className="flex justify-center">{!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : permissionValue(permission, key) ? <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-500"><Check className="mr-1 size-3" />Sí</Badge> : <span className="text-muted-foreground/30">—</span>}</div>)}</div>; })}</div></div>}
               </section>;
             })}
+            </div>
           </CardContent>
         </Card>
       </>}
@@ -531,12 +549,12 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       {roleView === 'editor' && editingRole && <>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} disabled={roleSaving} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">{editingRole.id ? 'Editar rol' : 'Nuevo rol'}</h2><p className="truncate text-xs text-muted-foreground">Define el acceso de este rol dentro de {tenantName}.</p></div></div>
-          <div className="flex flex-wrap items-center gap-2"><PermissionHelp /><Button variant="outline" onClick={closeRoleView} disabled={roleSaving}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
+          <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={closeRoleView} disabled={roleSaving}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
         </div>
 
           <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><ShieldCheck className="size-4 text-primary" /> Datos del rol</CardTitle><CardDescription className="mt-1 text-xs">El nombre y la descripción ayudan a identificar el alcance del equipo.</CardDescription></CardHeader><CardContent className="grid min-w-0 gap-4 p-4 sm:p-6 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="role-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del rol</Label><Input id="role-name" data-tour="role-name" value={editingRole.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ej: Gerencia" className="h-11" /></div><div className="space-y-2"><Label htmlFor="role-description" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción (opcional)</Label><Input id="role-description" data-tour="role-description" value={editingRole.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe el alcance del rol" className="h-11" /></div>{editingRole.id && <div className="md:col-span-2"><AuditHistoryDisclosure entity="ROLE" entityId={String(editingRole.id)} createdAt={editingRole.createdAt} /></div>}</CardContent></Card>
 
-        <Card data-tour="role-permissions" className="min-w-0 border-border/50"><CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-sm font-black uppercase tracking-wider">Permisos</CardTitle><CardDescription className="mt-1 text-xs">Cada sección es un módulo y cada tarjeta es una vista o tab real. Despliega o contrae los módulos y sus vistas para definir el acceso.</CardDescription></div><Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{ROLE_PERMISSION_MODULES.length} módulos y vistas</Badge></div><div className="flex flex-wrap items-center gap-2 border-t border-border/30 pt-3"><Button type="button" variant="outline" size="sm" onClick={expandAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsDown className="size-3.5" /> Expandir todo</Button><Button type="button" variant="outline" size="sm" onClick={collapseAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsUp className="size-3.5" /> Contraer todo</Button><Button type="button" variant="secondary" size="sm" onClick={toggleAllPermissions} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ListChecks className="size-3.5" /> {isAllPermissionsEnabled() ? 'Desmarcar todo' : 'Marcar todo'}</Button><span className="text-[10px] text-muted-foreground">Puedes marcar una vista, un módulo o todos los permisos.</span></div></CardHeader><CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
+        <Card data-tour="role-permissions" className="min-w-0 border-border/50"><CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-sm font-black uppercase tracking-wider">Permisos</CardTitle><CardDescription className="mt-1 text-xs">Cada sección es un módulo y cada tarjeta es una vista o tab real. Despliega o contrae los módulos y sus vistas para definir el acceso.</CardDescription></div><Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{ROLE_PERMISSION_MODULES.length} módulos y vistas</Badge></div><div data-tour="role-permission-actions" className="flex flex-wrap items-center gap-2 border-t border-border/30 pt-3"><RolePermissionsTutorial mode="editor" /><Button type="button" variant="outline" size="sm" onClick={expandAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsDown className="size-3.5" /> Expandir todo</Button><Button type="button" variant="outline" size="sm" onClick={collapseAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsUp className="size-3.5" /> Contraer todo</Button><Button type="button" variant="secondary" size="sm" onClick={toggleAllPermissions} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ListChecks className="size-3.5" /> {isAllPermissionsEnabled() ? 'Desmarcar todo' : 'Marcar todo'}</Button><span className="text-[10px] text-muted-foreground">Puedes marcar una vista, un módulo o todos los permisos.</span></div></CardHeader><CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
            {Object.entries(groupedModules).map(([group, modules]) => {
              const expanded = expandedSections[group] ?? false;
              const groupModules = modules as any[];

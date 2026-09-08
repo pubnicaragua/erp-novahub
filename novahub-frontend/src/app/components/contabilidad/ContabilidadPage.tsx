@@ -358,22 +358,8 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
   return (
     <div className="accounting-module flex h-full min-h-[calc(100vh-5rem)] min-w-0 overflow-x-hidden">
       <main className="min-w-0 flex-1 overflow-y-auto custom-scrollbar">
-        <div className="mx-auto min-w-0 w-full max-w-[1700px] overflow-x-hidden p-3 pb-20 sm:p-6 md:p-10">
-          {/* Header */}
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
-              <BookOpen className="size-9 text-primary" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-                Contabilidad <span className="text-primary">General</span>
-              </h1>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                  {SECTIONS.find((s) => s.id === activeSection)?.label}
-                </Badge>
-              </div>
-            </div>
+        <div className="mx-auto min-w-0 w-full max-w-[1700px] overflow-x-hidden p-3 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
+          <div className="mb-3 flex justify-end">
             <Button
               variant="outline"
               size="sm"
@@ -387,11 +373,11 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
               <span className="hidden sm:inline">¿Ayuda?</span>
             </Button>
           </div>
-          <CurrencyValuationBanner className="mb-6" />
+          <CurrencyValuationBanner className="mb-3" />
 
           {/* Horizontal tab navigation */}
           <div className={cn(
-            'mb-8 w-full min-w-0 overflow-x-auto custom-scrollbar',
+            'mb-4 w-full min-w-0 overflow-x-auto custom-scrollbar',
             !isSidebarCollapsed && 'hidden lg:hidden',
           )}>
             <div className="flex w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm">

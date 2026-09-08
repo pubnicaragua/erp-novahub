@@ -1,8 +1,10 @@
-import { AlertTriangle, ArrowRight } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, Loader2, Plus } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import type { SimilarProductGroup } from '../../services/inventario.service';
+import type { SimilarProductGroup, SimilarProductMatch } from '../../services/inventario.service';
+
+type SimilarProductVariant = NonNullable<SimilarProductMatch['variants']>[number];
 
 interface ProductSimilarityAlertProps {
   open: boolean;
@@ -12,6 +14,9 @@ interface ProductSimilarityAlertProps {
   continueLabel?: string;
   onOpenChange: (open: boolean) => void;
   onContinue?: () => void;
+  onSelectExisting?: (group: SimilarProductGroup, match: SimilarProductMatch, variant?: SimilarProductVariant) => void;
+  onCreateNew?: (group: SimilarProductGroup) => void;
+  resolvingKey?: string | null;
 }
 
 export function ProductSimilarityAlert({
@@ -22,7 +27,11 @@ export function ProductSimilarityAlert({
   continueLabel,
   onOpenChange,
   onContinue,
+  onSelectExisting,
+  onCreateNew,
+  resolvingKey,
 }: ProductSimilarityAlertProps) {
+  const hasDynamicResolution = Boolean(onSelectExisting || onCreateNew);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-2rem)] max-w-3xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-hidden flex flex-col">
@@ -33,38 +42,74 @@ export function ProductSimilarityAlert({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          {groups.flatMap((group) => group.matches.map((match) => (
-            <div key={`${group.inputKey}-${match.id}`} className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
+          {groups.map((group) => (
+            <section key={group.inputKey} className="space-y-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.03] p-3 sm:p-4" aria-label={`Coincidencias para ${group.inputKey}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 pb-3">
                 <div className="min-w-0">
-                  <p className="break-words font-black">{match.name || 'Sin nombre'}</p>
-                  <p className="mt-1 break-all font-mono text-xs text-muted-foreground">SKU: {match.sku || match.code || 'Sin SKU'}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Registro de la plantilla</p>
+                  <p className="mt-1 break-words font-mono text-xs font-bold text-foreground">{group.inputKey || 'Sin identificador'}</p>
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {(match.reasons || []).map((reason) => <Badge key={reason} variant="outline" className="border-amber-500/50 text-[10px]">Coincide por {reason}</Badge>)}
-                </div>
+                <Badge variant="outline" className="border-amber-500/50 text-[10px]">{group.matches.length} posible{group.matches.length === 1 ? '' : 's'} coincidencia{group.matches.length === 1 ? '' : 's'}</Badge>
               </div>
-              <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
-                <div><span className="font-bold text-muted-foreground">Marca:</span> {match.brand || 'Sin marca'}</div>
-                <div><span className="font-bold text-muted-foreground">Categoría:</span> {match.category || 'Sin categoría'}</div>
-                <div className="sm:col-span-2"><span className="font-bold text-muted-foreground">Descripción:</span> {match.description || 'Sin descripción'}</div>
-                <div className="sm:col-span-2">
-                  <span className="font-bold text-muted-foreground">Atributos y valores:</span>{' '}
-                  {match.attributes?.length ? match.attributes.map((attribute) => `${attribute.name}: ${attribute.value}`).join(' · ') : 'Sin atributos'}
+              {group.matches.map((match) => {
+                const matchKey = `${group.inputKey}:${match.id}`;
+                const isResolving = resolvingKey === matchKey;
+                return (
+                  <article key={matchKey} className="rounded-xl border border-amber-500/40 bg-background p-4 shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="break-words font-black">{match.name || 'Sin nombre'}</p>
+                        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">SKU: {match.sku || match.code || 'Sin SKU'}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {(match.reasons || []).map((reason) => <Badge key={reason} variant="outline" className="border-amber-500/50 text-[10px]">Coincide por {reason}</Badge>)}
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                      <div><span className="font-bold text-muted-foreground">Marca:</span> {match.brand || 'Sin marca'}</div>
+                      <div><span className="font-bold text-muted-foreground">Categoría:</span> {match.category || 'Sin categoría'}</div>
+                      <div className="sm:col-span-2"><span className="font-bold text-muted-foreground">Descripción:</span> {match.description || 'Sin descripción'}</div>
+                      <div className="sm:col-span-2">
+                        <span className="font-bold text-muted-foreground">Atributos y valores:</span>{' '}
+                        {match.attributes?.length ? match.attributes.map((attribute) => `${attribute.name}: ${attribute.value}`).join(' · ') : 'Sin atributos'}
+                      </div>
+                      <div className="sm:col-span-2">
+                        <span className="font-bold text-muted-foreground">Precios:</span>{' '}
+                        {match.prices?.length ? match.prices.map((price) => `${price.list}: ${price.price}${price.currency ? ` ${price.currency}` : ''}`).join(' · ') : 'Sin precios configurados'}
+                        <span className="mx-1 text-muted-foreground">·</span>
+                        <span className="font-bold text-muted-foreground">Costo:</span> {match.costPrice === null || match.costPrice === undefined ? 'No disponible' : match.costPrice}
+                      </div>
+                    </div>
+                    {hasDynamicResolution && (
+                      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+                        <Button type="button" size="sm" className="gap-2" disabled={isResolving} onClick={() => onSelectExisting?.(group, match)}>
+                          {isResolving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                          Usar este producto
+                        </Button>
+                        {match.variants?.map((variant) => (
+                          <Button key={variant.id} type="button" size="sm" variant="outline" className="gap-2" disabled={isResolving} onClick={() => onSelectExisting?.(group, match, variant)}>
+                            <Check className="size-4" /> Usar variante {variant.sku}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+              {hasDynamicResolution && (
+                <div className="flex justify-end">
+                  <Button type="button" size="sm" variant="outline" className="gap-2 border-amber-500/50 text-amber-800 hover:bg-amber-500/10 dark:text-amber-200" disabled={resolvingKey === `${group.inputKey}:CREATE_NEW`} onClick={() => onCreateNew?.(group)}>
+                    {resolvingKey === `${group.inputKey}:CREATE_NEW` ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                    Crear como nuevo
+                  </Button>
                 </div>
-                <div className="sm:col-span-2">
-                  <span className="font-bold text-muted-foreground">Precios:</span>{' '}
-                  {match.prices?.length ? match.prices.map((price) => `${price.list}: ${price.price}${price.currency ? ` ${price.currency}` : ''}`).join(' · ') : 'Sin precios configurados'}
-                  <span className="mx-1 text-muted-foreground">·</span>
-                  <span className="font-bold text-muted-foreground">Costo:</span> {match.costPrice === null || match.costPrice === undefined ? 'No disponible' : match.costPrice}
-                </div>
-              </div>
-            </div>
-          ))) }
+              )}
+            </section>
+          ))}
         </div>
         <DialogFooter className="shrink-0 border-t pt-3">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Revisar datos</Button>
-          {onContinue && continueLabel && (
+          {!hasDynamicResolution && onContinue && continueLabel && (
             <Button type="button" onClick={onContinue} className="gap-2">
               <ArrowRight className="size-4" /> {continueLabel}
             </Button>

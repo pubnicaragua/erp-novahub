@@ -12,6 +12,7 @@ export const customersService = {
   create: (data: Partial<Customer>) => api.post<Customer>('/sales/customers', data),
   importMassive: (data: { rows: Array<Partial<Customer> & { fiscalRegime?: string; customerClass?: string; priceListCode?: string }> }) => api.post<{ total: number; created: number; skipped: number; errors: string[]; warnings: string[] }>('/sales/customers/import', data),
   update: (id: string, data: Partial<Customer>) => api.patch<Customer>(`/sales/customers/${id}`, data),
+  setStatus: (id: string, status: Customer['status']) => api.patch<Customer>(`/sales/customers/${id}/status`, { status }),
   delete: (id: string) => api.delete<void>(`/sales/customers/${id}`),
 };
 
@@ -25,6 +26,7 @@ export const estimatesService = {
   getById: (id: string) => api.get<Estimate>(`/sales/estimates/${id}`),
   create: (data: Partial<Estimate>, idempotencyKey?: string) => api.idempotentPost<Estimate>('/sales/estimates', data, idempotencyKey),
   update: (id: string, data: Partial<Estimate>) => api.patch<Estimate>(`/sales/estimates/${id}`, data),
+  cancel: (id: string) => api.idempotentPatch<Estimate>(`/sales/estimates/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/sales/estimates/${id}`),
   convertToOrder: (id: string, data?: { sellerEmployeeId?: string | null }) => api.post<SalesOrder>(`/sales/estimates/${id}/convert-to-order`, data || {}),
 };

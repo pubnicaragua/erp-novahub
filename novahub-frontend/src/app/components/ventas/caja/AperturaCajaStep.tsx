@@ -10,9 +10,10 @@ import { getApiErrorMessage } from '../../../services/api';
 interface AperturaCajaStepProps {
   selectedRegister: string;
   onOpenSession: (dto: any) => Promise<void>;
+  canOperate?: boolean;
 }
 
-export function AperturaCajaStep({ selectedRegister, onOpenSession }: AperturaCajaStepProps) {
+export function AperturaCajaStep({ selectedRegister, onOpenSession, canOperate = true }: AperturaCajaStepProps) {
   const { exchangeRate } = useCurrency();
   const [nioDenominations, setNioDenominations] = useState<DenominationState[]>([
     ...NIO_BILLS.map(v => ({ value: v, quantity: 0, type: 'bill' as const })),
@@ -67,7 +68,7 @@ export function AperturaCajaStep({ selectedRegister, onOpenSession }: AperturaCa
             <CardTitle className="text-lg">Ingreso de Efectivo: Apertura</CardTitle>
             <CardDescription>Ingrese el fondo inicial en físico para comenzar a operar.</CardDescription>
           </div>
-          <Button onClick={handleOpenSession} disabled={totalOpening <= 0} title={totalOpening <= 0 ? 'Registra un fondo inicial mayor que cero' : undefined} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold transition-all shadow-sm">
+          <Button onClick={handleOpenSession} disabled={!canOperate || totalOpening <= 0} title={!canOperate ? 'No tienes permiso para operar sesiones de caja' : totalOpening <= 0 ? 'Registra un fondo inicial mayor que cero' : undefined} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold transition-all shadow-sm">
             <Lock className="size-4 mr-2" /> Aperturar Caja
           </Button>
         </div>

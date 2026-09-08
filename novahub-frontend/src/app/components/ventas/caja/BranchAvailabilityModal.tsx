@@ -26,6 +26,8 @@ interface BranchAvailabilityModalProps {
   loading: boolean;
   submitting: boolean;
   onSubmit: (selection: HoldReservationSelection) => void;
+  canCreateHold?: boolean;
+  canPayNow?: boolean;
 }
 
 export function BranchAvailabilityModal({
@@ -38,6 +40,8 @@ export function BranchAvailabilityModal({
   loading,
   submitting,
   onSubmit,
+  canCreateHold = true,
+  canPayNow = true,
 }: BranchAvailabilityModalProps) {
   // Solo se persiste la selección explícita del usuario; si apunta a una
   // sucursal ya no disponible o llegan datos nuevos, se cae al primer
@@ -53,7 +57,7 @@ export function BranchAvailabilityModal({
       : firstAvailable;
 
   const selectedRow = availability.find((row) => row.warehouseId === selectedWarehouseId) || null;
-  const canSubmit = Boolean(product && requestedQuantity > 0 && selectedRow && !loading && !submitting);
+  const canSubmit = Boolean(canCreateHold && product && requestedQuantity > 0 && selectedRow && !loading && !submitting && (!payNow || canPayNow));
 
   const handleOpenChange = (next: boolean) => {
     if (!next) {
@@ -179,7 +183,7 @@ export function BranchAvailabilityModal({
                     Emite la factura y cobra en esta caja; la entrega queda pendiente en la sucursal seleccionada.
                   </p>
                 </div>
-                <Switch checked={payNow} onCheckedChange={setPayNow} />
+                <Switch checked={payNow} onCheckedChange={setPayNow} disabled={!canPayNow} />
               </div>
             </>
           )}

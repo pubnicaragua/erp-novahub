@@ -1370,26 +1370,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const previewAccentForeground = getReadableForeground(accentHex);
 
   return (
-    <div className="space-y-6 p-4 md:p-8 pb-24 max-w-[1920px] mx-auto">
-
-      {/* —— HEADER —— */}
-      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-2 md:gap-3 uppercase italic">
-            <Settings2 className="size-6 md:size-9 text-primary" />
-            Configuración <span className="text-primary">Sistema</span>
-          </h1>
-          <div className="flex items-center gap-2 mt-2">
-            <Badge className="rounded-md bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-              {scenario === 'superadmin' ? 'Super Admin Console' : scenario === 'partner' ? 'Partner Panel' : 'Mi Configuración'}
-            </Badge>
-            <span className="text-muted-foreground/40 text-xs font-medium">
-              {user?.name}
-            </span>
-          </div>
-        </div>
-      </motion.div>
+    <div className="space-y-6 p-4 pb-24 md:mx-auto md:max-w-[1920px] md:px-8 md:pt-4">
 
       {/* —— TABS —— */}
       <Tabs value={activeTab} className="space-y-6" onValueChange={setActiveTab}>
