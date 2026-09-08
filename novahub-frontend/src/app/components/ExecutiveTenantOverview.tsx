@@ -4,6 +4,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
+  BarChart3,
   CalendarDays,
   Check,
   ChevronRight,
@@ -17,13 +18,17 @@ import {
   ShoppingCart,
   Store,
   TrendingDown,
-  TrendingUp,
   WalletCards,
 } from 'lucide-react';
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -68,6 +73,12 @@ const PRODUCT_TABS = [
 ] as const;
 
 type ProductTab = typeof PRODUCT_TABS[number]['id'];
+
+const CHART_COLORS = ['#08b78a', '#2563eb', '#f59e0b', '#ef6b73', '#7767d9', '#0ea5a4'];
+const shortenLabel = (value: unknown, max = 18) => {
+  const label = String(value || 'Sin nombre');
+  return label.length > max ? `${label.slice(0, max - 1)}…` : label;
+};
 
 const formatDate = (value: string) => new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: 'short' }).format(new Date(`${value}T12:00:00Z`));
 
@@ -165,8 +176,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const kpis = data?.kpis || {};
   const performance = useMemo(() => data?.productPerformance || {}, [data]);
   const previous = previousQuery.data?.kpis || {};
-  const alerts = Array.isArray(data?.inventoryAlerts) ? data.inventoryAlerts : [];
-  const registers = Array.isArray(data?.salesByRegister) ? data.salesByRegister : [];
+  const alerts = useMemo(() => Array.isArray(data?.inventoryAlerts) ? data.inventoryAlerts : [], [data]);
+  const registers = useMemo(() => Array.isArray(data?.salesByRegister) ? data.salesByRegister : [], [data]);
   const transactions = Array.isArray(data?.recentTransactions) ? data.recentTransactions : [];
   const trend = range ? chartRows(Array.isArray(data?.dailyTrend) ? data.dailyTrend : [], range) : [];
 
@@ -183,13 +194,26 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const rangeLabel = range ? `${formatDate(range.start)} – ${formatDate(range.end)}` : 'Selecciona un rango válido';
   const alertCount = new Set(alerts.map((row: any) => getProductId(row))).size;
   const hasData = Boolean(data && data.kpis);
-  const topProduct = performance.topSelling?.[0];
-  const topRegister = registers[0];
-  const totalRegisterSales = registers.reduce((sum: number, register: any) => sum + safeNumber(register.total), 0);
-  const revenue = safeNumber(kpis.totalRevenue);
-  const topProductShare = revenue > 0 ? safeNumber(topProduct?.totalRevenue) / revenue * 100 : 0;
-  const topRegisterShare = totalRegisterSales > 0 ? safeNumber(topRegister?.total) / totalRegisterSales * 100 : 0;
-  const revenueChange = changeLabel(revenue, safeNumber(previous.totalRevenue));
+  const productSalesChart = useMemo(() => (performance.topSelling || []).slice(0, 6).map((item: any) => ({
+    name: shortenLabel(getProductName(item)),
+    value: safeNumber(item.totalQty),
+  })).reverse(), [performance]);
+  const productMarginChart = useMemo(() => (performance.topMargin || []).slice(0, 6).map((item: any) => ({
+    name: shortenLabel(getProductName(item)),
+    value: safeNumber(item.profit),
+  })).reverse(), [performance]);
+  const registerChart = useMemo(() => registers.slice(0, 6).map((item: any) => ({
+    name: shortenLabel(item.registerName || item.registerCode || 'Caja'),
+    value: safeNumber(item.total),
+  })).reverse(), [registers]);
+  const inventoryChart = useMemo(() => {
+    const counts = alerts.reduce<Record<string, number>>((result, item: any) => {
+      const key = item.status === 'SIN_STOCK' ? 'Sin stock' : item.status === 'STOCK_BAJO' ? 'Stock bajo' : 'Reordenar';
+      result[key] = (result[key] || 0) + 1;
+      return result;
+    }, {});
+    return Object.entries(counts).map(([name, value], index) => ({ name, value, fill: CHART_COLORS[index + 2] || CHART_COLORS[0] }));
+  }, [alerts]);
 
   const toggleIndicator = (id: string, checked: boolean) => {
     setDraftPreferences((current) => ({ ...current, indicators: checked ? [...current.indicators, id] : current.indicators.filter((item) => item !== id) }));
@@ -331,7 +355,6 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         <div>
           <div className="executive-eyebrow"><span className="executive-eyebrow-dot" /> Panel ejecutivo</div>
           <h1>Resumen de gestión</h1>
-          <p>Una vista breve para decidir qué atender hoy, con acceso directo al detalle operativo.</p>
         </div>
         <div className="executive-toolbar">
           <Select value={period} onValueChange={(value) => setPeriod(value as DashboardPeriod)}>
@@ -360,22 +383,39 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
             const value = indicatorValue(id, kpis, performance, data);
             const previousValue = typeof value === 'number' && ['totalRevenue', 'totalExpenses', 'ordersCount', 'paidInvoicesCount', 'averagePaidInvoice'].includes(id) ? safeNumber(previous[id]) : undefined;
             const change = changeLabel(typeof value === 'number' ? value : 0, previousValue);
-            return <button type="button" key={id} className="executive-kpi" onClick={() => openKpi(definition)} title={`Abrir detalle de ${definition.label}`}><span className="executive-kpi-top"><span className="executive-kpi-icon"><KpiIcon id={id} /></span><span className="executive-kpi-label">{definition.label}</span><ArrowUpRight className="executive-kpi-arrow" /></span><KpiValue definition={definition} value={value} data={data} />{change && <span className={`executive-kpi-change ${change.startsWith('-') ? 'is-negative' : 'is-positive'}`}>{change} vs. período anterior</span>}<span className="executive-kpi-help">{definition.decision}</span></button>;
+            return <button type="button" key={id} className="executive-kpi" onClick={() => openKpi(definition)} title={`Abrir detalle de ${definition.label}`}><span className="executive-kpi-top"><span className="executive-kpi-icon"><KpiIcon id={id} /></span><span className="executive-kpi-label">{definition.label}</span><ArrowUpRight className="executive-kpi-arrow" /></span><KpiValue definition={definition} value={value} data={data} />{change && <span className={`executive-kpi-change ${change.startsWith('-') ? 'is-negative' : 'is-positive'}`}>{change} vs. período anterior</span>}</button>;
           })}
         </section>
 
-        <section className="executive-story" aria-label="Historia ejecutiva del período">
-          <div className="executive-story-heading"><div><span className="executive-section-kicker">La historia de este período</span><h2>De los datos a la decisión</h2><p>Lee el resultado en tres movimientos: primero el resultado, después sus principales impulsores y finalmente la acción recomendada.</p></div><span className="executive-story-period">{rangeLabel}</span></div>
-          <div className="executive-story-grid">
-            <article className="executive-story-step"><div className="executive-story-step-top"><span className="executive-story-number">01</span><span className="executive-story-label">¿Qué pasó?</span></div><strong className="executive-story-big-value">{money(revenue)}</strong><p>Ventas pagadas en el período.</p><span className={`executive-story-variance ${revenueChange?.startsWith('-') ? 'is-negative' : ''}`}>{revenueChange || 'Sin base comparable'} {revenueChange && 'vs. período anterior'}</span><button type="button" className="executive-story-link" onClick={() => navigate('ventas', { subModule: 'facturas' })}>Entender el resultado <ArrowUpRight /></button></article>
-            <article className="executive-story-step is-middle"><div className="executive-story-step-top"><span className="executive-story-number">02</span><span className="executive-story-label">¿Por qué pasó?</span></div><div className="executive-story-drivers"><button type="button" className="executive-story-driver" onClick={() => openProduct(topProduct)}><span>Producto líder</span><strong>{topProduct ? getProductName(topProduct) : 'Sin datos'}</strong><small>{topProduct ? `${topProductShare.toLocaleString('es-NI', { maximumFractionDigits: 1 })}% de las ventas del ranking` : 'Registra una venta para identificarlo'}</small></button><button type="button" className="executive-story-driver" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: topRegister?.registerId || 'ALL' })}><span>Caja líder</span><strong>{topRegister?.registerName || 'Sin datos'}</strong><small>{topRegister ? `${topRegisterShare.toLocaleString('es-NI', { maximumFractionDigits: 1 })}% de las ventas por caja` : 'Sin ventas por caja'}</small></button></div><span className="executive-story-context"><TrendingUp className="size-3.5" /> {safeNumber(kpis.paidInvoicesCount)} facturas pagadas · {alertCount} alertas de inventario</span></article>
-            <article className="executive-story-step is-action"><div className="executive-story-step-top"><span className="executive-story-number">03</span><span className="executive-story-label">¿Qué hacemos ahora?</span></div><p className="executive-story-action-intro">Atiende primero lo que puede mover el resultado.</p><div className="executive-story-actions"><button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'low' })}><span className="executive-action-mark alert"><AlertTriangle /></span><span><strong>Revisar inventario</strong><small>{alertCount} productos requieren atención</small></span><ChevronRight /></button><button type="button" onClick={() => navigate('ventas', { subModule: 'ordenes-venta' })}><span className="executive-action-mark order"><ShoppingCart /></span><span><strong>Dar seguimiento</strong><small>{safeNumber(kpis.pendingOrders)} órdenes abiertas</small></span><ChevronRight /></button></div></article>
-          </div>
-        </section>
+        <div className="executive-chart-wall" aria-label="Gráficas ejecutivas">
+          {preferences.blocks.includes('trend') && <section className="executive-panel executive-chart-card executive-chart-card-trend">
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Tendencia</span><h2>Ventas y gastos</h2></div><span className="executive-panel-caption">{(range?.days || 0) > 62 ? 'Por mes' : 'Por día'}</span></div>
+            <div className="executive-chart executive-chart-wall-trend"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} /><stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => money(value).replace(/\s/g, '')} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} /><Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} /><Area type="monotone" dataKey="expenses" name="expenses" stroke="#f59e0b" fill="url(#executiveExpenses)" strokeWidth={2} /></AreaChart></ResponsiveContainer></div><div className="executive-legend"><span><i className="legend-dot revenue" /> Ventas</span><span><i className="legend-dot expenses" /> Gastos</span></div>
+          </section>}
 
-        <div className="executive-section-grid">
-          {preferences.blocks.includes('trend') && <section className="executive-panel executive-trend-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Ritmo del negocio</span><h2>Ventas y gastos</h2></div><span className="executive-panel-caption">{(range?.days || 0) > 62 ? 'Agrupado por mes' : 'Día a día'}</span></div><div className="executive-chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} /><stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => money(value).replace(/\s/g, '')} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas pagadas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} /><Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} /><Area type="monotone" dataKey="expenses" name="expenses" stroke="#f59e0b" fill="url(#executiveExpenses)" strokeWidth={2} /></AreaChart></ResponsiveContainer></div><div className="executive-legend"><span><i className="legend-dot revenue" /> Ventas pagadas</span><span><i className="legend-dot expenses" /> Gastos registrados</span><span className="executive-legend-note">El resultado no sustituye el estado de resultados contable.</span></div></section>}
+          {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-sales">
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Volumen</span><h2>Ventas por producto</h2></div><BarChart3 className="executive-chart-heading-icon" /></div>
+            <div className="executive-mini-chart">{productSalesChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productSalesChart} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={112} axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value).toLocaleString('es-NI')} uds.`, 'Unidades']} /><Bar dataKey="value" fill="var(--primary)" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas</div>}</div>
+          </section>}
 
+          {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-margin">
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Rentabilidad</span><h2>Utilidad por producto</h2></div><WalletCards className="executive-chart-heading-icon" /></div>
+            <div className="executive-mini-chart">{productMarginChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productMarginChart} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={112} axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Utilidad']} /><Bar dataKey="value" fill="#2563eb" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin datos de utilidad</div>}</div>
+          </section>}
+
+          {preferences.blocks.includes('registers') && <section className="executive-panel executive-chart-card executive-chart-card-registers">
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Puntos de venta</span><h2>Ventas por caja</h2></div><Store className="executive-chart-heading-icon" /></div>
+            <div className="executive-mini-chart">{registerChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={registerChart} margin={{ top: 8, right: 8, left: -18, bottom: 2 }}><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} /><YAxis hide /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Ventas']} /><Bar dataKey="value" fill="#7767d9" radius={[6, 6, 0, 0]} barSize={28} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas por caja</div>}</div>
+          </section>}
+
+          {preferences.blocks.includes('attention') && <section className="executive-panel executive-chart-card executive-chart-card-inventory">
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Existencias</span><h2>Estado del inventario</h2></div><Package className="executive-chart-heading-icon" /></div>
+            <div className="executive-donut-wrap">{inventoryChart.length ? <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={inventoryChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={53} outerRadius={79} paddingAngle={4} stroke="none">{inventoryChart.map((entry: any) => <Cell key={entry.name} fill={entry.fill} />)}</Pie><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value)} productos`, 'Cantidad']} /></PieChart></ResponsiveContainer> : <div className="executive-no-data">Inventario sin alertas</div>}</div>
+            <div className="executive-chart-legend">{inventoryChart.map((entry: any) => <span key={entry.name}><i style={{ background: entry.fill }} />{entry.name}<strong>{entry.value}</strong></span>)}</div>
+          </section>}
+        </div>
+
+        <div className="executive-section-grid executive-attention-grid">
           {preferences.blocks.includes('attention') && <section ref={attentionRef} className="executive-panel executive-attention-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Prioridades</span><h2>Atención requerida</h2></div><span className="executive-attention-count">{alertCount} alertas</span></div><div className="executive-attention-list"><button type="button" className="executive-attention-row" onClick={() => navigate('ventas', { subModule: 'ordenes-venta' })}><span className="executive-attention-icon orange"><ShoppingCart /></span><span><strong>{safeNumber(kpis.pendingOrders)} órdenes abiertas</strong><small>Seguimiento comercial y despacho</small></span><ChevronRight /></button><button type="button" className="executive-attention-row" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'low' })}><span className="executive-attention-icon red"><AlertTriangle /></span><span><strong>{alertCount} productos requieren revisión</strong><small>Agotados, bajo mínimo o por reordenar</small></span><ChevronRight /></button><button type="button" className="executive-attention-row" onClick={() => setProductTab('noSaleProducts')}><span className="executive-attention-icon blue"><Package /></span><span><strong>{safeNumber(kpis.noSaleProductsCount ?? performance.noSaleProducts?.length)} productos sin ventas</strong><small>Con stock disponible en el período</small></span><ChevronRight /></button></div><div className="executive-panel-footer"><span><CircleHelp className="size-3.5" /> Las alertas muestran productos distintos, aunque existan en varias ubicaciones.</span></div></section>}
         </div>
 
