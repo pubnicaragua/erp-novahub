@@ -5,6 +5,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { PasswordRequirements } from '../PasswordRequirements';
+import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 
 type ManagerUserEditorDialogProps = {
   user: any | null;
@@ -71,6 +72,7 @@ export function ManagerUserEditorDialog({ user, open, saving = false, onOpenChan
                 {passwordError && <span className="block text-xs font-normal text-destructive">{passwordError}</span>}
               </label> : <p className="text-xs font-normal text-muted-foreground sm:col-span-2">La contraseña de los administradores de sucursal solo la puede cambiar el administrador principal de esa sucursal.</p>}
             </div>
+            <AuditHistoryDisclosure entity="USER" entityId={String(user.id)} createdAt={user.createdAt} />
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 p-4">
               <input type="checkbox" checked={isProtectedAdmin || isActive} disabled={isProtectedAdmin} onChange={(event) => setIsActive(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" />
               <span><span className="block text-sm font-bold">Cuenta activa</span><span className="mt-1 block text-xs font-normal text-muted-foreground">Al desactivar se invalidan sus sesiones. El administrador principal de la sucursal está protegido.</span></span>

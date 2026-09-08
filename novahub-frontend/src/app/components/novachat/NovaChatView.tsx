@@ -356,6 +356,7 @@ export function NovaChatView() {
                   <Smile className="size-4" />
                 </Button>
                 <Input
+                  data-testid="novachat-message-input"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
@@ -364,6 +365,7 @@ export function NovaChatView() {
                   disabled={sending}
                 />
                 <Button
+                  data-testid="novachat-send-message"
                   onClick={() => void handleSend()}
                   disabled={!newMessage.trim() || sending}
                   className="shrink-0 bg-orange-700 hover:bg-orange-800 text-white font-bold gap-2 rounded-xl px-5"

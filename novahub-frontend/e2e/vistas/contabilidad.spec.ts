@@ -9,6 +9,5 @@ test.describe('Vistas del ERP (plantillas para grabar)', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByText(/configuración de cuentas para asientos/i).first()).toBeVisible({ timeout: 15_000 });
-    await page.waitForTimeout(1500);
   });
 });

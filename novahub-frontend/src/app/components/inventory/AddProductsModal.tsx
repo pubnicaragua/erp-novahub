@@ -185,7 +185,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       try {
         const response = await inventoryService.checkProductCode(code);
         const exists = response?.exists;
-        setSkuError(exists ? 'Código duplicado' : '');
+        setSkuError(exists ? 'Observación: este SKU ya está utilizado' : '');
       } catch (e: any) {
         console.error('Error validating SKU', e);
       }
@@ -379,7 +379,27 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       setNewCategoryOpen(false);
       toast.success('Categoría creada');
     } catch (e: any) {
-      toast.error(e?.message || 'Error al crear categoría');
+      const existingCategory = (e?.data as any)?.category;
+      const isDuplicate = e?.code === 'CATEGORY_DUPLICATE'
+        || Boolean(existingCategory?.id)
+        || /ya existe la categoría|categor[ií]a.*duplic/i.test(String(e?.message || ''));
+      if (isDuplicate) {
+        if (existingCategory?.id) {
+          setExtraCategories((prev) => [
+            ...prev.filter((category) => category.id !== existingCategory.id),
+            existingCategory,
+          ]);
+          handleUpdateDraft('categoryId', existingCategory.id);
+        }
+        setNewCategoryName('');
+        setNewCategoryDesc('');
+        setNewCategoryOpen(false);
+        toast.warning(existingCategory?.name
+          ? `Observación: la categoría "${existingCategory.name}" ya existe. Se seleccionó la existente.`
+          : `Observación: ${e?.message || 'la categoría ya existe'}`);
+      } else {
+        toast.error(e?.message || 'Error al crear categoría');
+      }
     } finally {
       setCreatingCategory(false);
     }
@@ -412,7 +432,47 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     }
   };
 
+  const validateStockCosts = (product: any) => {
+    const isProduct = String(product.itemType || 'PRODUCT').toUpperCase() === 'PRODUCT';
+    const stock = product.isVariable ? getVariantStockTotal(product) : Number(product.initialStock || 0);
+    if (!isProduct || !Number.isFinite(stock) || stock <= 0) return true;
+
+    if (!canViewInventoryCost) {
+      toast.warning('Observación: no puedes registrar stock inicial sin permiso para indicar el costo del producto. Solicita acceso al costo o deja el stock en cero.');
+      return false;
+    }
+
+    const parentCost = product.costPrice === '' || product.costPrice === null || product.costPrice === undefined
+      ? NaN
+      : Number(product.costPrice);
+    if (!product.isVariable) {
+      if (!Number.isFinite(parentCost) || parentCost <= 0) {
+        toast.warning('Observación: el costo debe ser mayor que cero cuando el producto tiene stock inicial.');
+        return false;
+      }
+      return true;
+    }
+
+    const missingCostCombination = buildVariantCombinations(product.linkedAttributes).find((combination) => {
+      const key = variantCombinationKey(combination);
+      const quantity = Number(product.variantInitialStocks?.[key] || 0);
+      if (!Number.isFinite(quantity) || quantity <= 0) return false;
+      const rawVariantCost = product.variantCostPrices?.[key];
+      const effectiveCost = rawVariantCost === '' || rawVariantCost === null || rawVariantCost === undefined
+        ? parentCost
+        : Number(rawVariantCost);
+      return !Number.isFinite(effectiveCost) || effectiveCost <= 0;
+    });
+    if (missingCostCombination) {
+      const label = missingCostCombination.map((attribute) => `${attribute.attributeName}: ${attribute.value}`).join(' · ');
+      toast.warning(`Observación: la variante ${label} tiene stock inicial y necesita un costo mayor que cero.`);
+      return false;
+    }
+    return true;
+  };
+
   const validateProductsStockAccounting = async (products: any[]) => {
+    if (products.some((product) => !validateStockCosts(product))) return false;
     const stockProducts = products.filter((product) => {
       const isProduct = String(product.itemType || 'PRODUCT').toUpperCase() === 'PRODUCT';
       const stock = product.isVariable ? getVariantStockTotal(product) : Number(product.initialStock || 0);
@@ -599,7 +659,13 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       onOpenChange(false);
       onRefresh();
     } catch (error: any) {
-      toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
+      const similarMatches = (error?.data as any)?.matches;
+      if (error?.code === 'PRODUCT_SIMILAR_MATCH' && Array.isArray(similarMatches) && similarMatches.length > 0) {
+        setSimilarGroups(similarMatches);
+        toast.warning('Observación: se encontró un producto igual o muy similar. Revisa sus datos antes de continuar.');
+      } else {
+        toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -621,7 +687,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         return;
       }
       if (skuError) {
-        toast.error('Corrige el error en el código antes de guardar');
+        toast.warning('Observación: el SKU ya está utilizado. Usa el producto existente o registra otro código antes de guardar.');
         return;
       }
       if (draftProduct.isVariable) {
@@ -682,8 +748,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     <ProductSimilarityAlert
       open={similarGroups.length > 0}
       groups={similarGroups}
-      title="El producto ya existe o es muy similar"
-      description="No se creó ningún registro. Corrige el nombre, descripción, SKU, marca o atributos para evitar duplicados."
+      title="Observación: posible producto existente"
+      description="No se creó el producto. Revisa el registro encontrado y sus nombres, SKU, marca, descripción y atributos antes de continuar para evitar duplicados."
       onOpenChange={(value) => { if (!value) setSimilarGroups([]); }}
     />
     <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
@@ -737,18 +803,20 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               <div className={isPagePresentation ? 'col-span-1 md:col-start-2 md:row-start-1 md:col-span-2' : 'col-span-1 md:col-start-2 md:row-start-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
                 <div className="flex flex-col gap-1 mt-1 w-full">
-                  <Input 
+                  <Input
+                    data-testid="inventory-product-code"
                     value={draftProduct.code} 
                     onChange={e => handleUpdateDraft('code', e.target.value)} 
-                    className={`h-8 text-xs font-mono w-full ${skuError ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
+                    className={`h-8 text-xs font-mono w-full ${skuError ? 'border-amber-500 focus-visible:ring-amber-500' : ''}`}
                     placeholder="SKU-001" 
                   />
-                  {skuError && <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
+                  {skuError && <span className="text-[9px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
                 </div>
               </div>
               <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-1 md:col-span-9' : 'sm:col-span-2 md:col-start-3 md:row-start-1 md:col-span-3'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
-                <Input 
+                <Input
+                  data-testid="inventory-product-name"
                   value={draftProduct.name} 
                   onChange={e => handleUpdateDraft('name', e.target.value)} 
                   className="h-8 text-xs mt-1" 
@@ -798,16 +866,18 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     </div>
                   ) : (
                     <div className="mt-1 flex min-w-0 gap-1.5">
-                      <Combobox
-                        value={draftProduct.categoryId}
-                        onChange={value => handleUpdateDraft('categoryId', value)}
-                        options={categoryOptions}
-                        searchPlaceholder="Buscar categoría..."
-                        emptyMessage="No se encontraron categorías."
-                        className="!h-8 flex-1 !rounded-none text-xs"
-                        contentClassName="!z-[70] min-w-[360px]"
-                        placeholder="Seleccionar categoría"
-                      />
+                      <div data-testid="inventory-product-category" className="min-w-0 flex-1">
+                        <Combobox
+                          value={draftProduct.categoryId}
+                          onChange={value => handleUpdateDraft('categoryId', value)}
+                          options={categoryOptions}
+                          searchPlaceholder="Buscar categoría..."
+                          emptyMessage="No se encontraron categorías."
+                          className="!h-8 w-full !rounded-none text-xs"
+                          contentClassName="!z-[70] min-w-[360px]"
+                          placeholder="Seleccionar categoría"
+                        />
+                      </div>
                       <Button
                         type="button"
                         variant="outline"
@@ -919,6 +989,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 <div key={list.code} className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio {list.name}</label>
                   <Input
+                    data-testid={`inventory-product-price-${list.code}`}
                     type="number"
                     min={0}
                     step="any"
@@ -933,6 +1004,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               {canViewInventoryCost && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
                 <Input 
+                  data-testid="inventory-product-cost"
                   type="number" min={0}
                   value={draftProduct.costPrice} 
                   onChange={e => handleUpdateDraft('costPrice', e.target.value)} 
@@ -969,16 +1041,19 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 <>
                   <div className={isPagePresentation ? 'sm:col-span-2 md:row-start-5 md:col-span-4' : 'sm:col-span-2'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega (Stock Inicial)</label>
+                    <div data-testid="inventory-product-warehouse">
                     <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
                       <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue placeholder="Bodega para ingreso" /></SelectTrigger>
                       <SelectContent className="!rounded-none">
                         {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    </div>
                   </div>
                   <div className={isPagePresentation ? 'col-span-1 md:row-start-5 md:col-span-2' : 'col-span-1'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Inicial</label>
                     <Input
+                      data-testid="inventory-product-initial-stock"
                       type="number"
                       min={0}
                       value={draftProduct.initialStock}
@@ -1039,7 +1114,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               )}
               
               <div className={`sm:col-span-2 ${isPagePresentation ? 'md:col-span-12 md:row-start-6' : 'md:col-span-8'} flex justify-end`}>
-                <Button onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={!!skuError || isCheckingAccounting || isSaving}>
+                <Button data-testid="inventory-product-add-to-list" onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={!!skuError || isCheckingAccounting || isSaving}>
                   <Plus className="size-3 mr-2" />
                   {isCheckingAccounting ? 'Validando contabilidad...' : 'Agregar a la lista'}
                 </Button>
@@ -1346,7 +1421,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving || isCheckingAccounting}>
             Cancelar
           </Button>
-          <Button 
+          <Button
+            data-testid="inventory-product-save"
             onClick={handleSave} 
             disabled={isSaving || isCheckingAccounting || (productsList.length === 0 && (!!skuError || !draftProduct.code.trim() || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"

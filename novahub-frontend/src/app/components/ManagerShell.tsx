@@ -1063,7 +1063,7 @@ function ManagerSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-9 text-sidebar-foreground hover:bg-sidebar-accent lg:hidden"
+                className="size-9 text-sidebar-foreground hover:bg-primary/10 hover:text-primary lg:hidden"
                 onClick={onClose}
                 aria-label="Cerrar menú Manager"
               >
@@ -1098,11 +1098,13 @@ function ManagerSidebar({
                             onClick={() => onSectionClick(item.id)}
                             className={cn(
                               "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150",
-                              "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                              active
+                                ? "hover:bg-primary hover:text-primary-foreground"
+                                : "hover:bg-primary/10 hover:text-primary",
                               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                               sidebarCollapsed && "justify-center",
                               active
-                                ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm font-semibold"
+                                ? "bg-primary text-primary-foreground shadow-sm font-semibold"
                                 : "text-sidebar-foreground/70",
                             )}
                             aria-current={active ? "page" : undefined}
@@ -1196,11 +1198,10 @@ function ManagerSidebar({
                                     }
                                     className={cn(
                                       "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
-                                      "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                                       subActive
-                                        ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                                        : "text-sidebar-foreground/55",
+                                        ? "bg-primary text-primary-foreground font-medium shadow-sm hover:bg-primary hover:text-primary-foreground"
+                                        : "text-sidebar-foreground/55 hover:bg-primary/10 hover:text-primary",
                                     )}
                                   >
                                     <SubIcon className="size-4 shrink-0" />

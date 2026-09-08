@@ -162,7 +162,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
                     </Select>
                   </div>
                   {canPerform('LEGAL_CASES', 'create') && (
-                    <Button onClick={() => setShowNewCase(true)} className="rounded-xl gap-2 font-bold">
+                    <Button data-testid="legal-new-case" onClick={() => setShowNewCase(true)} className="rounded-xl gap-2 font-bold">
                       <Plus className="size-4" /> Nuevo Caso
                     </Button>
                   )}
@@ -300,7 +300,7 @@ function NewCaseForm({ onComplete, onCancel }: { onComplete: (c: LegalCase) => v
       </div>
       <div className="space-y-1.5">
         <Label className="text-[10px] uppercase font-black tracking-widest">Descripción</Label>
-        <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+        <Textarea data-testid="legal-case-description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
           placeholder="Describí el caso o trámite legal..." rows={3} className="rounded-xl resize-none" />
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -326,7 +326,7 @@ function NewCaseForm({ onComplete, onCancel }: { onComplete: (c: LegalCase) => v
       </div>
       <div className="flex gap-3 pt-2">
         <Button variant="outline" onClick={onCancel} className="h-11 rounded-xl font-bold gap-2 flex-1">Cancelar</Button>
-        <Button onClick={handleSubmit} disabled={loading || !form.description.trim()} className="h-11 rounded-xl font-bold gap-2 flex-1">
+        <Button data-testid="legal-case-submit" onClick={handleSubmit} disabled={loading || !form.description.trim()} className="h-11 rounded-xl font-bold gap-2 flex-1">
           {loading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           Crear Caso
         </Button>

@@ -115,7 +115,12 @@ const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'EMPLOYEE' | 'VIEWER'> = {
   'rh-manager': 'EMPLOYEE',
 };
 
-export function SuscripcionesPage() {
+interface SuscripcionesPageProps {
+  activeSubModule?: string;
+  onSubModuleChange?: (subModule?: string) => void;
+}
+
+export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: SuscripcionesPageProps = {}) {
   const { user, refreshEnabledModules, canPerform } = useAuth();
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
@@ -603,6 +608,8 @@ export function SuscripcionesPage() {
       <>
       <TenantSubscriptionView 
         tenant={myTenant} 
+        activeSubModule={activeSubModule}
+        onSubModuleChange={onSubModuleChange}
         availableModules={AVAILABLE_MODULES} 
         requests={requests.filter((r: any) => r.clientTenantId === user.tenantId)}
         customRoles={customRoles}

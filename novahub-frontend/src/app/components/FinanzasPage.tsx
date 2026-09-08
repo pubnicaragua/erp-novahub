@@ -20,6 +20,7 @@ import { FinanceCalendarView } from './finanzas/FinanceCalendarView';
 import { FinanceGeneralBalanceView } from './finanzas/FinanceGeneralBalanceView';
 import { FinanceLossesView } from './finanzas/FinanceLossesView';
 import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
+import { FinancialJournalView } from './finanzas/FinancialJournalView';
 import { contabilidadService } from '../services/contabilidad.service';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
@@ -146,6 +147,12 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     'gastos': 'gastos',
     'egresos': 'gastos', 
     'movimientos-recurrentes': 'recurrentes',
+    'ingresos-recurrentes': 'ingresos-recurrentes',
+    'cuentas-financieras': 'cuentas-financieras',
+    'diario-financiero': 'diario-financiero',
+    'libro-mayor-financiero': 'libro-mayor-financiero',
+    'presupuestos-financieros': 'presupuestos-financieros',
+    'reportes-financieros-detalle': 'reportes-financieros-detalle',
     'calendario-financiero': 'calendario',
     'analisis-ingresos-gastos': 'analisis',
     'balance-general': 'balance-general',
@@ -188,8 +195,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     income: ['resumen', 'ingresos', 'analisis', 'balance-general'].includes(activeTab),
     expense: ['resumen', 'gastos', 'analisis', 'balance-general'].includes(activeTab),
     recurringExpense: ['resumen', 'recurrentes', 'calendario', 'analisis'].includes(activeTab),
-    recurringIncome: ['resumen', 'recurrentes', 'calendario', 'analisis'].includes(activeTab),
-    accounts: ['resumen', 'ingresos', 'gastos', 'recurrentes', 'balance-general'].includes(activeTab),
+    recurringIncome: ['resumen', 'recurrentes', 'ingresos-recurrentes', 'calendario', 'analisis'].includes(activeTab),
+    accounts: ['resumen', 'ingresos', 'gastos', 'recurrentes', 'ingresos-recurrentes', 'cuentas-financieras', 'balance-general'].includes(activeTab),
   };
   const incomesQuery = useQuery({
     queryKey: ['finance', 'income', tenantKey, dateFrom, dateTo],
@@ -212,7 +219,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const recurringExpensesQuery = useQuery({
     queryKey: ['finance', 'recurring-expenses', tenantKey, dateFrom, dateTo],
     queryFn: ({ signal }) => recurringExpensesService.getAll(financeParams, signal),
-    enabled: canReadFinancial && activeDataTabs.recurringExpense,
+    enabled: (canReadFinancial || canPerform('FINANCIAL_EXPENSES_REC', 'view')) && activeDataTabs.recurringExpense,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -221,7 +228,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const recurringIncomesQuery = useQuery({
     queryKey: ['finance', 'recurring-incomes', tenantKey, dateFrom, dateTo],
     queryFn: ({ signal }) => recurringIncomesService.getAll(financeParams, signal),
-    enabled: canReadFinancial && activeDataTabs.recurringIncome,
+    enabled: (canReadFinancial || canPerform('FINANCIAL_INCOMES_REC', 'view')) && activeDataTabs.recurringIncome,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -230,7 +237,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const accountsQuery = useQuery({
     queryKey: ['finance', 'accounts', tenantKey],
     queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal),
-    enabled: canReadFinancial && activeDataTabs.accounts,
+    enabled: (canReadFinancial || canPerform('FINANCIAL_ACCOUNTS', 'view')) && activeDataTabs.accounts,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
@@ -508,6 +515,12 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES', permission: ['FINANCIAL_INCOMES'] },
     { id: 'gastos', label: 'Gastos', icon: Wallet, module: 'FINANCIAL_EXPENSES', permission: ['FINANCIAL_EXPENSES'] },
     { id: 'recurrentes', label: 'Recurrentes', icon: RotateCcw, module: 'FINANCIAL_EXPENSES_REC', permission: ['FINANCIAL_EXPENSES_REC'] },
+    { id: 'ingresos-recurrentes', label: 'Ingresos recurrentes', icon: TrendingUp, module: 'FINANCIAL_INCOMES_REC', permission: ['FINANCIAL_INCOMES_REC'] },
+    { id: 'cuentas-financieras', label: 'Cuentas financieras', icon: Landmark, module: 'FINANCIAL_ACCOUNTS', permission: ['FINANCIAL_ACCOUNTS'] },
+    { id: 'diario-financiero', label: 'Diario financiero', icon: Calendar, module: 'FINANCIAL_JOURNAL', permission: ['FINANCIAL_JOURNAL'] },
+    { id: 'libro-mayor-financiero', label: 'Libro mayor financiero', icon: BarChart3, module: 'FINANCIAL_LEDGER', permission: ['FINANCIAL_LEDGER'] },
+    { id: 'presupuestos-financieros', label: 'Presupuestos', icon: Wallet, module: 'FINANCIAL_BUDGET', permission: ['FINANCIAL_BUDGET'] },
+    { id: 'reportes-financieros-detalle', label: 'Reportes financieros', icon: BarChart3, module: 'FINANCIAL_REPORTS', permission: ['FINANCIAL_REPORTS'] },
     { id: 'calendario', label: 'Calendario', icon: CalendarClock, module: 'FINANCIAL_DASHBOARD', permission: ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD'] },
     { id: 'analisis', label: 'Análisis', icon: BarChart3, module: 'FINANCIAL_BALANCE', permission: ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'] },
     { id: 'balance-general', label: 'Balance Gral', icon: Landmark, module: 'FINANCIAL_BALANCE', permission: ['FINANCIAL_BALANCE'] },
@@ -624,6 +637,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     canDelete={false}
                     canExport={canPerform('FINANCIAL_INCOMES', 'export')}
                     detailsRenderer={renderIncomeDetails}
+                    auditEntity="FINANCIAL_INCOME"
                     targetItemId={targetFinanceId?.tab === 'ingresos' ? targetFinanceId.id : null}
                     onClearTargetItem={() => setTargetFinanceId(null)}
                   />
@@ -649,6 +663,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     canDelete={false}
                     canExport={canPerform('FINANCIAL_EXPENSES', 'export')}
                     detailsRenderer={renderExpenseDetails}
+                    auditEntity="FINANCIAL_EXPENSE"
                     targetItemId={targetFinanceId?.tab === 'gastos' ? targetFinanceId.id : null}
                     onClearTargetItem={() => setTargetFinanceId(null)}
                   />
@@ -679,6 +694,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           canEdit={false}
                           canDelete={false}
                           canExport={canPerform('FINANCIAL_INCOMES_REC', 'export')}
+                          detailsRenderer={(item) => <div className="text-sm text-muted-foreground">Ingreso recurrente programado: {item.source || item.description || 'Sin descripción'}</div>}
+                          auditEntity="RECURRING_FINANCIAL_INCOME"
                         />
                       </div>
                       <div>
@@ -695,11 +712,53 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           canEdit={false}
                           canDelete={false}
                           canExport={canPerform('FINANCIAL_EXPENSES_REC', 'export')}
+                          detailsRenderer={(item) => <div className="text-sm text-muted-foreground">Gasto recurrente programado: {item.source || item.description || 'Sin descripción'}</div>}
+                          auditEntity="RECURRING_FINANCIAL_EXPENSE"
                         />
                       </div>
                     </div>
                   </div>
                 </motion.div>
+              </TabsContent>
+
+              <TabsContent value="ingresos-recurrentes" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                  <FinanceTableView
+                    title="Ingresos recurrentes"
+                    data={fRecurringIncomes.map((r: any) => ({ ...r, isPayment: true }))}
+                    columns={RECURRING_COLUMNS}
+                    onUpdate={handleUpdateRecurring}
+                    onAdd={() => handleAddRecurring('INCOME')}
+                    onDelete={async (id) => { await recurringIncomesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] }); toast.success('Eliminado'); }}
+                    loading={loading}
+                    canCreate={canPerform('FINANCIAL_INCOMES_REC', 'create')}
+                    canEdit={canPerform('FINANCIAL_INCOMES_REC', 'edit')}
+                    canDelete={canPerform('FINANCIAL_INCOMES_REC', 'delete')}
+                    canExport={canPerform('FINANCIAL_INCOMES_REC', 'export')}
+                    detailsRenderer={(item) => <div className="text-sm text-muted-foreground">Ingreso recurrente programado: {item.source || item.description || 'Sin descripción'}</div>}
+                    auditEntity="RECURRING_FINANCIAL_INCOME"
+                  />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="cuentas-financieras" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinanceCashView /></motion.div>
+              </TabsContent>
+
+              <TabsContent value="diario-financiero" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinancialJournalView kind="journal" /></motion.div>
+              </TabsContent>
+
+              <TabsContent value="libro-mayor-financiero" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinancialJournalView kind="ledger" /></motion.div>
+              </TabsContent>
+
+              <TabsContent value="presupuestos-financieros" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinanceBalanceView incomes={fIncomes} expenses={fExpenses} recurringIncomes={fRecurringIncomes} recurringExpenses={fRecurringExpenses} /></motion.div>
+              </TabsContent>
+
+              <TabsContent value="reportes-financieros-detalle" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinanceGeneralBalanceView incomes={fIncomes} expenses={fExpenses} accounts={fAccounts} /></motion.div>
               </TabsContent>
 
               <TabsContent value="calendario" className="m-0" asChild>

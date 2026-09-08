@@ -61,6 +61,31 @@ const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
   { id: 'config', label: 'Configuración' },
 ];
 
+const TRACKING_TAB_PERMISSION: Record<TrackingTab, string> = {
+  transit: 'TRACKING_TRANSIT',
+  reception: 'TRACKING_RECEPTION',
+  batches: 'TRACKING_BATCHES',
+  packages: 'TRACKING_PACKAGES',
+  reconciliation: 'TRACKING_RECONCILIATION',
+  billing: 'TRACKING_BILLING',
+  config: 'TRACKING_CONFIG',
+};
+
+const TRACKING_SIDEBAR_TAB: Record<TrackingTab, string> = {
+  transit: 'tracking',
+  reception: 'tracking-recepcion',
+  batches: 'tracking-lotes',
+  packages: 'tracking-paquetes',
+  reconciliation: 'tracking-conciliacion',
+  billing: 'tracking-facturacion',
+  config: 'tracking-configuracion',
+};
+
+interface TrackingPageProps {
+  activeSubModule?: string;
+  onSubModuleChange?: (subModule?: string) => void;
+}
+
 const STATUS_OPTIONS = Object.keys(TRACKING_STATUS_LABELS) as TrackingStatus[];
 
 const INITIAL_FORM = {
@@ -73,8 +98,8 @@ const INITIAL_FORM = {
   estimatedAt: '',
 };
 
-export function TrackingPage() {
-  const { user } = useAuth();
+export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPageProps) {
+  const { user, canPerform } = useAuth();
   const [shipments, setShipments] = useState<TrackingShipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -89,7 +114,30 @@ export function TrackingPage() {
   const [lookupCode, setLookupCode] = useState('');
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState<{ reason: TrackLookupErrorReason; message: string } | null>(null);
+  const visibleTabs = useMemo(
+    () => TRACKING_TABS.filter(({ id }) => canPerform(TRACKING_TAB_PERMISSION[id], 'view')),
+    [canPerform],
+  );
   const [tab, setTab] = useState<TrackingTab>('transit');
+
+  useEffect(() => {
+    const requested = Object.entries(TRACKING_SIDEBAR_TAB).find(([, sidebarId]) => sidebarId === activeSubModule)?.[0] as TrackingTab | undefined;
+    if (requested && visibleTabs.some(({ id }) => id === requested)) setTab(requested);
+  }, [activeSubModule, visibleTabs]);
+
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.some(({ id }) => id === tab)) {
+      const fallback = visibleTabs[0].id;
+      setTab(fallback);
+      onSubModuleChange?.(TRACKING_SIDEBAR_TAB[fallback]);
+    }
+  }, [onSubModuleChange, tab, visibleTabs]);
+
+  const changeTab = (next: TrackingTab) => {
+    if (!visibleTabs.some(({ id }) => id === next)) return;
+    setTab(next);
+    onSubModuleChange?.(TRACKING_SIDEBAR_TAB[next]);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -244,10 +292,10 @@ export function TrackingPage() {
   return (
     <>
       <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-3 sm:px-6">
-        {TRACKING_TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => changeTab(t.id)}
             className={`rounded-t-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition-colors ${tab === t.id ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
           >
             {t.label}
@@ -268,7 +316,7 @@ export function TrackingPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           
-          <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)} data-tour="log-transit-create"><Plus className="size-4" /> Nuevo ticket</Button>
+          {canPerform('TRACKING_TRANSIT', 'create') && <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)} data-tour="log-transit-create" data-testid="tracking-new-ticket"><Plus className="size-4" /> Nuevo ticket</Button>}
         </div>
       </header>
 
@@ -419,6 +467,7 @@ export function TrackingPage() {
                 </label>
                 <Input
                   type={field === 'estimatedAt' ? 'datetime-local' : 'text'}
+                  data-testid={`tracking-create-${field}`}
                   value={form[field]}
                   onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))}
                   className="rounded-xl"
@@ -428,6 +477,7 @@ export function TrackingPage() {
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción de la mercancía</label>
               <textarea
+                data-testid="tracking-create-description"
                 value={form.description}
                 onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                 rows={3}
@@ -437,7 +487,7 @@ export function TrackingPage() {
           </div>
           <SheetFooter className="flex-row justify-end gap-2 border-t border-border/50 px-5 py-3">
             <Button type="button" variant="outline" className="rounded-xl" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button type="button" className="rounded-xl" onClick={handleCreate} disabled={saving}>{saving ? 'Creando…' : 'Crear ticket'}</Button>
+            <Button type="button" className="rounded-xl" data-testid="tracking-create-submit" onClick={handleCreate} disabled={saving}>{saving ? 'Creando…' : 'Crear ticket'}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -502,6 +552,7 @@ export function TrackingPage() {
                   <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><MapPin className="size-4 text-primary" /> Registrar estado manualmente</h3>
                   <div className="mt-3 space-y-2">
                     <select
+                      data-testid="tracking-event-status"
                       value={eventForm.status}
                       onChange={(e) => setEventForm((prev) => ({ ...prev, status: e.target.value as TrackingStatus }))}
                       className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold"
@@ -509,8 +560,8 @@ export function TrackingPage() {
                       {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{TRACKING_STATUS_LABELS[status]}</option>)}
                     </select>
                     <div className="flex gap-2">
-                      <Input placeholder="Ubicación (opcional)" value={eventForm.location} onChange={(e) => setEventForm((prev) => ({ ...prev, location: e.target.value }))} className="rounded-xl text-xs" />
-                      <Button className="rounded-xl text-xs" onClick={handleAddEvent}>Registrar</Button>
+                      <Input data-testid="tracking-event-location" placeholder="Ubicación (opcional)" value={eventForm.location} onChange={(e) => setEventForm((prev) => ({ ...prev, location: e.target.value }))} className="rounded-xl text-xs" />
+                      {canPerform('TRACKING_TRANSIT', 'edit') && <Button data-testid="tracking-event-submit" className="rounded-xl text-xs" onClick={handleAddEvent}>Registrar</Button>}
                     </div>
                   </div>
                 </Card>
@@ -519,9 +570,9 @@ export function TrackingPage() {
                   <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => { const url = `${window.location.origin}/public/tracking`; navigator.clipboard.writeText(url); toast.success('Enlace público copiado: ' + url); }}>
                     <Truck className="size-4" /> Copiar enlace público
                   </Button>
-                  <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>
+                  {canPerform('TRACKING_TRANSIT', 'edit') && <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>
                     <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar con transportista
-                  </Button>
+                  </Button>}
                   <Button
                     variant="outline"
                     className="flex-1 rounded-xl text-xs"
@@ -530,7 +581,7 @@ export function TrackingPage() {
                   >
                     <PackageCheck className="size-4" /> Recibir paquete
                   </Button>
-                  <Button variant="destructive" className="rounded-xl text-xs" onClick={handleDelete}><Trash2 className="size-4" /></Button>
+                  {canPerform('TRACKING_TRANSIT', 'delete') && <Button variant="destructive" className="rounded-xl text-xs" onClick={handleDelete}><Trash2 className="size-4" /></Button>}
                 </div>
                 <p className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-center text-[11px] text-muted-foreground">
                   Consultar tracking no representa una recepción física. Para registrar la llegada usa la pestaña <b>Recepción de paquetes</b>.

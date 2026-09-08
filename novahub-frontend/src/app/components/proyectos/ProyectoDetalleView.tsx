@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, FolderKanban, LayoutDashboard, ListTodo, Wallet, Receipt, Users, FileText, MessageSquare, BarChart3 } from 'lucide-react';
+import { ArrowLeft, FolderKanban, History, LayoutDashboard, ListTodo, Wallet, Receipt, Users, FileText, MessageSquare, BarChart3 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
@@ -14,6 +14,7 @@ import { PROJECT_STATUS_META, PRIORITY_META, money, formatDate } from './shared'
 import { ProyectoPlanificacionPanel } from './ProyectoPlanificacionPanel';
 import { ProyectoPresupuestoPanel, ProyectoCostosPanel, ProyectoReportePanel } from './ProyectoFinanzasPanels';
 import { ProyectoRecursosPanel, ProyectoDocumentosPanel, ProyectoActividadesPanel } from './ProyectoColaboracionPanels';
+import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 
 interface ProyectoDetalleViewProps {
   projectId: string;
@@ -29,6 +30,7 @@ const TAB_DEFS = [
   { id: 'documentos', label: 'Documentos', icon: FileText, module: 'PROJECTS_DOCUMENTS' },
   { id: 'actividades', label: 'Actividades', icon: MessageSquare, module: 'PROJECTS' },
   { id: 'reporte', label: 'Reporte', icon: BarChart3, module: 'PROJECTS' },
+  { id: 'historial', label: 'Historial', icon: History, module: 'PROJECTS' },
 ];
 
 export function ProyectoDetalleView({ projectId, onBack }: ProyectoDetalleViewProps) {
@@ -102,6 +104,7 @@ export function ProyectoDetalleView({ projectId, onBack }: ProyectoDetalleViewPr
         {activeTab === 'documentos' && <ProyectoDocumentosPanel projectId={projectId} />}
         {activeTab === 'actividades' && <ProyectoActividadesPanel projectId={projectId} />}
         {activeTab === 'reporte' && <ProyectoReportePanel projectId={projectId} />}
+        {activeTab === 'historial' && project ? <AuditHistoryModal isOpen={activeTab === 'historial'} onClose={() => setActiveTab('resumen')} entity="PROJECT" entityId={project.id} title="Historial del proyecto" presentation="inline" /> : null}
       </Tabs>
     </div>
   );

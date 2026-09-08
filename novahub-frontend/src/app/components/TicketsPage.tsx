@@ -48,7 +48,7 @@ interface TicketsPageProps {
 
 export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageProps) => {
   const { canPerform } = useAuth();
-  const canViewTickets = canPerform('TICKETS', 'view');
+  const canViewTickets = canPerform('TICKETS_LIST', 'view');
   const canViewKnowledge = canPerform('TICKETS_KNOWLEDGE_BASE', 'view');
   const canViewAgents = canPerform('TICKETS_AGENTS', 'view');
   const tabs = [

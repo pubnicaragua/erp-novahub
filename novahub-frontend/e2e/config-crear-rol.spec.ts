@@ -6,13 +6,12 @@ test.describe('Configuración - Roles', () => {
     await test.step('Abrir Configuración → Roles', async () => {
       await openModule(page, 'Configuración');
       const item = page.locator('a, button, span').filter({ hasText: /roles/i }).first();
-      if (await item.isVisible().catch(() => false)) { await item.click(); await page.waitForTimeout(1_500); }
+      if (await item.isVisible().catch(() => false)) { await item.click(); await expect(page.locator('#root')).toBeVisible(); }
     });
     await test.step('Botón nuevo rol abre formulario', async () => {
       const btn = page.getByRole('button', { name: /nuevo rol|crear rol|agregar rol|nuevo/i }).first();
       await expect(btn).toBeVisible({ timeout: 20_000 });
       await btn.click();
-      await page.waitForTimeout(1_000);
       await expect(page.locator('[role="dialog"], form').first()).toBeVisible({ timeout: 15_000 }).catch(() => {});
     });
     await test.step('Selector de permisos presente', async () => {

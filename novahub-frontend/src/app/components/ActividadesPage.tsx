@@ -31,7 +31,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
     enabled: activeTab === 'tareas' && canPerform('ACTIVITIES_TASKS', 'view'),
   });
   const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => eventsService.getAll(signal), {
-    enabled: activeTab === 'eventos' && canPerform('ACTIVITIES_EVENTS', 'view'),
+    enabled: ['eventos', 'calendario', 'reuniones'].includes(activeTab)
+      && canPerform(activeTab === 'calendario' ? 'ACTIVITIES_CALENDAR' : activeTab === 'reuniones' ? 'ACTIVITIES_MEETINGS' : 'ACTIVITIES_EVENTS', 'view'),
   });
   const remindersQuery = useTenantQuery<any[]>(['activities', 'reminders'], signal => remindersService.getAll(signal), {
     enabled: activeTab === 'recordatorios' && canPerform('ACTIVITIES_REMINDERS', 'view'),
@@ -65,7 +66,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
   }, [tasksQuery.data, eventsQuery.data, remindersQuery.data, logsQuery.data, user]);
 
   const activeQuery = activeTab === 'tareas' ? tasksQuery
-    : activeTab === 'eventos' ? eventsQuery
+    : ['eventos', 'calendario', 'reuniones'].includes(activeTab) ? eventsQuery
     : activeTab === 'recordatorios' ? remindersQuery
     : logsQuery;
   const loading = activeQuery.isLoading || activeQuery.isFetching;
@@ -76,6 +77,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
     { id: 'eventos', label: 'Eventos', icon: CalendarDays, color: 'text-emerald-500', module: 'ACTIVITIES_EVENTS' },
     { id: 'recordatorios', label: 'Recordatorios', icon: Bell, color: 'text-amber-500', module: 'ACTIVITIES_REMINDERS' },
     { id: 'bitacora', label: 'Bitácora', icon: Database, color: 'text-rose-500', module: 'ACTIVITIES_LOGS' }
+    ,{ id: 'calendario', label: 'Calendario', icon: CalendarDays, color: 'text-cyan-500', module: 'ACTIVITIES_CALENDAR' }
+    ,{ id: 'reuniones', label: 'Reuniones', icon: CalendarDays, color: 'text-violet-500', module: 'ACTIVITIES_MEETINGS' }
   ];
   const visibleTabs = tabs.filter((tab) => {
     const hasRequired = user?.enabledModules?.includes(tab.module);
@@ -145,7 +148,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'eventos' && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
+                {['eventos', 'calendario', 'reuniones'].includes(activeTab) && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} />}
               </motion.div>

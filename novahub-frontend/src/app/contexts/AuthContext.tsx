@@ -6,7 +6,7 @@ import { queryClient } from '../services/query-client';
 import { clearSessionCache } from '../services/session-cache';
 import { clearStorageUrlCache } from '../services/storage.service';
 import { BrandLogoLoader } from '../components/BrandLogo';
-import { SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
+import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
 import type { UserThemeSettings } from '../services/branding.service';
 
 export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
@@ -207,17 +207,23 @@ export interface User {
  * capacidades internas del tenant y no dependen de una suscripción operativa.
  */
 const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
+  'DASHBOARD',
   'CONFIGURATION', 'MY_COMPANY', 'SUBSCRIPTIONS',
   'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_SECURITY',
-  'CONFIG_TENANCY', 'CONFIG_CURRENCY', 'CONFIG_PLATFORM', 'CONFIG_COUNTRIES',
-  'CONFIG_MODULE_PRICING', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
-  'CONFIG_DEPARTMENTS', 'CONFIG_ORG_CHART', 'COMPANY_BRANCHES',
+  'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
+  'CONFIG_DEPARTMENTS',
 ]);
 
 const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
   // Ventas incluye facturación y caja; la API de Caja conserva RETAIL_POS
   // como permiso canónico, por lo que ambos módulos deben ser equivalentes.
   RETAIL_POS: ['RETAIL_POS', 'SALES_POS', 'SALES', 'CAJA'],
+  RETAIL_CASH_CONTROL: ['RETAIL_CASH_CONTROL', 'RETAIL_POS', 'SALES_POS', 'SALES', 'CAJA'],
+  RESTAURANT_SALON: ['RESTAURANT_SALON', 'RESTAURANT_TABLES', 'RESTAURANT'],
+  RESTAURANT_ORDERS: ['RESTAURANT_ORDERS', 'RESTAURANT_TABLES', 'RESTAURANT'],
+  TICKETS_LIST: ['TICKETS_LIST', 'TICKETS'],
+  DOCUMENTS_STORAGE_PLANS: ['DOCUMENTS_STORAGE_PLANS', 'DOCUMENTS'],
+  HR_DEPARTMENTS: ['HR_DEPARTMENTS', 'HR_EMPLOYEES', 'HR'],
   FINANCIAL_ACCOUNTS: ['FINANCIAL_ACCOUNTS', 'FINANCIAL_BANK', 'FINANCIAL_DASHBOARD', 'FINANCIAL_BALANCE'],
   FINANCIAL_INCOMES: ['FINANCIAL_INCOMES', 'FINANCIAL_RECEIVABLES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   FINANCIAL_RECEIVABLES: ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
@@ -235,7 +241,7 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
   const normalized = String(module || '').toUpperCase();
   const candidates = new Set(TENANT_PERMISSION_SUBSCRIPTION_ALIASES[normalized] || [normalized]);
   const parent = normalized.split('_')[0];
-  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT'].includes(parent)) {
+  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'FINANCING'].includes(parent)) {
     candidates.add(parent);
   }
   return [...candidates];
@@ -753,8 +759,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ];
       const platformConfigurationModules = [
         'CONFIGURATION', 'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF',
-        'CONFIG_SECURITY', 'CONFIG_ROLES', 'CONFIG_USERS', 'CONFIG_TENANCY',
-        'CONFIG_CURRENCY', 'CONFIG_PLATFORM', 'CONFIG_COUNTRIES', 'CONFIG_MODULE_PRICING', 'CONFIG_DOMAINS',
+        'CONFIG_SECURITY', 'CONFIG_ROLES', 'CONFIG_USERS', 'CONFIG_CURRENCY',
+        'CONFIG_DOMAINS', 'CONFIG_DEPARTMENTS',
       ];
       if (module === 'qa-console') return user.role === 'superadmin';
       if (platformConfigurationModules.includes(String(module).toUpperCase())) return true;
@@ -804,10 +810,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'SALES', 'CLIENTS',
         'SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES',
         'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'RETAIL_POS', 'SALES_POS',
-        'SALES_PRICE_LISTS',
+        'SALES_PRICE_LISTS', 'RETAIL_CASH_CONTROL',
       ],
-       restaurante: ['RESTAURANT'],
-      tracking: ['TRACKING'],
+       restaurante: ['RESTAURANT', 'RESTAURANT_SALON', 'RESTAURANT_ORDERS', 'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS'],
+      tracking: ['TRACKING', 'TRACKING_TRANSIT', 'TRACKING_RECEPTION', 'TRACKING_BATCHES', 'TRACKING_PACKAGES', 'TRACKING_RECONCILIATION', 'TRACKING_BILLING', 'TRACKING_CONFIG'],
       compras: [
         'PURCHASES', 'PROVIDERS',
         'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',
@@ -825,18 +831,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'FINANCIAL', 'FINANCIAL_BANK',
         'FINANCIAL_INCOMES', 'FINANCIAL_EXPENSES', 'FINANCIAL_EXPENSES_REC', 'FINANCIAL_BALANCE', 'FINANCIAL_DASHBOARD',
         'FINANCIAL_RECEIVABLES', 'FINANCIAL_PAYABLES', 'FINANCIAL_CALENDAR', 'FINANCIAL_ANALYSIS', 'FINANCIAL_LOSSES',
+        'FINANCIAL_INCOMES_REC', 'FINANCIAL_ACCOUNTS', 'FINANCIAL_JOURNAL', 'FINANCIAL_LEDGER', 'FINANCIAL_BUDGET', 'FINANCIAL_REPORTS',
       ],
       actividades: [
         'ACTIVITIES',
-        'ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS',
+        'ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS',
       ],
       proyectos: [
         'PROJECTS',
-        'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS',
+        'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME',
       ],
       documentos: [
         'DOCUMENTS',
-        'DOCUMENTS_FILES', 'DOCUMENTS_CONTRACTS', 'DOCUMENTS_INVOICES', 'DOCUMENTS_REPORTS',
+        'DOCUMENTS_FILES', 'DOCUMENTS_CONTRACTS', 'DOCUMENTS_INVOICES', 'DOCUMENTS_REPORTS', 'DOCUMENTS_FOLDERS', 'DOCUMENTS_STORAGE_PLANS',
       ],
       notificaciones: [
         'NOTIFICATIONS',
@@ -847,7 +854,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'REPORTS_SALES', 'REPORTS_PURCHASES', 'REPORTS_FINANCIAL', 'REPORTS_INVENTORY', 'REPORTS_CLIENTS', 'REPORTS_PROVIDERS', 'REPORTS_HR', 'REPORTS_SUBSCRIPTIONS',
       ],
       tickets: [
-        'TICKETS', 'TICKETS_KNOWLEDGE_BASE', 'TICKETS_AGENTS',
+        'TICKETS', 'TICKETS_LIST', 'TICKETS_KNOWLEDGE_BASE', 'TICKETS_AGENTS',
       ],
       contabilidad: [
         'ACCOUNTING',
@@ -859,7 +866,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       clientes: ['SALES', 'CLIENTS', 'SALES_CLIENTS'],
       proveedores: ['PURCHASES', 'PROVIDERS', 'PURCHASES_PROVIDERS'],
-      'financiamiento-pyme': ['FINANCING'],
+      'financiamiento-pyme': ['FINANCING', 'FINANCING_APPLICATIONS', 'FINANCING_CALCULATOR'],
       'asesoria-legal': ['LEGAL'],
       'centro-capacitacion': ['HR_TRAINING', 'TRAINING'],
       'soporte-tecnico': ['SUPPORT_TECH', 'SUPPORT'],
@@ -896,7 +903,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
     const directPermission = permissions.find((p) => p.module.toUpperCase() === module.toUpperCase())
       || permissions.find((p) => p.module.toUpperCase() === backendModuleName.toUpperCase());
-    if (directPermission?.canView) return true;
+    // Si existe una fila explícita para la vista, esa fila es la autoridad.
+    // Así, desactivar un hijo no queda anulado por el permiso del módulo padre.
+    if (directPermission) return directPermission.canView === true;
 
     const parentAliases = SIDEBAR_PERMISSION_PARENT_ALIASES[backendModuleName] || [];
     if (permissions.some((permission) =>
@@ -949,6 +958,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     let permission = findPermission(normalizedModule);
+    if (!permission) {
+      const legacyModules = LEGACY_VIEW_PERMISSION_ALIASES[upperModule] || [];
+      permission = legacyModules.map(findPermission).find(Boolean);
+    }
     if (!permission) {
       const parentAlias = Object.entries(SIDEBAR_PERMISSION_PARENT_ALIASES)
         .find(([, aliases]) => aliases.includes(upperModule))?.[0];

@@ -16,24 +16,27 @@ import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 interface DocumentosPageProps {
   activeSubModule?: string;
   isSidebarCollapsed?: boolean;
+  onSubModuleChange?: (subModule: string) => void;
 }
 
-export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: DocumentosPageProps) => {
+export const DocumentosPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: DocumentosPageProps) => {
   const { user, canPerform } = useAuth();
+  const normalizeTab = (value?: string) => value === 'nova-cloud-planes' ? 'planes' : value;
   const tabs = [
     { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500', module: 'DOCUMENTS_FILES' },
     { id: 'contratos', label: 'Contratos', icon: Scale, color: 'text-emerald-500', module: 'DOCUMENTS_CONTRACTS' },
     { id: 'facturas', label: 'Facturas Legales', icon: FileText, color: 'text-amber-500', module: 'DOCUMENTS_INVOICES' },
     { id: 'reportes', label: 'Reportes', icon: FileBarChart, color: 'text-purple-500', module: 'DOCUMENTS_REPORTS' },
-    { id: 'planes', label: 'Nova Cloud', icon: Cloud, color: 'text-cyan-500', module: 'DOCUMENTS' },
+    { id: 'carpetas', label: 'Carpetas', icon: Files, color: 'text-indigo-500', module: 'DOCUMENTS_FOLDERS' },
+    { id: 'planes', label: 'Nova Cloud', icon: Cloud, color: 'text-cyan-500', module: 'DOCUMENTS_STORAGE_PLANS' },
   ];
   const visibleTabs = tabs.filter((tab) => {
     const hasRequired = user?.enabledModules?.includes(tab.module);
     const hasFallback = user?.enabledModules?.includes('DOCUMENTS');
     return (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
   });
-  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'archivos');
-  const filesQuery = useTenantQuery<any[]>(['documents', 'files'], signal => filesService.getAll(signal), { enabled: activeTab === 'archivos' && canPerform('DOCUMENTS_FILES', 'view') });
+  const [activeTab, setActiveTab] = useState(() => normalizeTab(activeSubModule) || 'archivos');
+  const filesQuery = useTenantQuery<any[]>(['documents', 'files'], signal => filesService.getAll(signal), { enabled: (activeTab === 'archivos' && canPerform('DOCUMENTS_FILES', 'view')) || (activeTab === 'carpetas' && canPerform('DOCUMENTS_FOLDERS', 'view')) });
   const contractsQuery = useTenantQuery<any[]>(['documents', 'contracts'], signal => contractsService.getAll(signal), { enabled: activeTab === 'contratos' && canPerform('DOCUMENTS_CONTRACTS', 'view') });
   const invoicesQuery = useTenantQuery<any[]>(['documents', 'legal-invoices'], signal => legalInvoicesService.getAll(signal), { enabled: activeTab === 'facturas' && canPerform('DOCUMENTS_INVOICES', 'view') });
   const reportsQuery = useTenantQuery<any[]>(['documents', 'reports'], signal => reportsService.getAll(signal), { enabled: activeTab === 'reportes' && canPerform('DOCUMENTS_REPORTS', 'view') });
@@ -41,12 +44,12 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
     archivos: asList(filesQuery.data), contratos: asList(contractsQuery.data),
     facturas: asList(invoicesQuery.data), reportes: asList(reportsQuery.data),
   };
-  const activeQuery = activeTab === 'archivos' ? filesQuery : activeTab === 'contratos' ? contractsQuery : activeTab === 'facturas' ? invoicesQuery : reportsQuery;
+  const activeQuery = activeTab === 'archivos' || activeTab === 'carpetas' ? filesQuery : activeTab === 'contratos' ? contractsQuery : activeTab === 'facturas' ? invoicesQuery : reportsQuery;
   const loading = activeTab === 'planes' ? false : activeQuery.isLoading || activeQuery.isFetching;
   const fetchData = () => activeQuery.refetch();
 
   useEffect(() => {
-    const requestedTab = activeSubModule;
+    const requestedTab = normalizeTab(activeSubModule);
     if (requestedTab && visibleTabs.some((tab) => tab.id === requestedTab)) {
       setActiveTab(requestedTab);
       return;
@@ -59,6 +62,7 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
   const handleTabChange = (value: string) => {
     if (!visibleTabs.some((tab) => tab.id === value)) return;
     setActiveTab(value);
+    onSubModuleChange?.(value === 'planes' ? 'nova-cloud-planes' : value);
   };
 
   return (
@@ -108,7 +112,7 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {activeTab === 'archivos' && <ArchivosView data={data.archivos} loading={loading} onRefresh={fetchData} />}
+                {(activeTab === 'archivos' || activeTab === 'carpetas') && <ArchivosView data={data.archivos} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'contratos' && <ContratosView data={data.contratos} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'facturas' && <FacturasLegalesView data={data.facturas} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'reportes' && <ReportesView data={data.reportes} loading={loading} onRefresh={fetchData} />}

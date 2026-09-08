@@ -40,13 +40,14 @@ interface SalesWarehouseSelectProps {
   disabled?: boolean;
   required?: boolean;
   helpText?: string;
+  testId?: string;
 }
 
 /** Selector común para documentos comerciales no-POS. */
-export function SalesWarehouseSelect({ warehouses = [], value, onChange, disabled = false, required = false, helpText = 'La salida y el stock se validan en esta bodega.' }: SalesWarehouseSelectProps) {
+export function SalesWarehouseSelect({ warehouses = [], value, onChange, disabled = false, required = false, helpText = 'La salida y el stock se validan en esta bodega.', testId }: SalesWarehouseSelectProps) {
   const selectedValue = value || '';
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" data-testid={testId}>
       <p className="mb-1 flex items-center gap-1 text-[10px] text-muted-foreground">
         <Warehouse className="size-3 text-primary" />
         Bodega de salida{required ? ' *' : ''}

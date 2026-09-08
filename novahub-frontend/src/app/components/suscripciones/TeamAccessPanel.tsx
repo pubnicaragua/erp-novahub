@@ -14,8 +14,10 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { allowedModulesFromPermissions, getPermissionActionKeys, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
-import { PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_MODULE_IDS } from '../../utils/sidebarPermissions';
+import { HIDDEN_PERMISSION_MODULE_IDS, PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_MODULE_IDS } from '../../utils/sidebarPermissions';
 import { cn } from '../ui/utils';
+import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
+import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 
 interface TeamAccessPanelProps {
   tenantId: string;
@@ -119,7 +121,8 @@ function PermissionHelp() {
 }
 
 function hydratePermissions(role: any) {
-  const current = normalizePermissions(role?.permissions);
+  const current = normalizePermissions(role?.permissions)
+    .filter((permission: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(permission.module || '').toUpperCase()));
   const hydrated = ROLE_PERMISSION_MODULES.map((module: any) => {
     const existing = current.find((permission: any) => String(permission.module || '').toUpperCase() === String(module.id).toUpperCase());
     const parent = module.parent
@@ -127,13 +130,9 @@ function hydratePermissions(role: any) {
       : undefined;
     return hydratePermissionActions(existing || parent, module.id);
   });
-  // No borrar silenciosamente flags históricos que todavía reconoce el
-  // backend. Se conservan en el payload, aunque ya no se ofrecen como nuevas
-  // opciones del editor.
-  const visibleIds = new Set(ROLE_PERMISSION_MODULES.map((module: any) => module.id));
-  return [...hydrated, ...current
-    .filter((permission: any) => !visibleIds.has(String(permission.module || '').toUpperCase()))
-    .map((permission: any) => ({ ...permission }))];
+  // El editor se guarda contra el catálogo canónico. Así los identificadores
+  // retirados o desconocidos se limpian al editar un rol existente.
+  return hydrated;
 }
 
 export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesChange, canViewRoles = true, canCreateRoles = true, canEditRoles = true, canDeleteRoles = true }: TeamAccessPanelProps) {
@@ -144,6 +143,9 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
   const [assignedUsersRole, setAssignedUsersRole] = useState<any | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedViews, setExpandedViews] = useState<Record<string, boolean>>({});
+  const [rolesLayout, setRolesLayout] = useState<ViewLayoutMode>('table');
+  const isCompactRolesViewport = useCardsOnlyBelowTableBreakpoint();
+  const effectiveRolesLayout: ViewLayoutMode = isCompactRolesViewport ? 'cards' : rolesLayout;
 
   const { data: teamData, refetch: refetchTeam } = useTenantQuery(
     ['my-company-team-access', tenantId],
@@ -397,11 +399,13 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     if (!name) return toast.error('El nombre del rol es obligatorio');
     setRoleSaving(true);
     try {
-      const permissions = normalizePermissions(editingRole.permissions).map((permission: any) => ({
+      const permissions = normalizePermissions(editingRole.permissions)
+        .filter((permission: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(permission.module || '').toUpperCase()))
+        .map((permission: any) => ({
         ...permission,
         write: !!(permission.create || permission.edit || permission.write),
         ...Object.fromEntries(permissionActions.filter(({ key }) => key !== 'read').map(({ key }) => [key, permissionValue(permission, key)])),
-      }));
+        }));
       const payload = {
         name,
         description: String(editingRole.description || '').trim(),
@@ -455,10 +459,14 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         <Card className="min-w-0 border-border/50">
           <CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><UserCog className="size-4 text-primary" /> Catálogo de roles</CardTitle><CardDescription className="mt-1 text-xs">Define los permisos que tendrá cada grupo de usuarios.</CardDescription></div>
-            {canCreateRoles && <Button size="sm" onClick={openCreateRole} className="h-9 w-fit gap-1.5 text-xs"><Plus className="size-3.5" /> Nuevo rol</Button>}
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+              <ViewLayoutSelect value={effectiveRolesLayout} onChange={setRolesLayout} ariaLabel="Distribución de roles" className="h-8" />
+              {canCreateRoles && <Button size="sm" onClick={openCreateRole} className="h-9 w-fit gap-1.5 text-xs"><Plus className="size-3.5" /> Nuevo rol</Button>}
+            </div>
           </CardHeader>
-          <CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
+          <CardContent className="min-w-0 p-4 sm:p-6">
             {!roles.length && <p className="rounded-xl border border-dashed border-border p-8 text-center text-xs text-muted-foreground">Sin roles personalizados</p>}
+            <div className={cn(effectiveRolesLayout === 'cards' ? 'grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'space-y-3')}>
             {roles.map((role: any) => (
               (() => {
                 const linkedUsers = getLinkedUserCount(role, users);
@@ -468,9 +476,10 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
                   : linkedUsers > 0
                     ? `No se puede eliminar: ${linkedUsers} usuario${linkedUsers === 1 ? '' : 's'} vinculado${linkedUsers === 1 ? '' : 's'}`
                     : 'Eliminar rol';
-                return <div key={role.id || role.name} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/50 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0"><p className="truncate text-sm font-bold">{role.name}</p><p className="truncate text-xs text-muted-foreground">{role.description || 'Sin descripción'}</p></div>
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                const isRoleCard = effectiveRolesLayout === 'cards';
+                return <div key={role.id || role.name} className={cn('flex min-w-0 gap-3', isRoleCard ? 'h-full flex-col rounded-2xl border border-border/50 bg-card p-4 shadow-sm transition-colors hover:border-primary/30' : 'flex-col rounded-xl border border-border/50 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between')}>
+                <div className="min-w-0 flex-1"><p className={cn('text-sm font-bold', isRoleCard ? 'break-words' : 'truncate')}>{role.name}</p><p className={cn('text-xs text-muted-foreground', isRoleCard ? 'break-words' : 'truncate')}>{role.description || 'Sin descripción'}</p></div>
+                <div className={cn('flex min-w-0 flex-wrap items-center gap-1.5', isRoleCard && 'mt-auto pt-1')}>
                   <Badge variant="secondary" className="text-[9px]">{normalizePermissions(role.permissions).filter((permission: any) => permission.read).length} vistas</Badge>
                   <Badge variant="outline" className={cn('text-[9px]', linkedUsers > 0 && 'border-amber-500/40 text-amber-600')}>
                     {linkedUsers} {linkedUsers === 1 ? 'usuario vinculado' : 'usuarios vinculados'}
@@ -483,6 +492,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
                 </div>;
               })()
             ))}
+            </div>
           </CardContent>
         </Card>
       </>}
@@ -495,6 +505,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         <Card className="min-w-0 border-border/50">
           <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b border-border/30 bg-muted/10"><div><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Eye className="size-4 text-primary" /> Módulos y vistas habilitadas</CardTitle><CardDescription className="mt-1 text-xs">Revisa las acciones efectivas de este rol. Cada módulo se puede desplegar o contraer.</CardDescription></div><PermissionHelp /></CardHeader>
           <CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
+            <AuditHistoryDisclosure entity="ROLE" entityId={String(viewingRole.id)} createdAt={viewingRole.createdAt} />
             {Object.entries(groupedModules).map(([group, modules]) => {
               const expanded = expandedSections[group] ?? false;
               return <section key={group} className="overflow-hidden rounded-xl border border-border/60">
@@ -512,7 +523,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
           <div className="flex flex-wrap items-center gap-2"><PermissionHelp /><Button variant="outline" onClick={closeRoleView} disabled={roleSaving}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
         </div>
 
-        <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><ShieldCheck className="size-4 text-primary" /> Datos del rol</CardTitle><CardDescription className="mt-1 text-xs">El nombre y la descripción ayudan a identificar el alcance del equipo.</CardDescription></CardHeader><CardContent className="grid min-w-0 gap-4 p-4 sm:p-6 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="role-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del rol</Label><Input id="role-name" data-tour="role-name" value={editingRole.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ej: Gerencia" className="h-11" /></div><div className="space-y-2"><Label htmlFor="role-description" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción (opcional)</Label><Input id="role-description" data-tour="role-description" value={editingRole.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe el alcance del rol" className="h-11" /></div></CardContent></Card>
+          <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><ShieldCheck className="size-4 text-primary" /> Datos del rol</CardTitle><CardDescription className="mt-1 text-xs">El nombre y la descripción ayudan a identificar el alcance del equipo.</CardDescription></CardHeader><CardContent className="grid min-w-0 gap-4 p-4 sm:p-6 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="role-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del rol</Label><Input id="role-name" data-tour="role-name" value={editingRole.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ej: Gerencia" className="h-11" /></div><div className="space-y-2"><Label htmlFor="role-description" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción (opcional)</Label><Input id="role-description" data-tour="role-description" value={editingRole.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe el alcance del rol" className="h-11" /></div>{editingRole.id && <div className="md:col-span-2"><AuditHistoryDisclosure entity="ROLE" entityId={String(editingRole.id)} createdAt={editingRole.createdAt} /></div>}</CardContent></Card>
 
         <Card data-tour="role-permissions" className="min-w-0 border-border/50"><CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-sm font-black uppercase tracking-wider">Permisos</CardTitle><CardDescription className="mt-1 text-xs">Cada sección es un módulo y cada tarjeta es una vista o tab real. Despliega o contrae los módulos y sus vistas para definir el acceso.</CardDescription></div><Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{ROLE_PERMISSION_MODULES.length} módulos y vistas</Badge></div><div className="flex flex-wrap items-center gap-2 border-t border-border/30 pt-3"><Button type="button" variant="outline" size="sm" onClick={expandAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsDown className="size-3.5" /> Expandir todo</Button><Button type="button" variant="outline" size="sm" onClick={collapseAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsUp className="size-3.5" /> Contraer todo</Button><Button type="button" variant="secondary" size="sm" onClick={toggleAllPermissions} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ListChecks className="size-3.5" /> {isAllPermissionsEnabled() ? 'Desmarcar todo' : 'Marcar todo'}</Button><span className="text-[10px] text-muted-foreground">Puedes marcar una vista, un módulo o todos los permisos.</span></div></CardHeader><CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
            {Object.entries(groupedModules).map(([group, modules]) => {

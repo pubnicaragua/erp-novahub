@@ -219,7 +219,6 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     { label: 'Recepciones', description: 'Recepción de mercadería', module: 'compras', subModule: 'recepciones-compra', keywords: ['recepcion', 'entrada', 'mercaderia'], group: 'Compras' },
     { label: 'Pagos Realizados', description: 'Pagos a proveedores', module: 'compras', subModule: 'pagos-realizados', keywords: ['pago', 'proveedor'], group: 'Compras' },
     { label: 'Solicitudes de Compra', description: 'Solicitudes internas de compra', module: 'compras', subModule: 'solicitudes-compra', keywords: ['solicitud', 'requisicion'], group: 'Compras' },
-    { label: 'Gestión de Compras', description: 'Aprobación y gestión de compras', module: 'compras', subModule: 'gestion-compras', keywords: ['gestion', 'aprobacion'], group: 'Compras' },
     { label: 'Gastos', description: 'Gastos operativos directos', module: 'compras', subModule: 'gastos', keywords: ['gasto', 'caja chica'], group: 'Compras' },
     { label: 'Plan de Cuentas', description: 'Catálogo de cuentas contables', module: 'contabilidad', subModule: 'cuentas', keywords: ['cuenta', 'contable', 'plan', 'catalogo'], group: 'Contabilidad' },
     { label: 'Asientos Contables', description: 'Diario y asientos contables', module: 'contabilidad', subModule: 'asientos', keywords: ['asiento', 'diario', 'contable'], group: 'Contabilidad' },

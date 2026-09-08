@@ -44,8 +44,8 @@ import {
 type RestaurantTab = 'salon' | 'comandas' | 'cocina' | 'carta' | 'reportes';
 
 const RESTAURANT_TAB_PERMISSION: Record<RestaurantTab, string> = {
-  salon: 'RESTAURANT_TABLES',
-  comandas: 'RESTAURANT_TABLES',
+  salon: 'RESTAURANT_SALON',
+  comandas: 'RESTAURANT_ORDERS',
   cocina: 'RESTAURANT_KITCHEN',
   carta: 'RESTAURANT_MENU',
   reportes: 'RESTAURANT_REPORTS',
@@ -112,14 +112,16 @@ function playOrderSound() {
 export function RestaurantePage({ activeSubModule, onSubModuleChange }: RestaurantePageProps) {
   const { canPerform } = useAuth();
   const { accessibleBranches, selectedBranchId, setSelectedBranchId } = useBranchScope();
-  const canViewTables = canPerform('RESTAURANT_TABLES', 'view');
+  const canViewTables = canPerform('RESTAURANT_SALON', 'view');
+  const canViewOrders = canPerform('RESTAURANT_ORDERS', 'view');
   const canViewKitchen = canPerform('RESTAURANT_KITCHEN', 'view');
   const canViewMenu = canPerform('RESTAURANT_MENU', 'view');
   const canViewReports = canPerform('RESTAURANT_REPORTS', 'view');
-  const canViewRestaurant = canPerform('RESTAURANT', 'view') || [canViewTables, canViewKitchen, canViewMenu, canViewReports].some(Boolean);
-  const canCreateTables = canPerform('RESTAURANT_TABLES', 'create');
-  const canCreateOrders = canPerform('RESTAURANT_TABLES', 'create');
-  const canApproveTables = canPerform('RESTAURANT_TABLES', 'approve');
+  const canViewRestaurant = canPerform('RESTAURANT', 'view') || [canViewTables, canViewOrders, canViewKitchen, canViewMenu, canViewReports].some(Boolean);
+  const canCreateTables = canPerform('RESTAURANT_SALON', 'create');
+  const canCreateOrders = canPerform('RESTAURANT_ORDERS', 'create');
+  const canApproveTables = canPerform('RESTAURANT_SALON', 'approve');
+  const canApproveOrders = canPerform('RESTAURANT_ORDERS', 'approve');
   const canApproveKitchen = canPerform('RESTAURANT_KITCHEN', 'approve');
   const canCreateMenu = canPerform('RESTAURANT_MENU', 'create');
   const canEditMenu = canPerform('RESTAURANT_MENU', 'edit');
@@ -208,7 +210,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       const [nextTables, nextMenu, nextOrders, nextTickets, nextSummary] = await Promise.all([
         canViewTables ? restaurantService.listTables(branchId, signal) : Promise.resolve([]),
         canViewMenu ? restaurantService.getMenu(signal) : Promise.resolve([]),
-        canViewTables ? restaurantService.listOrders(branchId, signal) : Promise.resolve([]),
+        canViewOrders ? restaurantService.listOrders(branchId, signal) : Promise.resolve([]),
         canViewKitchen ? restaurantService.listKitchenTickets(branchId, signal) : Promise.resolve([]),
         canViewReports ? restaurantService.getSummary({ branchId }, signal) : Promise.resolve(null),
       ]);
@@ -225,7 +227,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       setLoading(false);
       setRefreshing(false);
     }
-  }, [canViewKitchen, canViewMenu, canViewReports, canViewTables, selectedBranchId]);
+  }, [canViewKitchen, canViewMenu, canViewOrders, canViewReports, canViewTables, selectedBranchId]);
 
   useEffect(() => {
     if (!canViewRestaurant) {
@@ -253,7 +255,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       try {
         const branchId = selectedBranchId || undefined;
         const results = await Promise.allSettled([
-          canViewTables ? restaurantService.listOrders(branchId) : Promise.resolve([]),
+          canViewOrders ? restaurantService.listOrders(branchId) : Promise.resolve([]),
           canViewKitchen ? restaurantService.listKitchenTickets(branchId) : Promise.resolve([]),
           canViewTables ? restaurantService.listTables(branchId) : Promise.resolve([]),
         ]);
@@ -296,7 +298,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       document.removeEventListener('visibilitychange', handleVisibility);
       window.clearTimeout(timeoutId);
     };
-  }, [canViewKitchen, canViewRestaurant, canViewTables, selectedBranchId, detectNewOrders]);
+  }, [canViewKitchen, canViewOrders, canViewRestaurant, canViewTables, selectedBranchId, detectNewOrders]);
 
   useEffect(() => {
     if (!canViewRestaurant) return;
@@ -383,7 +385,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   };
 
   const changeOrderStatus = async (order: RestaurantOrder, status: string) => {
-    if (!canApproveTables) return;
+    if (!canApproveOrders) return;
     try {
       await restaurantService.updateOrderStatus(order.id, status);
       await loadData();
@@ -393,7 +395,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   };
 
   const openCheckout = async (order: RestaurantOrder) => {
-    if (!canApproveTables) return;
+    if (!canApproveOrders) return;
     try {
       const available = await cajaService.getRegisters();
       setRegisters((available || []).map((register) => ({ id: register.id, name: register.name })));
@@ -405,7 +407,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   };
 
   const checkout = async () => {
-    if (!canApproveTables) return;
+    if (!canApproveOrders) return;
     if (!checkoutOrder || !checkoutRegisterId) return;
     try {
       const session = await cajaService.getActiveSession(checkoutRegisterId);
@@ -510,7 +512,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
                   </section>
                   <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}</span></span><span className="font-black text-primary">{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ item, quantity }) => <div key={item.id} className="flex items-center justify-between text-sm"><span>{quantity} × {item.name}</span><div className="flex items-center gap-2"><button type="button" onClick={() => removeFromCart(item.id)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0 || !canCreateOrders || !canApproveKitchen} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
                 </div>}
-                {tab === 'comandas' && <OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveTables={canApproveTables} onSend={async (order) => { if (!canApproveKitchen) return; try { await restaurantService.sendToKitchen(order.id); await loadData(); } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.')); } }} onStatus={changeOrderStatus} onCheckout={openCheckout} />}
+                {tab === 'comandas' && <OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} onSend={async (order) => { if (!canApproveKitchen) return; try { await restaurantService.sendToKitchen(order.id); await loadData(); } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.')); } }} onStatus={changeOrderStatus} onCheckout={openCheckout} />}
                 {tab === 'cocina' && <KitchenBoard tickets={tickets} canApprove={canApproveKitchen} onStatus={updateKitchen} />}
                 {tab === 'carta' && <MenuBoard menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} onSaved={() => loadData()} />}
                 {tab === 'reportes' && <ReportsBoard summary={summary} />}
@@ -545,7 +547,7 @@ function EmptyState({ icon, title, description, action }: { icon: React.ReactNod
   return <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 p-6 text-center"><div className="mb-3 rounded-2xl bg-card p-3 text-muted-foreground/50 shadow-sm">{icon}</div><p className="font-black text-foreground">{title}</p><p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>{action && <div className="mt-4">{action}</div>}</div>;
 }
 
-function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, onCheckout, canApproveKitchen, canApproveTables }: { orders: RestaurantOrder[]; targetOrderId?: string | null; onTargetHandled?: () => void; onSend: (order: RestaurantOrder) => void; onStatus: (order: RestaurantOrder, status: string) => void; onCheckout: (order: RestaurantOrder) => void; canApproveKitchen: boolean; canApproveTables: boolean }) {
+function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, onCheckout, canApproveKitchen, canApproveOrders }: { orders: RestaurantOrder[]; targetOrderId?: string | null; onTargetHandled?: () => void; onSend: (order: RestaurantOrder) => void; onStatus: (order: RestaurantOrder, status: string) => void; onCheckout: (order: RestaurantOrder) => void; canApproveKitchen: boolean; canApproveOrders: boolean }) {
   useEffect(() => {
     if (!targetOrderId) return;
     const frame = requestAnimationFrame(() => {
@@ -557,7 +559,7 @@ function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, 
     return () => cancelAnimationFrame(frame);
   }, [targetOrderId, onTargetHandled, orders]);
 
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Comandas recientes</h2><p className="mt-1 text-sm text-muted-foreground">La comanda relacionada con el aviso queda resaltada aquí.</p></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orders.map((order) => <div id={`restaurant-order-${order.id}`} key={order.id} tabIndex={-1} className={`rounded-2xl border p-4 transition-all duration-500 ${targetOrderId === order.id ? 'border-primary bg-primary/[0.06] ring-4 ring-primary/15 shadow-lg' : 'border-border/60'}`}><div className="flex items-start justify-between gap-3"><div><p className="text-lg font-black">{order.number}</p><p className="text-xs text-muted-foreground">{order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between"><span>{Number(item.quantity)} × {item.description}</span><span className="font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{canApproveKitchen && ['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{canApproveTables && ['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{canApproveTables && order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
+  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Comandas recientes</h2><p className="mt-1 text-sm text-muted-foreground">La comanda relacionada con el aviso queda resaltada aquí.</p></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orders.map((order) => <div id={`restaurant-order-${order.id}`} key={order.id} tabIndex={-1} className={`rounded-2xl border p-4 transition-all duration-500 ${targetOrderId === order.id ? 'border-primary bg-primary/[0.06] ring-4 ring-primary/15 shadow-lg' : 'border-border/60'}`}><div className="flex items-start justify-between gap-3"><div><p className="text-lg font-black">{order.number}</p><p className="text-xs text-muted-foreground">{order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between"><span>{Number(item.quantity)} × {item.description}</span><span className="font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{canApproveKitchen && ['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{canApproveOrders && ['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{canApproveOrders && order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
 }
 
 function KitchenBoard({ tickets, onStatus, canApprove }: { tickets: RestaurantKitchenTicket[]; onStatus: (ticket: RestaurantKitchenTicket, status: string) => void; canApprove: boolean }) {

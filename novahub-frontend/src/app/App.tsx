@@ -175,7 +175,15 @@ function DashboardLayout() {
     const permissionModules = SIDEBAR_SUBMENU_PERMISSION_MODULES[`${module}:${subModule}`]
       || SIDEBAR_SUBMENU_PERMISSION_MODULES[subModule]
       || requiredModules;
-    return permissionModules.some((permissionModule) => canPerform(permissionModule, 'view'));
+    const hasExplicitViewPermission = permissionModules.some((permissionModule) =>
+      user?.permissions?.some((permission) => String(permission.module || '').toUpperCase() === permissionModule.toUpperCase()),
+    );
+    return hasExplicitViewPermission
+      ? permissionModules.some((permissionModule) =>
+        user?.permissions?.some((permission) => String(permission.module || '').toUpperCase() === permissionModule.toUpperCase())
+          && canPerform(permissionModule, 'view'),
+      )
+      : permissionModules.some((permissionModule) => canPerform(permissionModule, 'view'));
   };
 
   const normalizeIncomingSubmodule = (module: string | undefined, subModule: string | undefined) => {
@@ -408,7 +416,7 @@ function DashboardLayout() {
       case 'inventario': return <ModuleErrorBoundary moduleName="Inventario"><InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
-      case 'tracking': return <ModuleErrorBoundary moduleName="Tracking"><TrackingPage /></ModuleErrorBoundary>;
+      case 'tracking': return <ModuleErrorBoundary moduleName="Tracking"><TrackingPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'finanzas': return <ModuleErrorBoundary moduleName="Finanzas"><FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
@@ -418,17 +426,17 @@ function DashboardLayout() {
       case 'proyectos': return <ModuleErrorBoundary moduleName="Proyectos"><ProyectosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'fuerza-comercial': return <FuerzaComercialPage />;
       case 'tickets': return <TicketsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'documentos': return <DocumentosPage activeSubModule={activeSubModule} isSidebarCollapsed={isCollapsed} />;
+      case 'documentos': return <DocumentosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'transferencias': return <InventarioPage activeSubModule="transferencias" isSidebarCollapsed={isCollapsed} />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
-      case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage />;
+      case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       // Alias de compatibilidad para enlaces antiguos: la administración de
       // sucursales ahora vive dentro de Grupos empresariales.
       case 'tenant-admin': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
-      case 'financiamiento-pyme': return <FinanciamientoPymePage />;
+      case 'financiamiento-pyme': return <FinanciamientoPymePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'centro-capacitacion': return <TrainingHubView />;
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /> : <SoporteTecnicoView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'contabilidad': return <ContabilidadPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;

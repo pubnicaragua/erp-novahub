@@ -36,7 +36,11 @@ export const test = base.extend<{ captureErrors: CapturedErrors }>({
     });
     page.on('requestfailed', (request) => {
       if (!request.url().includes('/api/')) return;
-      const text = `${request.method()} ${request.url()} -> ${request.failure()?.errorText || 'falló'}`;
+      const errorText = request.failure()?.errorText || '';
+      // React Query cancela consultas obsoletas al cambiar de subvista. No es
+      // un error del backend mientras no exista una respuesta HTTP fallida.
+      if (/ERR_ABORTED|ERR_CANCELED|NS_BINDING_ABORTED/i.test(errorText)) return;
+      const text = `${request.method()} ${request.url()} -> ${errorText || 'falló'}`;
       captured.all.push(`[requestfailed] ${text}`);
       captured.api.push(text);
       console.error('[captura:requestfailed]', text);

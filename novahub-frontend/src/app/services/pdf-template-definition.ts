@@ -585,11 +585,11 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
       page: { paperSize: settingsValue(settings, 'paperSize', 'LABEL'), orientation: 'portrait', background },
       nodes: [
         node({ type: 'image', label: 'Logotipo de la sucursal', x: 68, y: 1, width: 25, height: 6, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent', align: 'right' }, 'label-logo'),
-        node({ type: 'barcode', label: 'Código de barras', token: 'product.barcode', x: 7, y: 7, width: 86, height: 42, fontSize: 7, color: text, borderStyle: 'none', padding: 0.5 }, 'label-barcode'),
-        node({ type: 'field', label: 'Nombre del producto', token: 'product.name', x: 7, y: 52, width: 86, height: 15, fontSize: 8, fontWeight: 700, color: text, align: 'center', borderStyle: 'none', padding: 0.5 }, 'label-name'),
-        node({ type: 'field', label: 'Precio', token: 'product.price', x: 7, y: 68, width: 86, height: 12, fontSize: 10, fontWeight: 800, color: primary, align: 'center', borderStyle: 'none', padding: 0.5 }, 'label-price'),
-        node({ type: 'field', label: 'Empresa', token: 'company.name', x: 7, y: 83, width: 86, height: 8, fontSize: 6, color: text, align: 'center', borderStyle: 'none', padding: 0.5 }, 'label-company'),
-        node({ type: 'field', label: 'Fecha', token: 'document.date', x: 7, y: 91, width: 86, height: 6, fontSize: 5, color: text, align: 'center', borderStyle: 'none', padding: 0.5 }, 'label-date'),
+        node({ type: 'barcode', label: 'Código de barras', token: 'product.barcode', x: 7, y: 7, width: 86, height: 38, fontSize: 7, color: text, borderStyle: 'none', padding: 0.2 }, 'label-barcode'),
+        node({ type: 'field', label: 'Nombre del producto', token: 'product.name', x: 7, y: 47, width: 86, height: 17, fontSize: 7.5, fontWeight: 700, color: text, align: 'center', lineHeight: 1.05, borderStyle: 'none', padding: 0.2 }, 'label-name'),
+        node({ type: 'field', label: 'Precio', token: 'product.price', x: 7, y: 65, width: 86, height: 13, fontSize: 9, fontWeight: 800, color: primary, align: 'center', lineHeight: 1, borderStyle: 'none', padding: 0.2 }, 'label-price'),
+        node({ type: 'field', label: 'Empresa', token: 'company.name', x: 7, y: 80, width: 86, height: 9, fontSize: 5.5, color: text, align: 'center', lineHeight: 1, borderStyle: 'none', padding: 0.2 }, 'label-company'),
+        node({ type: 'field', label: 'Fecha', token: 'document.date', x: 7, y: 90, width: 86, height: 7, fontSize: 4.5, color: text, align: 'center', lineHeight: 1, borderStyle: 'none', padding: 0.2 }, 'label-date'),
       ],
       metadata: { preset: 'system-default-label' },
     };

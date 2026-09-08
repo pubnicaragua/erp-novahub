@@ -47,6 +47,17 @@ const defaultColors: BrandColors = {
 
 const DEFAULT_PALETTE_MODE: ThemePaletteMode = 'details';
 
+const SIDEBAR_CSS_VARIABLES = [
+  '--sidebar',
+  '--sidebar-foreground',
+  '--sidebar-primary',
+  '--sidebar-primary-foreground',
+  '--sidebar-accent',
+  '--sidebar-accent-foreground',
+  '--sidebar-border',
+  '--sidebar-ring',
+] as const;
+
 const defaultTheme: ThemeConfig = {
   userId: 'anonymous',
   tenantId: 'default',
@@ -178,12 +189,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const applyServerBranding = useCallback((branding: Branding, tenantId: string, userId: string) => {
     const userTheme = normalizeUserTheme(branding.userTheme);
     const colors = { ...brandingColors(branding), ...userTheme.colors };
-    const paletteMode = userTheme.paletteMode
-      || (Object.keys(userTheme.colors || {}).length > 0 ? 'complete' : DEFAULT_PALETTE_MODE);
     setThemeConfig(previous => {
       const base = previous.userId === userId && previous.tenantId === tenantId
         ? previous
         : readStoredTheme(userId, tenantId);
+      // The explicit user preference wins. If an older record has colors but
+      // no mode, keep the mode already resolved for this user instead of
+      // silently converting a details theme into a complete theme.
+      const paletteMode = userTheme.paletteMode || base.paletteMode || DEFAULT_PALETTE_MODE;
       const nextColors = { ...defaultColors, ...colors };
       return {
         ...base,
@@ -218,8 +231,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (!userTheme.paletteMode && Object.keys(userTheme.colors || {}).length === 0) return;
     setThemeConfig(previous => {
       const nextColors = { ...previous.colors, ...(userTheme.colors || {}) };
-      const paletteMode = userTheme.paletteMode
-        || (Object.keys(userTheme.colors || {}).length > 0 ? 'complete' : previous.paletteMode);
+      const paletteMode = userTheme.paletteMode || previous.paletteMode;
       return {
         ...previous,
         userId: themeUserId,
@@ -272,14 +284,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // Let theme.css provide white in light mode and the matching dark
         // surface in dark mode. Removing inline values also handles a live
         // switch from complete to details without a reload.
-        [
-          '--sidebar',
-          '--sidebar-foreground',
-          '--sidebar-primary',
-          '--sidebar-primary-foreground',
-          '--sidebar-accent',
-          '--sidebar-accent-foreground',
-        ].forEach(key => root.style.removeProperty(key));
+        SIDEBAR_CSS_VARIABLES.forEach(key => root.style.removeProperty(key));
         validateAppliedTheme();
         return;
       }

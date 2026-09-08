@@ -1,4 +1,4 @@
-import { CalendarDays, CalendarClock, CheckCircle2, Clock3, DollarSign, FileText, Flag, Hash, Info, Link2, MapPin, Paperclip, Users, XCircle, BookOpen, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { CalendarDays, CalendarClock, CheckCircle2, Clock3, DollarSign, FileText, Flag, Hash, History, Info, Link2, MapPin, Paperclip, Users, XCircle, BookOpen, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -6,6 +6,7 @@ import { Card } from '../ui/card';
 import { ScrollArea } from '../ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { cn } from '../ui/utils';
+import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 
 export type ActivityDetailKind = 'task' | 'event' | 'reminder' | 'log';
 
@@ -28,6 +29,13 @@ const labels: Record<ActivityDetailKind, { title: string; singular: string; acce
   event: { title: 'Detalle del evento', singular: 'Evento', accent: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
   reminder: { title: 'Detalle del recordatorio', singular: 'Recordatorio', accent: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
   log: { title: 'Detalle de bitácora', singular: 'Registro', accent: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
+};
+
+const auditEntityByKind: Record<ActivityDetailKind, string> = {
+  task: 'TASK',
+  event: 'EVENT',
+  reminder: 'REMINDER',
+  log: 'ACTIVITY_LOG',
 };
 
 const formatDate = (value: any) => {
@@ -250,7 +258,7 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
           </div>
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
         </SheetHeader>
-        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} />}{item && kind === 'event' && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}</div></ScrollArea>
+        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} />}{item && kind === 'event' && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>

@@ -10,6 +10,7 @@ Sentry.init({
   dsn:
     import.meta.env.VITE_SENTRY_DSN ||
     'https://e8777c5efd3a5c6531d70483c75a508b@o4511838597611520.ingest.us.sentry.io/4511838767939584',
+  enabled: import.meta.env.VITE_E2E_DISABLE_SENTRY !== '1',
   environment: import.meta.env.MODE || 'development',
   integrations: [
     Sentry.browserTracingIntegration(),

@@ -6,13 +6,12 @@ test.describe('Compras - Orden de Compra', () => {
     await test.step('Abrir Compras → Órdenes de Compra', async () => {
       await openModule(page, 'Compras');
       const item = page.locator('a, button, span').filter({ hasText: /órdenes? de compra|ordenes de compra/i }).first();
-      if (await item.isVisible().catch(() => false)) { await item.click(); await page.waitForTimeout(1_500); }
+      if (await item.isVisible().catch(() => false)) { await item.click(); await expect(page.locator('#root')).toBeVisible(); }
     });
     await test.step('Botón nueva orden abre formulario', async () => {
       const btn = page.getByRole('button', { name: /nueva orden|crear orden|nuevo/i }).first();
       await expect(btn).toBeVisible({ timeout: 20_000 });
       await btn.click();
-      await page.waitForTimeout(1_000);
       await expect(page.locator('[role="dialog"], form').first()).toBeVisible({ timeout: 15_000 }).catch(() => {});
     });
     await test.step('Selector de proveedor presente', async () => {

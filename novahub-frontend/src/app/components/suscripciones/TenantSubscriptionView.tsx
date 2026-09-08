@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck, GitBranch
+  Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -15,7 +15,6 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { TeamAccessPanel } from './TeamAccessPanel';
 import { DepartmentsView } from './DepartmentsView';
-import { OrgChartView } from './OrgChartView';
 import { DominiosView } from './DominiosView';
 import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
 import { tenantsService } from '../../services/tenants.service';
@@ -33,9 +32,12 @@ import { getPasswordError, isValidEmail, normalizeEmail } from '../../utils/acco
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { pendingUserCreate, clearPendingUserCreate } from '../../utils/pendingUserCreate';
 import { PasswordRequirements } from '../PasswordRequirements';
+import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
+  activeSubModule?: string;
+  onSubModuleChange?: (subModule?: string) => void;
   availableModules: any[];
   requests: any[];
   customRoles?: any[];
@@ -50,8 +52,6 @@ const SYSTEM_ROLE_OPTIONS = [
 
 const TEAM_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="team-users"]', title: 'Usuarios', description: 'Desde aquí puedes crear y administrar las personas que tienen acceso a la empresa, su tipo de acceso, rol, contraseña y estado.', placement: 'right' },
-  { target: '[data-tour="team-roles"]', title: 'Roles y permisos', description: 'Los roles agrupan permisos para que puedas asignar rápidamente qué módulos y acciones puede utilizar cada usuario.', placement: 'left' },
-  { target: '[data-tour="team-departments"]', title: 'Departamentos', description: 'Crea áreas de trabajo y asigna usuarios a cada departamento para mantener organizado el equipo.', placement: 'bottom' },
 ];
 
 const linkedEmployeePuesto = (user: any, employees: any[]) => {
@@ -68,7 +68,7 @@ const userGroupingDepartments = (user: any) => {
   return user?.department && (!user.department.type || user.department.type === 'ACCESS') ? [user.department] : [];
 };
 
-export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
+export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleChange, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
   const { updateConfig } = useTheme();
   const { user: currentUser, canPerform, refreshProfile } = useAuth();
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
@@ -82,7 +82,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const canManageRoles = canPerform('CONFIG_ROLES', 'edit');
   const canViewRoles = canPerform('CONFIG_ROLES', 'view');
   const canViewDepartments = canPerform('CONFIG_DEPARTMENTS', 'view');
-  const canViewOrgChart = canPerform('CONFIG_ORG_CHART', 'view');
+  const canCreateDepartments = canPerform('CONFIG_DEPARTMENTS', 'create');
+  const canEditDepartments = canPerform('CONFIG_DEPARTMENTS', 'edit');
+  const canDeleteDepartments = canPerform('CONFIG_DEPARTMENTS', 'delete');
   const canEditEmployees = canPerform('HR_EMPLOYEES', 'edit');
   const canViewEmployees = canPerform('HR_EMPLOYEES', 'view');
   const canViewDomains = canPerform('CONFIG_DOMAINS', 'view');
@@ -92,9 +94,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
-  const [showDepartmentsView, setShowDepartmentsView] = useState(false);
-  const [showRolesView, setShowRolesView] = useState(false);
-  const [showOrgChartView, setShowOrgChartView] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [linkingUser, setLinkingUser] = useState<any>(null);
@@ -121,6 +120,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [userDialogMode, setUserDialogMode] = useState<'plain' | 'withEmployee'>('plain');
   const [selectedCreateEmployeeId, setSelectedCreateEmployeeId] = useState('');
   const [activeTab, setActiveTab] = useState('general');
+  const [teamUsersLayout, setTeamUsersLayout] = useState<ViewLayoutMode>('table');
+  const isCompactTeamViewport = useCardsOnlyBelowTableBreakpoint();
+  const effectiveTeamUsersLayout: ViewLayoutMode = isCompactTeamViewport ? 'cards' : teamUsersLayout;
   const isCurrentUserPrincipalAdmin = users.some((user) => user.id === currentUser?.id && user.isPrincipalAdmin);
 
   const { data: tenantData, isLoading: tenantDataLoading, refetch: refetchTenantData } = useTenantQuery(
@@ -128,7 +130,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     async (signal) => {
       if (!tenant?.id) return null;
       const [usersRes, branding, industriesRes, employeesRes] = await Promise.all([
-        canViewUsers ? tenantsService.getUsers(tenant.id, signal) : Promise.resolve([]),
+        (canViewUsers || canViewDepartments) ? tenantsService.getUsers(tenant.id, signal) : Promise.resolve([]),
         (canViewCompany || canPerform('CONFIG_BRANDING', 'view')) ? brandingService.getCurrent(signal) : Promise.resolve(null),
         canViewCompany ? api.get<any[]>(`/tenants/${tenant.id}/industries`, { signal }) : Promise.resolve([]),
         (canViewEmployees || canEditEmployees) ? hrService.getEmployees({ status: 'ACTIVE', pageSize: 500 }, signal) : Promise.resolve([]),
@@ -167,9 +169,25 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const visibleTabs = useMemo(() => [
     ...(canViewCompany ? ['general'] : []),
     ...(canViewSubscriptions ? ['plan'] : []),
-    ...((canViewUsers || canViewRoles) ? ['team'] : []),
+    ...(canViewUsers ? ['team'] : []),
+    ...(canViewRoles ? ['roles'] : []),
+    ...(canViewDepartments ? ['departamentos'] : []),
     ...(canViewDomains ? ['dominio'] : []),
-  ], [canViewCompany, canViewSubscriptions, canViewUsers, canViewRoles, canViewDomains]);
+  ], [canViewCompany, canViewSubscriptions, canViewUsers, canViewRoles, canViewDepartments, canViewDomains]);
+
+  useEffect(() => {
+    if (!activeSubModule) return;
+    const tabBySubmodule: Record<string, string> = {
+      'mi-sucursal': 'general',
+      'plan-sucursal': 'plan',
+      usuarios: 'team',
+      roles: 'roles',
+      departamentos: 'departamentos',
+      dominio: 'dominio',
+    };
+    const targetTab = tabBySubmodule[activeSubModule];
+    if (targetTab && visibleTabs.includes(targetTab)) setActiveTab(targetTab);
+  }, [activeSubModule, visibleTabs]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) setActiveTab(visibleTabs[0] || 'general');
@@ -461,18 +479,35 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         <TrialCountdownBanner />
       </motion.div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-muted/20 border border-border/50 p-1 h-auto min-h-12 mb-8 flex flex-wrap">
-          {canViewCompany && <TabsTrigger value="general" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+      <Tabs value={activeTab} onValueChange={(value) => {
+        setActiveTab(value);
+        onSubModuleChange?.(
+          value === 'general' ? 'mi-sucursal'
+            : value === 'plan' ? 'plan-sucursal'
+              : value === 'team' ? 'usuarios'
+                : value === 'roles' ? 'roles'
+                  : value === 'departamentos' ? 'departamentos'
+                    : value === 'dominio' ? 'dominio'
+                      : undefined,
+        );
+      }} className="w-full">
+        <TabsList className="mb-8 flex h-auto min-h-12 max-w-full flex-nowrap overflow-x-auto border border-border/50 bg-muted/20 p-1">
+          {canViewCompany && <TabsTrigger value="general" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Building2 className="size-4" /> General
           </TabsTrigger>}
-          {canViewSubscriptions && <TabsTrigger value="plan" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          {canViewSubscriptions && <TabsTrigger value="plan" className="shrink-0 gap-2 px-8 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <LayoutGrid className="size-4" /> Módulos y Plan
           </TabsTrigger>}
-          {(canViewUsers || canViewRoles) && <TabsTrigger value="team" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          {canViewUsers && <TabsTrigger value="team" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Users className="size-4" /> Mi Equipo ({users.length})
           </TabsTrigger>}
-          {canViewDomains && <TabsTrigger value="dominio" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          {canViewRoles && <TabsTrigger value="roles" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Shield className="size-4" /> Roles
+          </TabsTrigger>}
+          {canViewDepartments && <TabsTrigger value="departamentos" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Building2 className="size-4" /> Departamentos
+          </TabsTrigger>}
+          {canViewDomains && <TabsTrigger value="dominio" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Globe className="size-4" /> Dominio propio
           </TabsTrigger>}
         </TabsList>
@@ -697,20 +732,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         </TabsContent>
 
          <TabsContent value="team" className="space-y-4">
-          {showOrgChartView ? <OrgChartView tenantId={tenant.id} tenantName={tenant.name} employees={employees} users={users} onBack={() => setShowOrgChartView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : showRolesView ? <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onBack={() => setShowRolesView(false)} onRolesChange={async () => { await refetchTenantData(); await onRefresh(); }} canViewRoles={canViewRoles} canCreateRoles={canPerform('CONFIG_ROLES', 'create')} canEditRoles={canPerform('CONFIG_ROLES', 'edit')} canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')} /> : <>
             <div className="flex flex-wrap justify-end">
              <div className="flex flex-wrap items-center justify-end gap-2">
               {canViewUsers && <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
                 <CircleHelp className="size-4" /> Tutorial
-              </Button>}
-              {canViewUsers && canViewDepartments && <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
-              <Building2 className="size-4" /> Departamentos
-              </Button>}
-              {canViewRoles && <Button data-tour="team-roles" variant="outline" className="gap-2 font-bold" onClick={() => setShowRolesView(true)}>
-              <Shield className="size-4" /> Roles
-              </Button>}
-              {canViewUsers && canViewEmployees && canViewOrgChart && <Button variant="outline" className="gap-2 font-bold" onClick={() => setShowOrgChartView(true)}>
-              <GitBranch className="size-4" /> Organigrama
               </Button>}
             </div>
            </div>
@@ -722,11 +747,15 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Users className="size-4 text-primary" /> Usuarios ({users.length})</CardTitle>
                   <CardDescription className="mt-1 text-xs">Administra las personas que tienen acceso a la empresa.</CardDescription>
                 </div>
-                {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => { setUserDialogMode('plain'); setSelectedCreateEmployeeId(''); setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' }); setIsUserDialogOpen(true); }}>
-                  <Plus className="size-4" /> Crear usuario
-                </Button>}
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                  <ViewLayoutSelect value={effectiveTeamUsersLayout} onChange={setTeamUsersLayout} ariaLabel="Distribución de usuarios" className="h-8" />
+                  {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => { setUserDialogMode('plain'); setSelectedCreateEmployeeId(''); setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' }); setIsUserDialogOpen(true); }}>
+                    <Plus className="size-4" /> Crear usuario
+                  </Button>}
+                </div>
               </CardHeader>
-              <CardContent className="min-w-0 space-y-2 p-4">
+              <CardContent className="min-w-0 p-4">
+            <div className={cn(effectiveTeamUsersLayout === 'cards' ? 'grid min-w-0 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4' : 'space-y-2')}>
             {users.map((u) => {
                const isCurrentUser = currentUser?.id === u.id;
                const normalizedRole = String(u.role || '').toUpperCase();
@@ -735,21 +764,24 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                const isAdmin = !isManager && (normalizedUserType === 'ADMIN' || normalizedRole === 'ADMIN');
                const isCollaborator = !isManager && !isAdmin;
                const canChangeThisPassword = canEditUsers && !isCurrentUser && !isManager && (!isAdmin || isCurrentUserPrincipalAdmin);
-               return <div key={u.id} className={cn('space-y-3 rounded-lg bg-muted/20 px-4 py-3 transition-colors', isCurrentUser ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : 'hover:bg-muted/40')}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
+               const isUserCard = effectiveTeamUsersLayout === 'cards';
+               return <div key={u.id} className={cn('min-w-0 space-y-3 transition-colors', isUserCard ? 'flex flex-col rounded-2xl border border-border/50 bg-card p-4 shadow-sm hover:border-primary/30' : 'rounded-lg bg-muted/20 px-4 py-3 hover:bg-muted/40', isCurrentUser && 'bg-primary/10 ring-1 ring-inset ring-primary/30')}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className={cn('flex min-w-0 flex-1 gap-3', isUserCard ? 'items-start' : 'items-center')}>
                     <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl font-black text-lg', isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary')}>
                       {u.name?.charAt(0).toUpperCase()}
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="truncate text-sm font-bold text-foreground">{u.name}</h4>
-                         {isCurrentUser && <Badge className="bg-primary text-primary-foreground text-[9px] uppercase">Tu usuario</Badge>}
-                         {u.isPrincipalAdmin && <Badge variant="outline" className="border-primary/30 bg-primary/10 text-[9px] uppercase text-primary">Administrador principal</Badge>}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-col items-start gap-1">
+                        <h4 className={cn('max-w-full min-w-0 break-words text-sm font-bold leading-tight text-foreground', !isUserCard && 'truncate')}>{u.name}</h4>
+                        <div className="flex max-w-full flex-wrap gap-1">
+                          {isCurrentUser && <Badge className="max-w-full break-words bg-primary text-primary-foreground text-[9px] uppercase whitespace-normal">Tu usuario</Badge>}
+                          {u.isPrincipalAdmin && <Badge variant="outline" className="max-w-full break-words border-primary/30 bg-primary/10 text-[9px] uppercase text-primary whitespace-normal">Administrador principal</Badge>}
+                        </div>
                       </div>
-                      <p className="flex items-center gap-1 truncate text-xs text-muted-foreground"><Mail className="size-3" /> {u.email}</p>
+                      <p className={cn('mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground', isUserCard ? 'break-all' : 'truncate')}><Mail className="size-3 shrink-0" /> {u.email}</p>
                       {(() => { const groupingDepartments = userGroupingDepartments(u); return <><p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{groupingDepartments.map((department: any) => department.name).join(' · ') || 'Sin departamento'}</p><p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="size-3" /> {groupingDepartments.length} {groupingDepartments.length === 1 ? 'departamento' : 'departamentos'} de equipo</p></>; })()}
-                       {u.employee ? <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-primary"><UserRoundCheck className="size-3" /> Empleado: {u.employee.firstName} {u.employee.lastName}{linkedEmployeePuesto(u, employees) ? <span className="normal-case"> · Puesto: {linkedEmployeePuesto(u, employees)}</span> : <span className="font-semibold text-muted-foreground"> · Sin puesto</span>}</p> : <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><UserRoundCheck className="size-3" /> Sin puesto</p>}
+                       {u.employee ? <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-[10px] font-semibold text-primary"><UserRoundCheck className="size-3 shrink-0" /> Empleado: {u.employee.firstName} {u.employee.lastName}{linkedEmployeePuesto(u, employees) ? <span className="normal-case"> · Puesto: {linkedEmployeePuesto(u, employees)}</span> : <span className="font-semibold text-muted-foreground"> · Sin puesto</span>}</p> : <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><UserRoundCheck className="size-3 shrink-0" /> Sin puesto</p>}
                     </div>
                   </div>
                    <Badge variant="outline" className="shrink-0 border-primary/20 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">
@@ -757,7 +789,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   </Badge>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 pl-0 sm:pl-[52px]">
+                <div className={cn('flex flex-wrap items-center gap-2', isUserCard ? 'pt-1' : 'pl-0 sm:pl-[52px]')}>
                    {isManager ? <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest">Manager · Accesos Manager</Badge> : <div className="flex items-center gap-1.5">
                      <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo</span>
                      <Select value={isAdmin ? 'ADMIN' : 'EMPLOYEE'} onValueChange={async (val) => {
@@ -790,11 +822,35 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </div>
               </div>;
             })}
+            </div>
                 {!users.length && <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Aún no hay usuarios creados.</div>}
               </CardContent>
             </Card>}
           </div>
-          </>}
+         </TabsContent>
+         <TabsContent value="roles" className="space-y-6">
+           <TeamAccessPanel
+             tenantId={tenant.id}
+             tenantName={tenant.name}
+             users={users}
+             onBack={() => { setActiveTab(canViewUsers ? 'team' : 'general'); onSubModuleChange?.(canViewUsers ? 'usuarios' : 'mi-sucursal'); }}
+             onRolesChange={async () => { await refetchTenantData(); await onRefresh(); }}
+             canViewRoles={canViewRoles}
+             canCreateRoles={canPerform('CONFIG_ROLES', 'create')}
+             canEditRoles={canPerform('CONFIG_ROLES', 'edit')}
+             canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')}
+           />
+         </TabsContent>
+         <TabsContent value="departamentos" className="space-y-6">
+           <DepartmentsView
+             tenantId={tenant.id}
+             users={users}
+             onBack={() => { setActiveTab(canViewUsers ? 'team' : 'general'); onSubModuleChange?.(canViewUsers ? 'usuarios' : 'mi-sucursal'); }}
+             onDataChange={async () => { await refetchTenantData(); }}
+             canCreate={canCreateDepartments}
+             canEdit={canEditDepartments}
+             canDelete={canDeleteDepartments}
+           />
          </TabsContent>
          <TabsContent value="dominio" className="space-y-6">
            <DominiosView />

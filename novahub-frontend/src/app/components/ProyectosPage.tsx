@@ -16,7 +16,7 @@ export const ProyectosPage = (_props: ProyectosPageProps) => {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['tenant-module', 'projects'] });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
 
   return (
     <div className="flex flex-1 bg-background w-full">
@@ -45,9 +45,9 @@ export const ProyectosPage = (_props: ProyectosPageProps) => {
               loading={false}
               onSelect={setSelectedId}
               onChanged={refresh}
-              canCreate={canPerform('PROJECTS', 'create')}
-              canEdit={canPerform('PROJECTS', 'edit')}
-              canDelete={canPerform('PROJECTS', 'delete')}
+              canCreate={canPerform('PROJECTS_LIST', 'create')}
+              canEdit={canPerform('PROJECTS_LIST', 'edit')}
+              canDelete={canPerform('PROJECTS_LIST', 'delete')}
             />
           )}
         </div>

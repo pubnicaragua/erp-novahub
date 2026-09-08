@@ -216,7 +216,7 @@ export const projectsService = {
     return data;
   },
   create: async (payload: Partial<any>): Promise<ProjectListItem> => {
-    return api.post('/projects', payload) as Promise<ProjectListItem>;
+    return api.idempotentPost('/projects', payload) as Promise<ProjectListItem>;
   },
   update: async (id: string, payload: Partial<any>): Promise<ProjectListItem> => {
     return api.patch(`/projects/${id}`, payload) as Promise<ProjectListItem>;

@@ -347,6 +347,8 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
   const isStatusField = node.type === 'field' && (node.id === 'document-status' || /estado|status/i.test(`${node.label || ''} ${node.token || ''}`));
   const isDocumentTitle = node.type === 'field' && (node.id === 'document-title' || node.token === 'document.title');
   const isReportKpiLabel = node.type === 'field' && /^report-kpi-label-\d+$/.test(node.id);
+  const isProductLabelName = node.id === 'label-name';
+  const isProductLabelValue = node.id === 'label-price' || node.id === 'label-company' || node.id === 'label-date';
   const content = isStatusField && rawContent ? `Estado: ${pdfStatusLabel(rawContent)}` : rawContent;
   if (partyField(node)) {
     Object.assign(element.style, { flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: '1px', padding: '0.2% 0.4%' });
@@ -360,6 +362,12 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
   } else if (content) {
     const text = document.createElement('span');
     text.textContent = content;
+    const contentLength = String(content).trim().length;
+    const productLabelFontSize = isProductLabelName
+      ? Math.max(5.8, Math.min(Number(node.fontSize) || 7.5, 8.6 - Math.max(0, contentLength - 18) * 0.11))
+      : isProductLabelValue
+        ? Math.max(4.2, Math.min(Number(node.fontSize) || 8, 8.6 - Math.max(0, contentLength - 22) * 0.08))
+        : undefined;
     const fittedTitleSize = isDocumentTitle
       ? Math.min(Number(node.fontSize) || 14, Math.max(7.5, 260 / Math.max(String(content).length, 1)))
       : undefined;
@@ -371,6 +379,8 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
       overflow: 'hidden',
       ...(isReportKpiLabel ? { lineHeight: '1.05', padding: '0 2px' } : {}),
       ...(isDocumentTitle ? { fontSize: pdfPointsToCss(fittedTitleSize, 7), overflow: 'hidden' } : {}),
+      ...(isProductLabelName ? { fontSize: pdfPointsToCss(productLabelFontSize, 5.5), lineHeight: '1.05', whiteSpace: 'normal', wordBreak: 'break-word' } : {}),
+      ...(isProductLabelValue ? { fontSize: pdfPointsToCss(productLabelFontSize, 4.2), lineHeight: '1', whiteSpace: 'nowrap', textOverflow: 'ellipsis' } : {}),
     });
     if (node.type === 'section' && node.id === 'party-section') {
       Object.assign(text.style, { fontSize: pdfPointsToCss(7), fontWeight: '700', letterSpacing: '0.45px', textTransform: 'uppercase', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155') });
@@ -517,29 +527,49 @@ function createTotalsNode(node: PdfTemplateNode, data: PdfTemplateData, settings
 function createBarcodeNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings) {
   const element = document.createElement('div');
   setBaseNodeStyle(element, node, settings);
-  element.style.border = '0';
-  element.style.padding = '0';
+  const isProductLabelBarcode = node.id === 'label-barcode';
+  Object.assign(element.style, {
+    border: '0',
+    padding: '0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  });
   const canvas = document.createElement('canvas');
   const value = tokenValue(node, data) || node.sample || '000000000000';
   try {
     JsBarcode(canvas, value, {
       format: 'CODE128',
-      width: 1.5,
-      height: 34,
+      width: isProductLabelBarcode ? 1.8 : 1.5,
+      height: isProductLabelBarcode ? 30 : 34,
       displayValue: true,
-      fontSize: Math.max(9, Math.min(22, Math.round((Number(node.fontSize) || 8) * 1.333 * PDF_DEFAULT_FONT_SCALE))),
+      fontSize: Math.max(8, Math.min(22, Math.round((Number(node.fontSize) || 8) * 1.2 * PDF_DEFAULT_FONT_SCALE))),
       margin: 0,
-      textMargin: 1,
+      textMargin: isProductLabelBarcode ? 2 : 1,
       background: 'transparent',
       lineColor: safeHtml2CanvasColor(node.color, '#111827'),
     });
-    canvas.style.display = 'block';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
+    Object.assign(canvas.style, {
+      display: 'block',
+      width: '100%',
+      height: 'auto',
+      maxWidth: '100%',
+      maxHeight: '100%',
+      objectFit: 'contain',
+    });
     element.appendChild(canvas);
   } catch {
     element.textContent = value;
-    element.style.textAlign = node.align || 'center';
+    Object.assign(element.style, {
+      color: safeHtml2CanvasColor(node.color || settings.textColor, '#111827'),
+      fontSize: pdfPointsToCss(Math.max(5, Number(node.fontSize) || 7), 5),
+      fontWeight: '700',
+      lineHeight: '1',
+      textAlign: node.align || 'center',
+      overflowWrap: 'anywhere',
+      wordBreak: 'break-all',
+    });
   }
   return element;
 }

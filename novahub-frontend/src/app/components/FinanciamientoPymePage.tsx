@@ -82,13 +82,38 @@ const FINANCING_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-export function FinanciamientoPymePage() {
+const FINANCING_TABS = [
+  { id: 'solicitudes', sidebarId: 'solicitudes-financiamiento', label: 'Mis Solicitudes', module: 'FINANCING_APPLICATIONS', icon: FileText },
+  { id: 'calculadora', sidebarId: 'calculadora-financiamiento', label: 'Calculadora', module: 'FINANCING_CALCULATOR', icon: Calculator },
+] as const;
+
+interface FinanciamientoPymePageProps {
+  activeSubModule?: string;
+  onSubModuleChange?: (subModule?: string) => void;
+}
+
+export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: FinanciamientoPymePageProps) {
   const { user, canPerform } = useAuth();
+  const visibleTabs = useMemo(() => FINANCING_TABS.filter((tab) => canPerform(tab.module, 'view')), [canPerform]);
+  const [activeTab, setActiveTab] = useState<'solicitudes' | 'calculadora'>('solicitudes');
   const [applications, setApplications] = useState<FinancingApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
   const [selectedApp, setSelectedApp] = useState<FinancingApplication | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    const requested = FINANCING_TABS.find((tab) => tab.sidebarId === activeSubModule)?.id;
+    if (requested && visibleTabs.some((tab) => tab.id === requested)) setActiveTab(requested);
+  }, [activeSubModule, visibleTabs]);
+
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.some((tab) => tab.id === activeTab)) {
+      const fallback = visibleTabs[0].id;
+      setActiveTab(fallback);
+      onSubModuleChange?.(fallback === 'solicitudes' ? 'solicitudes-financiamiento' : 'calculadora-financiamiento');
+    }
+  }, [activeTab, onSubModuleChange, visibleTabs]);
 
   const fetchApplications = async () => {
     setLoading(true);
@@ -107,8 +132,15 @@ export function FinanciamientoPymePage() {
       setLoading(true);
       await fetchApplications();
     };
-    load();
-  }, []);
+    if (canPerform('FINANCING_APPLICATIONS', 'view')) load();
+  }, [canPerform]);
+
+  const handleTabChange = (value: string) => {
+    const next = FINANCING_TABS.find((tab) => tab.id === value);
+    if (!next || !visibleTabs.some((tab) => tab.id === next.id)) return;
+    setActiveTab(next.id);
+    onSubModuleChange?.(next.sidebarId);
+  };
 
   return (
     <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
@@ -132,7 +164,7 @@ export function FinanciamientoPymePage() {
           <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="size-3.5 mr-1" /> Tutorial
           </Button>
-          {!selectedApp && canPerform('FINANCING', 'create') && (
+          {!selectedApp && activeTab === 'solicitudes' && canPerform('FINANCING_APPLICATIONS', 'create') && (
             <Button onClick={() => setShowWizard(true)} className="rounded-xl gap-2 font-bold" data-tour="financing-new-btn">
               <Plus className="size-4" /> Nueva Solicitud
             </Button>
@@ -151,20 +183,23 @@ export function FinanciamientoPymePage() {
           </motion.div>
         ) : (
           <motion.div key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-            <Tabs defaultValue="solicitudes" className="w-full">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6" data-tour="financing-tabs [&>button]:flex-none">
-                <TabsTrigger value="solicitudes"
+                {visibleTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-                  <FileText className="size-4" /> Mis Solicitudes
-                </TabsTrigger>
+                  <tab.icon className="size-4" /> {tab.label}
+                </TabsTrigger>)}
+                {/* La clase se mantiene en el trigger generado arriba para
+                    conservar el patrón visual del módulo. */}
+                {/*
                 <TabsTrigger value="calculadora"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
                   <Calculator className="size-4" /> Calculadora
-                </TabsTrigger>
+                </TabsTrigger> */}
               </TabsList>
 
               <TabsContent value="solicitudes" className="mt-0">
@@ -175,7 +210,7 @@ export function FinanciamientoPymePage() {
                     <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
                       <Landmark className="size-12 text-muted-foreground/30" />
                       <p className="text-muted-foreground text-center">No tenés solicitudes de financiamiento todavía.</p>
-                      {canPerform('FINANCING', 'create') && (
+                      {canPerform('FINANCING_APPLICATIONS', 'create') && (
                         <Button onClick={() => setShowWizard(true)} className="rounded-xl gap-2 font-bold">
                           <Plus className="size-4" /> Crear Primera Solicitud
                         </Button>

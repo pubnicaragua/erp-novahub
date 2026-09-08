@@ -16,6 +16,9 @@ interface DepartmentsViewProps {
   users: any[];
   onBack: () => void;
   onDataChange?: () => Promise<unknown> | void;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 const getUserDepartmentIds = (user: any) => {
@@ -36,7 +39,15 @@ function departmentUsersFor(department: any, users: any[]) {
   return users.filter((user: any) => getUserDepartmentIds(user).includes(department.id));
 }
 
-export function DepartmentsView({ tenantId, users, onBack, onDataChange }: DepartmentsViewProps) {
+export function DepartmentsView({
+  tenantId,
+  users,
+  onBack,
+  onDataChange,
+  canCreate = true,
+  canEdit = true,
+  canDelete = true,
+}: DepartmentsViewProps) {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [newDepartmentName, setNewDepartmentName] = useState('');
   const [departmentSearch, setDepartmentSearch] = useState('');
@@ -79,6 +90,7 @@ export function DepartmentsView({ tenantId, users, onBack, onDataChange }: Depar
   }, [memberSearch, selectedDepartment, users]);
 
   const createDepartment = async () => {
+    if (!canCreate) return;
     const name = newDepartmentName.trim();
     if (!name) {
       toast.error('El nombre del grupo es obligatorio');
@@ -99,6 +111,7 @@ export function DepartmentsView({ tenantId, users, onBack, onDataChange }: Depar
   };
 
   const toggleUser = async (user: any) => {
+    if (!canEdit) return;
     if (!selectedDepartment) return;
     const currentIds = getUserDepartmentIds(user);
     const isAssigned = currentIds.includes(selectedDepartment.id);
@@ -120,6 +133,7 @@ export function DepartmentsView({ tenantId, users, onBack, onDataChange }: Depar
   };
 
   const deleteDepartment = async () => {
+    if (!canDelete) return;
     if (!selectedDepartment) return;
     try {
       setDeleting(true);
@@ -155,7 +169,7 @@ export function DepartmentsView({ tenantId, users, onBack, onDataChange }: Depar
             <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={departmentSearch} onChange={(event) => setDepartmentSearch(event.target.value)} placeholder="Buscar departamento..." className="h-9 pl-9 text-xs" aria-label="Buscar departamento" /></div>
             <div className="flex gap-2">
               <Input value={newDepartmentName} onChange={(event) => setNewDepartmentName(event.target.value)} placeholder="Nombre" className="h-9 text-xs" aria-label="Nombre del departamento" />
-              <Button size="sm" className="h-9 gap-1.5" onClick={() => void createDepartment()} disabled={creating}><Plus className="size-3.5" /> Crear</Button>
+              <Button size="sm" className="h-9 gap-1.5" onClick={() => void createDepartment()} disabled={!canCreate || creating} title={!canCreate ? 'No tienes permiso para crear departamentos' : undefined}><Plus className="size-3.5" /> Crear</Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -170,13 +184,13 @@ export function DepartmentsView({ tenantId, users, onBack, onDataChange }: Depar
 
         <Card className="min-w-0 border-border/50">
           {!selectedDepartment ? <CardContent className="flex min-h-[300px] items-center justify-center p-6 text-center text-sm text-muted-foreground">Selecciona un departamento para administrar sus usuarios.</CardContent> : <>
-            <CardHeader className="flex flex-col gap-3 border-b border-border/40 pb-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="truncate text-lg font-black">{selectedDepartment.name}</CardTitle><CardDescription className="text-xs">Agrupador de usuarios; no modifica permisos ni accesos</CardDescription></div><Button variant="outline" size="sm" className="w-fit shrink-0 gap-1.5 border-rose-500/25 text-rose-600 hover:bg-rose-500/10" onClick={() => setDeleteDialogOpen(true)}><Trash2 className="size-3.5" /> Desactivar</Button></CardHeader>
+            <CardHeader className="flex flex-col gap-3 border-b border-border/40 pb-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><CardTitle className="truncate text-lg font-black">{selectedDepartment.name}</CardTitle><CardDescription className="text-xs">Agrupador de usuarios; no modifica permisos ni accesos</CardDescription></div><Button variant="outline" size="sm" className="w-fit shrink-0 gap-1.5 border-rose-500/25 text-rose-600 hover:bg-rose-500/10" onClick={() => setDeleteDialogOpen(true)} disabled={!canDelete} title={!canDelete ? 'No tienes permiso para desactivar departamentos' : undefined}><Trash2 className="size-3.5" /> Desactivar</Button></CardHeader>
             <CardContent className="space-y-4 p-4 sm:p-6">
               <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Buscar usuario por nombre o correo..." className="h-10 pl-9" aria-label="Buscar usuario del grupo" /></div>
               <div className="grid min-w-0 gap-4 lg:grid-cols-2">{[
                 { title: 'Usuarios vinculados', data: departmentUsers.assigned, assigned: true },
                 { title: 'Usuarios disponibles', data: departmentUsers.available, assigned: false },
-              ].map((section) => <div key={section.title} className="min-w-0 space-y-2"><div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{section.title}</p><Badge variant="secondary" className="text-[9px]">{section.data.length}</Badge></div><div className="max-h-[390px] space-y-2 overflow-y-auto pr-1">{!section.data.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">No hay usuarios en esta lista.</p>}{section.data.map((user: any) => { const busy = savingKey === `user:${user.id}`; return <div key={user.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/40 bg-background/60 px-3 py-3"><div className="flex min-w-0 items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-black text-primary">{user.name?.charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p><Badge variant="outline" className="mt-1 rounded-md text-[9px]">{getRoleLabel(user)}</Badge></div></div><Button type="button" size="sm" variant="outline" className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" disabled={busy} onClick={() => void toggleUser(user)}>{section.assigned ? <><Check className="size-3" /> Quitar</> : <><Plus className="size-3" /> Vincular</>}</Button></div>; })}</div></div>)}</div>
+              ].map((section) => <div key={section.title} className="min-w-0 space-y-2"><div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{section.title}</p><Badge variant="secondary" className="text-[9px]">{section.data.length}</Badge></div><div className="max-h-[390px] space-y-2 overflow-y-auto pr-1">{!section.data.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">No hay usuarios en esta lista.</p>}{section.data.map((user: any) => { const busy = savingKey === `user:${user.id}`; return <div key={user.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/40 bg-background/60 px-3 py-3"><div className="flex min-w-0 items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-black text-primary">{user.name?.charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p><Badge variant="outline" className="mt-1 rounded-md text-[9px]">{getRoleLabel(user)}</Badge></div></div><Button type="button" size="sm" variant="outline" className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" disabled={!canEdit || busy} title={!canEdit ? 'No tienes permiso para modificar los departamentos del usuario' : undefined} onClick={() => void toggleUser(user)}>{section.assigned ? <><Check className="size-3" /> Quitar</> : <><Plus className="size-3" /> Vincular</>}</Button></div>; })}</div></div>)}</div>
             </CardContent>
           </>}
         </Card>

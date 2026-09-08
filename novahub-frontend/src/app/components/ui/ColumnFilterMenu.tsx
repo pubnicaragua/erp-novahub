@@ -3,7 +3,17 @@
 import { useCallback, useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 import { Checkbox } from './checkbox';
-import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown, Filter, X } from 'lucide-react';
+import {
+  ArrowDown10,
+  ArrowDownAZ,
+  ArrowUp01,
+  ArrowUpAZ,
+  ArrowUpDown,
+  CalendarArrowDown,
+  CalendarArrowUp,
+  Filter,
+  X,
+} from 'lucide-react';
 import { cn } from './utils';
 
 export type ColumnSort = 'asc' | 'desc' | null;
@@ -30,6 +40,24 @@ function inferSortType(label: string): ColumnSortType {
   }
 
   return 'text';
+}
+
+function SortDirectionIcon({ sort, sortType, className }: { sort: Exclude<ColumnSort, null>; sortType: ColumnSortType; className?: string }) {
+  if (sortType === 'date') {
+    return sort === 'desc'
+      ? <CalendarArrowDown className={className} />
+      : <CalendarArrowUp className={className} />;
+  }
+
+  if (sortType === 'number') {
+    return sort === 'desc'
+      ? <ArrowDown10 className={className} />
+      : <ArrowUp01 className={className} />;
+  }
+
+  return sort === 'desc'
+    ? <ArrowDownAZ className={className} />
+    : <ArrowUpAZ className={className} />;
 }
 
 export interface ColumnFilterMenuProps {
@@ -59,20 +87,27 @@ export function ColumnFilterMenu({ label, options = [], selected = [], onSelect,
   const defaultSortOptions: { value: ColumnSort; label: string; icon?: React.ReactNode }[] = [
     ...(resolvedSortType === 'text'
       ? [
-          { value: 'asc' as const, label: 'A → Z / Orden alfabético', icon: <ArrowUpAZ className="size-3" /> },
-          { value: 'desc' as const, label: 'Z → A / Orden alfabético inverso', icon: <ArrowDownAZ className="size-3" /> },
+          { value: 'asc' as const, label: 'A → Z / Orden alfabético', icon: <SortDirectionIcon sort="asc" sortType="text" className="size-3" /> },
+          { value: 'desc' as const, label: 'Z → A / Orden alfabético inverso', icon: <SortDirectionIcon sort="desc" sortType="text" className="size-3" /> },
         ]
       : resolvedSortType === 'date'
         ? [
-            { value: 'desc' as const, label: 'Más recientes', icon: <ArrowDownAZ className="size-3" /> },
-            { value: 'asc' as const, label: 'Más antiguas', icon: <ArrowUpAZ className="size-3" /> },
+            { value: 'desc' as const, label: 'Más recientes', icon: <SortDirectionIcon sort="desc" sortType="date" className="size-3" /> },
+            { value: 'asc' as const, label: 'Más antiguas', icon: <SortDirectionIcon sort="asc" sortType="date" className="size-3" /> },
           ]
         : [
-            { value: 'desc' as const, label: 'Mayor a menor', icon: <ArrowDownAZ className="size-3" /> },
-            { value: 'asc' as const, label: 'Menor a mayor', icon: <ArrowUpAZ className="size-3" /> },
+            { value: 'desc' as const, label: 'Mayor a menor', icon: <SortDirectionIcon sort="desc" sortType="number" className="size-3" /> },
+            { value: 'asc' as const, label: 'Menor a mayor', icon: <SortDirectionIcon sort="asc" sortType="number" className="size-3" /> },
           ]),
   ];
   const effectiveSortOptions = sortOptions || defaultSortOptions;
+  const sortDirectionLabel = !sort
+    ? 'sin orden'
+    : resolvedSortType === 'date'
+      ? sort === 'desc' ? 'más recientes' : 'más antiguas'
+      : resolvedSortType === 'number'
+        ? sort === 'desc' ? 'mayor a menor' : 'menor a mayor'
+        : sort === 'desc' ? 'Z a A' : 'A a Z';
 
   const toggleValue = (value: string) => {
     if (!onSelect) return;
@@ -100,8 +135,8 @@ export function ColumnFilterMenu({ label, options = [], selected = [], onSelect,
   const trigger = (
     <button
       type="button"
-      title={isCompact ? `Ordenar ${label}` : `Filtrar por ${label}`}
-      aria-label={isCompact ? `Ordenar ${label}` : `Filtrar por ${label}`}
+      title={isCompact ? `Ordenar ${label}: ${sortDirectionLabel}` : `Filtrar por ${label}`}
+      aria-label={isCompact ? `Ordenar ${label}: ${sortDirectionLabel}` : `Filtrar por ${label}`}
       aria-pressed={isCompact ? Boolean(sort) : active}
       onClick={(e) => {
         e.stopPropagation();
@@ -115,7 +150,15 @@ export function ColumnFilterMenu({ label, options = [], selected = [], onSelect,
       }}
       className={triggerClassName}
     >
-      <ArrowUpDown className={cn("column-sort-icon size-3.5", !isCompact && "hidden")} />
+      {isCompact && (
+        <span key={`sort-icon-${sort || 'none'}`} className="column-sort-icon-swap inline-flex" aria-hidden="true">
+          {sort === 'asc'
+            ? <SortDirectionIcon sort="asc" sortType={resolvedSortType} className="column-sort-icon size-3.5" />
+            : sort === 'desc'
+              ? <SortDirectionIcon sort="desc" sortType={resolvedSortType} className="column-sort-icon size-3.5" />
+              : <ArrowUpDown className="column-sort-icon size-3.5" />}
+        </span>
+      )}
       <Filter className={cn("column-filter-icon size-3.5 shrink-0", isCompact && "hidden")} />
       {!isCompact && !hideLabel && <span className="column-filter-menu-label min-w-0 truncate">Filtrar {label}</span>}
     </button>

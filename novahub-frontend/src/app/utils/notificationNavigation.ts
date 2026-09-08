@@ -153,12 +153,5 @@ export function getNotificationNavigation(notification: NotificationLike): Notif
 export function navigateToNotification(notification: NotificationLike) {
   const navigation = getNotificationNavigation(notification);
   const detail = { ...navigation };
-  if (navigation.subModule === 'entregas' && navigation.targetId) {
-    try {
-      sessionStorage.setItem('pending-pos-hold-focus', navigation.targetId);
-    } catch {
-      // El foco es opcional; la navegación sigue funcionando sin almacenamiento local.
-    }
-  }
   window.dispatchEvent(new CustomEvent('navigate-module', { detail }));
 }

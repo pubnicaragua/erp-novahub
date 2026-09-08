@@ -834,7 +834,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     onClick={() => void handleSaveOrder('DRAFT')}>
                     Guardar Borrador
                   </Button>
-                  <Button className="w-full rounded-xl bg-primary px-6 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
+                  <Button data-testid="sales-order-save-in-process" className="w-full rounded-xl bg-primary px-6 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
                     onClick={() => void handleSaveOrder('IN_PROCESS')}>
                     Guardar
                   </Button>
@@ -853,7 +853,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <SalesAccountingLegend flow="order" />
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <div>
+                <div data-testid="sales-order-customer">
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox
                     options={(customers || [])
@@ -878,6 +878,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 </div>
                 <SalesWarehouseSelect
                   warehouses={warehouses}
+                  testId="sales-order-warehouse"
                   value={localDoc?.warehouseId}
                   onChange={(warehouseId) => {
                     setLocalDoc({ ...localDoc, warehouseId } as any);
@@ -1100,7 +1101,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             <div className="flex min-w-0 flex-col items-stretch justify-between gap-3 mb-4 sm:flex-row sm:items-center">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
+                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} data-testid={itemType === 'PRODUCT' ? 'sales-order-add-product' : 'sales-order-add-service'} type="button" variant="outline" size="sm" onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
                 }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
@@ -1132,7 +1133,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className={cn('sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0', pricingMode === 'individual' && 'pricing-individual')}>
                   <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
                     <div className="sales-line-product-fields">
-                      <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
+                      <div data-item-role="product-picker" data-testid={`sales-order-product-${idx}`} className="sales-line-product-picker min-w-0">
                         <Combobox 
                           options={getLineProductOptions(item)}
                           value={item.productId || ''}
@@ -1308,7 +1309,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     </div>
                   )}
                   <div className={cn('min-w-0 xl:col-span-2', pricingMode === 'individual' && 'xl:col-span-1')}>
-                    <Input 
+                    <Input data-testid={`sales-order-quantity-${idx}`}
                       type="number" 
                       min="0"
                        max={resolveItemType(item) === 'SERVICE' ? 1000000 : (products.find(x => x.id === item.productId) ? getProductStockForSalesWarehouse(products.find(x => x.id === item.productId), localDoc?.warehouseId, item.variantId) : 1000000)}

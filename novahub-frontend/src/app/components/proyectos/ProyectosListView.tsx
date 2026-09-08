@@ -24,6 +24,8 @@ import {
   money, formatDate, fromLocalDate, toLocalDate,
 } from './shared';
 
+const EMPTY_SELECT_VALUE = '__none__';
+
 interface ProyectosListViewProps {
   loading: boolean;
   onSelect: (id: string) => void;
@@ -78,7 +80,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
       toast.success(editing ? 'Proyecto actualizado' : 'Proyecto creado');
       setDialogOpen(false);
       setEditing(null);
-      queryClient.invalidateQueries({ queryKey: ['tenant-module', 'projects'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
       onChanged();
     },
     onError: (err: any) => toast.error(err?.message || 'No se pudo guardar el proyecto'),
@@ -86,7 +88,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => projectsService.remove(id),
-    onSuccess: () => { toast.success('Proyecto eliminado'); queryClient.invalidateQueries({ queryKey: ['tenant-module', 'projects'] }); onChanged(); },
+    onSuccess: () => { toast.success('Proyecto eliminado'); queryClient.invalidateQueries({ queryKey: ['tenant-module'] }); onChanged(); },
     onError: (err: any) => toast.error(err?.message || 'No se pudo eliminar el proyecto'),
   });
 
@@ -140,7 +142,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
             </div>
             {canCreate && (
               <div className="md:col-span-12 lg:col-span-12 xl:col-span-0 flex justify-end">
-                <Button onClick={openCreate} className="gap-2"><Plus className="size-4" /> Nuevo proyecto</Button>
+              <Button data-testid="projects-new-project" onClick={openCreate} className="gap-2"><Plus className="size-4" /> Nuevo proyecto</Button>
               </div>
             )}
           </div>
@@ -303,11 +305,11 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
         <div className="grid gap-4 py-2 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label>Nombre del proyecto *</Label>
-            <Input value={form.name || ''} onChange={(e) => setForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="Ej. Remodelación de sucursal Managua" />
+            <Input data-testid="projects-form-name" value={form.name || ''} onChange={(e) => setForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="Ej. Remodelación de sucursal Managua" />
           </div>
           <div className="sm:col-span-2">
             <Label>Descripción</Label>
-            <Textarea rows={2} value={form.description || ''} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} placeholder="Alcance, entregables, contexto..." />
+            <Textarea data-testid="projects-form-description" rows={2} value={form.description || ''} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} placeholder="Alcance, entregables, contexto..." />
           </div>
           <div>
             <Label>Estado</Label>
@@ -325,30 +327,30 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           </div>
           <div>
             <Label>Responsable</Label>
-            <Select value={form.managerId || ''} onValueChange={(v) => setForm((f: any) => ({ ...f, managerId: v }))}>
+            <Select value={form.managerId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, managerId: v === EMPTY_SELECT_VALUE ? '' : v }))}>
               <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sin asignar</SelectItem>
+                <SelectItem value={EMPTY_SELECT_VALUE}>Sin asignar</SelectItem>
                 {users.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label>Sucursal</Label>
-            <Select value={form.branchId || ''} onValueChange={(v) => setForm((f: any) => ({ ...f, branchId: v }))}>
+            <Select value={form.branchId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, branchId: v === EMPTY_SELECT_VALUE ? '' : v }))}>
               <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sin sucursal</SelectItem>
+                <SelectItem value={EMPTY_SELECT_VALUE}>Sin sucursal</SelectItem>
                 {branches.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label>Cliente relacionado</Label>
-            <Select value={form.customerId || ''} onValueChange={(v) => setForm((f: any) => ({ ...f, customerId: v }))}>
+            <Select value={form.customerId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, customerId: v === EMPTY_SELECT_VALUE ? '' : v }))}>
               <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sin cliente</SelectItem>
+                <SelectItem value={EMPTY_SELECT_VALUE}>Sin cliente</SelectItem>
                 {customers.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -356,7 +358,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           <div className="grid grid-cols-2 gap-3 sm:col-span-2">
             <div>
               <Label>Fecha de inicio *</Label>
-              <DateField value={form.startDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} />
+              <DateField id="projects-form-start-date" value={form.startDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} />
             </div>
             <div>
               <Label>Fecha de fin</Label>
@@ -365,7 +367,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           </div>
           <div>
             <Label>Presupuesto proyectado</Label>
-            <Input type="number" min={0} value={form.plannedBudget} onChange={(e) => setForm((f: any) => ({ ...f, plannedBudget: e.target.value }))} placeholder="0.00" />
+              <Input data-testid="projects-form-planned-budget" type="number" min={0} value={form.plannedBudget} onChange={(e) => setForm((f: any) => ({ ...f, plannedBudget: e.target.value }))} placeholder="0.00" />
           </div>
           <div>
             <Label>Ingresos proyectados</Label>
@@ -411,7 +413,7 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-          <Button onClick={submit} disabled={!valid || saving} className="gap-2">
+          <Button data-testid="projects-form-submit" onClick={submit} disabled={!valid || saving} className="gap-2">
             {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear proyecto'}
           </Button>
         </DialogFooter>

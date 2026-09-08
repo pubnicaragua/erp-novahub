@@ -826,7 +826,7 @@ function ImportPreviewPage({
               })}
             </div>
           </div>}
-          <p className="text-xs text-muted-foreground">Los precios muestran el importe efectivo para cada lista en {currencySymbol}. Un asterisco (*) indica un precio específico de la variante; sin asterisco hereda el precio base del producto. Los atributos y valores inexistentes se crearán o reutilizarán después de confirmar la importación. Los productos sin fila en Variantes recibirán automáticamente la variante Estándar.</p>
+          <p className="text-xs text-muted-foreground">Los precios muestran el importe efectivo para cada lista en {currencySymbol}. Un asterisco (*) indica un precio específico de la variante; sin asterisco hereda el precio base del producto. Observación: los atributos y valores existentes se reutilizarán y los que no existan se crearán después de confirmar la importación. Los productos sin fila en Variantes recibirán automáticamente la variante Estándar.</p>
           </div>}
         </section>
       )}
@@ -2303,7 +2303,32 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setPendingCategoryRowIndex(null);
       onRefresh();
     } catch (error: any) {
-      toast.error(error?.message || 'Error al crear categoría');
+      const existingCategory = (error?.data as any)?.category;
+      const isDuplicate = error?.code === 'CATEGORY_DUPLICATE'
+        || Boolean(existingCategory?.id)
+        || /ya existe la categoría|categor[ií]a.*duplic/i.test(String(error?.message || ''));
+      if (isDuplicate) {
+        if (existingCategory?.id && pendingCategoryRowIndex !== null) {
+          setImportData((current) => {
+            const next = [...current];
+            next[pendingCategoryRowIndex] = {
+              ...next[pendingCategoryRowIndex],
+              category: existingCategory.name,
+              categoryId: existingCategory.id,
+            };
+            return validateImportRows(next, imageArchiveEntries, imageArchiveFileName, [...importCategoryOptions, existingCategory], importWarehouseOptions);
+          });
+        }
+        setCategoryModalOpen(false);
+        setNewCategoryName('');
+        setNewCategoryDescription('');
+        setPendingCategoryRowIndex(null);
+        toast.warning(existingCategory?.name
+          ? `Observación: la categoría "${existingCategory.name}" ya existe. Se seleccionó la existente.`
+          : `Observación: ${error?.message || 'la categoría ya existe'}`);
+      } else {
+        toast.error(error?.message || 'Error al crear categoría');
+      }
     } finally {
       setCreatingCategory(false);
     }
@@ -2937,8 +2962,32 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const advancedStockError = advancedStockIssue
         ? `Inventario ${String(advancedStockIssue.variantSku || advancedStockIssue.productCode || '').trim() || 'sin SKU'}: ${!String(advancedStockIssue.warehouse || '').trim() ? 'bodega requerida' : !warehouseNames.has(String(advancedStockIssue.warehouse || '').trim().toLowerCase()) ? 'bodega no encontrada' : !Number.isFinite(Number(advancedStockIssue.quantity ?? 0)) || Number(advancedStockIssue.quantity ?? 0) < 0 ? 'stock inicial inválido' : 'fila inválida'}`
         : '';
-       const advancedStockSummaryOnly = !isServiceView && Boolean(row._advanced) && Array.isArray(row._stockRows);
-       const stock = Number(row.initialStock || 0);
+      const advancedStockSummaryOnly = !isServiceView && Boolean(row._advanced) && Array.isArray(row._stockRows);
+      const stock = Number(row.initialStock || 0);
+      const advancedStockCostIssue = advancedStockRows.find((stockRow: any) => {
+        const quantity = Number(stockRow?.quantity ?? 0);
+        if (!Number.isFinite(quantity) || quantity <= 0) return false;
+        if (!canViewInventoryCost) return true;
+        const stockSku = String(stockRow?.variantSku || stockRow?.productCode || '').trim().toLowerCase();
+        const variantRow = Array.isArray(row._variantRows)
+          ? row._variantRows.find((candidate: any) => String(candidate?.sku || '').trim().toLowerCase() === stockSku)
+          : undefined;
+        const rawCost = stockRow?.unitCost !== undefined && stockRow?.unitCost !== null && stockRow?.unitCost !== ''
+          ? stockRow.unitCost
+          : variantRow?.costPrice !== undefined && variantRow?.costPrice !== null && variantRow?.costPrice !== ''
+            ? variantRow.costPrice
+            : cost;
+        const effectiveCost = Number(rawCost);
+        return !Number.isFinite(effectiveCost) || effectiveCost <= 0;
+      });
+      const stockHasQuantity = stock > 0 || advancedStockRows.some((stockRow: any) => Number(stockRow?.quantity ?? 0) > 0);
+      const stockCostError = !isServiceView && stockHasQuantity
+        ? !canViewInventoryCost
+          ? 'El stock inicial requiere un costo mayor que cero y permiso para indicarlo'
+          : advancedStockCostIssue
+            ? `Inventario ${String(advancedStockCostIssue.variantSku || advancedStockCostIssue.productCode || '').trim() || 'sin SKU'}: el costo debe ser mayor que cero cuando hay stock`
+            : (!advancedStockSummaryOnly && (!Number.isFinite(cost) || Number(cost) <= 0) ? 'El costo debe ser mayor que cero cuando hay stock' : '')
+        : '';
        const warehouseName = String(row.warehouse || '').trim();
        const warehouseExists = advancedStockSummaryOnly || !warehouseName || warehouseNames.has(warehouseName.toLowerCase());
        const warehouseOk = advancedStockSummaryOnly
@@ -2950,6 +2999,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         Array.from(commercialNote).length > 100 ? 'Nota comercial supera 100 caracteres' : '',
          !categoryOk && !categoryWillBeCreated ? 'Categoría no encontrada' : '',
          !isServiceView && canViewInventoryCost && (cost === undefined || !Number.isFinite(cost) || cost < 0) ? 'Costo requerido y debe ser válido' : '',
+         stockCostError,
          isServiceView && cost !== undefined && (!Number.isFinite(cost) || cost < 0) ? 'Costo del servicio inválido' : '',
          isServiceView && row.estimatedDuration !== undefined && row.estimatedDuration !== '' && (!Number.isInteger(Number(row.estimatedDuration)) || Number(row.estimatedDuration) < 0) ? 'Duración estimada inválida' : '',
          isServiceView && (!Number.isFinite(servicePrice) || servicePrice < 0) ? 'Precio del servicio inválido' : '',
@@ -3304,7 +3354,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           return;
         }
       } catch (error: any) {
-        toast.error(error?.message || 'No se pudo validar si la importación contiene productos similares.');
+        toast.warning(`Observación: ${error?.message || 'no se pudo validar si la importación contiene productos similares.'}`);
         return;
       }
     }
@@ -4380,7 +4430,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       <ProductSimilarityAlert
         open={similarImportGroups.length > 0}
         groups={similarImportGroups}
-        title="La importación contiene productos existentes o similares"
+        title="Observación: la importación contiene posibles coincidencias"
         description={`Revisa nombre, marca, SKU, atributos, precios y costos. ${initialImportReimportMode === 'MERGE' ? 'Los SKU existentes se actualizarán conservando ID, historial y existencias.' : 'Los SKU existentes se omitirán y aparecerán como incidencias; no se actualizarán automáticamente.'}`}
         continueLabel={initialImportReimportMode === 'MERGE' ? 'Actualizar existentes' : 'Continuar sin actualizar'}
         onOpenChange={(value) => { if (!value) setSimilarImportGroups([]); }}

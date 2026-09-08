@@ -741,12 +741,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               <CircleHelp className="size-4" />
             </Button>
           </div>
-          <div className="customer-search-group flex min-w-0 flex-wrap items-center gap-2">
-            <div className="relative min-w-0 flex-1 lg:max-w-sm">
+          <div className="customer-search-group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:flex-nowrap">
+            <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
                 placeholder="Buscar cliente..." 
-                className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
+                className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />

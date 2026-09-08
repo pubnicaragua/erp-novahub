@@ -27,6 +27,27 @@ interface Category {
   _count?: { products?: number };
 }
 
+const normalizeCatalogValue = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase();
+
+const isCatalogDuplicate = (error: any) => {
+  const message = String(error?.message || '');
+  return ['ATTRIBUTE_DUPLICATE', 'ATTRIBUTE_VALUE_DUPLICATE', 'CATEGORY_DUPLICATE'].includes(String(error?.code || '').toUpperCase())
+    || /ya existe|duplicad/i.test(message);
+};
+
+const showCatalogSaveError = (error: any, fallback: string) => {
+  if (isCatalogDuplicate(error)) {
+    toast.warning(`Observación: ${error?.message || fallback} Revisa el registro existente para no duplicarlo.`);
+    return;
+  }
+  toast.error(error?.message || fallback);
+};
+
 export function AtributosView() {
   const [activeTab, setActiveTab] = useState('atributos');
 
@@ -138,8 +159,8 @@ function AtributosTab() {
   const addOption = () => {
     const trimmed = optionInput.trim();
     if (!trimmed) return;
-    if (formOptions.some((o) => o.toLowerCase() === trimmed.toLowerCase())) {
-      toast.warning('Esta opción ya existe');
+    if (formOptions.some((o) => normalizeCatalogValue(o) === normalizeCatalogValue(trimmed))) {
+      toast.warning('Observación: este valor ya existe en el atributo. Selecciona el existente en lugar de duplicarlo.');
       return;
     }
     setFormOptions((prev) => [...prev, trimmed]);
@@ -183,7 +204,7 @@ function AtributosTab() {
       setModalOpen(false);
       void loadAttributes();
     } catch (e: any) {
-      toast.error(e?.message || 'Error al guardar atributo');
+      showCatalogSaveError(e, 'No se pudo guardar el atributo');
     } finally {
       setSaving(false);
     }
@@ -478,7 +499,7 @@ function CategoriasTab() {
       setModalOpen(false);
       void loadCategories();
     } catch (e: any) {
-      toast.error(e?.message || 'Error al guardar categoría');
+      showCatalogSaveError(e, 'No se pudo guardar la categoría');
     } finally {
       setSaving(false);
     }

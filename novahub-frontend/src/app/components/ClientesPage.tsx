@@ -125,7 +125,7 @@ export function ClientesPage() {
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('SALES_CLIENTS', 'create') && (
               <DialogTrigger asChild>
-                <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleOpenDialog()}>
+                <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleOpenDialog()} data-testid="customers-new">
                   <Plus className="size-4" /> Nuevo cliente
                 </Button>
               </DialogTrigger>
@@ -140,7 +140,7 @@ export function ClientesPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="nombre">Nombre de la Empresa / Persona</Label>
-                  <Input id="nombre" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                  <Input id="nombre" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} data-testid="customer-name" />
                 </div>
                 <div className="grid gap-2">
                   <Label>Tipo</Label>
@@ -161,7 +161,7 @@ export function ClientesPage() {
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <div className="grid gap-2 col-span-2">
                         <Label htmlFor="ruc">RUC {formData.type === 'company' && <span className="text-destructive">*</span>}</Label>
-                        <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} />
+                        <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} data-testid="customer-ruc" />
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="dv">DV</Label>
@@ -176,7 +176,7 @@ export function ClientesPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                  <Input id="email" type="email" value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} data-testid="customer-email" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="telefono">Teléfono</Label>
@@ -195,7 +195,7 @@ export function ClientesPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleSave}>Guardar Cambios</Button>
+                <Button onClick={handleSave} data-testid="customer-save">Guardar Cambios</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

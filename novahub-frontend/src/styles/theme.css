@@ -94,6 +94,19 @@
   --switch-background: oklch(0.35 0.01 155);
 }
 
+/* En modo detalles el sidebar siempre vuelve a la superficie neutral del
+   tema actual, aunque la paleta guardada incluya colores propios de sidebar. */
+html[data-novahub-palette-mode="details"] {
+  --sidebar: var(--sidebar-neutral);
+  --sidebar-foreground: var(--sidebar-neutral-foreground);
+  --sidebar-primary: var(--sidebar-neutral-primary);
+  --sidebar-primary-foreground: var(--sidebar-neutral-primary-foreground);
+  --sidebar-accent: var(--sidebar-neutral-accent);
+  --sidebar-accent-foreground: var(--sidebar-neutral-accent-foreground);
+  --sidebar-border: var(--sidebar-neutral-border);
+  --sidebar-ring: var(--primary);
+}
+
 /* Revelado circular del tema, portado del patrón de ManagerLocal. */
 html[data-theme-transition="active"]::view-transition-group(root) {
   animation-duration: 460ms;

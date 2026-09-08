@@ -3,13 +3,13 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Palette, RotateCcw, Save, Upload, Eye, Check, Sparkles,
-  Package, DollarSign, ShieldCheck, Building2, Globe,
-  Plus, Settings2, KeyRound, Layers,
+  Package, DollarSign, ShieldCheck, Building2,
+  Plus, Settings2, KeyRound,
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
-  Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
+  Trash2, Edit2, Shield, ArrowRight, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned, ChevronDown,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -31,13 +31,12 @@ import { toast } from 'sonner';
 import { cn } from './ui/utils';
 import { type RoleManagement, type Permission } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
-import { modulePricingService, type ModulePriceItem } from '../services/module-pricing.service';
-import { CountriesView } from './admin/CountriesView';
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
 import { HIDDEN_PERMISSION_MODULE_IDS, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
+import { PERMISSION_SUBMODULES } from '../utils/sidebarPermissions';
 import { getReadableForeground } from '../utils/color-contrast';
 import { formatExchangeRate } from '../utils/currency';
 import { optimizeImageFile } from '../utils/image-optimization';
@@ -78,12 +77,12 @@ const AVAILABLE_MODULES = [
   { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
-  { id: 'MY_COMPANY', label: 'Mi Empresa', icon: Building2, description: 'Empresa, plan, equipo, sucursales y dominio' },
+  { id: 'MY_COMPANY', label: 'Mi Empresa', icon: Building2, description: 'Empresa, plan, equipo, roles, departamentos y dominio' },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
 // Submódulos para permisos ultra-granulares
-export const SUBMODULES_FOR_PERMS = [
+export const LEGACY_SUBMODULES_FOR_PERMS = [
   // Ventas
   { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
   { id: 'SALES_QUOTES', label: 'Cotizaciones', parent: 'SALES' },
@@ -105,8 +104,6 @@ export const SUBMODULES_FOR_PERMS = [
   // Compras
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
   { id: 'PURCHASES_REQUESTS', label: 'Solicitudes de compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_MANAGEMENT', label: 'Gestión de compras', parent: 'PURCHASES' },
-  { id: 'PURCHASES_SUPPLIER_PRICES', label: 'Precios de proveedores', parent: 'PURCHASES' },
   { id: 'PURCHASES_EXPENSES', label: 'Gastos', parent: 'PURCHASES' },
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
@@ -198,22 +195,18 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
   
   // Mi Empresa
-  { id: 'CONFIG_COMPANY', label: 'General', parent: 'MY_COMPANY' },
+  { id: 'CONFIG_COMPANY', label: 'Datos generales', parent: 'MY_COMPANY' },
   { id: 'SUBSCRIPTIONS', label: 'Módulos y Plan', parent: 'MY_COMPANY' },
   { id: 'CONFIG_USERS', label: 'Mi Equipo', parent: 'MY_COMPANY' },
   { id: 'CONFIG_ROLES', label: 'Roles y permisos', parent: 'MY_COMPANY' },
-  { id: 'COMPANY_BRANCHES', label: 'Sucursales', parent: 'MY_COMPANY' },
+  { id: 'CONFIG_DEPARTMENTS', label: 'Departamentos', parent: 'MY_COMPANY' },
   { id: 'CONFIG_DOMAINS', label: 'Dominio propio', parent: 'MY_COMPANY' },
 
   // Configuración
   { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION' },
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_CURRENCY', label: 'Moneda', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_CURRENCY', label: 'Moneda y cambio', parent: 'CONFIGURATION' },
   { id: 'CONFIG_PDF', label: 'Documentos PDF', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_TENANCY', label: 'Multiempresa', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_PLATFORM', label: 'Plataforma', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_COUNTRIES', label: 'Países', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_MODULE_PRICING', label: 'Precios de módulos', parent: 'CONFIGURATION' },
 
   // Contabilidad
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
@@ -234,6 +227,10 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'ACCOUNTING_EXPENSE_CATEGORIES', label: 'Categorías de gastos', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_CONFIG', label: 'Configuración contable', parent: 'ACCOUNTING' },
 ];
+
+// El editor de roles usa el mismo registro que el sidebar. Se conserva el
+// arreglo histórico anterior arriba solo para compatibilidad con datos viejos.
+export const SUBMODULES_FOR_PERMS = PERMISSION_SUBMODULES.map((item) => ({ ...item }));
 
 // Fusionar para la lista de permisos anidando los submódulos justo debajo de sus padres
 export const ALL_PERM_MODULES = AVAILABLE_MODULES.flatMap(mod => [
@@ -328,9 +325,12 @@ interface ColorFieldProps {
   description: string;
   hexValue: string;
   onHexChange: (hex: string) => void;
+  displayColor?: string;
+  displayValue?: string;
+  readOnly?: boolean;
 }
 
-function ColorField({ label, description, hexValue, onHexChange }: ColorFieldProps) {
+function ColorField({ label, description, hexValue, onHexChange, displayColor, displayValue, readOnly = false }: ColorFieldProps) {
   const validHex = /^#[0-9a-fA-F]{6}$/.test(hexValue) ? hexValue : '#000000';
   const [draftHex, setDraftHex] = useState(hexValue);
 
@@ -339,18 +339,19 @@ function ColorField({ label, description, hexValue, onHexChange }: ColorFieldPro
   }, [hexValue]);
 
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-border/50 p-3 transition-colors hover:bg-muted/20">
-      <label className="relative block size-10 shrink-0 cursor-pointer" title={`Elegir ${label.toLowerCase()}`}>
+    <div className={cn('flex items-center gap-4 rounded-lg border border-border/50 p-3 transition-colors', readOnly ? 'bg-muted/10' : 'hover:bg-muted/20')}>
+      <label className={cn('relative block size-10 shrink-0', readOnly ? 'cursor-default' : 'cursor-pointer')} title={readOnly ? `${label} definido por el modo detalles` : `Elegir ${label.toLowerCase()}`}>
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 rounded-lg border-2 border-border shadow-sm transition-transform hover:scale-105"
-          style={{ backgroundColor: validHex }}
+          style={{ backgroundColor: displayColor || validHex }}
         />
         <FastColorInput
           value={validHex}
           onChange={value => onHexChange(value)}
+          disabled={readOnly}
           aria-label={`Elegir ${label.toLowerCase()}`}
-          className="absolute inset-0 z-10 size-full cursor-pointer opacity-0"
+          className={cn('absolute inset-0 z-10 size-full opacity-0', !readOnly && 'cursor-pointer')}
         />
       </label>
       <div className="flex-1">
@@ -358,8 +359,10 @@ function ColorField({ label, description, hexValue, onHexChange }: ColorFieldPro
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       <Input
-        value={draftHex}
+        value={displayValue || draftHex}
+        disabled={readOnly}
         onChange={e => {
+          if (readOnly) return;
           const next = e.target.value;
           if (/^#[0-9a-fA-F]{0,6}$/.test(next)) {
             setDraftHex(next);
@@ -549,47 +552,15 @@ const ALL_TABS: TabDef[] = [
   { id: 'branding', label: 'Marca & Tema', icon: Palette, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'documentos-pdf', label: 'Documentos PDF', icon: FileText, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'seguridad', label: 'Seguridad', icon: KeyRound, scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'tenancy', label: 'Multi-Tenancy', icon: Layers, scenario: ['superadmin', 'partner'] },
   { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'plataforma', label: 'Plataforma', icon: Server, scenario: ['superadmin'] },
-  { id: 'paises', label: 'Países', icon: Globe, scenario: ['superadmin'] },
-  { id: 'precios', label: 'Precios Módulos', icon: DollarSign, scenario: ['superadmin'] },
 ];
 
 const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
   branding: 'CONFIG_BRANDING',
   'documentos-pdf': 'CONFIG_PDF',
   seguridad: 'CONFIG_SECURITY',
-  tenancy: 'CONFIG_TENANCY',
   currency: 'CONFIG_CURRENCY',
-  plataforma: 'CONFIG_PLATFORM',
-  paises: 'CONFIG_COUNTRIES',
-  precios: 'CONFIG_MODULE_PRICING',
 };
-
-// ---- Main Component ----
-const PRICING_MODULES = [
-  { category: 'Operaciones', modules: [
-    { id: 'SALES', label: 'Ventas', icon: TrendingUp },
-    { id: 'PURCHASES', label: 'Compras', icon: HandCoins },
-    { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package },
-  ]},
-  { category: 'Administración', modules: [
-    { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign },
-    { id: 'HR', label: 'Recursos Humanos', icon: UserIcon },
-    { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen },
-  ]},
-  { category: 'Herramientas', modules: [
-    { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays },
-    { id: 'DOCUMENTS', label: 'Documentos', icon: FileText },
-    { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing },
-    { id: 'REPORTS', label: 'Reportes', icon: BarChart3 },
-  ]},
-  { category: 'Soporte', modules: [
-    { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones },
-    { id: 'CONFIGURATION', label: 'Configuración', icon: Settings },
-  ]},
-];
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
   CREATE: 'Creación',
@@ -679,22 +650,16 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const canDeleteRoles = canPerform('CONFIG_ROLES', 'delete');
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
   const canViewBranding = canPerform('CONFIG_BRANDING', 'view');
-  const canViewTenancy = canPerform('CONFIG_TENANCY', 'view');
   const canViewCurrency = canPerform('CONFIG_CURRENCY', 'view');
-  const canViewModulePricing = canPerform('CONFIG_MODULE_PRICING', 'view');
   const canEditCompany = canPerform('CONFIG_COMPANY', 'edit');
   const canCreateCompany = canPerform('CONFIG_COMPANY', 'create');
   const canDeactivateCompany = canPerform('CONFIG_COMPANY', 'deactivate');
   const canEditBranding = canPerform('CONFIG_BRANDING', 'edit');
   const canEditSecurity = canPerform('CONFIG_SECURITY', 'edit');
   const canEditCurrency = canPerform('CONFIG_CURRENCY', 'edit');
-  const canEditTenancy = canPerform('CONFIG_TENANCY', 'edit');
   const canEditPdf = canPerform('CONFIG_PDF', 'edit');
   const canCreatePdf = canPerform('CONFIG_PDF', 'create');
   const canDeletePdf = canPerform('CONFIG_PDF', 'delete');
-  const canEditPlatform = canPerform('CONFIG_PLATFORM', 'edit');
-  const canEditCountries = canPerform('CONFIG_COUNTRIES', 'edit');
-  const canEditModulePricing = canPerform('CONFIG_MODULE_PRICING', 'edit');
 
   const tenantPermModules = React.useMemo(() => {
     if (!user) return [];
@@ -837,11 +802,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       .then(() => toast.success('Tiempo de expiración de sesión guardado'))
       .catch(() => toast.error('No se pudo guardar el tiempo de sesión'));
   };
-
-  // Tenancy state
-  const [strictIsolation, setStrictIsolation] = useState(true);
-  const [whiteLabel, setWhiteLabel] = useState(false);
-  const [apiAccess, setApiAccess] = useState(false);
 
   // Currency & Exchange Rate state
   const [exchangeRateAuto, setExchangeRateAuto] = useState(true);
@@ -1034,14 +994,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   const [pendingDeleteRole, setPendingDeleteRole] = useState<RoleManagement | null>(null);
 
-  const fetchPricing = async () => {
-    setPricingLoading(true);
-    try {
-      await refetchConfiguration();
-    } catch { /* ignore */ }
-    finally { setPricingLoading(false); }
-  };
-
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
     try {
@@ -1093,29 +1045,21 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Partial<ExtendedRoleManagement> | null>(null);
 
-  // Pricing state
-  const [pricingData, setPricingData] = useState<ModulePriceItem[]>([]);
-  const [pricingLoading, setPricingLoading] = useState(false);
-  const [pricingSaving, setPricingSaving] = useState(false);
-  const [pricingSearch, setPricingSearch] = useState('');
-  const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
-
   const { data: configurationData, refetch: refetchConfiguration } = useTenantQuery(
-    ['configuration', user?.tenantId || 'current', scenario, canViewRoles, canViewCompany, canViewBranding, canViewCurrency, canViewModulePricing],
+    ['configuration', user?.tenantId || 'current', scenario, canViewRoles, canViewCompany, canViewBranding, canViewCurrency],
     async (signal) => {
       const tenantId = user?.tenantId;
-      const [branding, currency, industries, pricing, rolesData, modules] = await Promise.all([
-        canViewBranding || canViewCompany || canViewTenancy ? brandingService.getCurrent(signal) : Promise.resolve(null),
+      const [branding, currency, industries, rolesData, modules] = await Promise.all([
+        canViewBranding || canViewCompany ? brandingService.getCurrent(signal) : Promise.resolve(null),
         canViewCurrency ? api.get<any>('/tools/exchange-rate', { signal }) : Promise.resolve(null),
         tenantId && canViewCompany ? api.get<any>(`/tenants/${tenantId}/industries`, { signal }) : Promise.resolve([]),
-        scenario === 'superadmin' && canViewModulePricing ? modulePricingService.getAll(signal) : Promise.resolve([]),
         // Los roles se administran exclusivamente desde Mi Empresa > Mi Equipo.
         Promise.resolve([]),
         tenantId && (user?.isTenantAdmin || canPerform('SUBSCRIPTIONS', 'view'))
           ? subscriptionsService.getEnabledModules(tenantId, undefined, signal)
           : Promise.resolve(user?.enabledModules || []),
       ]);
-      return { branding, currency, industries, pricing, roles: rolesData, modules };
+      return { branding, currency, industries, roles: rolesData, modules };
     },
     { enabled: Boolean(user), onError: (error) => toast.error(error.message || 'Error cargando configuración') },
   );
@@ -1126,7 +1070,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     const currency = configurationData.currency as any;
     const industries = asList(configurationData.industries);
     const rolesList = asList(configurationData.roles);
-    const pricingList = asList(configurationData.pricing);
     const modulesList = asList(configurationData.modules);
 
     const userThemeColors = branding?.userTheme?.colors || {};
@@ -1134,9 +1077,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       ? 'complete'
       : branding?.userTheme?.paletteMode === 'details'
         ? 'details'
-        : Object.keys(userThemeColors).length > 0
-          ? 'complete'
-          : 'details';
+        : themeConfig.paletteMode;
     const resolvedPrimary = userThemeColors.primary || branding?.primaryColor;
     const resolvedSidebar = userThemeColors.sidebar || branding?.sidebarColor;
     const resolvedAccent = userThemeColors.accent || branding?.accentColor;
@@ -1155,7 +1096,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (branding?.companyName) setCompanyName(branding.companyName);
     if (branding?.logo) setLogoPreview(branding.logo);
     if (branding?.industry) setCompanyIndustry(branding.industry);
-    if (branding?.whiteLabel !== undefined) setWhiteLabel(branding.whiteLabel);
     // El tema personal tiene prioridad sobre los colores corporativos. Si aún
     // no existe, la marca del tenant se usa como fallback visual.
     if (!themeDraftDirtyRef.current && branding && (resolvedPrimary || resolvedSidebar || resolvedAccent || resolvedPrimaryForeground || resolvedSidebarForeground)) {
@@ -1201,7 +1141,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       setAllowCurrencySwitch(currency.allowCurrencySwitch !== false);
     }
     setIndustryOptions(industries);
-    setPricingData(pricingList);
     setRoles(rolesList);
     setEnabledModules(modulesList);
   }, [configurationData]);
@@ -1309,12 +1248,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       // Limpiar el objeto de envío para eliminar campos innecesarios o automáticos
       const { id, _count, createdAt, updatedAt, ...cleanRole } = editingRole as any;
       
-      const permissions = normalizePermissions(cleanRole.permissions).map((p: any) => ({
+      const permissions = normalizePermissions(cleanRole.permissions)
+        .filter((p: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(p.module || '').toUpperCase()))
+        .map((p: any) => ({
         ...p,
         // El backend conserva `write` por compatibilidad con roles antiguos;
         // las acciones visibles de la matriz siguen siendo las canónicas.
         write: !!(p.create || p.edit || p.write),
-      }));
+        }));
       const payload = {
         name: cleanRole.name,
         description: cleanRole.description || '',
@@ -1546,10 +1487,26 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <ColorField label="Color de Acento" description="Elementos secundarios y hovers" hexValue={accentHex} onHexChange={v => { setAccentHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
                   <Separator className="my-2" />
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Colores del Sidebar</p>
-                  <ColorField label="Fondo del Sidebar" description="Color de fondo del menú lateral" hexValue={sidebarHex} onHexChange={v => { setSidebarHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
-                  <ColorField label="Texto del Sidebar" description="Color del texto en el menú lateral" hexValue={sidebarFgHex} onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
+                  <ColorField
+                    label="Fondo del Sidebar"
+                    description={paletteMode === 'details' ? 'No se aplica en detalles: blanco en claro y neutral oscuro en dark mode.' : 'Color de fondo del menú lateral'}
+                    hexValue={sidebarHex}
+                    displayColor={paletteMode === 'details' ? 'var(--sidebar-neutral)' : undefined}
+                    displayValue={paletteMode === 'details' ? 'Neutral del tema' : undefined}
+                    readOnly={paletteMode === 'details'}
+                    onHexChange={v => { setSidebarHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }}
+                  />
+                  <ColorField
+                    label="Texto del Sidebar"
+                    description={paletteMode === 'details' ? 'No se aplica en detalles: texto oscuro en claro y claro en dark mode.' : 'Color del texto en el menú lateral'}
+                    hexValue={sidebarFgHex}
+                    displayColor={paletteMode === 'details' ? 'var(--sidebar-neutral-foreground)' : undefined}
+                    displayValue={paletteMode === 'details' ? 'Neutral del tema' : undefined}
+                    readOnly={paletteMode === 'details'}
+                    onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }}
+                  />
                   <div className="flex gap-3 pt-2">
-                    <Button onClick={handleSave} disabled={!canEditBranding || isSavingTheme} className="rounded-xl gap-2 font-bold">
+                    <Button data-testid="configuration-theme-save" onClick={handleSave} disabled={!canEditBranding || isSavingTheme} className="rounded-xl gap-2 font-bold">
                       {isSavingTheme ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
                       {isSavingTheme ? 'Guardando...' : 'Guardar Tema'}
                     </Button>
@@ -2138,68 +2095,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>
 
-        {/* ══════════ TAB: MULTI-TENANCY ══════════ */}
-        <TabsContent value="tenancy" className="space-y-6 mt-0">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="border-border/50 shadow-sm">
-              <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black"><Layers className="size-5 text-primary" />Configuración de Tenancy</CardTitle>
-                <CardDescription>Ajustes de aislamiento y jerarquía del sistema multi-tenant</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                {[
-                  { label: 'Aislamiento Estricto de Datos', desc: 'Garantiza que ningún dato sea visible entre tenants, incluso en reportes globales', value: strictIsolation, setter: setStrictIsolation, locked: true },
-                  { label: 'White Label Branding', desc: 'Remueve las menciones de "NovaHub" y usa solo tu marca corporativa', value: whiteLabel, setter: setWhiteLabel, locked: false },
-                  { label: 'Acceso a API REST', desc: 'Habilita el endpoint REST para integraciones externas de tus clientes', value: apiAccess, setter: setApiAccess, locked: false },
-                ].map(({ label, desc, value, setter, locked }) => (
-                  <div key={label} className="flex items-center justify-between p-4 rounded-xl border border-border/40 hover:border-border/70 transition-all">
-                    <div className="flex-1 mr-4">
-                      <div className="flex items-center gap-2">
-                        <Label className="font-bold text-sm">{label}</Label>
-                        {locked && <Lock className="size-3 text-muted-foreground" />}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-                    </div>
-                    <Switch checked={value} onCheckedChange={locked || !canEditTenancy ? undefined : setter} disabled={locked || !canEditTenancy} />
-                  </div>
-                ))}
-                <Button disabled={!canEditTenancy} className="w-full rounded-xl gap-2 font-bold h-11" onClick={() => { if (!canEditTenancy) return; brandingService.update({ whiteLabel }); toast.success('Configuración de tenancy guardada'); }}>
-                  <Save className="size-4" />Guardar Configuración
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/50 shadow-sm">
-              <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black"><Server className="size-5 text-primary" />Infraestructura</CardTitle>
-                <CardDescription>Estado de la plataforma y recursos</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                {[
-                  { label: 'Base de Datos', value: 'PostgreSQL 15 · Supabase', status: 'ok' },
-                  { label: 'Almacenamiento', value: 'Supabase Storage · CDN activo', status: 'ok' },
-                  { label: 'Autenticación', value: 'JWT RS256 · 24h TTL', status: 'ok' },
-                  { label: 'API Backend', value: 'NestJS · localhost:3000', status: 'ok' },
-                  { label: 'Aislamiento Tenants', value: 'clientTenantId por query', status: 'ok' },
-                  { label: 'Dominio Frontend', value: 'Vite · localhost:5173', status: 'ok' },
-                ].map(({ label, value, status }) => (
-                  <div key={label} className="flex items-center justify-between p-3 rounded-xl bg-muted/10 border border-border/30">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{label}</p>
-                      <p className="text-sm font-bold mt-0.5">{value}</p>
-                    </div>
-                    <div className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black',
-                      status === 'ok' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500')}>
-                      <div className={cn('size-1.5 rounded-full', status === 'ok' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')} />
-                      {status === 'ok' ? 'Activo' : 'Atención'}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
         {/* ══════════ TAB: MONEDA & CAMBIO ══════════ */}
         <TabsContent value="currency" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2332,272 +2227,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <p className="text-[11px] leading-relaxed text-amber-700/80">
                     Cambiar la tasa de cambio manual no afectará transacciones ya realizadas. Las transacciones mantienen guardada la tasa con la que fueron creadas originalmente.
                   </p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
-        {/* ══════════ TAB: DOMINIOS ══════════ */}
-        {false && <TabsContent value="dominios" className="space-y-6 mt-0">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="border-border/50 shadow-sm mb-6">
-              <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black"><Globe className="size-5 text-primary" />Dominios Personalizados</CardTitle>
-                <CardDescription>Accede a Nova Hub con tu propio dominio corporativo</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-primary/15 rounded-xl">
-                      <Rocket className="size-6 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-black text-base">Dominio Personalizado · Próximamente</p>
-                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                        Pronto podrás acceder al ERP con tu propia URL corporativa, por ejemplo: <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">erp.tuempresa.com</code>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Subdominio Nova Hub (Activo)</Label>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 flex items-center gap-2 px-4 py-3 rounded-xl bg-muted/20 border border-border/40">
-                      <Globe className="size-4 text-muted-foreground flex-shrink-0" />
-                      <span className="font-mono text-sm">{user?.tenantId || 'empresa-demo'}.novahub.io</span>
-                    </div>
-                    <Button variant="outline" className="rounded-xl h-11 gap-2">
-                      <Copy className="size-4" />Copiar
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                  {[
-                    { title: 'Subdominio Gratis', price: 'Incluido', desc: 'empresa.novahub.io', current: true, features: ['SSL automático', 'CDN global', 'Soporte técnico'] },
-                    { title: 'Dominio Propio', price: '$29/mes', desc: 'erp.tuempresa.com', current: false, features: ['Tu dominio corporativo', 'SSL personalizado', 'Redirección automática', 'DNS configurado'] },
-                    { title: 'White Label Total', price: 'Enterprise', desc: 'app.tuempresa.com', current: false, features: ['Sin mención a NovaHub', 'Branding completo', 'Email corporativo', 'Support dedicado'] },
-                  ].map(({ title, price, desc, current, features }) => (
-                    <div key={title} className={cn('relative p-5 rounded-2xl border transition-all',
-                      current ? 'border-primary/40 bg-primary/5 shadow-lg' : 'border-border/50 hover:border-primary/20')}>
-                      {current && <div className="absolute -top-2 left-4 px-3 py-0.5 bg-primary text-primary-foreground text-[10px] font-black rounded-full uppercase tracking-widest">Activo</div>}
-                      <div className="mt-2">
-                        <p className="font-black text-base">{title}</p>
-                        <p className="text-2xl font-black text-primary mt-1">{price}</p>
-                        <p className="text-xs font-mono text-muted-foreground mt-1">{desc}</p>
-                      </div>
-                      <div className="space-y-2 mt-4">
-                        {features.map(f => (
-                          <div key={f} className="flex items-center gap-2 text-xs">
-                            <CheckCircle2 className="size-3.5 text-primary flex-shrink-0" />
-                            <span>{f}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <Button className="w-full mt-4 rounded-xl font-bold" variant={current ? 'outline' : 'default'} disabled={!current && price !== '$29/mes'}
-                        onClick={() => current ? toast.info('Ya estás usando este plan') : toast.info('Próximamente disponible')}>
-                        {current ? 'Plan Actual' : price === 'Enterprise' ? <><Rocket className="size-3.5 mr-1" />Contactar</> : <><ArrowRight className="size-3.5 mr-1" />Activar</>}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>}
-
-        {/* ══════════ TAB: PRECIOS (Super Admin only) ══════════ */}
-        <TabsContent value="precios" className="space-y-6 mt-0">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="border-border/50 shadow-sm">
-              <CardHeader className="border-b border-border/30 bg-muted/10">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 font-black text-lg">
-                      <DollarSign className="size-5 text-primary" />Precificación de Módulos
-                    </CardTitle>
-                    <CardDescription>Administrá los precios mensuales de cada módulo del ERP</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                      <Input 
-                        placeholder="Buscar módulo..." 
-                        value={pricingSearch}
-                        onChange={e => setPricingSearch(e.target.value)}
-                        className="h-9 w-48 rounded-xl pl-9 text-xs" 
-                      />
-                    </div>
-                    <Button 
-                      onClick={async () => {
-                        setPricingSaving(true);
-                        try {
-                          const entries = Object.entries(pricingEdits).map(([mod, price]) => ({ module: mod, price }));
-                          if (entries.length > 0) {
-                            await modulePricingService.bulkUpsert(entries);
-                          }
-                          setPricingEdits({});
-                          await fetchPricing();
-                          toast.success('Precios actualizados correctamente');
-                        } catch {
-                          toast.error('Error al guardar precios');
-                        } finally {
-                          setPricingSaving(false);
-                        }
-                      }}
-                      disabled={!canEditModulePricing || pricingSaving || Object.keys(pricingEdits).length === 0}
-                      className="rounded-xl gap-2 font-bold h-9 text-xs"
-                    >
-                      {pricingSaving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
-                      Guardar Cambios
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                {pricingLoading ? (
-                  <div className="flex items-center justify-center h-40">
-                    <RefreshCw className="size-8 animate-spin text-primary/30" />
-                  </div>
-                ) : (
-                  <div className="space-y-8">
-                    {PRICING_MODULES.map(group => {
-                      const filtered = group.modules.filter(m => 
-                        m.label.toLowerCase().includes(pricingSearch.toLowerCase())
-                      );
-                      if (filtered.length === 0) return null;
-                      return (
-                        <div key={group.category}>
-                          <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3 ml-1">
-                            {group.category}
-                          </h4>
-                          <div className="rounded-2xl border border-border/40 overflow-hidden">
-                            <table className="w-full text-sm">
-                              <thead className="bg-muted/20">
-                                <tr>
-                                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground w-1/3">Módulo</th>
-                                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Precio Mensual (USD)</th>
-                                  <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Acción</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border/30">
-                                {filtered.map(mod => {
-                                  const currentPrice = pricingEdits[mod.id] ?? pricingData.find(p => p.module === mod.id)?.price ?? 0;
-                                  const hasChanged = pricingEdits[mod.id] !== undefined && pricingEdits[mod.id] !== pricingData.find(p => p.module === mod.id)?.price;
-                                  return (
-                                    <tr key={mod.id} className={cn('hover:bg-muted/10 transition-colors', hasChanged && 'bg-amber-500/5')}>
-                                      <td className="px-4 py-3">
-                                        <div className="flex items-center gap-3">
-                                          <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                            <mod.icon className="size-4 text-primary" />
-                                          </div>
-                                          <div>
-                                            <p className="text-sm font-bold">{mod.label}</p>
-                                            <p className="text-[10px] text-muted-foreground">{mod.id}</p>
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="px-4 py-3">
-                                        <div className="flex items-center gap-2 max-w-[200px]">
-                                          <span className="text-xs text-muted-foreground font-bold">$</span>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            value={currentPrice}
-                                            disabled={!canEditModulePricing}
-                                            onChange={e => {
-                                              const val = parseFloat(e.target.value) || 0;
-                                              setPricingEdits(prev => ({ ...prev, [mod.id]: val }));
-                                            }}
-                                            className="h-9 rounded-xl text-sm font-bold w-28"
-                                          />
-                                          <span className="text-[10px] text-muted-foreground">/mes</span>
-                                        </div>
-                                      </td>
-                                      <td className="px-4 py-3 text-right">
-                                        {pricingData.find(p => p.module === mod.id)?.id ? (
-                                          <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black">
-                                            Creado
-                                          </Badge>
-                                        ) : (
-                                          <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[9px] font-black">
-                                            Nuevo
-                                          </Badge>
-                                        )}
-                                        {hasChanged && (
-                                          <Badge className="ml-2 bg-blue-500/10 text-blue-500 border-blue-500/20 text-[9px] font-black">
-                            Editado
-                                          </Badge>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
-        {/* ══════════ TAB: PLATAFORMA (Super Admin only) ══════════ */}
-        <TabsContent value="paises" className="space-y-6 mt-0">
-          <CountriesView canEdit={canEditCountries} />
-        </TabsContent>
-        <TabsContent value="plataforma" className="space-y-6 mt-0">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="border-border/50 shadow-sm">
-              <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black">
-                  <Crown className="size-5 text-violet-500" />
-                  Control de Plataforma
-                  <Badge className="bg-violet-500/10 text-violet-500 border-violet-500/20 text-[9px] font-black">SUPER ADMIN</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                {[
-                  { label: 'Modo Mantenimiento', desc: 'Bloquea el acceso de todos los tenants temporalmente', value: false },
-                  { label: 'Logs de Acceso Global', desc: 'Registra todas las acciones de todos los tenants', value: true },
-                  { label: 'Feature Flags Beta', desc: 'Habilita funcionalidades en fase beta para testing', value: false },
-                  { label: 'Notificaciones de Sistema', desc: 'Muestra banners de mantenimiento a los usuarios', value: false },
-                ].map(({ label, desc, value }) => (
-                  <div key={label} className="flex items-center justify-between p-4 rounded-xl border border-violet-500/10 bg-violet-500/5 hover:bg-violet-500/10 transition-all">
-                    <div className="flex-1 mr-4">
-                      <Label className="font-bold text-sm">{label}</Label>
-                      <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-                    </div>
-                    <Switch defaultChecked={value} disabled={!canEditPlatform} onCheckedChange={() => canEditPlatform && toast.success('Configuración actualizada')} />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/50 shadow-sm">
-              <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black"><BarChart3 className="size-5 text-violet-500" />Estadísticas Globales</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: 'Total Tenants', value: '1', color: 'from-violet-500 to-purple-600' },
-                    { label: 'Partners Activos', value: '1', color: 'from-blue-500 to-indigo-600' },
-                    { label: 'Usuarios Totales', value: '6', color: 'from-emerald-500 to-teal-600' },
-                    { label: 'Módulos Activos', value: '10', color: 'from-amber-500 to-orange-600' },
-                  ].map(({ label, value, color }) => (
-                    <div key={label} className={`p-5 rounded-2xl bg-gradient-to-br ${color} text-white`}>
-                      <p className="text-3xl font-black">{value}</p>
-                      <p className="text-xs font-bold uppercase tracking-widest mt-1 opacity-80">{label}</p>
-                    </div>
-                  ))}
                 </div>
               </CardContent>
             </Card>

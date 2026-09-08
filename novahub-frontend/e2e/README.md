@@ -1,5 +1,106 @@
 # Pruebas E2E con Playwright (grabadas desde el navegador)
 
+## Suite Dual Full-Stack
+
+La suite de `e2e/specs/` ejecuta el frontend contra una instancia NestJS que
+recibe exclusivamente `DATABASE_URL_E2E`. No se inicia ni reutiliza el backend
+normal. Antes de ejecutarla, crea una base PostgreSQL separada, aplica las
+migraciones desde `Backend/` y define las salvaguardas:
+
+```powershell
+$env:DATABASE_URL_E2E = 'postgresql://usuario:clave@host:5432/novahub_e2e'
+$env:E2E_ALLOW_DATABASE_MUTATIONS = '1'
+$env:E2E_ISOLATED_DATABASE = '1'
+$env:E2E_DUAL_FULLSTACK = '1'
+$env:E2E_BACKEND_PORT = '3310'
+$env:E2E_SCHEMA_MODE = 'datamodel'
+npx playwright test e2e/specs/module-smoke.spec.ts
+```
+
+También puedes copiar `e2e/.env.e2e.example` como referencia; Playwright no
+carga archivos `.env` automáticamente, por lo que las variables deben estar
+exportadas en la sesión de PowerShell o en el pipeline.
+`E2E_SCHEMA_MODE=datamodel` prepara una base E2E vacía a partir del schema
+Prisma sin ejecutar el historial de migraciones cuando existe drift conocido;
+la suite nunca aplica ese modo contra la URL normal.
+La ejecución dual no reutiliza un Vite ya levantado: si `5173` está ocupado,
+detén ese proceso o define `E2E_FRONTEND_PORT` y `E2E_BASE_URL` con otro puerto.
+
+El flujo transaccional de referencia se ejecuta así:
+
+```powershell
+npx playwright test e2e/specs/ventas-inventario-contabilidad.spec.ts
+```
+
+Ese caso crea una orden desde la UI, la convierte en factura, registra un
+cobro, valida Kardex/inventario y asiento contable en Prisma, repite la
+operación con la misma clave de idempotencia, comprueba aislamiento con un
+segundo tenant y provoca stock insuficiente para verificar rollback.
+
+La corrida usa un tenant y un `runId` únicos, limita los workers a uno y limpia
+la base E2E al inicio y al terminar cada fixture mutante. Si falta cualquiera
+de las variables, el test se detiene antes de registrar datos.
+
+Los comandos de revisión de la infraestructura son:
+
+```powershell
+npx tsc --noEmit -p e2e/tsconfig.json
+npx playwright test --list
+npm run build
+```
+
+La matriz de módulos está en `e2e/module-catalog.ts`. El smoke general confirma
+renderizado, acceso/denegación, errores de API y overflow; no sustituye todavía
+los flujos de negocio con aserciones de inventario y contabilidad, que se
+incorporan por dominio.
+
+La separación exacta entre cobertura profunda y cobertura de superficie está en
+`e2e/COVERAGE_MATRIX.md`; sirve para que un probe no se reporte como una prueba
+de persistencia completa.
+
+`e2e/specs/module-boundaries.spec.ts` recorre la misma matriz usando un tenant
+con módulos limitados. Comprueba que cada superficie pueda renderizarse o
+muestre protección de acceso, que los probes autenticados no apunten a rutas
+404 y que los probes sin JWT conserven el límite 401/403. Es la cobertura
+transversal de módulo deshabilitado; no inventa una operación de negocio para
+controllers backend-only.
+
+Los flujos duales profundos actualmente trazan estas cadenas: Ventas →
+Inventario → Contabilidad, Compras → Recepción → Inventario → Contabilidad,
+Inventario/Catálogo, Tracking, Actividades, Restaurante → Cocina, Proyectos →
+Costos, Asesoría Legal, Tickets, NovaChat, Financiamiento PYME, Finanzas,
+Recursos Humanos, Documentos, Notificaciones, Soporte Técnico, Clientes,
+Proveedores, Transferencias, Contabilidad y Configuración
+(bodega origen → bodega destino → Kardex → Contabilidad). Los demás
+módulos quedan cubiertos por la matriz UI/API y sus contratos explícitos; una
+mutación específica solo se marca como confirmada cuando existe payload,
+transición y aserción Prisma verificables.
+
+El smoke y los probes de superficie usan `full-auth.fixture.ts`, que registra
+un tenant temporal con los módulos funcionales disponibles. Los flujos de
+negocio usan `auth.fixture.ts`/`seed-data.fixture.ts` con un tenant mínimo y
+datos controlados; esa separación permite cubrir tanto módulos habilitados como
+escenarios de módulo deshabilitado sin mezclar semillas.
+
+Los probes autenticados y sus controles negativos sin JWT están en
+`e2e/specs/api-contract-probes.spec.ts`. Cubren cada contrato API declarable;
+la clasificación de los 49 controllers y sus 1.018 rutas está en
+`e2e/scripts/verify-backend-surfaces.mjs`. Esto incluye superficies backend-only
+sin inventar una pantalla UI para ellas.
+
+Nota de contrato: Compras ya protege la creación y aprobación de órdenes con
+`IdempotencyService`. Las mutaciones de recepción también envían
+`Idempotency-Key` desde el cliente para dejar el contrato observable. La
+actualización de recepción ya se ejecuta dentro del servicio de idempotencia,
+preservando el bloque transaccional de inventario, costos y contabilidad; la
+matriz mantiene `PENDIENTE` únicamente para crear y aprobar recepciones.
+
+El inventario de controllers se verifica por separado con
+`npm run test:e2e:backend-surfaces`. Este chequeo enumera cada controller y
+ruta real de `Backend/src`, y obliga a clasificarlo como superficie UI,
+backend-only, infraestructura o pública; un controller nuevo sin clasificación
+hace fallar la verificación.
+
 ## Grabar una prueba nueva (RECOMENDADO)
 
 Abrí el navegador de grabación y navegá como usuario real; Playwright genera el test:

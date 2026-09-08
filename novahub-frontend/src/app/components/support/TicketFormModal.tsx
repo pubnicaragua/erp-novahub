@@ -295,6 +295,7 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
           <div className="space-y-1.5">
             <label className="text-[10px] uppercase font-bold text-muted-foreground">Asunto *</label>
             <Input
+              data-testid="tickets-form-subject"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               className="h-9 text-xs"
@@ -305,6 +306,7 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
           <div className="space-y-1.5">
             <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción *</label>
             <Textarea
+              data-testid="tickets-form-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="text-xs min-h-[80px]"
@@ -534,7 +536,7 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancelar
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button data-testid="tickets-form-submit" onClick={handleSave} disabled={saving}>
             {saving && <Loader2 className="size-4 mr-2 animate-spin" />}
             {isEditing ? 'Guardar cambios' : 'Crear Ticket'}
           </Button>

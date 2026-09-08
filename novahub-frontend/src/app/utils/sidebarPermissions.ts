@@ -1,9 +1,9 @@
 /**
  * Catálogo de permisos que representan vistas navegables del sidebar.
  *
- * Las capacidades internas de un flujo (por ejemplo, la gestión que ocurre
- * dentro de Solicitudes de compra) deben colgar de la vista que las contiene,
- * no aparecer como una vista independiente en la matriz de roles.
+ * Cada entrada navegable del sidebar tiene un identificador propio. Las
+ * acciones de cada vista se definen en permissions.ts, pero la visibilidad
+ * siempre parte de este registro único.
  */
 export interface SidebarPermissionDefinition {
   id: string;
@@ -24,11 +24,12 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'SALES_RETURNS', label: 'Notas de crédito', parent: 'SALES' },
   { id: 'SALES_CREDIT_NOTES', label: 'Créditos', parent: 'SALES' },
   { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', parent: 'SALES' },
-  // Facturación por caja y Control de Caja comparten el permiso RETAIL_POS.
+  { id: 'RETAIL_CASH_CONTROL', label: 'Control de Caja', parent: 'SALES' },
   { id: 'RETAIL_POS', label: 'Facturación por caja', parent: 'SALES' },
 
   // Restaurante POS
-  { id: 'RESTAURANT_TABLES', label: 'Salón y mesas', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_SALON', label: 'Salón y mesas', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_ORDERS', label: 'Comandas', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_MENU', label: 'Carta', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_KITCHEN', label: 'Comandas y cocina', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_REPORTS', label: 'Reportes restaurante', parent: 'RESTAURANT' },
@@ -43,6 +44,15 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'PURCHASES_INVOICES_REC', label: 'Compras recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos realizados', parent: 'PURCHASES' },
   { id: 'PURCHASES_RETURNS', label: 'Créditos del proveedor', parent: 'PURCHASES' },
+
+  // Tracking
+  { id: 'TRACKING_TRANSIT', label: 'En tránsito', parent: 'TRACKING' },
+  { id: 'TRACKING_RECEPTION', label: 'Recepción de paquetes', parent: 'TRACKING' },
+  { id: 'TRACKING_BATCHES', label: 'Recepción en lote', parent: 'TRACKING' },
+  { id: 'TRACKING_PACKAGES', label: 'Paquetes recibidos', parent: 'TRACKING' },
+  { id: 'TRACKING_RECONCILIATION', label: 'Conciliación de compras', parent: 'TRACKING' },
+  { id: 'TRACKING_BILLING', label: 'Disponibles para facturar', parent: 'TRACKING' },
+  { id: 'TRACKING_CONFIG', label: 'Configuración de tracking', parent: 'TRACKING' },
 
   // Inventario
   // Productos, Servicios, Ajustes, Auditorías y Pérdidas son vistas del
@@ -71,10 +81,17 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'FINANCIAL_ANALYSIS', label: 'Análisis de ingresos y gastos', parent: 'FINANCIAL', subscription: false },
   { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_LOSSES', label: 'Pérdidas', parent: 'FINANCIAL', subscription: false },
+  { id: 'FINANCIAL_INCOMES_REC', label: 'Ingresos recurrentes', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_ACCOUNTS', label: 'Cuentas financieras', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_JOURNAL', label: 'Diario financiero', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_LEDGER', label: 'Libro mayor financiero', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_BUDGET', label: 'Presupuestos financieros', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_REPORTS', label: 'Reportes financieros', parent: 'FINANCIAL' },
 
   // Recursos Humanos
   { id: 'HR_DASHBOARD', label: 'Dashboard', parent: 'HR' },
   { id: 'HR_EMPLOYEES', label: 'Empleados', parent: 'HR' },
+  { id: 'HR_DEPARTMENTS', label: 'Departamentos', parent: 'HR' },
   { id: 'HR_PAYROLL', label: 'Nóminas', parent: 'HR' },
   { id: 'HR_COMMISSIONS', label: 'Comisiones', parent: 'HR' },
   { id: 'HR_ATTENDANCE', label: 'Asistencia', parent: 'HR' },
@@ -89,6 +106,8 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'ACTIVITIES_EVENTS', label: 'Eventos', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_REMINDERS', label: 'Recordatorios', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
+  { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', parent: 'ACTIVITIES' },
+  { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', parent: 'ACTIVITIES' },
 
   // Proyectos
   { id: 'PROJECTS_LIST', label: 'Portafolio', parent: 'PROJECTS' },
@@ -103,6 +122,8 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'DOCUMENTS_CONTRACTS', label: 'Contratos', parent: 'DOCUMENTS' },
   { id: 'DOCUMENTS_INVOICES', label: 'Facturas Legales', parent: 'DOCUMENTS' },
   { id: 'DOCUMENTS_REPORTS', label: 'Reportes', parent: 'DOCUMENTS' },
+  { id: 'DOCUMENTS_FOLDERS', label: 'Carpetas', parent: 'DOCUMENTS' },
+  { id: 'DOCUMENTS_STORAGE_PLANS', label: 'Planes de almacenamiento', parent: 'DOCUMENTS' },
 
   // Notificaciones
   { id: 'NOTIFICATIONS_ALERTS', label: 'Alertas', parent: 'NOTIFICATIONS' },
@@ -112,6 +133,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Tickets y soporte
   { id: 'TICKETS_KNOWLEDGE_BASE', label: 'Base de Conocimiento', parent: 'TICKETS' },
   { id: 'TICKETS_AGENTS', label: 'Agentes', parent: 'TICKETS' },
+  { id: 'TICKETS_LIST', label: 'Tickets', parent: 'TICKETS' },
 
   // Asesoría legal
   { id: 'LEGAL_CASES', label: 'Casos', parent: 'LEGAL' },
@@ -125,6 +147,11 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
   { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
   { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
+  { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
+
+  // Financiamiento PyME
+  { id: 'FINANCING_APPLICATIONS', label: 'Solicitudes', parent: 'FINANCING' },
+  { id: 'FINANCING_CALCULATOR', label: 'Calculadora', parent: 'FINANCING' },
 
   // Contabilidad: únicamente las entradas presentes en el sidebar.
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
@@ -149,6 +176,16 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
 
 /** Requisitos de suscripción para cada subentrada real del sidebar. */
 export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
+  'suscripciones:mi-sucursal': ['CONFIG_COMPANY'],
+  'suscripciones:plan-sucursal': ['SUBSCRIPTIONS'],
+  'suscripciones:usuarios': ['CONFIG_USERS'],
+  'suscripciones:roles': ['CONFIG_ROLES'],
+  'suscripciones:departamentos': ['CONFIG_DEPARTMENTS'],
+  'suscripciones:dominio': ['CONFIG_DOMAINS'],
+  'configuracion:branding': ['CONFIG_BRANDING'],
+  'configuracion:documentos-pdf': ['CONFIG_PDF'],
+  'configuracion:seguridad': ['CONFIG_SECURITY'],
+  'configuracion:currency': ['CONFIG_CURRENCY'],
   clientes: ['SALES_CLIENTS'],
   estimaciones: ['SALES_QUOTES'],
   'ordenes-venta': ['SALES_ORDERS'],
@@ -158,8 +195,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
   'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
-  'control-caja': ['RETAIL_POS', 'SALES_POS'],
-  'entregas': ['RETAIL_POS', 'SALES_POS'],
+  'control-caja': ['RETAIL_CASH_CONTROL'],
   'listas-precios': ['SALES_PRICE_LISTS'],
 
   solicitudes: ['PURCHASES_REQUESTS', 'PURCHASES'],
@@ -172,9 +208,23 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'pagos-realizados': ['PURCHASES_PAYMENTS'],
   'creditos-proveedor': ['PURCHASES_RETURNS'],
 
+  salon: ['RESTAURANT_SALON'],
+  comandas: ['RESTAURANT_ORDERS'],
+  cocina: ['RESTAURANT_KITCHEN'],
+  carta: ['RESTAURANT_MENU'],
+  'reportes-restaurante': ['RESTAURANT_REPORTS'],
+
+  tracking: ['TRACKING_TRANSIT'],
+  'tracking-recepcion': ['TRACKING_RECEPTION'],
+  'tracking-lotes': ['TRACKING_BATCHES'],
+  'tracking-paquetes': ['TRACKING_PACKAGES'],
+  'tracking-conciliacion': ['TRACKING_RECONCILIATION'],
+  'tracking-facturacion': ['TRACKING_BILLING'],
+  'tracking-configuracion': ['TRACKING_CONFIG'],
+
   'dashboard-hr': ['HR_DASHBOARD'],
   empleados: ['HR_EMPLOYEES'],
-  departamentos: ['HR_EMPLOYEES'],
+  departamentos: ['HR_DEPARTMENTS'],
   nominas: ['HR_PAYROLL'],
   comisiones: ['HR_COMMISSIONS'],
   asistencia: ['HR_ATTENDANCE'],
@@ -195,6 +245,18 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'analisis-ingresos-gastos': ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   'balance-general': ['FINANCIAL_BALANCE'],
   'finanzas:perdidas': ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
+  'ingresos-recurrentes': ['FINANCIAL_INCOMES_REC'],
+  'cuentas-financieras': ['FINANCIAL_ACCOUNTS'],
+  'diario-financiero': ['FINANCIAL_JOURNAL'],
+  'libro-mayor-financiero': ['FINANCIAL_LEDGER'],
+  'presupuestos-financieros': ['FINANCIAL_BUDGET'],
+  'reportes-financieros-detalle': ['FINANCIAL_REPORTS'],
+
+  'mi-sucursal': ['CONFIG_COMPANY'],
+  'plan-sucursal': ['SUBSCRIPTIONS'],
+  usuarios: ['CONFIG_USERS'],
+  roles: ['CONFIG_ROLES'],
+  dominio: ['CONFIG_DOMAINS'],
 
   productos: ['INVENTORY_PRODUCTS'],
   servicios: ['INVENTORY_SERVICES', 'INVENTORY_PRODUCTS'],
@@ -216,14 +278,24 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   contratos: ['DOCUMENTS_CONTRACTS'],
   'doc-facturas': ['DOCUMENTS_INVOICES'],
   'doc-reportes': ['DOCUMENTS_REPORTS'],
-  'nova-cloud-planes': ['DOCUMENTS'],
+  'nova-cloud-planes': ['DOCUMENTS_STORAGE_PLANS'],
+  carpetas: ['DOCUMENTS_FOLDERS'],
 
   tareas: ['ACTIVITIES_TASKS'],
   eventos: ['ACTIVITIES_EVENTS'],
   recordatorios: ['ACTIVITIES_REMINDERS'],
   bitacora: ['ACTIVITIES_LOGS'],
+  calendario: ['ACTIVITIES_CALENDAR'],
+  reuniones: ['ACTIVITIES_MEETINGS'],
 
-  tickets: ['TICKETS'],
+  proyectos: ['PROJECTS_LIST'],
+  'proyectos-tareas': ['PROJECTS_TASKS'],
+  'proyectos-hitos': ['PROJECTS_MILESTONES'],
+  'proyectos-costos': ['PROJECTS_EXPENSES'],
+  'proyectos-documentos': ['PROJECTS_DOCUMENTS'],
+  'proyectos-tiempo': ['PROJECTS_TIME'],
+
+  tickets: ['TICKETS_LIST'],
   faqs: ['TICKETS_KNOWLEDGE_BASE'],
   agents: ['TICKETS_AGENTS'],
 
@@ -237,6 +309,10 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'reportes-clientes': ['REPORTS_CLIENTS'],
   'reportes-proveedores': ['REPORTS_PROVIDERS'],
   'reportes-rrhh': ['REPORTS_HR'],
+  'reportes-suscripciones': ['REPORTS_SUBSCRIPTIONS'],
+
+  'solicitudes-financiamiento': ['FINANCING_APPLICATIONS'],
+  'calculadora-financiamiento': ['FINANCING_CALCULATOR'],
 
   'plan-cuentas': ['ACCOUNTING_CHART'],
   'solicitudes-pago': ['ACCOUNTING_HR_PAYMENT_REQUESTS', 'ACCOUNTING_JOURNAL'],
@@ -259,14 +335,45 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   configuracion: ['ACCOUNTING_CONFIG'],
 };
 
-/** Vistas diferidas: permanecen implementadas, pero no se exponen todavía. */
-export const HIDDEN_DEFERRED_SALES_VIEW_IDS = new Set(['entregas']);
+/** Vistas retiradas del producto o aún no expuestas en la navegación. */
+export const HIDDEN_DEFERRED_SALES_VIEW_IDS = new Set<string>([
+  'entregas',
+  'gestion-compras',
+  'precios-proveedores',
+  'organigrama',
+  'sucursales',
+  'tenancy',
+  'plataforma',
+  'paises',
+  'precios',
+]);
 
 /** Alias para impedir que permisos históricos vuelvan a mostrarse en Roles. */
-export const HIDDEN_PERMISSION_MODULE_IDS = new Set(['ENTREGAS', 'SALES_DELIVERIES']);
+export const HIDDEN_PERMISSION_MODULE_IDS = new Set([
+  'ENTREGAS',
+  'SALES_DELIVERIES',
+  'PURCHASES_MANAGEMENT',
+  'PURCHASES_SUPPLIER_PRICES',
+  'CONFIG_TENANCY',
+  'CONFIG_PLATFORM',
+  'CONFIG_COUNTRIES',
+  'CONFIG_MODULE_PRICING',
+  'CONFIG_ORG_CHART',
+  'COMPANY_BRANCHES',
+]);
 
 /** Permiso exacto de cada vista del sidebar. Puede diferir del módulo que habilita la suscripción. */
 export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
+  'suscripciones:mi-sucursal': ['CONFIG_COMPANY'],
+  'suscripciones:plan-sucursal': ['SUBSCRIPTIONS'],
+  'suscripciones:usuarios': ['CONFIG_USERS'],
+  'suscripciones:roles': ['CONFIG_ROLES'],
+  'suscripciones:departamentos': ['CONFIG_DEPARTMENTS'],
+  'suscripciones:dominio': ['CONFIG_DOMAINS'],
+  'configuracion:branding': ['CONFIG_BRANDING'],
+  'configuracion:documentos-pdf': ['CONFIG_PDF'],
+  'configuracion:seguridad': ['CONFIG_SECURITY'],
+  'configuracion:currency': ['CONFIG_CURRENCY'],
   'cuentas-cobrar': ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES'],
   'cuentas-pagar': ['FINANCIAL_PAYABLES', 'FINANCIAL_EXPENSES'],
   'calendario-financiero': ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD'],
@@ -288,11 +395,7 @@ export const INTERNAL_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION', subscription: false },
   { id: 'CONFIG_PDF', label: 'Documentos PDF', parent: 'CONFIGURATION', subscription: false },
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION', subscription: false },
-  { id: 'CONFIG_TENANCY', label: 'Multi-Tenancy', parent: 'CONFIGURATION', subscription: false },
   { id: 'CONFIG_CURRENCY', label: 'Moneda y Cambio', parent: 'CONFIGURATION', subscription: false },
-  { id: 'CONFIG_PLATFORM', label: 'Plataforma', parent: 'CONFIGURATION', subscription: false },
-  { id: 'CONFIG_COUNTRIES', label: 'Países', parent: 'CONFIGURATION', subscription: false },
-  { id: 'CONFIG_MODULE_PRICING', label: 'Precios de Módulos', parent: 'CONFIGURATION', subscription: false },
 
   // Mi Empresa
   { id: 'CONFIG_COMPANY', label: 'Datos generales', parent: 'MY_COMPANY', subscription: false },
@@ -300,8 +403,6 @@ export const INTERNAL_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'CONFIG_USERS', label: 'Usuarios', parent: 'MY_COMPANY', subscription: false },
   { id: 'CONFIG_ROLES', label: 'Roles y Permisos', parent: 'MY_COMPANY', subscription: false },
   { id: 'CONFIG_DEPARTMENTS', label: 'Departamentos', parent: 'MY_COMPANY', subscription: false },
-  { id: 'CONFIG_ORG_CHART', label: 'Organigrama', parent: 'MY_COMPANY', subscription: false },
-  { id: 'COMPANY_BRANCHES', label: 'Sucursales', parent: 'MY_COMPANY', subscription: false },
   { id: 'CONFIG_DOMAINS', label: 'Dominio propio', parent: 'MY_COMPANY', subscription: false },
 ];
 
@@ -315,14 +416,27 @@ export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'ACCOUNTING', 'HR',
   'ACTIVITIES', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
-  'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT', 'RESTAURANT_TABLES',
-  'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS',
-  'TRACKING',
+  'PROJECTS', 'FORCE_SALES', 'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT',
+  'RESTAURANT_TABLES', 'RESTAURANT_SALON', 'RESTAURANT_ORDERS', 'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS',
+  'TRACKING', 'DASHBOARD',
   ...PERMISSION_SUBMODULES.map(({ id }) => id),
 ]);
 
 /** Permisos internos que siguen existiendo, pero se gobiernan desde su vista padre. */
 export const SIDEBAR_PERMISSION_PARENT_ALIASES: Record<string, string[]> = {
-  MY_COMPANY: ['MY_COMPANY', 'CONFIG_COMPANY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DEPARTMENTS', 'CONFIG_ORG_CHART', 'COMPANY_BRANCHES', 'CONFIG_DOMAINS', 'SUBSCRIPTIONS'],
-  CONFIGURATION: ['CONFIGURATION', 'CONFIG_BRANDING', 'CONFIG_SECURITY', 'CONFIG_CURRENCY', 'CONFIG_PDF', 'CONFIG_TENANCY', 'CONFIG_PLATFORM', 'CONFIG_COUNTRIES', 'CONFIG_MODULE_PRICING'],
+  MY_COMPANY: ['MY_COMPANY', 'CONFIG_COMPANY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DEPARTMENTS', 'CONFIG_DOMAINS', 'SUBSCRIPTIONS'],
+  CONFIGURATION: ['CONFIGURATION', 'CONFIG_BRANDING', 'CONFIG_SECURITY', 'CONFIG_CURRENCY', 'CONFIG_PDF'],
+};
+
+/** Alias de lectura para roles guardados antes de separar las vistas. */
+export const LEGACY_VIEW_PERMISSION_ALIASES: Record<string, string[]> = {
+  RETAIL_CASH_CONTROL: ['RETAIL_POS'],
+  RESTAURANT_SALON: ['RESTAURANT_TABLES'],
+  RESTAURANT_ORDERS: ['RESTAURANT_TABLES'],
+  TICKETS_LIST: ['TICKETS'],
+  DOCUMENTS_STORAGE_PLANS: ['DOCUMENTS'],
+  DOCUMENTS_FOLDERS: ['DOCUMENTS_FILES'],
+  HR_DEPARTMENTS: ['HR_EMPLOYEES'],
+  ACTIVITIES_CALENDAR: ['ACTIVITIES_EVENTS'],
+  ACTIVITIES_MEETINGS: ['ACTIVITIES_EVENTS'],
 };

@@ -68,6 +68,7 @@ import {
   ChefHat,
   MapPinned,
   Ship,
+  Globe,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -129,7 +130,6 @@ const menuItems: MenuItem[] = [
       { id: 'devoluciones-venta', label: 'Notas de crédito', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Créditos', icon: <FileMinus className="size-4" /> },
       { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
-      { id: 'entregas', label: 'Entregas', icon: <PackageCheck className="size-4" />, hidden: true },
       { id: 'facturacion-caja', label: 'Facturación por caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
     ]
@@ -155,12 +155,28 @@ const menuItems: MenuItem[] = [
     label: 'Restaurante POS',
     icon: <ChefHat className="size-5" />,
     section: 'Operaciones',
+    submenu: [
+      { id: 'salon', label: 'Salón y mesas', icon: <LayoutDashboard className="size-4" /> },
+      { id: 'comandas', label: 'Comandas', icon: <ClipboardList className="size-4" /> },
+      { id: 'cocina', label: 'Cocina', icon: <ChefHat className="size-4" /> },
+      { id: 'carta', label: 'Carta', icon: <ShoppingBag className="size-4" /> },
+      { id: 'reportes-restaurante', label: 'Reportes', icon: <BarChart3 className="size-4" /> },
+    ],
   },
   {
     id: 'tracking',
     label: 'Tracking de Importaciones',
     icon: <Ship className="size-5" />,
     section: 'Operaciones',
+    submenu: [
+      { id: 'tracking', label: 'En tránsito', icon: <Ship className="size-4" /> },
+      { id: 'tracking-recepcion', label: 'Recepción de paquetes', icon: <PackageCheck className="size-4" /> },
+      { id: 'tracking-lotes', label: 'Recepción en lote', icon: <Package className="size-4" /> },
+      { id: 'tracking-paquetes', label: 'Paquetes recibidos', icon: <Package className="size-4" /> },
+      { id: 'tracking-conciliacion', label: 'Conciliación de compras', icon: <Scale className="size-4" /> },
+      { id: 'tracking-facturacion', label: 'Disponibles para facturar', icon: <FileText className="size-4" /> },
+      { id: 'tracking-configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
+    ],
   },
   {
     id: 'inventario',
@@ -193,6 +209,12 @@ const menuItems: MenuItem[] = [
       { id: 'ingresos', label: 'Ingresos', icon: <TrendingUp className="size-4" /> },
       { id: 'egresos', label: 'Gastos', icon: <Wallet className="size-4" /> },
       { id: 'movimientos-recurrentes', label: 'Movimientos Recurrentes', icon: <RotateCcw className="size-4" /> },
+      { id: 'ingresos-recurrentes', label: 'Ingresos Recurrentes', icon: <TrendingUp className="size-4" /> },
+      { id: 'cuentas-financieras', label: 'Cuentas financieras', icon: <Landmark className="size-4" /> },
+      { id: 'diario-financiero', label: 'Diario financiero', icon: <FileText className="size-4" /> },
+      { id: 'libro-mayor-financiero', label: 'Libro mayor financiero', icon: <BookOpenCheck className="size-4" /> },
+      { id: 'presupuestos-financieros', label: 'Presupuestos', icon: <Wallet className="size-4" /> },
+      { id: 'reportes-financieros-detalle', label: 'Reportes financieros', icon: <FileBarChart className="size-4" /> },
       { id: 'calendario-financiero', label: 'Calendario Financiero', icon: <CalendarClock className="size-4" /> },
       { id: 'analisis-ingresos-gastos', label: 'Análisis de ingresos y gastos', icon: <BarChart3 className="size-4" /> },
       { id: 'balance-general', label: 'Balance General', icon: <Landmark className="size-4" /> },
@@ -238,6 +260,7 @@ const menuItems: MenuItem[] = [
       { id: 'reportes-clientes', label: 'Clientes', icon: <Users className="size-4" /> },
       { id: 'reportes-proveedores', label: 'Proveedores', icon: <Truck className="size-4" /> },
       { id: 'reportes-rrhh', label: 'Recursos Humanos', icon: <Users className="size-4" /> },
+      { id: 'reportes-suscripciones', label: 'Suscripciones', icon: <Building2 className="size-4" /> },
     ]
   },
   {
@@ -267,7 +290,9 @@ const menuItems: MenuItem[] = [
       { id: 'tareas', label: 'Tareas', icon: <ListTodo className="size-4" /> },
       { id: 'eventos', label: 'Eventos', icon: <CalendarDays className="size-4" /> },
       { id: 'recordatorios', label: 'Recordatorios', icon: <Bell className="size-4" /> },
-      { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> }
+      { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> },
+      { id: 'calendario', label: 'Calendario', icon: <CalendarDays className="size-4" /> },
+      { id: 'reuniones', label: 'Reuniones', icon: <Users className="size-4" /> },
     ]
   },
   {
@@ -275,6 +300,14 @@ const menuItems: MenuItem[] = [
     label: 'Proyectos',
     icon: <FolderKanban className="size-5" />,
     section: 'Herramientas',
+    submenu: [
+      { id: 'proyectos', label: 'Portafolio', icon: <FolderKanban className="size-4" /> },
+      { id: 'proyectos-tareas', label: 'Planificación y tareas', icon: <ListTodo className="size-4" /> },
+      { id: 'proyectos-hitos', label: 'Hitos', icon: <ClipboardCheck className="size-4" /> },
+      { id: 'proyectos-costos', label: 'Costos y presupuesto', icon: <Wallet className="size-4" /> },
+      { id: 'proyectos-documentos', label: 'Documentos', icon: <FileText className="size-4" /> },
+      { id: 'proyectos-tiempo', label: 'Tiempo y cronograma', icon: <CalendarClock className="size-4" /> },
+    ],
   },
   {
     id: 'fuerza-comercial',
@@ -308,7 +341,15 @@ const menuItems: MenuItem[] = [
       { id: 'reminders', label: 'Recordatorios', icon: <Bell className="size-4" /> }
     ]
   },
-  { id: 'financiamiento-pyme', label: 'Financiamiento PYME', icon: <Landmark className="size-5" /> },
+  {
+    id: 'financiamiento-pyme',
+    label: 'Financiamiento PYME',
+    icon: <Landmark className="size-5" />,
+    submenu: [
+      { id: 'solicitudes-financiamiento', label: 'Solicitudes', icon: <FileText className="size-4" /> },
+      { id: 'calculadora-financiamiento', label: 'Calculadora', icon: <Calculator className="size-4" /> },
+    ],
+  },
   { id: 'novachat', label: 'Nova Suite', icon: <NovaSuiteIcon className="size-5" /> },
   {
     id: 'documentos',
@@ -319,6 +360,7 @@ const menuItems: MenuItem[] = [
       { id: 'contratos', label: 'Contratos', icon: <Scale className="size-4" /> },
       { id: 'doc-facturas', label: 'Facturas Legales', icon: <FileText className="size-4" /> },
       { id: 'doc-reportes', label: 'Reportes', icon: <BarChart3 className="size-4" /> },
+      { id: 'carpetas', label: 'Carpetas', icon: <FolderOpen className="size-4" /> },
       { id: 'nova-cloud-planes', label: 'Planes de Almacenamiento', icon: <Cloud className="size-4" /> }
     ]
   },
@@ -332,8 +374,31 @@ const menuItems: MenuItem[] = [
       { id: 'push', label: 'Push', icon: <Send className="size-4" /> }
     ]
   },
-  { id: 'suscripciones', label: 'Mi Sucursal', icon: <Building2 className="size-5" />, section: 'Sistema' },
-  { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-5" /> },
+  {
+    id: 'suscripciones',
+    label: 'Mi Sucursal',
+    icon: <Building2 className="size-5" />,
+    section: 'Sistema',
+    submenu: [
+      { id: 'mi-sucursal', label: 'Datos generales', icon: <Building2 className="size-4" /> },
+      { id: 'plan-sucursal', label: 'Módulos y plan', icon: <LayoutDashboard className="size-4" /> },
+      { id: 'usuarios', label: 'Usuarios', icon: <Users className="size-4" /> },
+      { id: 'roles', label: 'Roles', icon: <ShieldCheck className="size-4" /> },
+      { id: 'departamentos', label: 'Departamentos', icon: <Building2 className="size-4" /> },
+      { id: 'dominio', label: 'Dominio propio', icon: <Globe className="size-4" /> },
+    ],
+  },
+  {
+    id: 'configuracion',
+    label: 'Configuración',
+    icon: <Settings className="size-5" />,
+    submenu: [
+      { id: 'branding', label: 'Marca y tema', icon: <Tags className="size-4" /> },
+      { id: 'documentos-pdf', label: 'Documentos PDF', icon: <FileText className="size-4" /> },
+      { id: 'seguridad', label: 'Seguridad', icon: <ShieldCheck className="size-4" /> },
+      { id: 'currency', label: 'Moneda y cambio', icon: <Coins className="size-4" /> },
+    ],
+  },
 ];
 
 /** Orden canónico de módulos: debe coincidir con el orden visual del sidebar. */
@@ -370,6 +435,12 @@ const platformMenuItems: MenuItem[] = [
     label: 'Configuración global',
     icon: <Settings className="size-5" />,
     section: 'Ajustes',
+    submenu: [
+      { id: 'branding', label: 'Marca y tema', icon: <Tags className="size-4" /> },
+      { id: 'documentos-pdf', label: 'Documentos PDF', icon: <FileText className="size-4" /> },
+      { id: 'seguridad', label: 'Seguridad', icon: <ShieldCheck className="size-4" /> },
+      { id: 'currency', label: 'Moneda y cambio', icon: <Coins className="size-4" /> },
+    ],
   },
   {
     id: 'centro-capacitacion',
@@ -510,7 +581,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     'centro-capacitacion': 'HR_TRAINING',
     'soporte-tecnico': 'SUPPORT_TECH',
     restaurante: 'RESTAURANT',
-    tracking: 'TRACKING'
+    tracking: 'TRACKING',
+    configuracion: 'CONFIGURATION',
   };
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
@@ -519,7 +591,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     
     // Check if parent or any of its submodules is active
     let isParentOrSubmoduleActive = false;
-    if (parentMod) {
+    const isAlwaysAvailableSystemMenu = parentId === 'configuracion' || parentId === 'suscripciones';
+    if (parentMod && !isAlwaysAvailableSystemMenu) {
       if (user.enabledModules.includes(parentMod)) {
         isParentOrSubmoduleActive = true;
       } else {
@@ -527,7 +600,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       }
     }
     
-    if (parentMod && !isParentOrSubmoduleActive) return false;
+    if (parentMod && !isAlwaysAvailableSystemMenu && !isParentOrSubmoduleActive) return false;
 
     const requiredModules = SUBMENU_MODULE_REQUIREMENTS[`${parentId}:${subId}`] || SUBMENU_MODULE_REQUIREMENTS[subId];
     if (!requiredModules || requiredModules.length === 0) {
@@ -539,7 +612,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     // suscripción granular (sin padre) solo habilita los submódulos
     // específicos contratados.
     const hasParentModule = Boolean(parentMod && user.enabledModules.includes(parentMod));
-    const hasSubscription = hasRequired || hasParentModule;
+    const hasSubscription = isAlwaysAvailableSystemMenu || hasRequired || hasParentModule;
     if (!hasSubscription) return false;
 
     // La suscripción habilita el módulo, pero el rol también debe tener
@@ -547,8 +620,16 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     const permissionModules = SIDEBAR_SUBMENU_PERMISSION_MODULES[`${parentId}:${subId}`]
       || SIDEBAR_SUBMENU_PERMISSION_MODULES[subId]
       || requiredModules;
-    return permissionModules.some(mod => canPerform(mod, 'view'))
-      || (parentMod ? canPerform(parentMod, 'view') : false);
+    const hasExplicitViewPermission = permissionModules.some((mod) =>
+      user.permissions?.some((permission) => String(permission.module || '').toUpperCase() === mod.toUpperCase()),
+    );
+    return hasExplicitViewPermission
+      ? permissionModules.some((mod) =>
+        user.permissions?.some((permission) => String(permission.module || '').toUpperCase() === mod.toUpperCase())
+          && canPerform(mod, 'view'),
+      )
+      : permissionModules.some(mod => canPerform(mod, 'view'))
+        || (parentMod ? canPerform(parentMod, 'view') : false);
   };
 
   const sectionHeaderIds = (() => {
@@ -617,7 +698,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
             </div>
             <button
               onClick={onClose}
-              className="flex size-8 items-center justify-center text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground lg:hidden"
+              className="flex size-8 items-center justify-center text-sidebar-foreground/60 transition-colors hover:bg-primary/10 hover:text-primary lg:hidden"
               aria-label="Cerrar menú"
             >
               <X className="size-5" />
@@ -645,12 +726,14 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                 const showSection = sectionHeaderIds.has(item.id);
                 const itemClassName = cn(
                   'flex w-full items-center gap-3 px-3 py-2 text-[13px] transition-colors duration-150',
-                  'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                  isActive
+                    ? 'hover:bg-primary hover:text-primary-foreground'
+                    : 'hover:bg-primary/10 hover:text-primary',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                   isActive && !item.submenu
                     ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
                     : isActive && item.submenu
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-sidebar-border'
+                      ? 'bg-primary text-primary-foreground ring-1 ring-primary/30 shadow-sm font-semibold'
                       : 'text-sidebar-foreground/70'
                 );
                 const itemHref = buildModuleHref(item.id as Module | 'overview');
@@ -742,11 +825,10 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                   )}
                                   className={cn(
                                     'flex w-full items-center gap-2 px-2.5 py-1.5 text-[13px] transition-colors duration-150',
-                                    'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                                     activeModule === item.id && activeSubModule === subItem.id
-                                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm'
-                                      : 'text-sidebar-foreground/55'
+                                      ? 'bg-primary text-primary-foreground font-medium shadow-sm hover:bg-primary hover:text-primary-foreground'
+                                      : 'text-sidebar-foreground/55 hover:bg-primary/10 hover:text-primary'
                                   )}
                                   aria-current={activeModule === item.id && activeSubModule === subItem.id ? 'page' : undefined}
                                 >

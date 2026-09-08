@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Truck, Plus, Search, Edit, Star, Download, Phone, Mail, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -21,6 +21,7 @@ export function ProveedoresPage() {
   const { formatConvertedAmount } = useCurrency();
   const [proveedoresData, setProveedoresData] = useState<Supplier[]>([]);
   const [, setLoading] = useState(true);
+  const suppliersFetchVersion = useRef(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProveedor, setEditingProveedor] = useState<Supplier | null>(null);
@@ -36,14 +37,19 @@ export function ProveedoresPage() {
   });
 
   const fetchProveedores = useCallback(async () => {
+    const requestVersion = ++suppliersFetchVersion.current;
     try {
       setLoading(true);
       const res = await suppliersService.getAll();
-      setProveedoresData(res.data || []);
+      const payload = res as unknown;
+      const nextSuppliers = Array.isArray(payload)
+        ? payload as Supplier[]
+        : ((payload as { data?: Supplier[] })?.data || []);
+      if (requestVersion === suppliersFetchVersion.current) setProveedoresData(nextSuppliers);
     } catch (error) {
-      console.error('Error fetching suppliers:', error);
+      if (requestVersion === suppliersFetchVersion.current) console.error('Error fetching suppliers:', error);
     } finally {
-      setLoading(false);
+      if (requestVersion === suppliersFetchVersion.current) setLoading(false);
     }
   }, []);
 
@@ -92,7 +98,7 @@ export function ProveedoresPage() {
       } else {
         await suppliersService.create(formData);
       }
-      fetchProveedores();
+      await fetchProveedores();
       setIsDialogOpen(false);
       toast.success(editingProveedor ? 'Proveedor actualizado' : 'Proveedor creado');
     } catch (error: any) {
@@ -119,7 +125,7 @@ export function ProveedoresPage() {
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('PURCHASES_PROVIDERS', 'create') && (
               <DialogTrigger asChild>
-                <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleOpenDialog()}>
+                <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleOpenDialog()} data-testid="suppliers-new">
                   <Plus className="size-4" /> Nuevo Proveedor
                 </Button>
               </DialogTrigger>
@@ -134,7 +140,7 @@ export function ProveedoresPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="nombre">Nombre {formData.type === 'COMPANY' ? 'de la Empresa' : 'del Proveedor'}</Label>
-                  <Input id="nombre" value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                  <Input id="nombre" value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} data-testid="supplier-name" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-2">
@@ -149,7 +155,7 @@ export function ProveedoresPage() {
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="ruc">RUC {formData.type === 'COMPANY' && <span className="text-destructive">*</span>}</Label>
-                    <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} />
+                    <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} data-testid="supplier-ruc" />
                   </div>
                 </div>
                 <div className="grid gap-2">
@@ -158,7 +164,7 @@ export function ProveedoresPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="email">Correo Institucional</Label>
-                  <Input id="email" type="email" value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                  <Input id="email" type="email" value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} data-testid="supplier-email" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="telefono">Teléfono</Label>
@@ -178,7 +184,7 @@ export function ProveedoresPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white">Guardar Detalles</Button>
+                <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="supplier-save">Guardar Detalles</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -188,7 +194,7 @@ export function ProveedoresPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Proveedores</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-400">{proveedoresData.length}</div></CardContent></Card>
         <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Activos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-400">{proveedoresData.filter(p => p.status === 'ACTIVE').length}</div></CardContent></Card>
-        <Card className="border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Calificacion Promedio</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-orange-400 flex items-center gap-1"><Star className="size-5 fill-orange-400" />{(proveedoresData.reduce((acc, p) => acc + (p.rating || 0), 0) / (proveedoresData.length || 1)).toFixed(1)}</div></CardContent></Card>
+        <Card className="border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Calificacion Promedio</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-orange-400 flex items-center gap-1"><Star className="size-5 fill-orange-400" />{(proveedoresData.reduce((acc, p) => acc + Number(p.rating || 0), 0) / (proveedoresData.length || 1)).toFixed(1)}</div></CardContent></Card>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -215,7 +221,7 @@ export function ProveedoresPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map(p => {
-                  const stars = p.rating || 0;
+                  const stars = Number(p.rating || 0);
                   return (
                     <TableRow key={p.id} className="hover:bg-muted/20">
                       <TableCell>

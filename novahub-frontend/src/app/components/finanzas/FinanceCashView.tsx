@@ -19,7 +19,7 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316'
 export function FinanceCashView() {
   const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency()
   const { user, canPerform } = useAuth()
-  const canReadFinancial = canPerform('FINANCIAL', 'view')
+  const canReadFinancial = canPerform('FINANCIAL', 'view') || canPerform('FINANCIAL_ACCOUNTS', 'view') || canPerform('FINANCIAL_BANK', 'view')
   const canReadSales = canPerform('SALES', 'view')
   const canReadPurchases = canPerform('PURCHASES', 'view')
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current'

@@ -4,7 +4,7 @@ import {
   Truck, Wallet, CalendarClock,
   ClipboardList, PackageCheck, RotateCcw,
   Banknote, BadgeDollarSign,
-  ClipboardPen,
+  ClipboardPen, Tags,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';

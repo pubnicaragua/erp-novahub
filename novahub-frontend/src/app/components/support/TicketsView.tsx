@@ -176,12 +176,12 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
   );
   const canChangeTicketStatus = (ticket?: Ticket | null) => Boolean(
     ticket
-      && canPerform('TICKETS', 'edit')
+      && canPerform('TICKETS_LIST', 'edit')
       && canInteractWithTicket(ticket)
       && (isTicketAdmin(user) || ticket.assignedToId === user?.id)
       && String(ticket.status || '').toUpperCase() !== 'CLOSED',
   );
-  const canEditTicket = (ticket?: Ticket | null) => canPerform('TICKETS', 'edit') && canInteractWithTicket(ticket) && !isTerminalTicket(ticket);
+  const canEditTicket = (ticket?: Ticket | null) => canPerform('TICKETS_LIST', 'edit') && canInteractWithTicket(ticket) && !isTerminalTicket(ticket);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
@@ -291,7 +291,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
       key: 'subject',
       header: 'Asunto',
       width: '28%',
-      editable: canPerform('TICKETS', 'edit'),
+      editable: canPerform('TICKETS_LIST', 'edit'),
       render: (val: any, row: Ticket) => (
         <div className="min-w-0">
           <p className="truncate font-semibold text-foreground">{val || 'Sin asunto'}</p>
@@ -351,7 +351,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
       key: 'priority',
       header: 'Prioridad',
       width: '110px',
-      editable: canPerform('TICKETS', 'edit'),
+      editable: canPerform('TICKETS_LIST', 'edit'),
       type: 'select',
       options: priorityOpts,
       render: (val: any) => {
@@ -367,7 +367,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
       key: 'status',
       header: 'Estado',
       width: '120px',
-      editable: canPerform('TICKETS', 'edit'),
+      editable: canPerform('TICKETS_LIST', 'edit'),
       type: 'select',
       options: statusOpts,
       render: (val: any) => {
@@ -668,13 +668,14 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              {canPerform('TICKETS', 'edit') && (
+              {canPerform('TICKETS_LIST', 'edit') && (
                 <Button type="button" variant="outline" onClick={() => setCategoryManagerOpen(true)} className="h-10 shrink-0 gap-2 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest">
                   <Tags className="size-4" /> Categorías
                 </Button>
               )}
-              {canPerform('TICKETS', 'create') && (
+              {canPerform('TICKETS_LIST', 'create') && (
                 <Button
+                  data-testid="tickets-new-ticket"
                   data-toolbar-role="primary"
                   onClick={handleAdd}
                   className="h-10 shrink-0 gap-2 rounded-xl bg-primary px-4 font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"
@@ -757,7 +758,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                     <ArrowRightLeft className="size-4" />
                   </Button>
                 )}
-                {canPerform('TICKETS', 'edit') && canInteractWithTicket(row) && isTerminalTicket(row) && (
+                {canPerform('TICKETS_LIST', 'edit') && canInteractWithTicket(row) && isTerminalTicket(row) && (
                   <Button
                     type="button"
                     variant="ghost"
@@ -788,7 +789,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                 >
                   <Eye className="size-4" />
                 </Button>
-                {canPerform('TICKETS', 'delete') && canInteractWithTicket(row) && (
+                {canPerform('TICKETS_LIST', 'delete') && canInteractWithTicket(row) && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1018,15 +1019,15 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     className="min-h-20"
-                    disabled={!canPerform('TICKETS', 'edit') || !canInteractWithTicket(activeSelectedTicket)}
+                    disabled={!canPerform('TICKETS_LIST', 'edit') || !canInteractWithTicket(activeSelectedTicket)}
                   />
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <input type="checkbox" checked={commentInternal} onChange={(event) => setCommentInternal(event.target.checked)} disabled={!canPerform('TICKETS', 'edit') || !canInteractWithTicket(activeSelectedTicket)} className="size-3.5 accent-primary" />
+                    <input type="checkbox" checked={commentInternal} onChange={(event) => setCommentInternal(event.target.checked)} disabled={!canPerform('TICKETS_LIST', 'edit') || !canInteractWithTicket(activeSelectedTicket)} className="size-3.5 accent-primary" />
                     Comentario interno
                   </label>
                   <Button
                     onClick={sendComment}
-                    disabled={commentLoading || !newComment.trim() || !canPerform('TICKETS', 'edit') || !canInteractWithTicket(activeSelectedTicket)}
+                    disabled={commentLoading || !newComment.trim() || !canPerform('TICKETS_LIST', 'edit') || !canInteractWithTicket(activeSelectedTicket)}
                     className="w-full h-9 text-[10px] font-black uppercase tracking-widest"
                   >
                     {commentLoading ? 'Guardando...' : 'Comentar'}

@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
+import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import { Label } from '../ui/label';
 import { ScrollArea } from '../ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -376,6 +377,7 @@ export function SupplierDetailDrawer({
               </TabsContent>
 
               <TabsContent value="historial" className="mt-0 space-y-4 outline-none">
+                {supplier && <AuditHistoryDisclosure entity="SUPPLIER" entityId={supplier.id} createdAt={supplier.createdAt} />}
                 <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><History className="size-4 text-primary" /> Operaciones recientes</h3><p className="mt-1 text-[11px] text-muted-foreground">Órdenes, facturas y gastos relacionados con este proveedor.</p></div><Badge variant="outline" className="shrink-0 text-[9px] font-black">{transactions.length}</Badge></div>
                   {loadingTransactions ? <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div> : transactions.length === 0 ? <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Aún no hay operaciones registradas para este proveedor.</p> : <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">{transactions.slice(0, 50).map((item) => <div key={item.id} className="flex items-center justify-between gap-3 p-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div><div className="min-w-0"><p className="truncate text-xs font-bold">{item.type}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{item.number}</p></div></div><div className="shrink-0 text-right"><p className="text-[10px] font-bold text-muted-foreground">{item.date ? format(new Date(item.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black">{formatConvertedAmount(item.amount, item.currency, item.exchangeRate)}</p><p className="text-[9px] text-muted-foreground">{transactionStatus(item.status)}</p></div></div>)}</div>}

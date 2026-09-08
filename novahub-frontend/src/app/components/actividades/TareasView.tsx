@@ -198,7 +198,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
             <InventoryViewTutorial label="Qué son las Tareas" targetPrefix="tareas-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Tareas', description: 'Las tareas te permiten crear, asignar y dar seguimiento a actividades pendientes. Cada tarea puede tener prioridad, fecha de vencimiento y un responsable. Al completarla, queda registrada en la bitácora.' }, data: { title: 'Crear y asignar', description: 'Haz clic en "Nueva Tarea" para crear una. Asigna un responsable, prioridad y fecha de vencimiento.' }, actions: { title: 'Gestionar', description: 'Edita directamente en la tabla, cambia el estado a "Completada" cuando termines, o elimina tareas obsoletas.' } }} />
             <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_TASKS', 'create') && (
-              <Button data-toolbar-role="primary" variant="default" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 font-black uppercase text-[10px] tracking-widest"><Plus className="size-4" /> Nueva Tarea</Button>
+              <Button data-toolbar-role="primary" data-testid="activities-new-task" variant="default" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 font-black uppercase text-[10px] tracking-widest"><Plus className="size-4" /> Nueva Tarea</Button>
             )}
           </div>
         </div>
@@ -212,7 +212,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           actions={(row: any) => (
             <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <Button type="button" variant="ghost" size="icon" title="Ver detalle de la tarea" aria-label="Ver detalle de la tarea" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setDetailTask(row)}><Eye className="size-4" /></Button>
-              {String(row.status || '').toUpperCase() !== 'COMPLETED' && canPerform('ACTIVITIES_TASKS', 'approve') && <Button type="button" variant="ghost" size="icon" title="Completar tarea" aria-label="Completar tarea" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" onClick={() => { setDetailTask(null); setSelectedTask(row); setIsCompleteOpen(true); }}><CheckCircle2 className="size-4" /></Button>}
+              {String(row.status || '').toUpperCase() !== 'COMPLETED' && canPerform('ACTIVITIES_TASKS', 'approve') && <Button type="button" data-testid={`activities-complete-${row.id}`} variant="ghost" size="icon" title="Completar tarea" aria-label="Completar tarea" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" onClick={() => { setDetailTask(null); setSelectedTask(row); setIsCompleteOpen(true); }}><CheckCircle2 className="size-4" /></Button>}
               {String(row.status || '').toUpperCase() === 'COMPLETED' && row.evidences?.[0]?.fileUrl && <a href={row.evidences[0].fileUrl} target="_blank" rel="noreferrer" title="Abrir evidencia" aria-label="Abrir evidencia" className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"><Paperclip className="size-4" /></a>}
             </div>
           )}
@@ -230,11 +230,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           <div className="grid gap-5 px-6 py-6 sm:px-8">
             <div className="space-y-2">
               <Label className="flex items-center gap-1 text-xs font-bold text-foreground">Título de la tarea <span className="text-destructive">*</span></Label>
-              <Input autoFocus placeholder="Ej. Revisar inventario" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} className="h-11 rounded-xl bg-background" />
+              <Input autoFocus data-testid="activities-task-title" placeholder="Ej. Revisar inventario" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} className="h-11 rounded-xl bg-background" />
             </div>
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-xs font-bold text-foreground"><AlignLeft className="size-3.5 text-primary" />Descripción <span className="font-normal text-muted-foreground">(opcional)</span></Label>
-              <Textarea placeholder="Agrega contexto, entregables o instrucciones..." value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})} className="min-h-28 resize-y rounded-xl bg-background" />
+              <Textarea data-testid="activities-task-description" placeholder="Agrega contexto, entregables o instrucciones..." value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})} className="min-h-28 resize-y rounded-xl bg-background" />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -244,7 +244,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
               </div>
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-xs font-bold text-foreground"><Flag className="size-3.5 text-primary" />Prioridad</Label>
-                <select className="flex h-11 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})}>
+                <select data-testid="activities-task-priority" className="flex h-11 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})}>
                   <option value="LOW">Baja</option>
                   <option value="MEDIUM">Media</option>
                   <option value="HIGH">Alta</option>
@@ -269,7 +269,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           </div>
           <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8">
             <Button variant="outline" className="rounded-xl" onClick={() => setIsAddOpen(false)} disabled={isCreating}>Cancelar</Button>
-            <Button onClick={handleCreateTask} disabled={isCreating || !newTask.title.trim()} className="rounded-xl px-5">{isCreating ? 'Creando…' : <><Plus className="mr-2 size-4" />Crear tarea</>}</Button>
+            <Button data-testid="activities-task-submit" onClick={handleCreateTask} disabled={isCreating || !newTask.title.trim()} className="rounded-xl px-5">{isCreating ? 'Creando…' : <><Plus className="mr-2 size-4" />Crear tarea</>}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -288,6 +288,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
               <Input 
                 placeholder="https://ejemplo.com/imagen.jpg" 
                 value={evidenceUrl} 
+                data-testid="activities-task-evidence-url"
                 onChange={e => setEvidenceUrl(e.target.value)} 
                 className="h-11 rounded-xl bg-background"
               />
@@ -296,7 +297,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           </div>
           <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8">
             <Button variant="outline" className="rounded-xl" onClick={() => setIsCompleteOpen(false)}>Cancelar</Button>
-            {canPerform('ACTIVITIES_TASKS', 'approve') && <Button onClick={handleCompleteTask} className="rounded-xl px-5">Confirmar cierre</Button>}
+            {canPerform('ACTIVITIES_TASKS', 'approve') && <Button data-testid="activities-task-complete-submit" onClick={handleCompleteTask} className="rounded-xl px-5">Confirmar cierre</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

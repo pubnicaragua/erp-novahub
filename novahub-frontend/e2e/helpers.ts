@@ -19,7 +19,6 @@ export async function login(page: Page) {
     const t = Object.keys(localStorage).find((k) => /token|auth/i.test(k));
     return !!t || !document.querySelector('input[type="password"]');
   }, null, { timeout: 30_000 });
-  await page.waitForTimeout(1_500);
   await expect(page.locator('aside, nav, [class*="sidebar" i]').first()).toBeVisible({ timeout: 20_000 }).catch(() => {});
 }
 
@@ -34,7 +33,7 @@ export async function openModule(page: Page, menuText: string) {
     const burger = page.locator('button[aria-label*="menu" i], [class*="menu" i] button').first();
     if (await burger.isVisible().catch(() => false)) {
       await burger.click();
-      await page.waitForTimeout(500);
+      await expect(item).toBeVisible({ timeout: 10_000 });
       await item.click();
     } else {
       await page.evaluate((t) => {
@@ -42,7 +41,7 @@ export async function openModule(page: Page, menuText: string) {
       }, menuText);
     }
   }
-  await page.waitForTimeout(1_500);
+  await expect(page.locator('main, [role="main"], #root').first()).toBeVisible({ timeout: 20_000 });
 }
 
 export async function clickByText(page: Page, text: string) {
@@ -59,8 +58,10 @@ export async function expectToastSuccess(page: Page, text?: RegExp) {
 
 export async function closeDialog(page: Page) {
   const closeBtn = page.locator('[role="dialog"] button[aria-label="Close"], [role="dialog"] [aria-label="Cerrar"]').first();
-  if (await closeBtn.isVisible().catch(() => false)) await closeBtn.click();
-  await page.waitForTimeout(600);
+  if (await closeBtn.isVisible().catch(() => false)) {
+    await closeBtn.click();
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0, { timeout: 10_000 }).catch(() => {});
+  }
 }
 
 export { test, expect };

@@ -2221,7 +2221,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
                   Guardar borrador
                 </Button>
-                <Button onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                <Button data-testid="purchase-order-save-in-process" onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                   Guardar
                 </Button>
               </>
@@ -2260,6 +2260,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 )}
                 <div className={(isNew && !localDoc?.purchaseRequestNumber) ? 'col-span-2' : ''}>
                   <p className="text-[10px] text-foreground mb-1">Proveedor</p>
+                  <div data-testid="purchase-order-supplier">
                   <Combobox 
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     options={suppliers
@@ -2269,9 +2270,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
                     placeholder="Seleccionar Proveedor"
                   />
+                  </div>
                 </div>
                 <div>
                   <p className="text-[10px] text-foreground mb-1">Bodega destino *</p>
+                  <div data-testid="purchase-order-warehouse">
                   <Combobox
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     options={availableWarehouseCatalog
@@ -2285,6 +2288,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     onChange={(value) => setLocalDoc({ ...localDoc, warehouseId: value })}
                     placeholder="Seleccionar bodega destino"
                   />
+                  </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">Solo bodegas activas de la sucursal seleccionada.</p>
                 </div>
                 <div>
@@ -2436,7 +2440,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <Button variant="outline" size="sm" onClick={() => setImportIntroOpen(true)} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest">
                   <Upload className="mr-2 size-3" /> Importar productos
                 </Button>
-                  <Button variant="outline" size="sm" onClick={() => {
+                <Button data-testid="purchase-order-add-item" variant="outline" size="sm" onClick={() => {
                   const isServiceOrder = localDoc.purchaseType === 'SERVICE';
                   const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, productId: '', code: '', name: '', category: '', categoryId: '', stockApplies: isServiceOrder ? false : false, stock: undefined, currentStock: 0, quantity: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, accountId: '', total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
@@ -2448,7 +2452,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             
             <div className="space-y-3">
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="group relative min-w-0 rounded-2xl border-2 border-border/80 bg-card p-4 shadow-sm ring-1 ring-border/20 backdrop-blur-sm transition-all duration-200 hover:border-primary/50 hover:shadow-md">
+                <div key={item.id || idx} data-testid={`purchase-order-item-${idx}`} className="group relative min-w-0 rounded-2xl border-2 border-border/80 bg-card p-4 shadow-sm ring-1 ring-border/20 backdrop-blur-sm transition-all duration-200 hover:border-primary/50 hover:shadow-md">
                   {/* Selector acotado: queda en la cabecera y no consume una fila completa. */}
                   <div className="flex min-w-0 flex-col gap-3 border-b border-border/30 pb-3 sm:flex-row sm:items-end sm:justify-between">
                     <div className="min-w-0 flex-1">
@@ -2467,6 +2471,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     </div>
                     <div className="flex min-w-0 w-full items-end gap-2 sm:w-auto sm:max-w-[34rem] sm:flex-1">
                       <div className="min-w-0 flex-1 sm:w-[28rem] sm:flex-none">
+                        <div data-testid={`purchase-order-product-${idx}`}>
                         <Combobox
                           disabled={!canEditOrderItems}
                           options={[
@@ -2493,6 +2498,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                           searchPlaceholder="Buscar por nombre, código o SKU..."
                           className="h-9 text-xs"
                         />
+                        </div>
                         {item.variantId && (
                           <Badge variant="secondary" className="mt-1 max-w-full truncate font-mono text-[9px]">
                             Variante · {item.code || item.variantId}
@@ -2518,7 +2524,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Código</p>
                       <Input
-                       disabled={!canEditOrderItems}
+                        disabled={!canEditOrderItems}
                         value={item.code || ''}
                         onChange={(e) => handleItemChange(idx, 'code', e.target.value)}
                         className="h-8 text-xs font-mono"
@@ -2567,6 +2573,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant.</p>
                       <Input
+                        data-testid="purchase-order-item-quantity"
                         disabled={!canEditOrderItems}
                         type="number"
                         min="0"
@@ -2581,6 +2588,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Precio</p>
                       <Input
+                        data-testid="purchase-order-item-price"
                         disabled={!canEditOrderItems}
                         type="text"
                         inputMode="decimal"

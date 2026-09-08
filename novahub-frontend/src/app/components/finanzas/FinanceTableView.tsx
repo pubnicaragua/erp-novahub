@@ -32,6 +32,7 @@ import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
+import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 
 interface Column {
   key: string;
@@ -57,6 +58,7 @@ interface FinanceTableViewProps {
   targetItemId?: string | null;
   onClearTargetItem?: () => void;
   detailsRenderer?: (item: any) => React.ReactNode;
+  auditEntity?: string;
 }
 
 export function FinanceTableView({
@@ -74,6 +76,7 @@ export function FinanceTableView({
   targetItemId,
   onClearTargetItem,
   detailsRenderer,
+  auditEntity,
 }: FinanceTableViewProps) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
@@ -619,6 +622,7 @@ export function FinanceTableView({
             <DialogDescription>{detailItem?.description || 'Información del movimiento financiero'}</DialogDescription>
           </DialogHeader>
           {detailItem && detailsRenderer?.(detailItem)}
+          {detailItem && auditEntity && <AuditHistoryDisclosure entity={auditEntity} entityId={String(detailItem.id)} createdAt={detailItem.createdAt} />}
           <DialogFooter><Button variant="outline" onClick={() => setDetailItem(null)}>Cerrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>

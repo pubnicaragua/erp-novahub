@@ -305,7 +305,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                 <div>
                   <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
                     <UserIcon className="size-3.5 text-muted-foreground" />
-                    {log.user ? log.user.name : 'Sistema automático'}
+                    {log.user?.name || (log.userId ? 'Usuario no disponible' : 'Sistema automático')}
                   </div>
                   {log.user?.email && <p className="text-[10px] text-muted-foreground pl-5">{log.user.email}</p>}
                 </div>

@@ -761,7 +761,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             </Button>
           )}
           {canPerform('ACCOUNTING_CHART', 'create') && (
-            <Button size="sm" data-toolbar-role="primary" onClick={() => openAddDialog()}>
+            <Button size="sm" data-toolbar-role="primary" data-testid="accounting-new-account" onClick={() => openAddDialog()}>
               <Plus className="w-4 h-4 mr-1" /> Nueva Cuenta
             </Button>
           )}
@@ -1255,7 +1255,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               <div className="space-y-2">
                 <Label htmlFor="code">Código</Label>
                 <Input
-                  id="code" value={formData.code}
+                  id="code" data-testid="accounting-account-code" value={formData.code}
                   onChange={(e) => setFormData(p => ({ ...p, code: e.target.value }))}
                   placeholder="100001"
                 />
@@ -1279,8 +1279,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             </div>
             <div className="space-y-2">
               <Label htmlFor="name">Nombre</Label>
-              <Input
-                id="name" value={formData.name}
+                <Input
+                id="name" data-testid="accounting-account-name" value={formData.name}
                 onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
                 placeholder="Caja General"
               />
@@ -1365,7 +1365,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button data-testid="accounting-account-save" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
               {editingAccount ? 'Guardar Cambios' : 'Crear Cuenta'}
             </Button>

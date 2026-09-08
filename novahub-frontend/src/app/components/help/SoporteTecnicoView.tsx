@@ -144,7 +144,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
           </h1>
           </div>
         </div>
-        {canCreateSupport && <Button onClick={() => setShowCreateModal(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 py-6 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all">
+        {canCreateSupport && <Button data-testid="support-tech-new-ticket" onClick={() => setShowCreateModal(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 py-6 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all">
           <Plus className="size-5 mr-2" /> Nuevo Ticket
         </Button>}
       </div>
@@ -301,11 +301,11 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
               <div className="space-y-5">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Asunto</label>
-                  <Input placeholder="Ej: Error al generar factura PDF" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="h-12 rounded-2xl font-bold bg-muted/30 border-transparent focus:bg-background shadow-none" />
+                  <Input data-testid="support-tech-subject" placeholder="Ej: Error al generar factura PDF" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="h-12 rounded-2xl font-bold bg-muted/30 border-transparent focus:bg-background shadow-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Descripción</label>
-                  <textarea placeholder="Describe el problema con detalle..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full min-h-[120px] p-4 rounded-2xl font-bold bg-muted/30 border-transparent focus:bg-background resize-none text-sm outline-none" />
+                  <textarea data-testid="support-tech-description" placeholder="Describe el problema con detalle..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full min-h-[120px] p-4 rounded-2xl font-bold bg-muted/30 border-transparent focus:bg-background resize-none text-sm outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Categoría</label>
@@ -344,7 +344,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
                   </div>
                 </div>
                 <div className="nh-modal-footer mt-4 border-t border-border/50 pt-4">
-                <Button onClick={handleCreate} disabled={saving || !form.subject.trim() || !form.description.trim()} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest h-14 rounded-2xl shadow-xl shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50">
+                <Button data-testid="support-tech-submit" onClick={handleCreate} disabled={saving || !form.subject.trim() || !form.description.trim()} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest h-14 rounded-2xl shadow-xl shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50">
                   {saving ? <Loader2 className="size-5 animate-spin" /> : <><Send className="size-5 mr-2" />Enviar Ticket</>}
                 </Button>
                 </div>
