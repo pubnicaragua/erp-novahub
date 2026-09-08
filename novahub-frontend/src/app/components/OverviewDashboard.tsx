@@ -1,7 +1,7 @@
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { AdminOverview } from './AdminOverview';
 import { PartnerDashboard } from './PartnerDashboard';
-import { TenantOverview } from './TenantOverview';
+import { ExecutiveTenantOverview } from './ExecutiveTenantOverview';
 import { Loader2 } from 'lucide-react';
 
 interface OverviewDashboardProps {
@@ -31,5 +31,5 @@ export function OverviewDashboard({ onNavigate }: OverviewDashboardProps) {
   }
 
   // --- TENANT ROLE (Default for admin, manager, employee, viewer) ---
-  return <TenantOverview onNavigate={onNavigate} />;
+  return <ExecutiveTenantOverview onNavigate={onNavigate} />;
 }
