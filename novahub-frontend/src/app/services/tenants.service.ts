@@ -75,7 +75,7 @@ export const tenantsService = {
     customRoleId?: string | null;
     isActive?: boolean;
     password?: string;
-  }) => api.patch(`/tenants/${tenantId}/users/${userId}`, data),
+  }) => api.patch<TenantUser>(`/tenants/${tenantId}/users/${userId}`, data),
   updateUserDepartments: (tenantId: string, userId: string, departmentIds: string[], primaryDepartmentId?: string | null) =>
     api.put(`/tenants/${tenantId}/users/${userId}/departments`, { departmentIds, primaryDepartmentId }),
   linkUserToEmployee: (tenantId: string, userId: string, employeeId: string) =>

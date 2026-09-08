@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { Eye, KeyRound, Loader2, Pencil, Save, Users } from 'lucide-react';
+import { Eye, KeyRound, Loader2, Mail, Pencil, Save, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { tenantsService } from '../../services/tenants.service';
 import { storageService } from '../../services/storage.service';
@@ -38,6 +38,9 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
   const [passwordUser, setPasswordUser] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const [emailUser, setEmailUser] = useState<any>(null);
+  const [newEmail, setNewEmail] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -144,6 +147,26 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
     }
   };
 
+  const saveEmail = async () => {
+    const email = safeTrim(newEmail).toLowerCase();
+    if (!emailUser?.id || !isValidEmail(email)) {
+      toast.error('Escribe un correo válido');
+      return;
+    }
+    try {
+      setSavingEmail(true);
+      const updated = await tenantsService.updateUser(branch.id, emailUser.id, { email });
+      setUsers((current) => current.map((user) => user.id === emailUser.id ? { ...user, email: updated?.email || email } : user));
+      toast.success('Correo actualizado correctamente');
+      setEmailUser(null);
+      setNewEmail('');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo actualizar el correo');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   return (
     <>
       <Button variant="outline" size="sm" className="h-8 shrink-0 rounded-lg px-2.5" onClick={() => setOpen(true)}>
@@ -220,9 +243,14 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
                     <p className="truncate text-xs text-muted-foreground">{item.email}</p>
                     <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-primary/70">{getBranchUserIdentityLabel(item)}</p>
                   </div>
-                  <Button variant="outline" className="shrink-0 rounded-xl" onClick={() => setPasswordUser(item)}>
-                    <KeyRound className="size-4" /> Cambiar contraseña
-                  </Button>
+                  <div className="flex flex-wrap gap-2 sm:shrink-0">
+                    <Button variant="outline" className="rounded-xl" onClick={() => { setEmailUser(item); setNewEmail(item.email || ''); }}>
+                      <Mail className="size-4" /> Cambiar correo
+                    </Button>
+                    <Button variant="outline" className="rounded-xl" onClick={() => setPasswordUser(item)}>
+                      <KeyRound className="size-4" /> Cambiar contraseña
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -246,6 +274,24 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setPasswordUser(null)} disabled={savingPassword}>Cancelar</Button>
             <Button className="rounded-xl" disabled={savingPassword || !!getPasswordError(newPassword)} onClick={savePassword}>{savingPassword ? 'Guardando…' : 'Guardar contraseña'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!emailUser} onOpenChange={(nextOpen) => { if (!nextOpen) { setEmailUser(null); setNewEmail(''); } }}>
+        <DialogContent className="w-[min(92vw,32rem)] max-w-none">
+          <DialogHeader>
+            <DialogTitle className="font-black uppercase italic tracking-tight">Cambiar correo</DialogTitle>
+            <DialogDescription>Actualiza el correo de acceso de {emailUser?.name}. Se valida contra todos los usuarios del ERP antes de guardar.</DialogDescription>
+          </DialogHeader>
+          <label className="space-y-2 text-xs font-bold text-muted-foreground">
+            Correo de acceso
+            <input autoFocus type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="usuario@empresa.com" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+          </label>
+          <p className="text-xs text-muted-foreground">Debe ser válido y no estar registrado en ninguna otra cuenta, empresa o Manager.</p>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setEmailUser(null)} disabled={savingEmail}>Cancelar</Button>
+            <Button className="rounded-xl" disabled={savingEmail || !isValidEmail(newEmail)} onClick={saveEmail}>{savingEmail ? 'Guardando…' : 'Guardar correo'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
