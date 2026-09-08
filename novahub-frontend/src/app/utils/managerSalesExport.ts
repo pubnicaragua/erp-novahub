@@ -150,7 +150,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
   const preferredKeys = ['number', 'documentNumber', 'branchName', 'customerName', 'supplierName', 'date', 'dueDate', 'expiryDate', 'status', 'total', 'amount', 'balance', 'currency'];
   const reportKeys = (options.rows.length
     ? [...preferredKeys.filter(key => availableKeys.includes(key)), ...availableKeys.filter(key => !preferredKeys.includes(key))]
-    : ['Mensaje']).slice(0, 8);
+    : ['Mensaje']);
   const reportLabels: Record<string, string> = { number: 'Documento', documentNumber: 'Documento', branchName: 'Sucursal', customerName: 'Cliente', supplierName: 'Proveedor', date: 'Fecha', dueDate: 'Vencimiento', expiryDate: 'Validez', status: 'Estado', total: 'Total', amount: 'Monto', balance: 'Saldo', currency: 'Moneda' };
   const configured = options.pdfFormat !== 'roll-58' && options.pdfFormat !== 'roll-80'
     ? await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: options.title, tenantName: options.tenantName, tenantLogo: options.tenantLogo, designOverride: options.pdfDesign, rows: options.rows, columns: reportKeys.map((key) => ({ header: reportLabels[key] || key, value: row => /estado|status/i.test(key) ? pdfStatusLabel(row[key]) : row[key], align: ['total', 'amount', 'balance'].includes(key) ? 'right' as const : 'left' as const })), fileName: buildDateFilteredPdfFileName([options.fileBase], 'configured', options.dateFrom, options.dateTo) })

@@ -50,6 +50,7 @@ export interface PurchasePdfListColumn {
   label: string;
   value: (row: any) => unknown;
   align?: 'left' | 'center' | 'right';
+  width?: number;
 }
 
 const standardPaper = (format: PdfDownloadFormat) => {
@@ -73,6 +74,24 @@ const isStatusColumn = (column: PurchasePdfListColumn) => /estado|status/i.test(
 const purchaseListValue = (column: PurchasePdfListColumn, row: any) => {
   const value = column.value(row);
   return isStatusColumn(column) ? pdfStatusLabel(value) : valueText(value);
+};
+
+const purchaseListColumnWidths = (columns: PurchasePdfListColumn[]) => {
+  const weights = columns.map((column) => {
+    if (column.width) return column.width;
+    const label = column.label.toLowerCase();
+    if (/descrip|detalle|concepto/.test(label)) return 2;
+    if (/proveedor|nombre|direcci[oó]n/.test(label)) return 1.7;
+    if (/categor[ií]a/.test(label)) return 0.85;
+    if (/referencia|orden|solicitud|factura|c[oó]digo|documento/.test(label)) return 1.2;
+    if (/total|monto|pagado|comprometido|saldo|precio/.test(label)) return 1;
+    if (/fecha/.test(label)) return 0.75;
+    if (/estado/.test(label)) return 0.65;
+    if (/m[eé]todo|tipo|[íi]tems|cantidad|frecuencia/.test(label)) return 0.6;
+    return 1;
+  });
+  const total = weights.reduce((sum, weight) => sum + weight, 0) || 1;
+  return weights.map((weight) => (weight / total) * 100);
 };
 
 const countLines = (doc: jsPDF, value: unknown, size: number, width: number) => {
@@ -228,13 +247,26 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
   return doc;
 }
 
-export async function generatePurchaseListPDF({ title, rows, columns, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.list' }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string }) {
+export async function generatePurchaseListPDF({ title, rows, columns, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.list', summary }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; summary?: { label: string; value: unknown; columnIndex?: number } }) {
   if (isRoll(format)) throw new Error('Los reportes generales solo están disponibles en tamaños de página PDF.');
-  const configuredDesign = await getPdfDesign(targetKey);
-  const settings = await getPdfDesignSettings(targetKey);
+  // Una exportación global no tiene una entidad única. Siempre usa la
+  // plantilla de listado para no reservar el bloque de datos personales que
+  // corresponde únicamente a comprobantes individuales.
+  const listTargetKey = 'compras.list';
+  void targetKey;
+  const configuredDesign = await getPdfDesign(listTargetKey);
+  // getPdfDesign ya trae los ajustes activos; evitar una segunda consulta al
+  // mismo endpoint hace perceptible la mejora en listados de proveedores.
+  const settings = configuredDesign?.settings && typeof configuredDesign.settings === 'object'
+    ? configuredDesign.settings as Record<string, any>
+    : await getPdfDesignSettings(listTargetKey);
   const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : undefined;
   const resolvedLogo = configuredLogo || tenantLogo;
   const paperSettings = withPaperFormat(settings, format === 'configured' ? 'configured' : format);
+  const summaryColumnIndex = summary
+    ? Math.min(Math.max(summary.columnIndex ?? columns.length - 1, 0), Math.max(columns.length - 1, 0))
+    : -1;
+  const columnWidths = purchaseListColumnWidths(columns);
   if (configuredDesign?.layoutZones?.definition) {
     const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...paperSettings };
     const mappedRows = rows.map(row => {
@@ -242,17 +274,18 @@ export async function generatePurchaseListPDF({ title, rows, columns, tenantName
       columns.forEach((column, index) => { const value = purchaseListValue(column, row); mapped[`column-${index}`] = value; mapped[column.label.toLowerCase().replace(/\s+/g, '_')] = value; });
       return mapped;
     });
-    const data: PdfTemplateData = { logo: resolvedLogo, company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: resolvedLogo }, document: { title, number: `${rows.length} registro(s)` }, rows: mappedRows, items: mappedRows, tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.label, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' })) };
-    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildPdfFileName([title], format), save: true });
+    const data: PdfTemplateData = { logo: resolvedLogo, company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: resolvedLogo }, document: { title, number: `${rows.length} registro(s)` }, rows: mappedRows, items: mappedRows, renderScale: rows.length > 10 ? 1.5 : undefined, tableSummary: summary ? { label: summary.label, 'column-0': summary.label, [`column-${summaryColumnIndex}`]: valueText(summary.value) } : undefined, tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.label, token: `column-${index}`, width: columnWidths[index], align: column.align || 'left' })) };
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, listTargetKey, renderSettings), settings: renderSettings, targetKey: listTargetKey, data, fileName: buildPdfFileName([title], format), save: true });
     return rendered.doc;
   }
   const doc = new jsPDF(pdfDesignPaper(paperSettings));
   const primary = pdfDesignColor(paperSettings.primaryColor, [16, 185, 129]);
   const text = pdfDesignColor(paperSettings.textColor, [51, 65, 85]);
   const margin = Math.max(10, Math.min(18, Number(paperSettings.margins) || 14));
+  const tableWidth = doc.internal.pageSize.getWidth() - margin * 2;
   doc.setTextColor(...primary); doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(tenantName || 'Nova Hub', margin, 20);
   doc.setTextColor(...text); doc.setFontSize(12); doc.text(title, margin, 28);
-  autoTable(doc, { startY: 38, head: [columns.map((column) => column.label)], body: rows.length ? rows.map((row) => columns.map((column) => purchaseListValue(column, row))) : [columns.map(() => '—')], theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: Object.fromEntries(columns.map((column, index) => [index, { halign: column.align || 'left' }])), styles: { cellPadding: 3, overflow: 'linebreak' } });
+  autoTable(doc, { startY: 38, head: [columns.map((column) => column.label)], body: rows.length ? rows.map((row) => columns.map((column) => purchaseListValue(column, row))) : [columns.map(() => '—')], foot: summary ? [columns.map((column, index) => index === 0 ? summary.label : index === summaryColumnIndex ? valueText(summary.value) : '')] : undefined, theme: 'grid', tableWidth, headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, footStyles: { textColor: text, fontStyle: 'bold', lineColor: primary, lineWidth: 0.5 }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: Object.fromEntries(columns.map((column, index) => [index, { halign: column.align || 'left', cellWidth: tableWidth * columnWidths[index] / 100 }])), styles: { cellPadding: 3, overflow: 'linebreak' } });
   doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.text(`${rows.length} registro(s) · Generado por ${tenantName || 'Nova Hub'}`, margin, doc.internal.pageSize.getHeight() - 10);
   doc.save(buildPdfFileName([title], format));
   return doc;

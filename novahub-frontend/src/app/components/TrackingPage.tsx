@@ -41,22 +41,18 @@ import {
   type TrackingStatus,
   type TrackingEvent,
 } from '../services/tracking.service';
-import { ReceptionWizard } from './tracking/ReceptionWizard';
-import { BatchReception } from './tracking/BatchReception';
+import { Reception } from './tracking/Reception';
 import { ReceivedPackages } from './tracking/ReceivedPackages';
-import { Reconciliation } from './tracking/Reconciliation';
 import { Billing } from './tracking/Billing';
 import { LogisticsConfig } from './tracking/LogisticsConfig';
 import { TrackingViewTutorial } from './tracking/TrackingViewTutorial';
 
-type TrackingTab = 'transit' | 'reception' | 'batches' | 'packages' | 'reconciliation' | 'billing' | 'config';
+type TrackingTab = 'transit' | 'reception' | 'packages' | 'billing' | 'config';
 
 const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
   { id: 'transit', label: 'En tránsito' },
-  { id: 'reception', label: 'Recepción de paquetes' },
-  { id: 'batches', label: 'Recepción en lote' },
+  { id: 'reception', label: 'Recepción' },
   { id: 'packages', label: 'Paquetes recibidos' },
-  { id: 'reconciliation', label: 'Conciliación de compras' },
   { id: 'billing', label: 'Disponibles para facturar' },
   { id: 'config', label: 'Configuración' },
 ];
@@ -593,13 +589,9 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       </Sheet>
     </div>
       ) : tab === 'reception' ? (
-        <ReceptionWizard onDone={() => setTab('packages')} />
-      ) : tab === 'batches' ? (
-        <BatchReception />
+        <Reception />
       ) : tab === 'packages' ? (
         <ReceivedPackages />
-      ) : tab === 'reconciliation' ? (
-        <Reconciliation />
       ) : tab === 'billing' ? (
         <Billing />
       ) : (

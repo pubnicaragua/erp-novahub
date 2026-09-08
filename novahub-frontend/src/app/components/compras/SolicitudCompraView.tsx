@@ -27,10 +27,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { EditableDataTable, type ColumnDef } from '../ui/EditableDataTable';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { getPurchasePriorityOption } from '../../utils/purchasePriority';
+import { fetchAllPaginatedRows } from '../../utils/export-utils';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-primary/10 text-primary',
@@ -91,9 +92,10 @@ interface SolicitudCompraViewProps {
   warehouseCatalog?: Warehouse[];
   supplierCatalog?: Supplier[];
   productCatalog?: Product[];
+  selectedBranchId?: string;
 }
 
-export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog, supplierCatalog = [], productCatalog = [] }: SolicitudCompraViewProps) {
+export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog, supplierCatalog = [], productCatalog = [], selectedBranchId = '' }: SolicitudCompraViewProps) {
   const { user, canPerform } = useAuth();
   const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
   const canApproveRequests = canPerform('PURCHASES_REQUESTS', 'approve');
@@ -140,16 +142,48 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     });
   }, [data, search, statusFilter]);
 
-  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de solicitudes...');
     try {
+      const allRows = scope === 'all'
+        ? await fetchAllPaginatedRows<PurchaseRequest>((page, pageSize) => purchaseRequestsService.getAll({
+          page,
+          pageSize,
+          search: search.trim() || undefined,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
+          branchId: selectedBranchId || undefined,
+        }))
+        : data;
+      const exportRows = allRows.filter((request) => {
+        if (statusFilter !== 'all' && normalizeRequestStatus(request.status) !== statusFilter) return false;
+        if (!search) return true;
+        const value = search.toLowerCase();
+        return (request.number || '').toLowerCase().includes(value)
+          || (request.requestedBy?.firstName?.toLowerCase().includes(value))
+          || (request.requestedBy?.lastName?.toLowerCase().includes(value))
+          || (request.warehouse?.name?.toLowerCase().includes(value))
+          || (request.supplier?.name?.toLowerCase().includes(value))
+          || (request.management?.[0]?.supplier?.name?.toLowerCase().includes(value));
+      });
+      const totalRequests = exportRows.reduce((sum, request) => {
+        const management = request.management?.[0];
+        if (!management) return sum;
+        return sum + convertBetweenCurrencies(
+          Number(management.total || 0),
+          (management.currency || displayCurrency) as any,
+          displayCurrency as any,
+          Number(management.exchangeRate || globalRate || 1),
+          Number(globalRate || 1),
+        );
+      }, 0);
       await generatePurchaseListPDF({
         title: 'Solicitudes de compra',
-        rows: filtered,
+        rows: exportRows,
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-request',
+        summary: { label: 'Total general', value: formatConvertedAmount(totalRequests, displayCurrency as any, globalRate), columnIndex: 3 },
         columns: [
           { label: 'N° Solicitud', value: (row) => row.number },
           { label: 'Proveedor', value: (row) => row.supplier?.name || row.management?.[0]?.supplier?.name || 'Sin proveedor' },
@@ -564,7 +598,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           <Badge variant="secondary" className="text-xs">{data.length}</Badge>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
-        <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+        <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
         <PurchaseViewTutorial view="requests" />
         <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de solicitudes de compra" />
         </div>

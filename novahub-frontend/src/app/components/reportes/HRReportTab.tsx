@@ -1130,10 +1130,15 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           vacProximas.slice(0, 12).map(vacation => [empName(vacation.employee), toDate(vacation.startDate)?.toLocaleDateString('es-NI') || '—', toDate(vacation.endDate)?.toLocaleDateString('es-NI') || '—', vacation.days || '—']),
           [76, 40, 40, 26]);
 
-        renderTable('Próximos aniversarios',
-          ['Colaborador', 'Departamento', 'Antigüedad', 'Aniversario'],
-          antiquity.list.filter(item => item.anni).slice().sort((a, b) => (a.anni as Date).getTime() - (b.anni as Date).getTime()).slice(0, 12).map(item => [item.name, item.dept, fmtTenure(item.months), (item.anni as Date).toLocaleDateString('es-NI')]),
-          [76, 46, 34, 26]);
+    renderTable('Próximos aniversarios',
+      ['Colaborador', 'Departamento', 'Antigüedad', 'Aniversario'],
+      antiquity.list
+        .filter(item => item.anni)
+        .slice()
+        .sort((a, b) => (a.anni?.days ?? 0) - (b.anni?.days ?? 0))
+        .slice(0, 12)
+        .map(item => [item.name, item.dept, fmtTenure(item.months), item.anni?.label || '—']),
+      [76, 46, 34, 26]);
 
         renderTable('Desempeño',
           ['Indicador', 'Valor', 'Detalle'],

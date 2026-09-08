@@ -27,13 +27,14 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { hasPaymentReferenceField, isBankPaymentMethod, paymentMethodLabel, requiresPaymentReference } from '../../utils/paymentMethods';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { formatPdfItemDescription } from '../../utils/pdf-line-details';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { cn } from '../ui/utils';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
+import { fetchAllPaginatedRows } from '../../utils/export-utils';
 
 interface Props {
   data: PaymentMade[];
@@ -45,6 +46,7 @@ interface Props {
   onDraftConsumed?: () => void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
+  selectedBranchId?: string;
   targetId?: string | null;
   onClearTargetId?: () => void;
 }
@@ -127,7 +129,7 @@ function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate
   });
 }
 
-export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, targetId, onClearTargetId }: Props) {
+export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, selectedBranchId = '', targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -330,16 +332,48 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     return invoice?.exchangeRate || payment.exchangeRate;
   };
 
-  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de pagos...');
     try {
+      const allRows = scope === 'all'
+        ? await fetchAllPaginatedRows<PaymentMade>((page, pageSize) => paymentsService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, branchId: selectedBranchId || undefined }))
+        : data;
+      const allGroupedPayments = groupMadePayments(allRows, baseCurrency, globalRate, toBaseAmount);
+      const exportFiltered = allGroupedPayments.filter((payment) => {
+        if (!normalizedSearchTerm) return true;
+        const linkedBill = bills.find((bill) => bill.id === payment.supplierInvoiceId);
+        const haystack = [
+          payment.reference,
+          payment.number,
+          payment.supplier?.name,
+          payment.supplier?.code,
+          payment.notes,
+          payment.displayReference,
+          payment.date ? formatDateEs(payment.date) : '',
+          payment.amount,
+          Number(payment.amount || 0).toLocaleString(),
+          getMethodLabel(payment.method),
+          linkedBill?.number,
+          linkedBill?.status,
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(normalizedSearchTerm);
+      });
+      const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      const totalPaid = exportRows.reduce((sum, payment) => sum + convertBetweenCurrencies(
+        paidPaymentAmount(payment),
+        (linkedInvoiceForPayment(payment)?.currency || payment.currency || displayCurrency) as any,
+        displayCurrency as any,
+        Number(linkedInvoiceForPayment(payment)?.exchangeRate || payment.exchangeRate || globalRate || 1),
+        Number(globalRate || 1),
+      ), 0);
       await generatePurchaseListPDF({
         title: 'Pagos realizados',
-        rows: filteredData,
+        rows: exportRows,
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.payment-made',
+        summary: { label: 'Total pagado', value: formatConvertedAmount(totalPaid, displayCurrency as any, globalRate), columnIndex: 4 },
         columns: [
           { label: 'Referencia', value: (row) => row.displayReference || paymentReferenceLabel(row) },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
@@ -851,7 +885,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="payments" />
-            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos a proveedores" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
              {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && (

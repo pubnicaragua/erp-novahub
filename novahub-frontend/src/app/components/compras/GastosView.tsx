@@ -35,7 +35,7 @@ import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
 import { hasPaymentReferenceField, requiresPaymentReference } from '../../utils/paymentMethods';
 import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
@@ -43,6 +43,7 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { isBankPaymentMethod } from '../../utils/paymentMethods';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
+import { fetchAllPaginatedRows } from '../../utils/export-utils';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -190,16 +191,35 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
-  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de gastos...');
     try {
+      const allRows = scope === 'all'
+        ? await fetchAllPaginatedRows<Expense>((page, pageSize) => expensesService.getAll({
+          page,
+          pageSize,
+          search: searchTerm.trim() || undefined,
+          dateFrom: appliedRange?.from,
+          dateTo: appliedRange?.to,
+        }))
+        : data;
+      const exportFiltered = allRows.filter((expense) => {
+        const search = searchTerm.toLowerCase();
+        const matchesSearch = (expense.description || '').toLowerCase().includes(search)
+          || (expense.category || '').toLowerCase().includes(search);
+        if (!matchesSearch) return false;
+        if (activeKpiFilter.type === 'draft') return String(expense.status || '').toUpperCase() === 'DRAFT';
+        if (activeKpiFilter.type === 'pending') return String(expense.status || '').toUpperCase() === 'PENDING';
+        if (activeKpiFilter.type === 'category') return String(expense.category || '').toUpperCase() === activeKpiFilter.category;
+        return true;
+      });
       await generatePurchaseListPDF({
         title: 'Gastos',
-        rows: filteredData,
+        rows: colFilters.applyTo(exportFiltered, filterGetters),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
-        targetKey: 'compras.expense',
+        targetKey: 'compras.list',
         columns: [
           { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
           { label: 'Categoría', value: (row) => row.category || '—' },
@@ -573,6 +593,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           ],
           total: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate),
           totalLabel: 'Monto',
+          lines: [{
+            description: expense.description || 'Gasto',
+            quantity: 1,
+            unitPrice: String(String(expense.category || '').toUpperCase() === 'OTRO' ? expense.categoryCustom || 'OTRO' : expense.category || '—'),
+            total: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate),
+          }],
           notes: expense.notes,
         },
       });
@@ -892,7 +918,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2></div>
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
-            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
@@ -1166,4 +1192,3 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     </div>
   );
 }
-

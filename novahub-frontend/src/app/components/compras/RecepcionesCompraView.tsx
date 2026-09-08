@@ -36,11 +36,12 @@ import { Switch } from '../ui/switch';
 import { hasPaymentReferenceField, isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
+import { fetchAllPaginatedRows } from '../../utils/export-utils';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; onOpenCredits?: () => void; }
+interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; onOpenCredits?: () => void; }
 
 const statusOpts = [
   { label: 'Pendiente', value: 'PENDING', color: 'bg-primary/10 text-primary' },
@@ -527,7 +528,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
   );
 }
 
-export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId, onOpenCredits }: Props) {
+export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId, onOpenCredits }: Props) {
   const { canPerform, user } = useAuth();
   const { formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
@@ -673,12 +674,26 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
-  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de recepciones...');
     try {
+      const allRows = scope === 'all'
+        ? await fetchAllPaginatedRows<PurchaseReceipt>((page, pageSize) => purchaseReceiptsService.getAll({
+          page,
+          pageSize,
+          search: searchTerm.trim() || undefined,
+          branchId: selectedBranchId || undefined,
+        }))
+        : data;
+      const exportFiltered = allRows.filter((receipt) => {
+        if (statusFilter !== 'ALL' && getReceiptDisplayStatus(receipt) !== statusFilter) return false;
+        const search = searchTerm.toLowerCase();
+        return (receipt.number || '').toLowerCase().includes(search)
+          || (receipt.supplier?.name || '').toLowerCase().includes(search);
+      });
       await generatePurchaseListPDF({
         title: 'Recepciones de compra',
-        rows: filteredData,
+        rows: colFilters.applyTo(exportFiltered, filterGetters),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -1771,7 +1786,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
-            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}

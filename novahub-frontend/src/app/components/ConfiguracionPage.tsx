@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -179,6 +179,9 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   { id: 'NOTIFICATIONS_ALERTS', label: 'Alertas', parent: 'NOTIFICATIONS' },
   { id: 'NOTIFICATIONS_MESSAGES', label: 'Mensajes', parent: 'NOTIFICATIONS' },
   { id: 'NOTIFICATIONS_PUSH', label: 'Push', parent: 'NOTIFICATIONS' },
+
+  // Gestión de tickets
+  { id: 'TICKETS_VIEW', label: 'Tickets', parent: 'TICKETS' },
 
   // Tickets y soporte
   { id: 'TICKETS_KNOWLEDGE_BASE', label: 'Base de conocimiento', parent: 'TICKETS' },
@@ -1248,9 +1251,22 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       // Limpiar el objeto de envío para eliminar campos innecesarios o automáticos
       const { id, _count, createdAt, updatedAt, ...cleanRole } = editingRole as any;
       
-      const permissions = normalizePermissions(cleanRole.permissions)
-        .filter((p: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(p.module || '').toUpperCase()))
-        .map((p: any) => ({
+      const mergedPermissions = normalizePermissions(cleanRole.permissions).reduce((result: any[], permission: any) => {
+        // TICKETS_VIEW es el identificador visual de la subvista Tickets;
+        // el backend continúa usando TICKETS como permiso canónico.
+        const module = permission.module === 'TICKETS_VIEW' ? 'TICKETS' : permission.module;
+        const existing = result.find((item) => item.module === module);
+        if (!existing) {
+          result.push({ ...permission, module });
+          return result;
+        }
+        ['read', 'create', 'edit', 'delete', 'approve', 'import', 'export', 'viewCost'].forEach((action) => {
+          existing[action] = Boolean(existing[action] || permission[action]);
+        });
+        existing.write = Boolean(existing.write || permission.write);
+        return result;
+      }, []);
+      const permissions = mergedPermissions.map((p: any) => ({
         ...p,
         // El backend conserva `write` por compatibilidad con roles antiguos;
         // las acciones visibles de la matriz siguen siendo las canónicas.

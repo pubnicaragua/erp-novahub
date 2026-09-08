@@ -604,9 +604,9 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
           ['Diferencia de arqueo', fmt(cajaInfo.diferenciaArqueo), 'Cajas'],
         ], [59, 130, 246]);
         renderTable('Presupuesto y Recurrentes', ['Indicador', 'Valor', 'Detalle'], [
-          ['Presupuesto del período', fmt(budget.presupuesto), `${budget.count} partida(s)`],
-          ['Ejecutado', fmt(budget.ejecutado), `${budget.pct.toFixed(1)}% del presupuesto`],
-          ['Disponible', fmt(budget.disponible), budget.desviacion > 0 ? `Sobre ejecutado: ${fmt(budget.desviacion)}` : 'Dentro del presupuesto'],
+          ['Presupuesto del período', budget ? fmt(budget.presupuesto) : 'N/D', budget ? `${budget.count} partida(s)` : 'Sin partidas presupuestarias activas'],
+          ['Ejecutado', budget ? fmt(budget.ejecutado) : 'N/D', budget ? `${budget.pct.toFixed(1)}% del presupuesto` : 'Sin presupuesto configurado'],
+          ['Disponible', budget ? fmt(budget.disponible) : 'N/D', budget ? (budget.desviacion > 0 ? `Sobre ejecutado: ${fmt(budget.desviacion)}` : 'Dentro del presupuesto') : 'Sin presupuesto configurado'],
           ['Ingresos recurrentes activos', recurrentes.ingresos, `Mensual: ${fmt(recurrentes.ingMensual)}`],
           ['Gastos recurrentes activos', recurrentes.gastos, `Mensual: ${fmt(recurrentes.expMensual)}`],
           ['Impacto neto recurrente mensual', fmt(recurrentes.impactoNeto), recurrentes.nextExp?.fecha ? `Próximo pago: ${recurrentes.nextExp.fecha.toLocaleDateString('es-NI')}` : 'Sin próximo pago'],
@@ -633,7 +633,10 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
           `${indicator.formula} · ${indicator.interpretacion}`,
         ]), [42, 30, 118]);
         renderTable('Compromisos próximos 30 días', ['Fecha', 'Monto', 'Detalle'], orderedCompromisos.slice(0, 12).map(item => [item.fecha ? item.fecha.toLocaleDateString('es-NI') : '—', fmt(item.monto), item.detalle]), [244, 63, 94]);
-        renderTable('Balance de comprobación', ['Código', 'Cuenta', 'Tipo', 'Debe', 'Haber', 'Saldo'], trialBalanceRows.slice(0, 120).map(row => [row.code, row.name, row.type, fmt(row.debit), fmt(row.credit), fmt(row.balance)]), [59, 130, 246]);
+        renderTable('Balance de comprobación', ['Código', 'Cuenta', 'Tipo', 'Debe', 'Haber', 'Saldo'], trialRows.slice(0, 120).map(row => {
+          const normalized = normalizeTrialBalanceRow(row);
+          return [normalized.code, normalized.name, normalized.type, fmt(normalized.debit), fmt(normalized.credit), fmt(normalized.balance)];
+        }), [59, 130, 246]);
 
         const configured = await generateConfiguredReportSectionsPDF({
           targetKey: 'reportes.finance', title: 'Reporte Financiero de Negocio', tenantName: companyName, tenantLogo: logoUrl,

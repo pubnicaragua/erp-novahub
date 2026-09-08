@@ -45,7 +45,7 @@ const fetchAllSupplierRecords = async (
   const rows: any[] = [];
   let page = 1;
   while (page <= 1000) {
-    const response = await fetcher({ supplierId, page, pageSize: 5000, report: true }, signal);
+    const response = await fetcher({ supplierId, page, pageSize: 500, report: true }, signal);
     rows.push(...unwrapList(response));
     const totalPages = Math.max(1, getTotalPages(response));
     if (page >= totalPages) break;

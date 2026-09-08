@@ -26,7 +26,7 @@ import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import * as XLSX from 'xlsx';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
@@ -34,8 +34,9 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
+import { fetchAllPaginatedRows } from '../../utils/export-utils';
 
-interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 type CreditImportCatalogOption = {
   code: string;
@@ -135,7 +136,7 @@ const statusOpts = [
   { label: 'Anulado',   value: 'voided',  color: 'bg-primary/10 text-primary' },
 ];
 
-export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], pagination, onSearchChange }: Props) {
+export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], selectedBranchId = '', pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
   const { displayCurrency, baseCurrency, displayMode, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -397,12 +398,23 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
-  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de créditos...');
     try {
+      const allRows = scope === 'all'
+        ? await fetchAllPaginatedRows<SupplierCredit>((page, pageSize) => vendorCreditsService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, branchId: selectedBranchId || undefined }))
+        : data;
+      const exportFiltered = allRows.filter((credit) => {
+        const status = String(credit.status || '').toLowerCase();
+        if (statusFilter === 'ISSUED' && status !== 'issued') return false;
+        if (statusFilter === 'APPLIED' && !['applied', 'partial', 'paid'].includes(status)) return false;
+        if (!searchTerm) return true;
+        return (credit.number || '').toLowerCase().includes(searchTerm.toLowerCase())
+          || (credit.supplier?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      });
       await generatePurchaseListPDF({
         title: 'Créditos de proveedor',
-        rows: filteredData,
+        rows: colFilters.applyTo(exportFiltered, filterGetters),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -1160,7 +1172,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
-            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos de proveedor" />
             <div className="max-w-md rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-[10px] font-semibold text-muted-foreground">
               Los créditos se crean desde una recepción recibida, con sus artículos y cantidades verificadas.
