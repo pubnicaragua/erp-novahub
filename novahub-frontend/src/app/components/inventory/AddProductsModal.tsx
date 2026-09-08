@@ -117,7 +117,7 @@ const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, brands = [], priceLists, onRefresh, onSelectExistingProduct, itemType = 'PRODUCT', presentation = 'dialog' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
-  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
+  const canViewInventoryCost = canPerform(itemType === 'SERVICE' ? 'INVENTORY_SERVICES' : 'INVENTORY_PRODUCTS', 'viewCost');
   const [internalCategories, setInternalCategories] = useState<any[]>([]);
   const [internalWarehouses, setInternalWarehouses] = useState<any[]>([]);
 

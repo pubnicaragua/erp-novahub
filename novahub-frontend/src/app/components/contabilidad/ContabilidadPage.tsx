@@ -8,7 +8,6 @@ import {
   Inbox,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Tag, Wallet } from 'lucide-react';
 import { cn } from '../ui/utils';
@@ -359,21 +358,24 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
     <div className="accounting-module flex h-full min-h-[calc(100vh-5rem)] min-w-0 overflow-x-hidden">
       <main className="min-w-0 flex-1 overflow-y-auto custom-scrollbar">
         <div className="mx-auto min-w-0 w-full max-w-[1700px] overflow-x-hidden p-3 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
-          <div className="mb-3 flex justify-end">
+          <div className="mb-3 flex min-w-0 items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <CurrencyValuationBanner />
+            </div>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
               onClick={() => { setShowHelp(!showHelp); setOpenFaq(null); }}
               className={cn(
-                'rounded-xl gap-2 font-bold text-xs shrink-0',
+                'size-8 shrink-0 rounded-lg text-muted-foreground',
                 showHelp && 'bg-primary/10 border-primary/30 text-primary',
               )}
+              aria-label={`Cómo usar ${SECTIONS.find((section) => section.id === activeSection)?.label || 'esta vista'}`}
+              title={`Cómo usar ${SECTIONS.find((section) => section.id === activeSection)?.label || 'esta vista'}`}
             >
               <HelpCircle className="size-4" />
-              <span className="hidden sm:inline">¿Ayuda?</span>
             </Button>
           </div>
-          <CurrencyValuationBanner className="mb-3" />
 
           {/* Horizontal tab navigation */}
           <div className={cn(

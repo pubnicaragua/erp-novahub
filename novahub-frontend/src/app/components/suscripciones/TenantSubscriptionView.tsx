@@ -484,8 +484,6 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     }
   };
 
-  const getPlanColor = (_plan: string) => 'bg-primary/10 text-primary border-primary/20';
-
   const isModuleActive = (modId: string) => {
     return tenant?.subscriptions?.some((s: any) => s.module === modId && s.isActive);
   };
@@ -500,14 +498,6 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
 
   return (
     <div className="p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4 space-y-6 max-w-7xl mx-auto min-h-screen">
-      <div className="flex justify-end">
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className={cn("text-[12px] font-black uppercase tracking-widest px-4 py-1.5 h-10 flex items-center", getPlanColor(tenant.plan))}>
-            Plan {tenant.plan}
-          </Badge>
-        </div>
-      </div>
-
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -769,14 +759,6 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
         </TabsContent>
 
          <TabsContent value="team" className="space-y-4">
-            <div className="flex flex-wrap justify-end">
-             <div className="flex flex-wrap items-center justify-end gap-2">
-              {canViewUsers && <Button data-tour="team-tutorial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTeamTutorial(true)} aria-label="Cómo gestionar Mi Equipo" title="Cómo gestionar Mi Equipo">
-                <CircleHelp className="size-4" />
-              </Button>}
-            </div>
-           </div>
-
           <div className="min-w-0">
             {canViewUsers && <Card className="min-w-0 border-border/50" data-tour="team-users">
               <CardHeader className="flex flex-col items-start justify-between gap-3 border-b border-border/30 bg-muted/10 pb-3 sm:flex-row sm:items-center">
@@ -785,6 +767,9 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                   <CardDescription className="mt-1 text-xs">Administra las personas que tienen acceso a la empresa.</CardDescription>
                 </div>
                 <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                  {canViewUsers && <Button data-tour="team-tutorial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTeamTutorial(true)} aria-label="Cómo gestionar Mi Equipo" title="Cómo gestionar Mi Equipo">
+                    <CircleHelp className="size-4" />
+                  </Button>}
                   <ViewLayoutSelect value={effectiveTeamUsersLayout} onChange={setTeamUsersLayout} ariaLabel="Distribución de usuarios" className="h-8" />
                   {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => { setUserDialogMode('plain'); setSelectedCreateEmployeeId(''); setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' }); setIsUserDialogOpen(true); }}>
                     <Plus className="size-4" /> Crear usuario

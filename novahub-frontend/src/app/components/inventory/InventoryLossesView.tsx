@@ -36,8 +36,8 @@ interface InventoryLossesViewProps {
 
 export function InventoryLossesView({ warehouses, warehouseId, active = true }: InventoryLossesViewProps) {
   const { user, canPerform } = useAuth();
-  const canReadInventory = canPerform('INVENTORY', 'view');
-  const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
+  const canReadInventory = canPerform('INVENTORY_LOSSES', 'view');
+  const canViewInventoryCost = canPerform('INVENTORY_LOSSES', 'viewCost');
   const { baseCurrency, displayMode, formatExplicitAmount, formatConvertedAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'current';
   const [dateFrom, setDateFrom] = useState('');

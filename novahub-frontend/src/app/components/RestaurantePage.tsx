@@ -31,6 +31,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getApiErrorMessage } from '../services/api';
 import { cajaService } from '../services/caja.service';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { RestaurantViewTutorial } from './RestaurantViewTutorial';
 import {
   restaurantService,
   type RestaurantKitchenTicket,
@@ -120,7 +121,6 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   const canViewRestaurant = canPerform('RESTAURANT', 'view') || [canViewTables, canViewOrders, canViewKitchen, canViewMenu, canViewReports].some(Boolean);
   const canCreateTables = canPerform('RESTAURANT_SALON', 'create');
   const canCreateOrders = canPerform('RESTAURANT_ORDERS', 'create');
-  const canApproveTables = canPerform('RESTAURANT_SALON', 'approve');
   const canApproveOrders = canPerform('RESTAURANT_ORDERS', 'approve');
   const canApproveKitchen = canPerform('RESTAURANT_KITCHEN', 'approve');
   const canCreateMenu = canPerform('RESTAURANT_MENU', 'create');
@@ -446,7 +446,11 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     <div className="flex flex-1 w-full bg-background">
       <main className="relative flex-1">
         <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
-          <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2" data-tour="restaurant-header">
+              <div className="mr-auto flex min-w-0 items-center gap-2">
+                <div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-primary">Restaurante POS</p><h1 className="truncate text-xl font-black tracking-tight">Operación del restaurante</h1></div>
+                <RestaurantViewTutorial view={tab} />
+              </div>
               <select value={selectedBranchId || ''} onChange={(event) => setSelectedBranchId(event.target.value || null)} className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary">
                 <option value="">Todas las sucursales</option>
                 {accessibleBranches.map((branch: { id: string; name: string }) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
@@ -476,7 +480,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
             setTab(value as RestaurantTab);
             if (value === 'comandas') setNewOrdersCount(0);
           }}>
-            <div className="mb-4 w-full overflow-x-auto custom-scrollbar">
+            <div className="mb-4 w-full overflow-x-auto custom-scrollbar" data-tour="restaurant-tabs">
               <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
                 {visibleTabs.map(({ id, label, icon: Icon }) => (
                   <TabsTrigger key={id} value={id} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
@@ -492,7 +496,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
             <AnimatePresence mode="wait">
               <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                 {tab === 'salon' && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.7fr)]">
-                  <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                  <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm" data-tour="restaurant-salon">
                     <div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Vista de salón</p><h2 className="mt-1 text-2xl font-black">Mesas y zonas</h2></div>{canCreateTables && <Button size="sm" onClick={() => setShowTableForm((value) => !value)}><Plus className="size-4" />Nueva mesa</Button>}</div>
                     {showTableForm && <div className="mb-5 grid gap-2 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4 sm:grid-cols-4"><Input placeholder="Código" value={newTable.code} onChange={(e) => setNewTable({ ...newTable, code: e.target.value })} /><Input placeholder="Nombre" value={newTable.name} onChange={(e) => setNewTable({ ...newTable, name: e.target.value })} /><Input placeholder="Zona" value={newTable.zone} onChange={(e) => setNewTable({ ...newTable, zone: e.target.value })} /><div className="flex gap-2"><Input type="number" min="1" placeholder="Sillas" value={newTable.seats} onChange={(e) => setNewTable({ ...newTable, seats: e.target.value })} /><Button onClick={createTable}>Guardar</Button></div></div>}
                     {tables.length === 0 ? <EmptyState icon={<LayoutGrid className="size-8" />} title="Aún no hay mesas configuradas" description="Crea la primera mesa para comenzar a operar el salón." action={canCreateTables ? <Button size="sm" onClick={() => setShowTableForm(true)}><Plus className="size-4" />Crear mesa</Button> : undefined} /> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{tables.map((table) => { const status = tableStatus[table.status] || tableStatus.AVAILABLE; return <div key={table.id} role="button" tabIndex={0} onClick={() => setSelectedTableId(table.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedTableId(table.id); }} className={`group relative min-h-32 cursor-pointer rounded-2xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selectedTableId === table.id ? 'border-primary ring-4 ring-primary/10' : 'border-border/60'}`}><div className="flex items-start justify-between"><span className="text-2xl font-black">{table.code}</span><Badge className={status.className}>{status.label}</Badge></div><p className="mt-2 text-sm font-semibold text-foreground">{table.name}</p><p className="mt-1 text-xs text-muted-foreground">{table.zone || 'Salón principal'} · {table.seats} puestos</p><button type="button" onClick={(event) => { event.stopPropagation(); void copyQrLink(table); }} className="absolute bottom-3 right-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground" title="Ver enlace QR" aria-label={`Ver enlace QR de ${table.name}`}><QrCode className="size-4" /></button></div>; })}</div>}
@@ -500,10 +504,10 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
                   </section>
                   <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}</span></span><span className="font-black text-primary">{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ item, quantity }) => <div key={item.id} className="flex items-center justify-between text-sm"><span>{quantity} × {item.name}</span><div className="flex items-center gap-2"><button type="button" onClick={() => removeFromCart(item.id)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0 || !canCreateOrders || !canApproveKitchen} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
                 </div>}
-                {tab === 'comandas' && <OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} onSend={async (order) => { if (!canApproveKitchen) return; try { await restaurantService.sendToKitchen(order.id); await loadData(); } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.')); } }} onStatus={changeOrderStatus} onCheckout={openCheckout} />}
-                {tab === 'cocina' && <KitchenBoard tickets={tickets} canApprove={canApproveKitchen} onStatus={updateKitchen} />}
-                {tab === 'carta' && <MenuBoard menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} onSaved={() => loadData()} />}
-                {tab === 'reportes' && <ReportsBoard summary={summary} />}
+                {tab === 'comandas' && <div data-tour="restaurant-orders"><OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} onSend={async (order) => { if (!canApproveKitchen) return; try { await restaurantService.sendToKitchen(order.id); await loadData(); } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.')); } }} onStatus={changeOrderStatus} onCheckout={openCheckout} /></div>}
+                {tab === 'cocina' && <div data-tour="restaurant-kitchen"><KitchenBoard tickets={tickets} canApprove={canApproveKitchen} onStatus={updateKitchen} /></div>}
+                {tab === 'carta' && <div data-tour="restaurant-menu"><MenuBoard menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} onSaved={() => loadData()} /></div>}
+                {tab === 'reportes' && <div data-tour="restaurant-reports"><ReportsBoard summary={summary} /></div>}
               </motion.div>
             </AnimatePresence>
           </Tabs>

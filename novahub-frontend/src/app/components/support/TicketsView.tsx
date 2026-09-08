@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Ticket, TicketAudit, TicketComment, TicketProductLink } from '../../types';
-import { Card, CardContent } from '../ui/card';
+import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -28,6 +28,7 @@ import {
   Tags,
   RotateCcw,
   ArrowRightLeft,
+  CircleHelp,
 } from 'lucide-react';
 import { supportService } from '../../services/support.service';
 import { toast } from 'sonner';
@@ -39,6 +40,7 @@ import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { TicketFormModal } from './TicketFormModal';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 interface TicketsViewProps {
   data: Ticket[];
@@ -49,6 +51,7 @@ interface TicketsViewProps {
   productCatalog?: any[];
   loading: boolean;
   onRefresh: () => void;
+  onHelp: () => void;
   targetTicketId?: string | null;
   onTargetTicketHandled?: () => void;
 }
@@ -169,7 +172,7 @@ const ticketProductLinks = (ticket?: Ticket | null): TicketProductLink[] => {
   return [];
 };
 
-export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog = [], categoryCatalog = [], agentCatalog = [], invoiceCatalog = [], productCatalog = [], loading, onRefresh, targetTicketId, onTargetTicketHandled }) => {
+export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog = [], categoryCatalog = [], agentCatalog = [], invoiceCatalog = [], productCatalog = [], loading, onRefresh, onHelp, targetTicketId, onTargetTicketHandled }) => {
   const { canPerform, user } = useAuth();
   const canInteractWithTicket = (ticket?: Ticket | null) => Boolean(
     ticket && user && (isTicketAdmin(user) || ticket.createdById === user.id || ticket.assignedToId === user.id),
@@ -638,17 +641,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
-          <Card key={kpi.title} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn('p-3 rounded-2xl flex items-center justify-center', kpi.bg)}>
-                <kpi.icon className={cn('size-6', kpi.color)} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
-                <p className="text-2xl font-black tracking-tight">{kpi.value}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <SalesKpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
 
@@ -659,6 +652,9 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
               <p className="mt-1 text-xs text-muted-foreground">Selecciona un ticket para abrir su detalle, seguimiento e historial.</p>
             </div>
             <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
+              <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={onHelp} aria-label="Cómo gestionar tickets" title="Cómo gestionar tickets">
+                <CircleHelp className="size-4" />
+              </Button>
               <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
                 <Input

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Bell, MessageSquare, Send, CircleHelp } from 'lucide-react';
+import { AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
@@ -105,12 +105,6 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   return (
     <div className="min-h-full bg-background">
       <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
-        <header className="mb-3 flex justify-end" data-tour="notificaciones-title">
-          <Button variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTour(true)} aria-label="Cómo usar Notificaciones" title="Cómo usar Notificaciones">
-            <CircleHelp className="size-4" />
-          </Button>
-        </header>
-
         {activeQuery.isError && (
           <div role="alert" className="mb-6 flex flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -132,8 +126,8 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
             onSubModuleChange?.(value);
           }}
         >
-          <div className={cn("w-full overflow-x-auto custom-scrollbar mb-4", !isSidebarCollapsed && "hidden lg:hidden")}>
-          <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="notificaciones-tabs">
+          <div className={cn("mb-4 w-full overflow-x-auto custom-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")} data-tour="notificaciones-title">
+            <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="notificaciones-tabs">
             {visibleTabs.map((tab) => (
               <TabsTrigger
                 key={tab.id}
@@ -145,7 +139,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
                 <span>{tab.label}</span>
               </TabsTrigger>
             ))}
-          </TabsList>
+            </TabsList>
           </div>
 
           <AnimatePresence mode="wait">
@@ -156,9 +150,9 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18 }}
             >
-              {activeTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} />}
-              {activeTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} />}
-              {activeTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} />}
+              {activeTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} onHelp={() => setShowTour(true)} />}
+              {activeTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} onHelp={() => setShowTour(true)} />}
+              {activeTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} onHelp={() => setShowTour(true)} />}
             </motion.div>
           </AnimatePresence>
         </Tabs>

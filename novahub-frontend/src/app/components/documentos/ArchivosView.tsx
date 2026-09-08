@@ -1,16 +1,16 @@
 import { useRef, useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { File as FileModel } from '../../types';
-import { Card, CardContent } from '../ui/card';
+import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, HardDrive, File as FileIcon, Image as ImageIcon, FileArchive } from 'lucide-react';
 import { filesService } from '../../services/documentos.service';
 import { toast } from 'sonner';
-import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 interface ArchivosViewProps {
   data: FileModel[];
@@ -69,12 +69,7 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
-          <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
-            </CardContent>
-          </Card>
+          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
 

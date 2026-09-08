@@ -67,7 +67,7 @@ const statusLabel: Record<string, string> = {
 
 export function WarehouseSupplyPanel() {
   const { canPerform } = useAuth();
-  const canRequestSupply = canPerform('INVENTORY', 'write');
+  const canRequestSupply = canPerform('INVENTORY_WAREHOUSES', 'create');
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

@@ -3,23 +3,24 @@ import { PushNotification } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { BellRing, CheckCircle2, Plus, Search, Send, Wifi } from 'lucide-react';
+import { BellRing, CheckCircle2, CircleHelp, Plus, Search, Send, Wifi } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import { pushNotificationsService } from '../../services/notificaciones.service';
 import { navigateToNotification } from '../../utils/notificationNavigation';
 import { enableBrowserNotifications, getBrowserNotificationStatus, isBrowserNotificationsEnabled, type BrowserNotificationStatus } from '../../utils/browserNotifications';
 import { NotificationTable } from './NotificationTable';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 interface PushViewProps {
   data: PushNotification[];
   loading: boolean;
   onRefresh: () => void;
+  onHelp: () => void;
 }
 
-export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) => {
+export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh, onHelp }) => {
   const { canPerform } = useAuth();
   const { markAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
@@ -95,12 +96,7 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="notificaciones-push">
         {kpis.map((kpi, i) => (
-          <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
-            </CardContent>
-          </Card>
+          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
 
@@ -124,6 +120,9 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight">Registro de avisos</h2><p className="mt-1 text-sm text-muted-foreground">Historial de avisos internos del ERP. El permiso del navegador se controla arriba.</p></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
+            <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={onHelp} aria-label="Cómo usar Notificaciones" title="Cómo usar Notificaciones">
+              <CircleHelp className="size-4" />
+            </Button>
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('NOTIFICATIONS_PUSH', 'create') && (
               <Button data-toolbar-role="primary" onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Crear aviso</Button>

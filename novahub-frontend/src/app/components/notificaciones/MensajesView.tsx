@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Bot,
   CheckCheck,
+  CircleHelp,
   Loader2,
   MailPlus,
   MessageCircle,
@@ -36,6 +37,7 @@ interface MensajesViewProps {
   data: Message[];
   loading: boolean;
   onRefresh: () => void | Promise<void>;
+  onHelp: () => void;
 }
 
 type MessageFilter = 'all' | 'unread' | 'direct';
@@ -74,7 +76,7 @@ const ParticipantAvatar = ({ participant, system = false }: { participant?: Mess
   </Avatar>
 );
 
-export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRefresh }) => {
+export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRefresh, onHelp }) => {
   const { canPerform } = useAuth();
   const { refresh: refreshInbox } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
@@ -269,15 +271,20 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
               )}
             </div>
 
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Buscar conversaciones"
-                aria-label="Buscar conversaciones"
-                className="h-10 rounded-lg bg-muted/30 pl-9"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Buscar conversaciones"
+                  aria-label="Buscar conversaciones"
+                  className="h-10 rounded-lg bg-muted/30 pl-9"
+                />
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={onHelp} aria-label="Cómo usar Notificaciones" title="Cómo usar Notificaciones">
+                <CircleHelp className="size-4" />
+              </Button>
             </div>
 
             <div className="mt-3 flex gap-1" aria-label="Filtros de mensajes">

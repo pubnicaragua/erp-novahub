@@ -6,6 +6,7 @@ import { Input } from '../ui/input';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { getApiErrorMessage } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { suppliersService } from '../../services/compras.service';
 import { customersService } from '../../services/ventas.service';
 import {
@@ -49,6 +50,8 @@ const inferMode = (format: 'AWBOX' | 'OGLOBAL' | null, item?: string) => {
 };
 
 export function Reception() {
+  const { canPerform } = useAuth();
+  const canCreateReception = canPerform('TRACKING_RECEPTION', 'create');
   const [view, setView] = useState<ReceptionView>('reception');
   const [ctx, setCtx] = useState<{ settings: LogisticsSettings; warehouses: LogisticsWarehouse[]; shipmentModes: ShipmentMode[] } | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -119,7 +122,7 @@ export function Reception() {
   }), []);
 
   const onPickPdfs = useCallback(async (files: File[] = []) => {
-    if (files.length === 0) return;
+    if (!canCreateReception || files.length === 0) return;
     setImporting(true);
     try {
       const results = await Promise.all(files.map(async (file) => logisticsService.pdfPreview(file.name, await readPdf(file))));
@@ -142,11 +145,12 @@ export function Reception() {
     } finally {
       setImporting(false);
     }
-  }, [form.warehouseId, readPdf]);
+  }, [canCreateReception, form.warehouseId, readPdf]);
 
   const addRow = useCallback(() => {
+    if (!canCreateReception) return;
     setRows((previous) => [...previous, { ...emptyRow(previous.length), warehouseId: form.warehouseId || undefined }]);
-  }, [form.warehouseId]);
+  }, [canCreateReception, form.warehouseId]);
 
   const changeDefaultWarehouse = useCallback((warehouseId: string) => {
     const previousDefault = form.warehouseId;
@@ -165,7 +169,7 @@ export function Reception() {
   }, []);
 
   const saveReception = useCallback(async () => {
-    if (!ctx || !canSave) return;
+    if (!canCreateReception || !ctx || !canSave) return;
     setSaving(true);
     try {
       const batch = await logisticsService.createBatch({
@@ -199,7 +203,7 @@ export function Reception() {
     } finally {
       setSaving(false);
     }
-  }, [canSave, ctx, form, rows, warehouse]);
+  }, [canCreateReception, canSave, ctx, form, rows, warehouse]);
 
   if (!ctx) return <div className="p-10 text-center text-sm text-muted-foreground">Cargando configuración logística…</div>;
 
@@ -218,6 +222,7 @@ export function Reception() {
       </div>
 
       <Card className="rounded-2xl border-border/60 p-5 shadow-sm" data-tour="log-reception-wizard">
+        <fieldset disabled={!canCreateReception} className="contents">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Truck className="size-5" /></div>
           <div className="min-w-0 flex-1">
@@ -225,7 +230,7 @@ export function Reception() {
             <p className="text-xs text-muted-foreground">Aquí haces todo: eliges proveedor, cargas PDF o agregas paquetes manualmente y los agrupas en una referencia.</p>
           </div>
           <input ref={pdfInputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={(event) => { void onPickPdfs(Array.from(event.target.files || [])); event.target.value = ''; }} />
-          <Button type="button" variant="outline" className="rounded-xl text-xs" disabled={importing} onClick={() => pdfInputRef.current?.click()}><FileUp className="size-4" /> {importing ? 'Procesando PDF…' : 'Cargar PDF AWBOX / OGLOBAL'}</Button>
+          {canCreateReception && <Button type="button" variant="outline" className="rounded-xl text-xs" disabled={importing} onClick={() => pdfInputRef.current?.click()}><FileUp className="size-4" /> {importing ? 'Procesando PDF…' : 'Cargar PDF AWBOX / OGLOBAL'}</Button>}
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -262,7 +267,7 @@ export function Reception() {
         {warehouse && <p className="mt-3 rounded-xl bg-primary/5 px-3 py-2 text-xs text-muted-foreground">Esta bodega se aplica como predeterminada. Cada paquete puede enviarse a otra bodega y el número se completa por fila según su configuración.</p>}
 
         <div className="mt-5 overflow-x-auto rounded-xl border border-border/60">
-          <div className="flex items-center justify-between border-b border-border/50 bg-muted/20 px-3 py-2"><div><p className="text-xs font-black uppercase tracking-widest">Paquetes de esta referencia</p><p className="text-[11px] text-muted-foreground">Puedes mezclar aéreo y marítimo y enviar cada fila a una bodega distinta.</p></div><Button type="button" variant="outline" className="rounded-xl text-xs" onClick={addRow}><Plus className="size-4" /> Agregar paquete</Button></div>
+          <div className="flex items-center justify-between border-b border-border/50 bg-muted/20 px-3 py-2"><div><p className="text-xs font-black uppercase tracking-widest">Paquetes de esta referencia</p><p className="text-[11px] text-muted-foreground">Puedes mezclar aéreo y marítimo y enviar cada fila a una bodega distinta.</p></div>{canCreateReception && <Button type="button" variant="outline" className="rounded-xl text-xs" onClick={addRow}><Plus className="size-4" /> Agregar paquete</Button>}</div>
           <table className="w-full min-w-[78rem] text-sm"><thead className="bg-muted/40 text-left"><tr>
             <th className="w-10 px-3 py-2 text-[10px] font-black uppercase tracking-widest">#</th><th className="w-32 px-3 py-2 text-[10px] font-black uppercase tracking-widest">Tipo</th><th className="min-w-52 px-3 py-2 text-[10px] font-black uppercase tracking-widest">Item / producto</th><th className="w-28 px-3 py-2 text-[10px] font-black uppercase tracking-widest">Peso físico (lb)</th><th className="w-20 px-3 py-2 text-[10px] font-black uppercase tracking-widest">Cant.</th><th className="w-24 px-3 py-2 text-[10px] font-black uppercase tracking-widest">P.Unt</th><th className="w-20 px-3 py-2 text-[10px] font-black uppercase tracking-widest">Desc.</th><th className="w-24 px-3 py-2 text-[10px] font-black uppercase tracking-widest">S.Total</th><th className="min-w-48 px-3 py-2 text-[10px] font-black uppercase tracking-widest">Tracking</th><th className="w-40 px-3 py-2 text-[10px] font-black uppercase tracking-widest">Bodega</th><th className="w-10 px-3 py-2" />
           </tr></thead><tbody>
@@ -283,13 +288,14 @@ export function Reception() {
               <td className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.subtotal ?? ''} onChange={(event) => updateRow(row.id, { subtotal: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="0.00" className="h-9 rounded-lg text-xs" /></td>
               <td className="px-3 py-2"><Input value={row.trackingCode || ''} onChange={(event) => updateRow(row.id, { trackingCode: event.target.value })} placeholder="Tracking" className="h-9 rounded-lg font-mono text-xs" /></td>
               <td className="px-3 py-2 align-top"><select value={selectedWarehouseId} onChange={(event) => updateRow(row.id, { warehouseId: event.target.value, warehouseValue: '' })} className="h-9 w-full min-w-36 rounded-lg border border-input bg-background px-2 text-xs"><option value="">Sin bodega</option>{ctx.warehouses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.country}</option>)}</select>{rowWarehouse?.strategy === 'TRACKING_LAST_N' ? <p className="mt-1 text-[10px] font-mono text-muted-foreground">{warehouseNumber || `Últimos ${rowWarehouse.trackingLastN || 6}`}</p> : rowWarehouse?.strategy === 'MANUAL' || rowWarehouse?.strategy === 'PROVIDER_ASSIGNED' ? <Input value={row.warehouseValue || rowWarehouse.code || ''} onChange={(event) => updateRow(row.id, { warehouseValue: event.target.value })} placeholder={rowWarehouse.code ? 'Código configurado' : 'Número de bodega'} className="mt-1 h-8 rounded-lg font-mono text-xs" /> : <p className="mt-1 text-[10px] text-muted-foreground">{rowWarehouse ? 'Se asigna al guardar' : 'Sin bodega'}</p>}</td>
-              <td className="px-3 py-2"><Button variant="ghost" size="sm" className="rounded-lg" disabled={rows.length === 1} onClick={() => setRows((previous) => previous.filter((item) => item.id !== row.id))}><Trash2 className="size-4 text-destructive" /></Button></td>
+              <td className="px-3 py-2">{canCreateReception && <Button variant="ghost" size="sm" className="rounded-lg" disabled={rows.length === 1} onClick={() => setRows((previous) => previous.filter((item) => item.id !== row.id))}><Trash2 className="size-4 text-destructive" /></Button>}</td>
               </tr>;
             })}
           </tbody></table>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2"><Button className="rounded-xl" onClick={saveReception} disabled={saving || !canSave} data-tour="log-reception-save">{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar recepción ({rows.length})</Button>{reference && <><Badge variant="outline" className="gap-1 rounded-lg text-[11px] text-emerald-600 ring-emerald-300"><CheckCircle2 className="size-3.5" /> {reference}</Badge><Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva recepción</Button></>}</div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">{canCreateReception && <Button className="rounded-xl" onClick={saveReception} disabled={saving || !canSave} data-tour="log-reception-save">{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar recepción ({rows.length})</Button>}{reference && <><Badge variant="outline" className="gap-1 rounded-lg text-[11px] text-emerald-600 ring-emerald-300"><CheckCircle2 className="size-3.5" /> {reference}</Badge><Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva recepción</Button></>}</div>
+        </fieldset>
       </Card>
     </div>
   );

@@ -225,7 +225,7 @@ export function ProductDetailDrawer({
 }: ProductDetailDrawerProps) {
   const { baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
-  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
+  const canEditStockLevels = canPerform('INVENTORY_ADJUSTMENTS', 'create');
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -265,7 +265,10 @@ export function ProductDetailDrawer({
   }, [detail]);
 
   const saveLevelMinMax = async (item: { warehouseId: string; variantId?: string | null; quantity: number; readOnly?: boolean }) => {
-    if (item.readOnly) return;
+    if (item.readOnly || !canEditStockLevels) {
+      if (!canEditStockLevels) toast.error('No tienes permiso para editar niveles de stock');
+      return;
+    }
     const draft = levelDrafts[String(item.warehouseId)];
     if (!draft) return;
     const minStock = Math.max(0, Number(draft.minStock) || 0);
@@ -378,6 +381,7 @@ export function ProductDetailDrawer({
 
   const itemType = String(product?.itemType || 'PRODUCT').toUpperCase();
   const isService = itemType === 'SERVICE';
+  const canViewInventoryCost = canPerform(isService ? 'INVENTORY_SERVICES' : 'INVENTORY_PRODUCTS', 'viewCost');
 
   const costPrice = Number(product?.costPrice ?? product?.cost ?? 0);
   const servicePrice = (() => {
@@ -972,7 +976,7 @@ export function ProductDetailDrawer({
                                       onKeyDown={(e) => { if (e.key === 'Enter') void saveLevelMinMax(item); }}
                                       aria-label={`Stock mínimo en ${item.warehouseName}`}
                                       title={isReadOnlyLevel ? 'Nivel corporativo de solo lectura' : 'Stock mínimo editable'}
-                                      disabled={isReadOnlyLevel}
+                                      disabled={isReadOnlyLevel || !canEditStockLevels}
                                       className="h-8 w-16 min-w-0 text-right text-xs"
                                     />
                                     <span className="text-muted-foreground">/</span>
@@ -984,7 +988,7 @@ export function ProductDetailDrawer({
                                       onKeyDown={(e) => { if (e.key === 'Enter') void saveLevelMinMax(item); }}
                                       aria-label={`Stock máximo en ${item.warehouseName}`}
                                       title={isReadOnlyLevel ? 'Nivel corporativo de solo lectura' : 'Stock máximo editable'}
-                                      disabled={isReadOnlyLevel}
+                                      disabled={isReadOnlyLevel || !canEditStockLevels}
                                       className="h-8 w-16 min-w-0 text-right text-xs"
                                     />
                                   </div>
@@ -995,8 +999,8 @@ export function ProductDetailDrawer({
                                     variant="ghost"
                                     size="icon"
                                     className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
-                                    disabled={isSavingLevel || isReadOnlyLevel}
-                                    title={isReadOnlyLevel ? 'Nivel corporativo de solo lectura' : 'Guardar mínimo y máximo de esta bodega'}
+                                    disabled={isSavingLevel || isReadOnlyLevel || !canEditStockLevels}
+                                    title={isReadOnlyLevel ? 'Nivel corporativo de solo lectura' : !canEditStockLevels ? 'No tienes permiso para editar niveles de stock' : 'Guardar mínimo y máximo de esta bodega'}
                                     aria-label={`Guardar niveles de ${item.warehouseName}`}
                                     onClick={() => void saveLevelMinMax(item)}
                                   >

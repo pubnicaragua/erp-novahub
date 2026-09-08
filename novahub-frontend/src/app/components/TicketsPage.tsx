@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button } from './ui/button';
-import { TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
+import { TicketIcon, Users, BookOpen } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TicketsView } from './support/TicketsView';
@@ -140,15 +139,9 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
     <div className="flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
       <main className="relative min-w-0 flex-1 overflow-x-hidden">
         <div className="mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] overflow-x-hidden p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
-          <div className="mb-3 flex justify-end">
-            <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo gestionar tickets" title="Cómo gestionar tickets">
-              <CircleHelp className="size-4" />
-            </Button>
-          </div>
-
           <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
             <div className="mb-4 w-full min-w-0 max-w-full overflow-x-auto custom-scrollbar">
-            <TabsList className="flex h-auto min-w-full w-max max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
+              <TabsList className="flex h-auto min-w-full w-max max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
               {visibleTabs.map((tab) => (
                 <TabsTrigger 
                   key={tab.id} 
@@ -161,7 +154,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
                   <span className="hidden sm:inline">{tab.label}</span>
                 </TabsTrigger>
               ))}
-            </TabsList>
+              </TabsList>
             </div>
             
             <AnimatePresence mode="wait">
@@ -173,12 +166,12 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {activeTab === 'tickets' && <TicketsView data={data.tickets} customerCatalog={data.customers} categoryCatalog={data.categories} agentCatalog={data.agents} invoiceCatalog={data.invoices} productCatalog={data.products} loading={loading} onRefresh={fetchData} targetTicketId={targetTicketId} onTargetTicketHandled={() => setTargetTicketId(null)} />}
+                {activeTab === 'tickets' && <TicketsView data={data.tickets} customerCatalog={data.customers} categoryCatalog={data.categories} agentCatalog={data.agents} invoiceCatalog={data.invoices} productCatalog={data.products} loading={loading} onRefresh={fetchData} onHelp={() => setShowTutorial(true)} targetTicketId={targetTicketId} onTargetTicketHandled={() => setTargetTicketId(null)} />}
                 {activeTab === 'faqs' && (
-                  <KnowledgeBaseView data={data.knowledgeBase} loading={loading} onRefresh={fetchData} />
+                  <KnowledgeBaseView data={data.knowledgeBase} loading={loading} onRefresh={fetchData} onHelp={() => setShowTutorial(true)} />
                 )}
                 {activeTab === 'agents' && (
-                  <AgentsView data={data.agents} tickets={data.tickets} loading={loading} onRefresh={fetchData} />
+                  <AgentsView data={data.agents} tickets={data.tickets} loading={loading} onRefresh={fetchData} onHelp={() => setShowTutorial(true)} />
                 )}
               </motion.div>
             </AnimatePresence>

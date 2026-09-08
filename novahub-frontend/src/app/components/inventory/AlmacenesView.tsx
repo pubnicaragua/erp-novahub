@@ -66,7 +66,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const { canPerform } = useAuth();
   const canCreateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'create');
   const canEditWarehouse = canPerform('INVENTORY_WAREHOUSES', 'edit');
-  const canDeactivateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'deactivate');
+  const canDeactivateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'delete');
   const canViewPos = canPerform('RETAIL_POS', 'view');
   const canManagePos = canPerform('RETAIL_POS', 'edit');
   const [showTutorial, setShowTutorial] = useState(false);

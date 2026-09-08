@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Card, CardContent } from '../ui/card';
+import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Users, UserCheck, UserX, Search, RefreshCw } from 'lucide-react';
+import { CircleHelp, Users, UserCheck, UserX, Search, RefreshCw } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { useAuth } from '../../contexts/AuthContext';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 interface SupportAgent {
   id: string;
@@ -31,12 +32,13 @@ interface AgentsViewProps {
   tickets: Array<{ assignedToId?: string | null }>;
   loading: boolean;
   onRefresh: () => void;
+  onHelp: () => void;
 }
 
 // Manager es un tipo de usuario global y no un rol operativo del tenant.
 const roleOptions = ['ADMIN', 'EMPLOYEE', 'VIEWER', 'PARTNER'];
 
-export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, onRefresh }) => {
+export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, onRefresh, onHelp }) => {
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -89,17 +91,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
-          <Card key={kpi.title} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn('p-3 rounded-2xl flex items-center justify-center', kpi.bg)}>
-                <kpi.icon className={cn('size-6', kpi.color)} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
-                <p className="text-2xl font-black tracking-tight">{kpi.value}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <SalesKpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
 
@@ -109,6 +101,9 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
             <h2 className="text-xl font-black uppercase tracking-tight">Agentes de Soporte</h2>
           </div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
+            <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={onHelp} aria-label="Cómo gestionar tickets" title="Cómo gestionar tickets">
+              <CircleHelp className="size-4" />
+            </Button>
             <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input

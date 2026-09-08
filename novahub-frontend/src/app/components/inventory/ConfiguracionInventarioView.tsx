@@ -120,8 +120,10 @@ interface ConfiguracionInventarioViewProps {
 
 export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewProps) {
   const { user, canPerform } = useAuth()
-  const canViewInventory = canPerform('INVENTORY', 'view')
+  const canViewInventory = canPerform('INVENTORY_CONFIG', 'view')
+  const canEditInventoryConfig = canPerform('INVENTORY_CONFIG', 'edit')
   const canViewAccounting = canPerform('ACCOUNTING', 'view')
+  const canEditAccounting = canPerform('ACCOUNTING', 'edit')
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view')
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('general')
@@ -261,6 +263,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   }, [activeAccounts, flatAccounts, controlAccountId]);
 
   const saveControlAccount = async () => {
+    if (!canEditAccounting) {
+      toast.error('No tienes permiso para editar la configuración contable')
+      return
+    }
     setConfigLoading(true)
     try {
       await contabilidadService.updateConfig({
@@ -302,6 +308,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   }
 
   const openConfig = (wh: any, branch?: any) => {
+    if (!canEditInventoryConfig) return
     const info = linkInfo(wh)
     setConfigTarget(wh)
     setConfigBranch(null)
@@ -345,6 +352,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   const runConfigure = async () => {
     if (!configTarget) return
+    if (!canEditInventoryConfig) {
+      toast.error('No tienes permiso para configurar las cuentas de las bodegas')
+      return
+    }
     setConfigSaving(true)
     try {
       if (configMode === 'existing') {
@@ -370,6 +381,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   const runUnlink = async () => {
     if (!unlinkTarget) return
+    if (!canEditInventoryConfig) {
+      toast.error('No tienes permiso para desvincular cuentas de las bodegas')
+      return
+    }
     setUnlinkSaving(true)
     try {
       await inventoryService.updateWarehouse(unlinkTarget.wh.id, { inventoryAccountId: null })
@@ -488,7 +503,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                   </div>
                   <Switch checked={requiresPerWarehouse} onCheckedChange={setRequiresPerWarehouse} />
                 </div>
-                <Button onClick={saveControlAccount} disabled={configLoading}>
+                <Button onClick={saveControlAccount} disabled={configLoading || !canEditAccounting}>
                   {configLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />} Guardar
                 </Button>
               </div>
@@ -659,15 +674,15 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                                 </p>
                               </div>
                               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                <Button
+                                {canEditInventoryConfig && <Button
                                   variant="outline"
                                   size="sm"
                                   className="h-9 w-full gap-1 text-[10px] font-black uppercase tracking-widest"
                                   onClick={() => openConfig(wh, branch)}
                                 >
                                   <Settings2 className="size-3.5" /> {actionLabel}
-                                </Button>
-                                {info.status === 'VINCULADO' && (
+                                </Button>}
+                                {canEditInventoryConfig && info.status === 'VINCULADO' && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -752,10 +767,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                           <TableCell><StatusBadge status={info.status} /></TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1.5">
-                              <Button variant="outline" size="sm" className="h-8 gap-1 text-[10px] font-black uppercase tracking-widest" onClick={() => openConfig(wh, branch)} title={`${info.status === 'VINCULADO' ? 'Editar' : 'Configurar'} la cuenta contable de la bodega ${wh.name} en ${branch.name}`}>
+                              {canEditInventoryConfig && <Button variant="outline" size="sm" className="h-8 gap-1 text-[10px] font-black uppercase tracking-widest" onClick={() => openConfig(wh, branch)} title={`${info.status === 'VINCULADO' ? 'Editar' : 'Configurar'} la cuenta contable de la bodega ${wh.name} en ${branch.name}`}>
                                 <Settings2 className="size-3.5" /> {info.status === 'VINCULADO' ? 'Editar' : info.status === 'CUENTA_INACTIVA' || info.status === 'CUENTA_NO_POSTEABLE' ? 'Corregir' : 'Configurar'}
-                              </Button>
-                              {info.status === 'VINCULADO' && (
+                              </Button>}
+                              {canEditInventoryConfig && info.status === 'VINCULADO' && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -985,7 +1000,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
             <Button variant="outline" onClick={() => setConfigTarget(null)} disabled={configSaving}>Cancelar</Button>
             <Button
               onClick={runConfigure}
-              disabled={configSaving || (configMode === 'existing' && (!existingAccountId || linkableAccounts.length === 0))}
+              disabled={!canEditInventoryConfig || configSaving || (configMode === 'existing' && (!existingAccountId || linkableAccounts.length === 0))}
             >
               {configSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} {configMode === 'auto' ? 'Crear y vincular' : 'Vincular'}
             </Button>

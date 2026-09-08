@@ -130,7 +130,10 @@ const PRODUCT_TABLE_WIDTHS = {
   unit: '112px',
   min: '80px',
   max: '80px',
-  warehouse: '112px',
+  // Las bodegas suelen incluir el nombre de la sucursal y necesitan espacio
+  // para leerse completas dentro de la tabla. El texto de las etiquetas
+  // también puede envolver cuando el nombre supera este ancho.
+  warehouse: '180px',
   stock: '96px',
   price: '112px',
   cost: '112px',
@@ -243,6 +246,7 @@ interface ImportPreviewPageProps {
   onDownloadErrors: () => void;
   onCreateCategory: (index: number, value: string) => void;
   canCreateCategory: boolean;
+  canViewInventoryCost: boolean;
   onConfirm: () => void;
   onBack: () => void;
   onReady?: () => void;
@@ -498,6 +502,7 @@ function ImportPreviewPage({
   onDownloadErrors,
   onCreateCategory,
   canCreateCategory,
+  canViewInventoryCost,
   onConfirm,
   onBack,
   onReady,
@@ -505,9 +510,7 @@ function ImportPreviewPage({
   priceLists = DEFAULT_IMPORT_PRICE_LISTS,
 }: ImportPreviewPageProps) {
   useImportPreviewLayout();
-  const { canPerform } = useAuth();
   const [advancedCardOpen, setAdvancedCardOpen] = useState(false);
-  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const visiblePriceLists = isService ? [] : priceLists;
   const currencySymbol = getImportCurrencySymbol(importCurrency);
   const summaryPriceLists = useMemo(() => {
@@ -906,10 +909,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
-  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const canCreatePurchaseRequest = canPerform('PURCHASES', 'create');
   const catalogItemType = itemType || 'PRODUCT';
   const isServiceView = catalogItemType === 'SERVICE';
+  const catalogPermissionModule: 'INVENTORY_PRODUCTS' | 'INVENTORY_SERVICES' = isServiceView
+    ? 'INVENTORY_SERVICES'
+    : 'INVENTORY_PRODUCTS';
+  const canViewInventoryCost = canPerform(catalogPermissionModule, 'viewCost');
   const [configuredPriceLists, setConfiguredPriceLists] = useState<PriceList[]>([]);
   useEffect(() => {
     const controller = new AbortController();
@@ -2052,6 +2058,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const handleSaveRow = async (id: string) => {
     const product = editingRows.get(id);
     if (!product) return;
+    const requiredAction = product.isNew ? 'create' : 'edit';
+    if (!canPerform(catalogPermissionModule, requiredAction)) {
+      toast.error(`No tienes permiso para ${product.isNew ? 'crear' : 'editar'} ${isServiceView ? 'servicios' : 'productos'}`);
+      return;
+    }
 
     if (skuErrors.get(id)) {
       toast.error('Corrige el error en el código antes de guardar');
@@ -2248,11 +2259,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   };
 
   const handleToggleProductStatus = (product: any) => {
+    if (!canPerform(catalogPermissionModule, 'delete')) {
+      toast.error(`No tienes permiso para activar o inactivar ${isServiceView ? 'servicios' : 'productos'}`);
+      return;
+    }
     setPendingStatusChange(product);
   };
 
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const handleDuplicateProduct = async (product: any) => {
+    if (!canPerform(catalogPermissionModule, 'create')) {
+      toast.error(`No tienes permiso para duplicar ${isServiceView ? 'servicios' : 'productos'}`);
+      return;
+    }
     setDuplicatingId(product.id);
     try {
       await inventoryService.duplicateProduct(product.id);
@@ -2267,6 +2286,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const handleConfirmStatusChange = async () => {
     if (!pendingStatusChange) return;
+    if (!canPerform(catalogPermissionModule, 'delete')) {
+      toast.error(`No tienes permiso para activar o inactivar ${isServiceView ? 'servicios' : 'productos'}`);
+      return;
+    }
     const nextIsActive = pendingStatusChange.isActive === false;
     setStatusChanging(true);
     try {
@@ -3283,6 +3306,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   }, [validateImportRows]);
 
   const handleImportConfirm = useCallback(() => {
+    if (!canPerform(catalogPermissionModule, 'import')) {
+      toast.error(`No tienes permiso para importar ${isServiceView ? 'servicios' : 'productos'}`);
+      return;
+    }
     const valid = importData.filter((row) => !row._hasError);
     if (valid.length === 0) {
       toast.error('No hay registros válidos para importar');
@@ -3292,7 +3319,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       toast.warning(`Se omitirán ${importData.length - valid.length} fila(s) con errores. Las advertencias no impedirán la carga.`);
     }
     setInitialImportConfirmOpen(true);
-  }, [importData]);
+  }, [catalogPermissionModule, canPerform, importData, isServiceView]);
 
   const uploadInitialImportImages = useCallback(async (rows: any[], onProgress?: (progress: number) => void) => {
     const imageRows = rows.filter((row) => imageArchiveEntries.has(productImageKey(row.code)));
@@ -3342,6 +3369,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   }, [imageArchiveEntries, isServiceView]);
 
   const handleFinalInitialImport = useCallback(async (skipSimilarityCheck = false, resolutionList?: SimilarityResolution[]) => {
+    if (!canPerform(catalogPermissionModule, 'import')) {
+      toast.error(`No tienes permiso para importar ${isServiceView ? 'servicios' : 'productos'}`);
+      return;
+    }
     const valid = importData.filter((row) => !row._hasError);
     if (initialImportConfirmText !== 'IMPORTAR' || valid.length === 0) return;
     const effectiveSimilarityResolutions = resolutionList || Object.values(similarImportResolutions);
@@ -3502,7 +3533,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setImporting(false);
       setImportProgress(0);
     }
-  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView, similarImportResolutions]);
+  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView, similarImportResolutions, catalogPermissionModule, canPerform]);
 
   const resolveImportSimilarity = useCallback(async (group: SimilarProductGroup, action: SimilarityResolution['action'], match?: SimilarProductMatch) => {
     const inputKey = normalizeSimilarityInputKey(group.inputKey);
@@ -3647,7 +3678,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             setNewCategoryDescription('');
             setCategoryModalOpen(true);
           }}
-          canCreateCategory={canPerform('INVENTORY', 'edit')}
+          canCreateCategory={canPerform('INVENTORY_ATTRIBUTES', 'create')}
+          canViewInventoryCost={canViewInventoryCost}
           onConfirm={handleImportConfirm}
           onBack={() => {
             if (previewMountTimerRef.current !== null) window.clearTimeout(previewMountTimerRef.current);
@@ -3857,7 +3889,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           </div>
 
           <div className="erp-toolbar-primary-group flex w-full max-w-full shrink-0 flex-wrap items-center justify-start gap-2 min-[1800px]:w-auto min-[1800px]:justify-end" data-tour="inventory-products-actions">
-          {canPerform('INVENTORY_PRODUCTS', 'create') && (
+          {canPerform(catalogPermissionModule, 'create') && (
             <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 md:order-last" onClick={() => onCreateProduct ? onCreateProduct() : setCreateModalOpen(true)}>
               <Plus className="mr-2 size-4" /> Nuevo
             </Button>
@@ -3865,12 +3897,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <Button type="button" size="icon" variant="ghost" data-toolbar-role="help" data-tutorial-trigger="true" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="size-4" />
           </Button>
-          {canPerform('INVENTORY', 'edit') && (
+          {canPerform(catalogPermissionModule, 'import') && (
             <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title={`Importar ${isServiceView ? 'servicios' : 'el catálogo inicial'} desde una plantilla`}>
               <Upload className="mr-2 size-4" /> Importar {isServiceView ? 'servicios' : 'productos'}
             </Button>
           )}
-          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && (
+          {!isServiceView && canPerform(catalogPermissionModule, 'edit') && (
             <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
               <ImageIcon className="mr-2 size-4" /> Imágenes
             </Button>
@@ -3880,7 +3912,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <PackageSearch className="mr-2 size-4" />Solicitar compra
             </Button>
           )}
-          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
+          {!isServiceView && canPerform(catalogPermissionModule, 'export') && (
             <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
               <Barcode className="mr-2 size-4" /> Etiquetas
             </Button>
@@ -3903,7 +3935,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               {canCreatePurchaseRequest && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={openSelectedSolicitud}>
                 <PackageSearch className="mr-1.5 size-3.5" /> Solicitar compra
               </Button>}
-              {canPerform('INVENTORY_PRODUCTS', 'export') && <Button type="button" size="sm" variant="outline" aria-label="Descargar plantilla vacía de productos" title="Descargar una plantilla vacía para productos y variantes" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={() => void handleDownloadSelectedTemplate()}>
+              {canPerform(catalogPermissionModule, 'import') && <Button type="button" size="sm" variant="outline" aria-label="Descargar plantilla vacía de productos" title="Descargar una plantilla vacía para productos y variantes" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={() => void handleDownloadSelectedTemplate()}>
                 <Download className="mr-1.5 size-3.5" /> Plantilla
               </Button>}
               <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-destructive" onClick={clearSelectedProducts}>
@@ -4006,14 +4038,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       {isServiceView ? 'Estado' : 'Bodegas'}
                     </span>
-                    <div className="flex min-w-0 flex-wrap gap-1">
+                    <div className={`flex min-w-0 gap-1 ${isServiceView ? 'flex-wrap' : 'flex-col items-stretch'}`}>
                       {isServiceView ? (
                         <Badge variant="outline" className={product.isActive !== false ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}>
                           {product.isActive !== false ? 'Disponible' : 'No disponible'}
                         </Badge>
                       ) : (
                         warehousesForProduct.length > 0
-                          ? Array.from(new Set(warehousesForProduct)).map((name: any) => <Badge key={name} variant="secondary" className="max-w-full truncate text-[9px]">{name}</Badge>)
+                          ? Array.from(new Set(warehousesForProduct)).map((name: any) => <Badge key={name} variant="secondary" title={name} className="w-full min-w-0 max-w-full !whitespace-normal break-words text-left text-[9px] leading-tight">{name}</Badge>)
                           : <span className="text-[10px] text-muted-foreground">-</span>
                       )}
                     </div>
@@ -4022,8 +4054,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 </div>
               </div>
               <div className="mt-4 flex justify-end gap-1 border-t border-border/40 pt-3">
-                {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
-                {canPerform('INVENTORY_PRODUCTS', 'create') && product.isActive !== false && (
+                {canPerform(catalogPermissionModule, 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
+                {canPerform(catalogPermissionModule, 'create') && product.isActive !== false && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -4035,7 +4067,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     {duplicatingId === product.id ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}
                   </Button>
                 )}
-                {product.isVariable && canPerform('INVENTORY_PRODUCTS', 'edit') && (
+                {product.isVariable && canPerform(catalogPermissionModule, 'edit') && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -4046,7 +4078,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     <Tag className="size-3.5" />
                   </Button>
                 )}
-                {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
+                {canPerform(catalogPermissionModule, 'delete') && <Button
                   variant="ghost"
                   size="icon"
                   className={`size-8 ${product.isActive === false ? 'text-emerald-600 hover:bg-emerald-700 hover:text-white' : 'text-amber-600 hover:bg-amber-800 hover:text-white'}`}
@@ -4146,7 +4178,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       aria-busy={String(openingId) === String(product.id) || undefined}
                       data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined}
                       onClick={() => openProductDetail(product)}
-                      onDoubleClick={() => canPerform('INVENTORY_PRODUCTS', 'edit') && handleEditRow(product)}
+                      onDoubleClick={() => canPerform(catalogPermissionModule, 'edit') && handleEditRow(product)}
                      >
                      <TableCell className="w-10">
                        <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id, product); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60" aria-pressed={selectedIds.has(String(product.id))} aria-label={selectedIds.has(String(product.id)) ? `Quitar ${product.name} de la selección` : `Seleccionar ${product.name}`} title={selectedIds.has(String(product.id)) ? 'Quitar de la selección' : 'Agregar a la selección'}>
@@ -4235,10 +4267,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                           {product.isActive !== false ? 'Disponible' : 'No disponible'}
                         </Badge>
                       ) : (
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex min-w-0 flex-col items-stretch gap-1">
                           {warehouseNames.length > 0
                             ? warehouseNames.map((whName: string) => (
-                              <Badge key={whName} variant="secondary" className="text-[9px] bg-muted/50 font-medium">
+                              <Badge key={whName} variant="secondary" title={whName} className="w-full min-w-0 max-w-full !whitespace-normal break-words bg-muted/50 text-left text-[9px] font-medium leading-tight">
                                 {whName}
                               </Badge>
                             ))
@@ -4254,7 +4286,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       {!isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
                      <TableCell className="text-right">
                          <div className="flex items-center justify-end gap-1 transition-opacity">
-                         {canPerform('INVENTORY_PRODUCTS', 'edit') && (
+                         {canPerform(catalogPermissionModule, 'edit') && (
                              <Button 
                                variant="ghost" 
                                size="icon" 
@@ -4267,7 +4299,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                              <Pencil className="size-3.5" />
                            </Button>
                        )}
-                        {canPerform('INVENTORY_PRODUCTS', 'create') && product.isActive !== false && (
+                        {canPerform(catalogPermissionModule, 'create') && product.isActive !== false && (
                            <Button 
                              variant="ghost" 
                              size="icon" 
@@ -4282,7 +4314,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             {duplicatingId === product.id ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Copy className="size-3.5" />}
                           </Button>
                        )}
-                        {product.isVariable && canPerform('INVENTORY_PRODUCTS', 'edit') && (
+                        {product.isVariable && canPerform(catalogPermissionModule, 'edit') && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -4296,7 +4328,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             <Tag className="size-3.5" />
                           </Button>
                         )}
-                         {canPerform('INVENTORY_PRODUCTS', 'edit') && (
+                         {canPerform(catalogPermissionModule, 'delete') && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -4736,7 +4768,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                       {importCategoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
                                     </SelectContent>
                                   </Select>
-                                  {canPerform('INVENTORY', 'edit') && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => {
+                                  {canPerform('INVENTORY_ATTRIBUTES', 'create') && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => {
                                     setPendingCategoryRowIndex(i);
                                     setNewCategoryName(row.category || '');
                                     setNewCategoryDescription('');

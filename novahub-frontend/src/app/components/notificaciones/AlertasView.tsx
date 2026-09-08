@@ -1,24 +1,25 @@
 import { useState } from 'react';
 import { Alert } from '../../types';
-import { Card, CardContent } from '../ui/card';
+import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Search, AlertTriangle, Info, AlertCircle, Eye } from 'lucide-react';
+import { Plus, Search, AlertTriangle, Info, AlertCircle, CircleHelp, Eye } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import { alertsService } from '../../services/notificaciones.service';
 import { navigateToNotification } from '../../utils/notificationNavigation';
 import { NotificationTable } from './NotificationTable';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 interface AlertasViewProps {
   data: Alert[];
   loading: boolean;
   onRefresh: () => void;
+  onHelp: () => void;
 }
 
-export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefresh }) => {
+export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefresh, onHelp }) => {
   const { canPerform } = useAuth();
   const { markAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,12 +69,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="notificaciones-alertas-kpis">
         {kpis.map((kpi, i) => (
-          <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
-            </CardContent>
-          </Card>
+          <SalesKpiCard key={i} title={kpi.title} value={kpi.value} icon={kpi.icon} color={kpi.color} bg={kpi.bg} kind="indicator" />
         ))}
       </div>
 
@@ -81,6 +77,9 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight">Alertas del Sistema</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
+            <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={onHelp} aria-label="Cómo usar Notificaciones" title="Cómo usar Notificaciones">
+              <CircleHelp className="size-4" />
+            </Button>
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('NOTIFICATIONS_ALERTS', 'create') && (
               <Button data-toolbar-role="primary" data-testid="notifications-create-alert" onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Crear aviso</Button>

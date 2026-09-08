@@ -14,6 +14,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '../ui/sheet';
 import { getApiErrorMessage } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { suppliersService } from '../../services/compras.service';
 import { customersService } from '../../services/ventas.service';
 import {
@@ -53,6 +54,10 @@ const emptyRow = (index: number): GridRow => ({
 });
 
 export function BatchReception() {
+  const { canPerform } = useAuth();
+  const canCreateBatch = canPerform('TRACKING_BATCHES', 'create');
+  const canEditBatch = canPerform('TRACKING_BATCHES', 'edit');
+  const canApproveBatch = canPerform('TRACKING_BATCHES', 'approve');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -162,6 +167,7 @@ export function BatchReception() {
   }, [load]);
 
   const createBatch = useCallback(async () => {
+    if (!canCreateBatch) return;
     setCreating(true);
     try {
       const batch = await logisticsService.createBatch({
@@ -182,10 +188,10 @@ export function BatchReception() {
     } finally {
       setCreating(false);
     }
-  }, [createForm, openDetail]);
+  }, [canCreateBatch, createForm, openDetail]);
 
   const onPickPdf = useCallback(async (files: File[] = []) => {
-    if (files.length === 0 || !detail) return;
+    if (!canEditBatch || files.length === 0 || !detail) return;
     setImporting(true);
     try {
       const results = await Promise.all(files.map(async (file) => {
@@ -210,18 +216,19 @@ export function BatchReception() {
     } finally {
       setImporting(false);
     }
-  }, [detail]);
+  }, [canEditBatch, detail]);
 
   const updateRow = useCallback((id: string, patch: Partial<GridRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }, []);
 
   const removeRow = useCallback((id: string) => {
+    if (!canEditBatch) return;
     setRows((prev) => prev.filter((r) => r.id !== id));
-  }, []);
+  }, [canEditBatch]);
 
   const saveRows = useCallback(async () => {
-    if (!detail || rows.length === 0) return;
+    if (!canEditBatch || !detail || rows.length === 0) return;
     const payload: BatchPackageRow[] = rows.map((r) => ({
       line: r.line,
       trackingCode: r.trackingCode?.trim() || undefined,
@@ -247,10 +254,10 @@ export function BatchReception() {
     } finally {
       setSaving(false);
     }
-  }, [commonOwner, detail, rows, refreshDetail]);
+  }, [canEditBatch, commonOwner, detail, rows, refreshDetail]);
 
   const confirmBatch = useCallback(async () => {
-    if (!detail) return;
+    if (!canApproveBatch || !detail) return;
     setConfirming(true);
     try {
       const result = await logisticsService.confirmBatch(detail.batch.id, {
@@ -272,7 +279,7 @@ export function BatchReception() {
     } finally {
       setConfirming(false);
     }
-  }, [detail, confirmForm, refreshDetail]);
+  }, [canApproveBatch, detail, confirmForm, refreshDetail]);
 
   const totals = useMemo(() => {
     const weight = rows.reduce((s, r) => s + (Number(r.physicalWeight) || 0), 0);

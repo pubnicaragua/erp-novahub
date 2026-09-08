@@ -3,7 +3,7 @@ import { CircleHelp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
-export type TrackingTutorialView = 'transit' | 'reception' | 'packages' | 'reconciliation' | 'billing' | 'config';
+export type TrackingTutorialView = 'transit' | 'reception' | 'batches' | 'packages' | 'reconciliation' | 'billing' | 'config';
 
 type TrackingTutorial = { label: string; title: string; steps: GuidedTourStep[] };
 
@@ -26,6 +26,14 @@ const TUTORIALS: Record<TrackingTutorialView, TrackingTutorial> = {
       { target: '[data-tour="log-reception-wizard"]', title: '1. Datos de la recepción', description: 'Selecciona proveedor, agencia, cliente opcional y bodega. Estos datos se usan para toda la referencia.', placement: 'bottom' },
       { target: '[data-tour="log-reception-save"]', title: '2. Registrar paquetes', description: 'Agrega filas, mezcla aéreo y marítimo, carga uno o varios PDFs y edita cada dato antes de guardar.', placement: 'top' },
       { target: '[data-tour="log-reception-history"]', title: '3. Historial', description: 'Cada registro genera automáticamente una referencia REF-###### para consultar el historial de la recepción.', placement: 'bottom' },
+    ],
+  },
+  batches: {
+    label: 'Cómo usar Recepción en lote',
+    title: 'Recepción en lote · paso a paso',
+    steps: [
+      { target: '[data-tour="log-batch-list"]', title: 'Referencias de recepción', description: 'Consulta las referencias agrupadas, filtra por estado y abre una referencia para revisar sus paquetes.', placement: 'bottom' },
+      { target: '[data-tour="log-batch-grid"]', title: 'Detalle de paquetes', description: 'Dentro de una referencia puedes revisar las filas, completar datos y guardar los paquetes antes de confirmar.', placement: 'top' },
     ],
   },
   packages: {

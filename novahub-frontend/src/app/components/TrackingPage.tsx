@@ -42,17 +42,21 @@ import {
   type TrackingEvent,
 } from '../services/tracking.service';
 import { Reception } from './tracking/Reception';
+import { BatchReception } from './tracking/BatchReception';
 import { ReceivedPackages } from './tracking/ReceivedPackages';
+import { Reconciliation } from './tracking/Reconciliation';
 import { Billing } from './tracking/Billing';
 import { LogisticsConfig } from './tracking/LogisticsConfig';
 import { TrackingViewTutorial } from './tracking/TrackingViewTutorial';
 
-type TrackingTab = 'transit' | 'reception' | 'packages' | 'billing' | 'config';
+type TrackingTab = 'transit' | 'reception' | 'batches' | 'packages' | 'reconciliation' | 'billing' | 'config';
 
 const TRACKING_TABS: Array<{ id: TrackingTab; label: string }> = [
   { id: 'transit', label: 'En tránsito' },
   { id: 'reception', label: 'Recepción' },
+  { id: 'batches', label: 'Recepción en lote' },
   { id: 'packages', label: 'Paquetes recibidos' },
+  { id: 'reconciliation', label: 'Conciliación de compras' },
   { id: 'billing', label: 'Disponibles para facturar' },
   { id: 'config', label: 'Configuración' },
 ];
@@ -95,7 +99,7 @@ const INITIAL_FORM = {
 };
 
 export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPageProps) {
-  const { user, canPerform } = useAuth();
+  const { canPerform } = useAuth();
   const [shipments, setShipments] = useState<TrackingShipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -115,6 +119,10 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     [canPerform],
   );
   const [tab, setTab] = useState<TrackingTab>('transit');
+  const canReadTransit = canPerform('TRACKING_TRANSIT', 'read');
+  const canCreateTransit = canPerform('TRACKING_TRANSIT', 'create');
+  const canEditTransit = canPerform('TRACKING_TRANSIT', 'edit');
+  const canDeleteTransit = canPerform('TRACKING_TRANSIT', 'delete');
 
   useEffect(() => {
     const requested = Object.entries(TRACKING_SIDEBAR_TAB).find(([, sidebarId]) => sidebarId === activeSubModule)?.[0] as TrackingTab | undefined;
@@ -136,6 +144,11 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   };
 
   const load = useCallback(async () => {
+    if (!canReadTransit) {
+      setShipments([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const data = await trackingService.list({ search: search || undefined, status: statusFilter || undefined });
@@ -145,7 +158,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter]);
+  }, [canReadTransit, search, statusFilter]);
 
   useEffect(() => {
     const timer = setTimeout(load, 250);
@@ -164,6 +177,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
 
   /** Consulta el código de tracking en los providers y muestra el resultado. */
   const handleLookup = useCallback(async (rawCode?: string) => {
+    if (!canReadTransit) return;
     const code = (rawCode ?? lookupCode).trim();
     if (!code) {
       setLookupError({ reason: 'EMPTY', message: TRACK_LOOKUP_ERROR_LABELS.EMPTY });
@@ -194,7 +208,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     } finally {
       setLookupBusy(false);
     }
-  }, [lookupCode, load]);
+  }, [canReadTransit, lookupCode, load]);
 
   const counts = useMemo(() => ({
     total: shipments.length,
@@ -204,6 +218,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   }), [shipments]);
 
   const handleCreate = async () => {
+    if (!canCreateTransit) return;
     if (!form.trackingCode.trim()) {
       toast.error('El código de tracking es obligatorio');
       return;
@@ -226,6 +241,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   };
 
   const handleSync = async () => {
+    if (!canEditTransit) return;
     if (!selected) return;
     try {
       setSyncing(true);
@@ -245,6 +261,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   };
 
   const handleAddEvent = async () => {
+    if (!canEditTransit) return;
     if (!selected) return;
     try {
       const event = await trackingService.addEvent(selected.id, {
@@ -264,6 +281,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   };
 
   const handleDelete = async () => {
+    if (!canDeleteTransit) return;
     if (!selected) return;
     try {
       await trackingService.remove(selected.id);
@@ -305,7 +323,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <header className="flex flex-wrap items-center justify-end gap-3 border-b border-border/60 px-4 py-3 sm:px-6" data-tour="log-transit-title">
         <div className="flex flex-wrap items-center gap-2">
-          {canPerform('TRACKING_TRANSIT', 'create') && <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)} data-tour="log-transit-create" data-testid="tracking-new-ticket"><Plus className="size-4" /> Nuevo ticket</Button>}
+          {canCreateTransit && <Button className="rounded-xl text-xs" onClick={() => setCreateOpen(true)} data-tour="log-transit-create" data-testid="tracking-new-ticket"><Plus className="size-4" /> Nuevo ticket</Button>}
         </div>
       </header>
 
@@ -550,7 +568,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
                     </select>
                     <div className="flex gap-2">
                       <Input data-testid="tracking-event-location" placeholder="Ubicación (opcional)" value={eventForm.location} onChange={(e) => setEventForm((prev) => ({ ...prev, location: e.target.value }))} className="rounded-xl text-xs" />
-                      {canPerform('TRACKING_TRANSIT', 'edit') && <Button data-testid="tracking-event-submit" className="rounded-xl text-xs" onClick={handleAddEvent}>Registrar</Button>}
+                  {canEditTransit && <Button data-testid="tracking-event-submit" className="rounded-xl text-xs" onClick={handleAddEvent}>Registrar</Button>}
                     </div>
                   </div>
                 </Card>
@@ -559,7 +577,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
                   <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => { const url = `${window.location.origin}/public/tracking`; navigator.clipboard.writeText(url); toast.success('Enlace público copiado: ' + url); }}>
                     <Truck className="size-4" /> Copiar enlace público
                   </Button>
-                  {canPerform('TRACKING_TRANSIT', 'edit') && <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>
+                  {canEditTransit && <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>
                     <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar con transportista
                   </Button>}
                   <Button
@@ -570,7 +588,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
                   >
                     <PackageCheck className="size-4" /> Recibir paquete
                   </Button>
-                  {canPerform('TRACKING_TRANSIT', 'delete') && <Button variant="destructive" className="rounded-xl text-xs" onClick={handleDelete}><Trash2 className="size-4" /></Button>}
+                  {canDeleteTransit && <Button variant="destructive" className="rounded-xl text-xs" onClick={handleDelete}><Trash2 className="size-4" /></Button>}
                 </div>
                 <p className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-center text-[11px] text-muted-foreground">
                   Consultar tracking no representa una recepción física. Para registrar la llegada usa la pestaña <b>Recepción de paquetes</b>.
@@ -583,8 +601,12 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     </div>
       ) : tab === 'reception' ? (
         <Reception />
+      ) : tab === 'batches' ? (
+        <BatchReception />
       ) : tab === 'packages' ? (
         <ReceivedPackages />
+      ) : tab === 'reconciliation' ? (
+        <Reconciliation />
       ) : tab === 'billing' ? (
         <Billing />
       ) : (

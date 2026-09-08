@@ -14,6 +14,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../ui/table';
 import { getApiErrorMessage } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { customersService } from '../../services/ventas.service';
 import {
@@ -33,6 +34,10 @@ const today = () => format(new Date(), 'yyyy-MM-dd');
 type SubView = 'available' | 'delivery' | 'traceability';
 
 export function Billing() {
+  const { canPerform } = useAuth();
+  const canReadBilling = canPerform('TRACKING_BILLING', 'read');
+  const canApproveBilling = canPerform('TRACKING_BILLING', 'approve');
+  const canDeleteBilling = canPerform('TRACKING_BILLING', 'delete');
   const [sub, setSub] = useState<SubView>('available');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -70,6 +75,7 @@ export function Billing() {
   const [creditNoteBusy, setCreditNoteBusy] = useState(false);
 
   const load = useCallback(async () => {
+    if (!canReadBilling) return;
     try {
       setLoading(true);
       const [avail, al] = await Promise.all([
@@ -83,7 +89,7 @@ export function Billing() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search]);
+  }, [canReadBilling, page, pageSize, search]);
 
   useEffect(() => {
     const timer = setTimeout(load, 250);
@@ -91,7 +97,7 @@ export function Billing() {
   }, [load]);
 
   useEffect(() => {
-    if (sub !== 'delivery') return;
+    if (!canReadBilling || sub !== 'delivery') return;
     (async () => {
       try {
         const res = await logisticsService.listReceivedPackages({ page: 1, pageSize: 200 });
@@ -100,7 +106,7 @@ export function Billing() {
         setDeliverable([]);
       }
     })();
-  }, [sub]);
+  }, [canReadBilling, sub]);
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -135,6 +141,7 @@ export function Billing() {
   }, [defaultRate, selectedPackages]);
 
   const runPreview = useCallback(async () => {
+    if (!canReadBilling) return;
     if (selected.size === 0) { toast.error('Selecciona al menos un paquete'); return; }
     setBusy(true);
     try {
@@ -152,9 +159,10 @@ export function Billing() {
     } finally {
       setBusy(false);
     }
-  }, [selected, customerName, date, dueDate, rates]);
+  }, [canReadBilling, selected, customerName, date, dueDate, rates]);
 
   const sendWhatsApp = useCallback(async () => {
+    if (!canApproveBilling) return;
     if (!result || !lastCustomerId) { toast.error('No hay cliente registrado para la factura'); return; }
     try {
       const link = await publicAccessService.createDocumentLink({
@@ -175,10 +183,10 @@ export function Billing() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo generar el enlace de la factura'));
     }
-  }, [result, lastCustomerId]);
+  }, [canApproveBilling, result, lastCustomerId]);
 
   const confirm = useCallback(async () => {
-    if (!preview) return;
+    if (!canApproveBilling || !preview) return;
     setConfirming(true);
     try {
       const res = await logisticsService.billingConfirm({
@@ -198,7 +206,7 @@ export function Billing() {
     } finally {
       setConfirming(false);
     }
-  }, [preview, date, dueDate, rates, replacementCtx, load]);
+  }, [canApproveBilling, preview, date, dueDate, rates, replacementCtx, load]);
 
   const reset = useCallback(() => {
     setResult(null);
@@ -211,6 +219,7 @@ export function Billing() {
   }, []);
 
   const deliver = useCallback(async () => {
+    if (!canApproveBilling) return;
     if (deliverSel.size === 0) { toast.error('Selecciona al menos un paquete facturado'); return; }
     setDelivering(true);
     try {
@@ -224,7 +233,7 @@ export function Billing() {
     } finally {
       setDelivering(false);
     }
-  }, [deliverSel, deliverNote]);
+  }, [canApproveBilling, deliverSel, deliverNote]);
 
   const runTrace = useCallback(async (name?: string) => {
     const target = (name ?? traceName).trim();
@@ -239,6 +248,7 @@ export function Billing() {
   }, [traceName]);
 
   const openReversal = useCallback(async (invoiceId: string) => {
+    if (!canReadBilling) return;
     setReversalOpen(true);
     setReversalPreview(null);
     setReversalResult(null);
@@ -249,10 +259,10 @@ export function Billing() {
       toast.error(getApiErrorMessage(error, 'No se pudo preparar la reversión'));
       setReversalOpen(false);
     }
-  }, []);
+  }, [canReadBilling]);
 
   const confirmCancel = useCallback(async () => {
-    if (!reversalPreview) return;
+    if (!canDeleteBilling || !reversalPreview) return;
     if (reversalReason.trim().length < 3) { toast.error('Indica una razón de al menos 3 caracteres'); return; }
     setReversalBusy(true);
     try {
@@ -265,7 +275,7 @@ export function Billing() {
     } finally {
       setReversalBusy(false);
     }
-  }, [reversalPreview, reversalReason, load]);
+  }, [canDeleteBilling, reversalPreview, reversalReason, load]);
 
   const rebillAfterReversal = useCallback(async () => {
     if (!reversalResult) return;
@@ -288,7 +298,7 @@ export function Billing() {
   }, [reversalResult]);
 
   const runCreditNote = useCallback(async () => {
-    if (!reversalPreview) return;
+    if (!canApproveBilling || !reversalPreview) return;
     setCreditNoteBusy(true);
     try {
       const res = await logisticsService.billingCreditNote({ invoiceId: reversalPreview.invoice.id, reason: reversalReason.trim() || undefined });
@@ -299,7 +309,7 @@ export function Billing() {
     } finally {
       setCreditNoteBusy(false);
     }
-  }, [reversalPreview, reversalReason]);
+  }, [canApproveBilling, reversalPreview, reversalReason]);
 
   const summary = data?.summary;
 
@@ -446,9 +456,9 @@ export function Billing() {
               </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button className="rounded-xl text-xs" onClick={runPreview} disabled={busy || selected.size === 0}>
+              {canReadBilling && <Button className="rounded-xl text-xs" onClick={runPreview} disabled={busy || selected.size === 0}>
                 <FileText className="size-4" /> {busy ? 'Preparando…' : 'Preparar factura'}
-              </Button>
+              </Button>}
               <Button variant="outline" className="rounded-xl text-xs" onClick={() => setSelected(new Set())} disabled={selected.size === 0}>Limpiar selección</Button>
             </div>
           </Card>
@@ -473,9 +483,9 @@ export function Billing() {
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button className="rounded-xl text-xs" onClick={confirm} disabled={confirming} data-tour="log-billing-confirm">
+                {canApproveBilling && <Button className="rounded-xl text-xs" onClick={confirm} disabled={confirming} data-tour="log-billing-confirm">
                   {confirming ? 'Confirmando…' : `Emitir factura (${preview.packageCount})`}
-                </Button>
+                </Button>}
                 <Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva factura</Button>
               </div>
             </Card>
@@ -535,9 +545,9 @@ export function Billing() {
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Input value={deliverNote} onChange={(e) => setDeliverNote(e.target.value)} placeholder="Observación de entrega (opcional)" className="max-w-sm rounded-xl text-xs" />
-                <Button className="rounded-xl text-xs" onClick={deliver} disabled={delivering || deliverSel.size === 0}>
+                {canApproveBilling && <Button className="rounded-xl text-xs" onClick={deliver} disabled={delivering || deliverSel.size === 0}>
                   <PackageCheck className="size-4" /> {delivering ? 'Entregando…' : `Entregar (${deliverSel.size})`}
-                </Button>
+                </Button>}
               </div>
             </>
           )}
@@ -591,12 +601,12 @@ export function Billing() {
                       <span className="font-black text-primary">{pkgs[0]?.saleInvoiceNumber || invoiceId}</span>
                       <span className="text-muted-foreground">{pkgs.length} paquete(s) · ${pkgs.reduce((s, p) => s + (p.saleAmount ?? 0), 0).toFixed(2)}</span>
                       <div className="flex gap-1">
-                        <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
+                        {canDeleteBilling && <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
                           <RotateCcw className="size-3" /> Anular / Reversar
-                        </Button>
-                        <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
+                        </Button>}
+                        {canApproveBilling && <Button variant="outline" size="sm" className="h-7 rounded-lg text-[10px]" onClick={() => openReversal(invoiceId)}>
                           <FileText className="size-3" /> Nota de crédito
-                        </Button>
+                        </Button>}
                       </div>
                     </div>
                   );
@@ -669,12 +679,12 @@ export function Billing() {
             </div>
             {!reversalResult && reversalPreview && (
               <SheetFooter className="flex-row justify-end gap-2 border-t border-border/50 px-5 py-3">
-                <Button type="button" variant="outline" className="rounded-xl text-xs" onClick={runCreditNote} disabled={creditNoteBusy || !reversalPreview.invoice}>
+                {canApproveBilling && <Button type="button" variant="outline" className="rounded-xl text-xs" onClick={runCreditNote} disabled={creditNoteBusy || !reversalPreview.invoice}>
                   <FileText className="size-4" /> {creditNoteBusy ? 'Generando…' : 'Nota de crédito'}
-                </Button>
-                <Button type="button" className="rounded-xl text-xs" onClick={confirmCancel} disabled={reversalBusy || !reversalPreview.reversable}>
+                </Button>}
+                {canDeleteBilling && <Button type="button" className="rounded-xl text-xs" onClick={confirmCancel} disabled={reversalBusy || !reversalPreview.reversable}>
                   {reversalBusy ? 'Anulando…' : 'Anular y reversar'}
-                </Button>
+                </Button>}
               </SheetFooter>
             )}
           </SheetContent>

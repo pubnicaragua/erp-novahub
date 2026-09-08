@@ -26,6 +26,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from '../ui/sheet';
 import { getApiErrorMessage } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/auth.service';
 import { usersService } from '../../services/users.service';
 import {
@@ -50,6 +51,8 @@ function formatWeight(value?: number, unit?: string) {
 }
 
 export function ReceivedPackages() {
+  const { canPerform } = useAuth();
+  const canCreatePackages = canPerform('TRACKING_PACKAGES', 'create');
   const [result, setResult] = useState<ReceivedPackageListResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -151,8 +154,8 @@ export function ReceivedPackages() {
             className="rounded-xl pl-9"
           />
         </div>
-        <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')} data-tour="log-reception-quick"><Zap className="size-4" /> Recepción rápida</Button>
-        <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')} data-tour="log-reception-import"><Download className="size-4" /> Importar Excel</Button>
+        {canCreatePackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')} data-tour="log-reception-quick"><Zap className="size-4" /> Recepción rápida</Button>}
+        {canCreatePackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')} data-tour="log-reception-import"><Download className="size-4" /> Importar Excel</Button>}
       </div>
 
       {/* Filtros */}

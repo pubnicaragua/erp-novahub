@@ -237,7 +237,11 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   const queryClient = useQueryClient();
   const { displayMode, formatConvertedAmount } = useCurrency();
   const { canPerform } = useAuth();
-  const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
+  const canViewInventoryCost = canPerform('INVENTORY_ASSETS', 'viewCost');
+  const canCreateAssets = canPerform('INVENTORY_ASSETS', 'create');
+  const canEditAssets = canPerform('INVENTORY_ASSETS', 'edit');
+  const canDeleteAssets = canPerform('INVENTORY_ASSETS', 'delete');
+  const canImportAssets = canPerform('INVENTORY_ASSETS', 'import');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -345,8 +349,12 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formOpen, form.currency]);
 
-  const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setFormOpen(true); };
+  const openCreate = () => {
+    if (!canCreateAssets) return;
+    setEditing(null); setForm(EMPTY_FORM); setFormOpen(true);
+  };
   const openEdit = (asset: AssetRow) => {
+    if (!canEditAssets) return;
     setEditing(asset);
     setForm({
       code: asset.code, name: asset.name, category: asset.category,
@@ -363,6 +371,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   };
 
   const handleSave = async () => {
+    if (editing ? !canEditAssets : !canCreateAssets) {
+      toast.error(`No tienes permiso para ${editing ? 'editar' : 'crear'} activos`);
+      return;
+    }
     if (!form.name.trim()) { toast.error('El nombre es obligatorio'); return; }
     setSaving(true);
     try {
@@ -394,6 +406,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    if (!canDeleteAssets) {
+      toast.error('No tienes permiso para eliminar activos');
+      return;
+    }
     setDeleting(true);
     try {
       await mobiliarioService.deleteAsset(deleteTarget.id);
@@ -409,6 +425,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   };
 
   const handleAttachFile = async (asset: AssetRow, file: File) => {
+    if (!canEditAssets) {
+      toast.error('No tienes permiso para adjuntar respaldos');
+      return;
+    }
     setAttachmentBusy(true);
     try {
       const uploaded = await storageService.uploadFile('purchase-evidence', file, { folder: `assets/${asset.code}` });
@@ -429,6 +449,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   };
 
   const handleRemoveAttachment = async (asset: AssetRow) => {
+    if (!canDeleteAssets) {
+      toast.error('No tienes permiso para eliminar respaldos');
+      return;
+    }
     if (!window.confirm('¿Eliminar el respaldo adjunto?')) return;
     setAttachmentBusy(true);
     try {
@@ -444,6 +468,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   };
 
   const handleImportFile = async (file: File) => {
+    if (!canImportAssets) {
+      toast.error('No tienes permiso para importar activos');
+      return;
+    }
     setReadingFile(true);
     setReadingProgress(3);
     try {
@@ -470,6 +498,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   };
 
   const confirmImport = async () => {
+    if (!canImportAssets) {
+      toast.error('No tienes permiso para importar activos');
+      return;
+    }
     if (!canViewInventoryCost) {
       toast.error('Para importar activos y sincronizarlos con Activos Fijos se requiere el permiso Ver costo en Inventario.');
       return;
@@ -500,7 +532,8 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   };
 
   const handleSyncFixedAssets = async () => {
-    if (!canViewInventoryCost) {
+    if (!canEditAssets || !canViewInventoryCost) {
+      toast.error(!canEditAssets ? 'No tienes permiso para editar activos.' : 'Para sincronizar Activos Fijos se requiere el permiso Ver costo en Inventario.');
       toast.error('Para sincronizar Activos Fijos se requiere el permiso Ver costo en Inventario.');
       return;
     }
@@ -566,15 +599,15 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+          {canImportAssets && <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <FileDown className="size-4" /> Plantilla
-          </Button>
-          {canViewInventoryCost && <Button variant="outline" size="sm" onClick={handleSyncFixedAssets} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+          </Button>}
+          {canEditAssets && canViewInventoryCost && <Button variant="outline" size="sm" onClick={handleSyncFixedAssets} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <RefreshCw className="size-4" /> Sincronizar Activos Fijos
           </Button>}
-          <Button variant="outline" size="sm" onClick={() => document.getElementById('mobiliario-import-file')?.click()} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+          {canImportAssets && <Button variant="outline" size="sm" onClick={() => document.getElementById('mobiliario-import-file')?.click()} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Upload className="size-4" /> Importar Excel
-          </Button>
+          </Button>}
           <input
             id="mobiliario-import-file"
             type="file"
@@ -586,9 +619,9 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               e.target.value = '';
             }}
           />
-          <Button size="sm" data-toolbar-role="primary" onClick={openCreate} className="h-10 w-full gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
+          {canCreateAssets && <Button size="sm" data-toolbar-role="primary" onClick={openCreate} className="h-10 w-full gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
             <Plus className="size-4" /> Nuevo activo
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -709,8 +742,8 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               <Building2 className="size-9 mb-2 opacity-40" />
               <p className="text-sm">Sin activos registrados</p>
               <div className="flex items-center gap-2">
-                <Button variant="link" size="sm" onClick={openCreate}>Registrar el primer activo</Button>
-                <Button variant="link" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)}>Descargar plantilla</Button>
+                {canCreateAssets && <Button variant="link" size="sm" onClick={openCreate}>Registrar el primer activo</Button>}
+                {canImportAssets && <Button variant="link" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)}>Descargar plantilla</Button>}
               </div>
             </div>
           ) : (
@@ -753,12 +786,12 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                               <a href={asset.attachmentUrl} target="_blank" rel="noreferrer" title={asset.attachmentName || 'Ver respaldo'} className="text-primary hover:underline inline-flex items-center gap-0.5">
                                 <Paperclip className="size-3.5" />
                               </a>
-                              <button onClick={() => handleRemoveAttachment(asset)} title="Quitar respaldo" className="text-muted-foreground hover:text-red-500">
+                              {canDeleteAssets && <button onClick={() => handleRemoveAttachment(asset)} title="Quitar respaldo" className="text-muted-foreground hover:text-red-500">
                                 <X className="size-3" />
-                              </button>
+                              </button>}
                             </div>
                           ) : (
-                            <button
+                            canEditAssets && <button
                               onClick={() => document.getElementById(`asset-file-${asset.id}`)?.click()}
                               disabled={attachmentBusy}
                               title="Adjuntar factura de compra"
@@ -781,8 +814,8 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                         </TableCell>
                         <TableCell className="py-2 px-2">
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(asset)}><Pencil className="size-3.5" /></Button>
-                            <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => setDeleteTarget(asset)}><Trash2 className="size-3.5" /></Button>
+                            {canEditAssets && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(asset)} aria-label={`Editar ${asset.name}`} title="Editar activo"><Pencil className="size-3.5" /></Button>}
+                            {canDeleteAssets && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => setDeleteTarget(asset)} aria-label={`Eliminar ${asset.name}`} title="Eliminar activo"><Trash2 className="size-3.5" /></Button>}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -921,7 +954,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                   </span>
                   <div className="flex shrink-0 items-center gap-2">
                     <a href={editing.attachmentUrl} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-primary hover:underline inline-flex items-center gap-1"><ExternalLink className="size-3" /> Ver</a>
-                    <button onClick={() => handleRemoveAttachment(editing)} className="text-[10px] font-bold text-red-500 hover:underline">Quitar</button>
+                    {canDeleteAssets && <button onClick={() => handleRemoveAttachment(editing)} className="text-[10px] font-bold text-red-500 hover:underline">Quitar</button>}
                   </div>
                 </div>
               )}
@@ -937,7 +970,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           </div>
           <DialogFooter className="gap-2 sm:gap-0" data-tour="mobiliario-form-actions">
             <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving || (editing ? !canEditAssets : !canCreateAssets)}>
               {saving ? <Loader2 className="size-4 animate-spin mr-1" /> : null} {editing ? 'Guardar cambios' : 'Registrar activo'}
             </Button>
           </DialogFooter>
@@ -1024,7 +1057,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
             {!importResult ? (
               <>
                 <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cancelar</Button>
-                <Button onClick={confirmImport} disabled={importing || importRowsData.length === 0}>
+                <Button onClick={confirmImport} disabled={importing || importRowsData.length === 0 || !canImportAssets}>
                   {importing ? <Loader2 className="size-4 animate-spin mr-1" /> : null} Importar {importRowsData.length} filas
                 </Button>
               </>

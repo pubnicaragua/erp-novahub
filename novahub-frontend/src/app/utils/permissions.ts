@@ -14,7 +14,15 @@ export const SENSITIVE_PERMISSION_ACTION_DEFINITIONS = [
 ] as const;
 
 /** Vistas de inventario que contienen costos o valoraciones monetarias visibles. */
-export const INVENTORY_COST_PERMISSION_MODULES = ['INVENTORY', 'INVENTORY_PRODUCTS', 'INVENTORY_ADJUSTMENTS'] as const;
+export const INVENTORY_COST_PERMISSION_MODULES = [
+  'INVENTORY',
+  'INVENTORY_PRODUCTS',
+  'INVENTORY_SERVICES',
+  'INVENTORY_ADJUSTMENTS',
+  'INVENTORY_MOVEMENTS',
+  'INVENTORY_LOSSES',
+  'INVENTORY_ASSETS',
+] as const;
 
 export function supportsInventoryCostPermission(module: string): boolean {
   return INVENTORY_COST_PERMISSION_MODULES.includes(String(module || '').toUpperCase() as typeof INVENTORY_COST_PERMISSION_MODULES[number]);
@@ -82,7 +90,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   RESTAURANT: ['read'],
   TRACKING: ['read'],
   PURCHASES: ['read', 'create'],
-  INVENTORY: ['read', 'edit', 'viewCost'],
+  INVENTORY: ['read', 'viewCost'],
   FINANCIAL: ['read'],
   ACCOUNTING: ['read', 'create', 'edit', 'delete', 'import', 'export'],
   HR: ['read'],
@@ -130,23 +138,23 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   PURCHASES_PAYMENTS: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
   PURCHASES_RETURNS: ['read', 'create', 'edit', 'delete', 'approve', 'import', 'export'],
   TRACKING_TRANSIT: ['read', 'create', 'edit', 'delete'],
-  TRACKING_RECEPTION: ['read', 'create', 'edit', 'approve'],
-  TRACKING_BATCHES: ['read', 'create', 'edit', 'approve'],
-  TRACKING_PACKAGES: ['read', 'create', 'edit', 'approve'],
-  TRACKING_RECONCILIATION: ['read', 'edit', 'approve'],
-  TRACKING_BILLING: ['read', 'approve'],
-  TRACKING_CONFIG: ['read', 'edit'],
+  TRACKING_RECEPTION: ['read', 'create', 'approve'],
+  TRACKING_BATCHES: ['read', 'create', 'edit', 'delete', 'approve'],
+  TRACKING_PACKAGES: ['read', 'create'],
+  TRACKING_RECONCILIATION: ['read', 'approve'],
+  TRACKING_BILLING: ['read', 'delete', 'approve'],
+  TRACKING_CONFIG: ['read', 'edit', 'delete'],
 
-  INVENTORY_PRODUCTS: ['read', 'create', 'edit', 'export', 'viewCost'],
-  INVENTORY_SERVICES: ['read'],
-  INVENTORY_ATTRIBUTES: ['read'],
+  INVENTORY_PRODUCTS: ['read', 'create', 'edit', 'delete', 'import', 'export', 'viewCost'],
+  INVENTORY_SERVICES: ['read', 'create', 'edit', 'delete', 'import', 'export', 'viewCost'],
+  INVENTORY_ATTRIBUTES: ['read', 'create', 'edit', 'delete'],
   INVENTORY_WAREHOUSES: ['read', 'create', 'edit', 'delete'],
   INVENTORY_TRANSFERS: ['read', 'create'],
   INVENTORY_ADJUSTMENTS: ['read', 'create', 'approve', 'viewCost'],
-  INVENTORY_MOVEMENTS: ['read'],
+  INVENTORY_MOVEMENTS: ['read', 'create', 'export', 'viewCost'],
   INVENTORY_AUDITS: ['read', 'create', 'delete', 'approve'],
-  INVENTORY_LOSSES: ['read'],
-  INVENTORY_ASSETS: ['read'],
+  INVENTORY_LOSSES: ['read', 'viewCost'],
+  INVENTORY_ASSETS: ['read', 'create', 'edit', 'delete', 'import', 'viewCost'],
   INVENTORY_CONFIG: ['read', 'edit'],
 
   FINANCIAL_DASHBOARD: ['read'],

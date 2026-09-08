@@ -14,6 +14,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface MovimientosViewProps {
   movements: any[];
@@ -68,7 +69,7 @@ const MOVEMENTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="movements-pagination"]', title: 'Paginación', description: 'Selecciona la cantidad de registros por página y utiliza los controles para revisar todo el historial.', placement: 'top' },
 ];
 
-function MovementDetailsPanel({ movement, onClose }: { movement: any; onClose: () => void }) {
+function MovementDetailsPanel({ movement, onClose, canViewInventoryCost }: { movement: any; onClose: () => void; canViewInventoryCost: boolean }) {
   const transferDetails = movement.transferDetails;
   const quantity = Number(movement.quantity || 0);
   const unitCost = Number(movement.baseCost ?? movement.unitCost ?? 0);
@@ -104,8 +105,10 @@ function MovementDetailsPanel({ movement, onClose }: { movement: any; onClose: (
           <div className="min-w-0"><p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Warehouse className="size-3" /> Bodega afectada</p><p className="mt-1 truncate font-semibold" title={movement.warehouse?.name || undefined}>{movement.warehouse?.name || '—'}</p></div>
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Cantidad</p><p className={`mt-1 font-mono font-bold ${isEntry ? 'text-emerald-600' : movement.type === 'OUT' ? 'text-rose-500' : 'text-primary'}`}>{movement.type === 'OUT' ? '-' : '+'}{quantity}</p></div>
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock</p><p className="mt-1 font-mono font-semibold">{movement.previousQty != null ? Number(movement.previousQty) : '—'} → {movement.resultingQty != null ? Number(movement.resultingQty) : '—'}</p></div>
-          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo unitario</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? <CurrencyValuationAmount amount={unitCost} sourceCurrency={currency} sourceExchangeRate={movement.exchangeRate} showRate /> : '—'}</p></div>
-          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo total</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? <CurrencyValuationAmount amount={unitCost * quantity} sourceCurrency={currency} sourceExchangeRate={movement.exchangeRate} showRate /> : '—'}</p></div>
+          {canViewInventoryCost && <>
+            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo unitario</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? <CurrencyValuationAmount amount={unitCost} sourceCurrency={currency} sourceExchangeRate={movement.exchangeRate} showRate /> : '—'}</p></div>
+            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo total</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? <CurrencyValuationAmount amount={unitCost * quantity} sourceCurrency={currency} sourceExchangeRate={movement.exchangeRate} showRate /> : '—'}</p></div>
+          </>}
         </div>
 
         <div className="space-y-2 rounded-xl border border-border/50 px-3 py-3 text-xs">
@@ -141,6 +144,9 @@ function MovementDetailsPanel({ movement, onClose }: { movement: any; onClose: (
 }
 
 export function MovimientosView({ movements, warehouses, pagination, onSearchChange, onTypeChange, onWarehouseChange, onDateChange }: MovimientosViewProps) {
+  const { canPerform } = useAuth();
+  const canExportMovements = canPerform('INVENTORY_MOVEMENTS', 'export');
+  const canViewInventoryCost = canPerform('INVENTORY_MOVEMENTS', 'viewCost');
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -208,6 +214,10 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
   };
 
   const handleExport = () => {
+    if (!canExportMovements) {
+      toast.error('No tienes permiso para exportar movimientos');
+      return;
+    }
     try {
       const csvContent = [
         ['Fecha', 'Tipo', 'Producto', 'Almacén', 'Cantidad', 'Usuario', 'Referencia'].join(','),
@@ -285,7 +295,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
             />
           </div>
         </div>
-        <div className="erp-toolbar-primary-group flex w-full gap-2 sm:w-auto"><Button type="button" variant="ghost" size="icon" data-toolbar-role="help" data-tutorial-trigger="true" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo consultar movimientos" title="Cómo consultar movimientos"><CircleHelp className="size-4" /></Button><Button variant="outline" size="sm" data-toolbar-role="print" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button></div>
+        <div className="erp-toolbar-primary-group flex w-full gap-2 sm:w-auto"><Button type="button" variant="ghost" size="icon" data-toolbar-role="help" data-tutorial-trigger="true" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo consultar movimientos" title="Cómo consultar movimientos"><CircleHelp className="size-4" /></Button>{canExportMovements && <Button variant="outline" size="sm" data-toolbar-role="print" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button>}</div>
       </div>
 
       <div className={`grid min-w-0 gap-4 ${selectedMovement ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : 'grid-cols-1'}`}>
@@ -376,7 +386,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
         </span>}
       </div>
         </div>
-        {selectedMovement && <MovementDetailsPanel movement={selectedMovement} onClose={() => setSelectedMovement(null)} />}
+        {selectedMovement && <MovementDetailsPanel movement={selectedMovement} canViewInventoryCost={canViewInventoryCost} onClose={() => setSelectedMovement(null)} />}
       </div>
       {showTutorial && <GuidedTour steps={MOVEMENTS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Movimientos de inventario" allowTargetInteraction />}
     </Card>

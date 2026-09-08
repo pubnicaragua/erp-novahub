@@ -11,6 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../ui/table';
 import { getApiErrorMessage } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { suppliersService, purchaseOrdersService } from '../../services/compras.service';
 import {
   logisticsService,
@@ -27,6 +28,9 @@ interface BatchOption { id: string; number: string; provider?: string | null; st
 const formatDate = (value?: string | Date) => (value ? format(new Date(value), 'dd/MM/yyyy', { locale: es }) : '');
 
 export function Reconciliation() {
+  const { canPerform } = useAuth();
+  const canReadReconciliation = canPerform('TRACKING_RECONCILIATION', 'read');
+  const canApproveReconciliation = canPerform('TRACKING_RECONCILIATION', 'approve');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -50,6 +54,7 @@ export function Reconciliation() {
   const [result, setResult] = useState<ReconciliationConfirmResult | null>(null);
 
   const load = useCallback(async () => {
+    if (!canReadReconciliation) return;
     try {
       setLoading(true);
       setData(await logisticsService.reconciliationAvailable({
@@ -60,7 +65,7 @@ export function Reconciliation() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, receptionBatchId]);
+  }, [canReadReconciliation, page, pageSize, search, receptionBatchId]);
 
   useEffect(() => {
     const timer = setTimeout(load, 250);
@@ -97,6 +102,7 @@ export function Reconciliation() {
   const selectedPackages = useMemo(() => data?.items.filter((p) => selected.has(p.id)) ?? [], [data, selected]);
 
   const runPreview = useCallback(async () => {
+    if (!canReadReconciliation) return;
     if (selected.size === 0) { toast.error('Selecciona al menos un paquete'); return; }
     if (!receptionBatchId && (!supplierId || !orderId)) { toast.error('Selecciona una referencia o proveedor y orden de compra'); return; }
     setBusy(true);
@@ -116,10 +122,10 @@ export function Reconciliation() {
     } finally {
       setBusy(false);
     }
-  }, [selected, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
+  }, [canReadReconciliation, selected, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
 
   const confirm = useCallback(async () => {
-    if (!preview) return;
+    if (!canApproveReconciliation || !preview) return;
     setConfirming(true);
     try {
       const res = await logisticsService.reconciliationConfirm({
@@ -144,7 +150,7 @@ export function Reconciliation() {
     } finally {
       setConfirming(false);
     }
-  }, [preview, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
+  }, [canApproveReconciliation, preview, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);
 
   const reset = useCallback(() => {
     setResult(null);
@@ -314,9 +320,9 @@ export function Reconciliation() {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button className="rounded-xl text-xs" onClick={runPreview} disabled={busy || selected.size === 0 || (!receptionBatchId && (!supplierId || !orderId))}>
+          {canReadReconciliation && <Button className="rounded-xl text-xs" onClick={runPreview} disabled={busy || selected.size === 0 || (!receptionBatchId && (!supplierId || !orderId))}>
             <FileText className="size-4" /> {busy ? 'Preparando…' : 'Preparar conciliación'}
-          </Button>
+          </Button>}
           <Button variant="outline" className="rounded-xl text-xs" onClick={() => setSelected(new Set())} disabled={selected.size === 0}>Limpiar selección</Button>
         </div>
       </Card>
@@ -334,9 +340,9 @@ export function Reconciliation() {
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Costo total</p><p className="font-black text-primary">${preview.totalAmount.toFixed(2)}</p></div>
             <div><p className="text-[10px] font-black uppercase text-muted-foreground">Factura</p><p className="font-black">{preview.invoiceNumber}</p></div>
           </div>
-          <Button className="mt-3 rounded-xl text-xs" onClick={confirm} disabled={confirming}>
+          {canApproveReconciliation && <Button className="mt-3 rounded-xl text-xs" onClick={confirm} disabled={confirming}>
             {confirming ? 'Confirmando…' : `Confirmar conciliación (${preview.packageCount})`}
-          </Button>
+          </Button>}
         </Card>
       )}
 

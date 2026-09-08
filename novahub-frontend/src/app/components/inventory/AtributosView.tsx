@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Attribute {
   id: string;
@@ -88,6 +89,10 @@ export function AtributosView() {
 }
 
 function AtributosTab() {
+  const { canPerform } = useAuth();
+  const canCreateAttribute = canPerform('INVENTORY_ATTRIBUTES', 'create');
+  const canEditAttribute = canPerform('INVENTORY_ATTRIBUTES', 'edit');
+  const canDeleteAttribute = canPerform('INVENTORY_ATTRIBUTES', 'delete');
   const [attributes, setAttributes] = useState<Attribute[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -139,6 +144,7 @@ function AtributosTab() {
   }, [totalPages]);
 
   const openCreate = () => {
+    if (!canCreateAttribute) return;
     setEditingId(null);
     setFormName('');
     setFormDescription('');
@@ -148,6 +154,7 @@ function AtributosTab() {
   };
 
   const openEdit = (attr: Attribute) => {
+    if (!canEditAttribute) return;
     setEditingId(attr.id);
     setFormName(attr.name);
     setFormDescription(attr.description || '');
@@ -179,6 +186,10 @@ function AtributosTab() {
   };
 
   const handleSave = async () => {
+    if (editingId ? !canEditAttribute : !canCreateAttribute) {
+      toast.error(`No tienes permiso para ${editingId ? 'editar' : 'crear'} atributos`);
+      return;
+    }
     if (!formName.trim()) {
       toast.error('El nombre es obligatorio');
       return;
@@ -212,6 +223,10 @@ function AtributosTab() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+    if (!canDeleteAttribute) {
+      toast.error('No tienes permiso para eliminar atributos');
+      return;
+    }
     setDeleting(true);
     try {
       await inventoryService.deleteAttribute(deleteId);
@@ -238,9 +253,9 @@ function AtributosTab() {
             placeholder="Buscar atributo..."
             className="h-9 w-full rounded-xl sm:w-44"
           />
-          <Button onClick={openCreate} size="sm" className="h-10 w-full rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto">
+          {canCreateAttribute && <Button onClick={openCreate} size="sm" className="h-10 w-full rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Plus className="mr-1 size-3.5" /> Nuevo
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -288,17 +303,19 @@ function AtributosTab() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(attr)}>
+                      {canEditAttribute && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(attr)} aria-label={`Editar atributo ${attr.name}`} title="Editar atributo">
                         <Edit2 className="size-3.5" />
-                      </Button>
-                      <Button
+                      </Button>}
+                      {canDeleteAttribute && <Button
                         variant="ghost"
                         size="icon"
                         className="size-7 text-red-500 hover:text-white hover:bg-red-500"
+                        aria-label={`Eliminar atributo ${attr.name}`}
+                        title="Eliminar atributo"
                         onClick={() => setDeleteId(attr.id)}
                       >
                         <Trash2 className="size-3.5" />
-                      </Button>
+                      </Button>}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -394,7 +411,7 @@ function AtributosTab() {
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving || !formName.trim() || formOptions.length < 2} className="font-bold">
+            <Button onClick={handleSave} disabled={saving || !formName.trim() || formOptions.length < 2 || (editingId ? !canEditAttribute : !canCreateAttribute)} className="font-bold">
               {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear atributo'}
             </Button>
           </DialogFooter>
@@ -416,6 +433,10 @@ function AtributosTab() {
 }
 
 function CategoriasTab() {
+  const { canPerform } = useAuth();
+  const canCreateCategory = canPerform('INVENTORY_ATTRIBUTES', 'create');
+  const canEditCategory = canPerform('INVENTORY_ATTRIBUTES', 'edit');
+  const canDeleteCategory = canPerform('INVENTORY_ATTRIBUTES', 'delete');
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -465,6 +486,7 @@ function CategoriasTab() {
   }, [totalPages]);
 
   const openCreate = () => {
+    if (!canCreateCategory) return;
     setEditingId(null);
     setFormName('');
     setFormDescription('');
@@ -472,6 +494,7 @@ function CategoriasTab() {
   };
 
   const openEdit = (cat: Category) => {
+    if (!canEditCategory) return;
     setEditingId(cat.id);
     setFormName(cat.name);
     setFormDescription(cat.description || '');
@@ -479,6 +502,10 @@ function CategoriasTab() {
   };
 
   const handleSave = async () => {
+    if (editingId ? !canEditCategory : !canCreateCategory) {
+      toast.error(`No tienes permiso para ${editingId ? 'editar' : 'crear'} categorías`);
+      return;
+    }
     if (!formName.trim()) {
       toast.error('El nombre es obligatorio');
       return;
@@ -507,6 +534,10 @@ function CategoriasTab() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+    if (!canDeleteCategory) {
+      toast.error('No tienes permiso para eliminar categorías');
+      return;
+    }
     setDeleting(true);
     try {
       await inventoryService.deleteCategory(deleteId);
@@ -533,9 +564,9 @@ function CategoriasTab() {
             placeholder="Buscar categoría..."
             className="h-9 w-full rounded-xl sm:w-44"
           />
-          <Button onClick={openCreate} size="sm" className="h-10 w-full rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto">
+          {canCreateCategory && <Button onClick={openCreate} size="sm" className="h-10 w-full rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Plus className="mr-1 size-3.5" /> Nuevo
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -579,17 +610,19 @@ function CategoriasTab() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(cat)}>
+                      {canEditCategory && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(cat)} aria-label={`Editar categoría ${cat.name}`} title="Editar categoría">
                         <Edit2 className="size-3.5" />
-                      </Button>
-                      <Button
+                      </Button>}
+                      {canDeleteCategory && <Button
                         variant="ghost"
                         size="icon"
                         className="size-7 text-red-500 hover:text-white hover:bg-red-500"
+                        aria-label={`Eliminar categoría ${cat.name}`}
+                        title="Eliminar categoría"
                         onClick={() => setDeleteId(cat.id)}
                       >
                         <Trash2 className="size-3.5" />
-                      </Button>
+                      </Button>}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -651,7 +684,7 @@ function CategoriasTab() {
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving || !formName.trim()} className="font-bold">
+            <Button onClick={handleSave} disabled={saving || !formName.trim() || (editingId ? !canEditCategory : !canCreateCategory)} className="font-bold">
               {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear categoría'}
             </Button>
           </DialogFooter>

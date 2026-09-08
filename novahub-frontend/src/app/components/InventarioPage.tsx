@@ -17,7 +17,6 @@ import {
   Tags
 } from 'lucide-react';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,16 +47,16 @@ import { cn } from './ui/utils';
 
 const INVENTORY_SECTIONS = [
   { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
-  { id: 'servicios',       label: 'Servicios',       icon: BriefcaseBusiness, requiredModules: ['INVENTORY_SERVICES', 'INVENTORY_PRODUCTS'] },
-  { id: 'atributos',       label: 'Atributos y Categoría', icon: Tags, requiredModules: ['INVENTORY_ATTRIBUTES', 'INVENTORY_PRODUCTS'] },
+  { id: 'servicios',       label: 'Servicios',       icon: BriefcaseBusiness, requiredModules: ['INVENTORY_SERVICES'] },
+  { id: 'atributos',       label: 'Atributos y Categoría', icon: Tags, requiredModules: ['INVENTORY_ATTRIBUTES'] },
   { id: 'almacenes',       label: 'Bodegas',         icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
   { id: 'ajustes',         label: 'Ajustes',         icon: Scale,     requiredModules: ['INVENTORY_ADJUSTMENTS'] },
-  { id: 'auditorias',      label: 'Auditorías',      icon: ClipboardCheck, requiredModules: ['INVENTORY_AUDITS', 'INVENTORY_ADJUSTMENTS'] },
-  { id: 'perdidas',        label: 'Pérdidas',        icon: TrendingDown, requiredModules: ['INVENTORY_LOSSES', 'INVENTORY_ADJUSTMENTS'] },
+  { id: 'auditorias',      label: 'Auditorías',      icon: ClipboardCheck, requiredModules: ['INVENTORY_AUDITS'] },
+  { id: 'perdidas',        label: 'Pérdidas',        icon: TrendingDown, requiredModules: ['INVENTORY_LOSSES'] },
   { id: 'movimientos',     label: 'Movimientos',     icon: History,   requiredModules: ['INVENTORY_MOVEMENTS'] },
   { id: 'mobiliario-equipos', label: 'Mobiliario y Equipos', icon: Building2, requiredModules: ['INVENTORY_ASSETS'] },
-  { id: 'configuracion',   label: 'Configuración',   icon: Settings2, requiredModules: ['INVENTORY_CONFIG', 'INVENTORY_WAREHOUSES'] },
+  { id: 'configuracion',   label: 'Configuración',   icon: Settings2, requiredModules: ['INVENTORY_CONFIG'] },
 ];
 
 interface InventarioPageProps {
@@ -522,7 +521,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       link.download = buildDateFilteredDownloadFileName(['reporte_inventario'], 'csv', dateFrom, dateTo);
       link.click();
       toast.success('Archivo CSV descargado');
-    } catch (e: any) {
+    } catch {
       toast.error('Error al exportar datos');
     }
   };
@@ -540,16 +539,17 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             <RefreshCw className={`size-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleExportData}
-            disabled={!canExportInventory}
-            className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none"
-          >
-            <Download className="size-4 mr-2" />
-            Exportar
-          </Button>
+          {activeTab === 'productos' && canExportInventory && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportData}
+              className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none"
+            >
+              <Download className="size-4 mr-2" />
+              Exportar
+            </Button>
+          )}
         </div>
 
       <CurrencyValuationBanner />
