@@ -110,6 +110,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'NOTIFICATIONS_PUSH', label: 'Push', parent: 'NOTIFICATIONS' },
 
   // Tickets y soporte
+  { id: 'TICKETS_VIEW', label: 'Tickets', parent: 'TICKETS' },
   { id: 'TICKETS_KNOWLEDGE_BASE', label: 'Base de Conocimiento', parent: 'TICKETS' },
   { id: 'TICKETS_AGENTS', label: 'Agentes', parent: 'TICKETS' },
 

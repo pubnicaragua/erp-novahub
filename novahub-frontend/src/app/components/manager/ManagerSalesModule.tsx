@@ -35,6 +35,7 @@ import { ManagerSalesCashSheet, ManagerSalesDeliverySheet, ManagerSalesPriceList
 import { ManagerInvoiceSeriesSettings } from './ManagerInvoiceSeriesSettings';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
+import { fetchAllPaginatedRows } from '../../utils/export-utils';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -259,6 +260,27 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     report: true,
   };
 
+  const fetchGlobalSalesReport = async (params: Record<string, any>) => {
+    const pageSize = 5000;
+    const firstReport = await enterpriseGroupsService.getSalesModule(groupId, {
+      ...params,
+      page: 1,
+      pageSize,
+      report: true,
+    });
+    const rows = await fetchAllPaginatedRows(
+      (page, requestedPageSize) => enterpriseGroupsService.getSalesModule(groupId, {
+        ...params,
+        page,
+        pageSize: requestedPageSize,
+        report: true,
+      }),
+      pageSize,
+      firstReport,
+    );
+    return { ...firstReport, data: rows };
+  };
+
   const quoteFilterSummary = [
     search ? `búsqueda: ${search}` : '',
     status ? `estado: ${statusLabel(status)}` : '',
@@ -277,7 +299,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     setExporting(true);
     try {
       if (view === 'quotes') {
-        const report = await enterpriseGroupsService.getSalesModule(groupId, quoteReportParams);
+        const report = await fetchGlobalSalesReport(quoteReportParams);
         await exportManagerQuotesExcel({
           rows: report.data,
           tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
@@ -290,7 +312,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
         });
         return;
       }
-      const report = await enterpriseGroupsService.getSalesModule(groupId, { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined, page: 1, pageSize: 5000, report: true });
+      const report = await fetchGlobalSalesReport({ view, businessUnitId, branchId, search: search || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined });
       const data = (report.data || []).map((row: any) => exportRow(view, row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode));
       const options = { rows: data, tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: viewLabels[view], fileBase: `reporte_ventas_${viewLabels[view]}`, reportCurrency: reportCurrency || report.metrics?.amountCurrency || 'NIO', filterSummary: quoteFilterSummary, dateFrom, dateTo, metrics: report.metrics, extraSheets: view === 'cash' ? [{ name: 'Resumen por caja', rows: (report.metrics?.registerSummary || []).map((row: any) => cashSummaryExportRow(row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode)) }] : undefined };
       await exportManagerSalesExcel(options);
@@ -302,7 +324,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
   const exportQuotesPdf = async () => {
     setExporting(true);
     try {
-      const report = await enterpriseGroupsService.getSalesModule(groupId, quoteReportParams);
+      const report = await fetchGlobalSalesReport(quoteReportParams);
       await exportManagerQuotesPdf({
         rows: report.data,
         tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
@@ -432,7 +454,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
             <DropdownMenuItem className="gap-2 rounded-xl py-2.5" onClick={async () => {
               setExporting(true);
               try {
-      const report = await enterpriseGroupsService.getSalesModule(groupId, { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined, page: 1, pageSize: 5000, report: true });
+      const report = await fetchGlobalSalesReport({ view, businessUnitId, branchId, search: search || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined });
                 const data = (report.data || []).map((row: any) => exportRow(view, row, reportCurrency || report.metrics?.amountCurrency || 'NIO', displayMode));
                 await exportManagerSalesPdf({ rows: data, tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: viewLabels[view], fileBase: `reporte_ventas_${viewLabels[view]}`, reportCurrency: reportCurrency || report.metrics?.amountCurrency || 'NIO', filterSummary: quoteFilterSummary, dateFrom, dateTo, metrics: report.metrics });
               } finally { setExporting(false); }

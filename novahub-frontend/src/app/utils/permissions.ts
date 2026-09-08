@@ -178,6 +178,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   NOTIFICATIONS_PUSH: ['read', 'create'],
   TICKETS_KNOWLEDGE_BASE: ['read'],
   TICKETS_AGENTS: ['read'],
+  TICKETS_VIEW: ['read', 'create', 'edit', 'delete'],
   LEGAL_CASES: ['read', 'create', 'edit', 'approve'],
   LEGAL_REMINDERS: ['read', 'create', 'delete'],
 

@@ -1,5 +1,49 @@
 import { getReadableForeground } from './color-contrast';
 
+type PaginatedExportResponse<T> = {
+  data?: T[];
+  meta?: {
+    total?: number;
+    page?: number;
+    pageSize?: number;
+    totalPages?: number;
+  };
+};
+
+/**
+ * Descarga todas las páginas de un listado antes de construir un archivo.
+ * Las tablas de la interfaz permanecen paginadas; las exportaciones globales
+ * deben representar el conjunto completo del filtro activo.
+ */
+export async function fetchAllPaginatedRows<T>(
+  fetchPage: (page: number, pageSize: number) => Promise<PaginatedExportResponse<T> | T[]>,
+  pageSize = 500,
+  initialResponse?: PaginatedExportResponse<T> | T[],
+): Promise<T[]> {
+  const firstResponse = initialResponse || await fetchPage(1, pageSize);
+  const firstRows = Array.isArray(firstResponse) ? firstResponse : (firstResponse.data || []);
+  const meta = Array.isArray(firstResponse) ? undefined : firstResponse.meta;
+  // Algunos endpoints normalizan el pageSize solicitado (por ejemplo, 500)
+  // a un límite interno y pueden dejar totalPages desactualizado. Usamos el
+  // pageSize real de la respuesta junto con total para no exportar solo la
+  // primera página visible.
+  const total = Number(meta?.total || 0);
+  const responsePageSize = Number(meta?.pageSize || pageSize);
+  const pagesFromTotal = total > 0 && responsePageSize > 0
+    ? Math.ceil(total / responsePageSize)
+    : 1;
+  const totalPages = Math.max(1, Number(meta?.totalPages || 0), pagesFromTotal);
+  if (totalPages === 1) return firstRows;
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => fetchPage(index + 2, pageSize)),
+  );
+  return [
+    ...firstRows,
+    ...remainingPages.flatMap((response) => Array.isArray(response) ? response : (response.data || [])),
+  ];
+}
+
 export const getBase64Image = async (url: string): Promise<string | null> => {
   try {
     const resp = await fetch(url);

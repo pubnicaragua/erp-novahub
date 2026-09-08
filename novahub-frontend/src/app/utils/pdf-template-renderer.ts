@@ -51,23 +51,58 @@ function asRows(data: PdfTemplateData) {
  * La definición visual sigue siendo reutilizable, pero no debe reducir una
  * tabla de 6 o 7 columnas a las 4 columnas de la plantilla de transacciones.
  */
-function runtimeTableColumns(data: PdfTemplateData | undefined): PdfTemplateColumn[] {
+function shouldAdaptReportWidths(targetKey: string) {
+  return targetKey.startsWith('compras.')
+    || targetKey.startsWith('reportes.')
+    || targetKey === 'ventas.cash-historical-report'
+    || targetKey === 'ventas.customer-history';
+}
+
+function reportColumnWeight(label: string) {
+  const normalized = label.toLocaleLowerCase('es-NI');
+  if (/descrip|detalle|concepto/.test(normalized)) return 2.4;
+  if (/proveedor|nombre|direcci[oó]n/.test(normalized)) return 1.5;
+  if (/categor[ií]a/.test(normalized)) return 0.75;
+  if (/referencia|orden|solicitud|factura|c[oó]digo|documento/.test(normalized)) return 1.15;
+  if (/total|monto|pagado|comprometido|saldo|precio|ventas|diferencia/.test(normalized)) return 1;
+  if (/fecha/.test(normalized)) return 0.65;
+  if (/estado/.test(normalized)) return 0.55;
+  if (/m[eé]todo|tipo|[íi]tems?|cantidad|frecuencia/.test(normalized)) return 0.55;
+  if (/sucursal|cajero|caja/.test(normalized)) return 1.1;
+  return 0.9;
+}
+
+/**
+ * Las plantillas guardadas pueden conservar anchos antiguos. Los listados
+ * globales necesitan que el ancho se calcule a partir del contenido real,
+ * especialmente para descripción/proveedor, que son las columnas que más se
+ * cortan cuando el diseño fue creado para un reporte individual.
+ */
+function adaptReportColumnWidths(columns: PdfTemplateColumn[], enabled: boolean) {
+  if (!enabled || columns.length < 5) return columns;
+  const weights = columns.map(column => reportColumnWeight(column.label));
+  const total = weights.reduce((sum, weight) => sum + weight, 0) || 1;
+  return columns.map((column, index) => ({ ...column, width: (weights[index] / total) * 100 }));
+}
+
+function runtimeTableColumns(data: PdfTemplateData | undefined, adaptWidths = false): PdfTemplateColumn[] {
   if (!Array.isArray(data?.tableColumns)) return [];
   const source = data.tableColumns as Array<Partial<PdfTemplateColumn>>;
   const usable = source.filter(column => column && typeof column.label === 'string' && (column.token || column.id));
   if (!usable.length) return [];
   const defaultWidth = 100 / usable.length;
-  return usable.slice(0, 10).map((column, index) => ({
+  const columns = usable.slice(0, 10).map((column, index) => ({
     id: String(column.id || `column-${index}`),
     label: String(column.label),
     token: String(column.token || column.id || `column-${index}`),
     width: Number.isFinite(Number(column.width)) && Number(column.width) > 0 ? Number(column.width) : defaultWidth,
     align: column.align === 'center' || column.align === 'right' ? column.align : 'left',
   }));
+  return adaptReportColumnWidths(columns, adaptWidths);
 }
 
-function applyRuntimeTableColumns(definition: PdfTemplateDefinition, data: PdfTemplateData | undefined) {
-  const columns = runtimeTableColumns(data);
+function applyRuntimeTableColumns(definition: PdfTemplateDefinition, data: PdfTemplateData | undefined, adaptWidths = false) {
+  const columns = runtimeTableColumns(data, adaptWidths);
   if (!columns.length) return definition;
   return {
     ...definition,
@@ -393,15 +428,21 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
 function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings) {
   const element = document.createElement('div');
   setBaseNodeStyle(element, node, settings);
+  // Una tabla con pocas filas no debe conservar la altura editorial del nodo:
+  // el navegador estira sus filas para llenar una tabla con height: 100%,
+  // dejando el contenido suspendido en medio de un gran espacio vacío.
+  element.style.height = 'auto';
+  element.style.minHeight = '0';
+  element.style.overflow = 'visible';
   element.style.padding = '0';
   element.style.borderStyle = 'solid'; element.style.borderWidth = '1px';
   const table = document.createElement('table');
   // Esta tabla vive en un lienzo de impresión; no debe ser transformada en
   // tarjetas por el hook responsive global mientras html2canvas la captura.
   table.setAttribute('data-responsive-cards', 'false');
-  table.style.width = '100%'; table.style.height = '100%'; table.style.borderCollapse = 'collapse'; table.style.borderSpacing = '0';
+  table.style.width = '100%'; table.style.height = 'auto'; table.style.borderCollapse = 'collapse'; table.style.borderSpacing = '0';
   const columns = node.columns?.length ? node.columns : [{ id: 'description', label: 'Descripción', token: 'description', width: 70 }, { id: 'total', label: 'Total', token: 'total', width: 30, align: 'right' as const }];
-  const compact = columns.length >= 6;
+  const compact = columns.length >= 5;
   table.style.fontSize = pdfPointsToCss(Math.max(compact ? 6.5 : 7, (node.fontSize || settings.fontSize || 9) - (compact ? 2 : 1)));
   table.style.fontFamily = browserFontFamily(node.fontFamily || settings.fontFamily); table.style.tableLayout = 'fixed'; table.style.lineHeight = compact ? '1.12' : '1.25';
   const head = table.createTHead().insertRow();
@@ -412,12 +453,55 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const headerBackground = node.tableHeaderColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? '#ffffff' : primaryColor);
   const headerColor = node.tableHeaderTextColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff');
   const rowBackground = node.tableStripeColor || (tableLayout === 'striped' || tableLayout === 'standard' || tableLayout === 'accent' ? '#f8fafc' : 'transparent');
-  columns.forEach(column => { const cell = head.insertCell(); cell.textContent = column.label; cell.style.width = `${column.width || 25}%`; cell.style.minWidth = '0'; cell.style.maxWidth = '100%'; cell.style.textAlign = column.align || 'left'; cell.style.padding = compact ? '4px 4px' : '7px 8px'; cell.style.backgroundColor = safeHtml2CanvasColor(column.backgroundColor || headerBackground, headerBackground); cell.style.color = safeHtml2CanvasColor(column.color || headerColor, headerColor); cell.style.fontWeight = '700'; cell.style.fontSize = pdfPointsToCss(Math.max(compact ? 6.2 : 7, (node.fontSize || settings.fontSize || 9) - (compact ? 2.5 : 1.5))); cell.style.letterSpacing = compact ? '0' : '0.15px'; cell.style.textTransform = 'uppercase'; cell.style.borderBottom = `${compact ? 1 : 2}px solid ${primaryColor}`; cell.style.whiteSpace = 'normal'; cell.style.overflow = 'hidden'; cell.style.overflowWrap = 'anywhere'; cell.style.wordBreak = 'break-word'; });
+  columns.forEach(column => { const cell = head.insertCell(); cell.textContent = column.label; cell.style.width = `${column.width || 25}%`; cell.style.minWidth = '0'; cell.style.maxWidth = '100%'; cell.style.boxSizing = 'border-box'; cell.style.textAlign = column.align || 'left'; cell.style.verticalAlign = 'middle'; cell.style.padding = compact ? '4px 4px' : '7px 8px'; cell.style.backgroundColor = safeHtml2CanvasColor(column.backgroundColor || headerBackground, headerBackground); cell.style.color = safeHtml2CanvasColor(column.color || headerColor, headerColor); cell.style.fontWeight = '700'; cell.style.fontSize = pdfPointsToCss(Math.max(compact ? 6.2 : 7, (node.fontSize || settings.fontSize || 9) - (compact ? 2.5 : 1.5))); cell.style.lineHeight = compact ? '1.15' : '1.2'; cell.style.letterSpacing = compact ? '0' : '0.15px'; cell.style.textTransform = 'uppercase'; cell.style.borderBottom = `${compact ? 1 : 2}px solid ${primaryColor}`; cell.style.whiteSpace = 'normal'; cell.style.overflow = 'visible'; cell.style.overflowWrap = 'anywhere'; cell.style.wordBreak = 'break-word'; });
   const body = table.createTBody();
-  asRows(data).slice(0, 30).forEach((row, rowIndex) => {
+  // Las filas ya se dividen en trabajos por página antes de renderizar. No
+  // volver a truncarlas aquí: ese límite ocultaba registros de exportaciones
+  // globales cuando una plantilla recibía más de 30 filas.
+  asRows(data).forEach((row, rowIndex) => {
     const tr = body.insertRow();
-    columns.forEach(column => { const cell = tr.insertCell(); const rawValue = row[column.token] ?? row[column.id]; cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue); cell.style.padding = compact ? '3px 4px' : tableLayout === 'compact' ? '4px 6px' : '6px 8px'; cell.style.minWidth = '0'; cell.style.maxWidth = '100%'; cell.style.borderTop = `1px solid ${lineColor}`; cell.style.textAlign = column.align || 'left'; const isDescription = column.token === 'description' || column.id === 'description' || /descrip|concepto|detalle/i.test(`${column.label || ''} ${column.token || ''} ${column.id || ''}`) || String(rawValue ?? '').includes('\n'); cell.style.verticalAlign = isDescription ? 'top' : 'middle'; cell.style.lineHeight = compact ? '1.12' : '1.25'; cell.style.whiteSpace = isDescription ? 'pre-wrap' : 'normal'; cell.style.overflow = 'hidden'; cell.style.overflowWrap = 'anywhere'; cell.style.wordBreak = 'break-word'; if (node.tableRowColor) cell.style.backgroundColor = safeHtml2CanvasColor(node.tableRowColor, '#ffffff'); else if (rowIndex % 2 && rowBackground !== 'transparent') cell.style.backgroundColor = safeHtml2CanvasColor(rowBackground, '#f8fafc'); if (tableLayout === 'boxed' || tableLayout === 'cards') cell.style.borderLeft = `1px solid ${lineColor}`; });
+    columns.forEach(column => {
+      const cell = tr.insertCell();
+      const rawValue = row[column.token] ?? row[column.id];
+      cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue);
+      cell.style.padding = compact ? '3px 4px' : tableLayout === 'compact' ? '4px 6px' : '6px 8px';
+      cell.style.minWidth = '0';
+      cell.style.maxWidth = '100%';
+      cell.style.borderTop = `1px solid ${lineColor}`;
+      cell.style.textAlign = column.align || 'left';
+      const isDescription = column.token === 'description' || column.id === 'description' || /descrip|concepto|detalle/i.test(`${column.label || ''} ${column.token || ''} ${column.id || ''}`) || String(rawValue ?? '').includes('\n');
+      const isNumericCell = column.align === 'right' && !isDescription;
+      cell.style.verticalAlign = isDescription ? 'top' : 'middle';
+      cell.style.lineHeight = compact ? '1.12' : '1.25';
+      cell.style.whiteSpace = isDescription ? 'pre-wrap' : isNumericCell ? 'nowrap' : 'normal';
+      cell.style.overflow = isNumericCell ? 'visible' : 'hidden';
+      cell.style.overflowWrap = isNumericCell ? 'normal' : 'anywhere';
+      cell.style.wordBreak = isNumericCell ? 'normal' : 'break-word';
+      if (node.tableRowColor) cell.style.backgroundColor = safeHtml2CanvasColor(node.tableRowColor, '#ffffff');
+      else if (rowIndex % 2 && rowBackground !== 'transparent') cell.style.backgroundColor = safeHtml2CanvasColor(rowBackground, '#f8fafc');
+      if (tableLayout === 'boxed' || tableLayout === 'cards') cell.style.borderLeft = `1px solid ${lineColor}`;
+    });
   });
+  const tableSummary = data.tableSummary && typeof data.tableSummary === 'object'
+    ? data.tableSummary as Record<string, unknown>
+    : null;
+  if (tableSummary) {
+    const footer = table.createTFoot().insertRow();
+    columns.forEach((column, columnIndex) => {
+      const cell = footer.insertCell();
+      const rawValue = tableSummary[column.token] ?? tableSummary[column.id] ?? (columnIndex === 0 ? tableSummary.label : '');
+      cell.textContent = escapeValue(rawValue);
+      cell.style.padding = compact ? '4px 4px' : '6px 8px';
+      cell.style.borderTop = `2px solid ${primaryColor}`;
+      cell.style.backgroundColor = '#f8fafc';
+      cell.style.color = textColor;
+      cell.style.fontWeight = '700';
+      cell.style.textAlign = column.align || 'left';
+      cell.style.whiteSpace = column.align === 'right' ? 'nowrap' : 'normal';
+      cell.style.overflow = 'visible';
+      cell.style.overflowWrap = column.align === 'right' ? 'normal' : 'anywhere';
+    });
+  }
   element.appendChild(table);
   return element;
 }
@@ -438,7 +522,10 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
   element.style.padding = '0';
   element.style.borderStyle = 'solid';
   element.style.borderWidth = '1px';
-  element.style.overflow = 'hidden';
+  // La altura de cada encabezado depende de cuánto envuelva el texto. Si el
+  // contenedor recorta su contenido, los encabezados de las primeras tablas
+  // (que suelen tener columnas más largas) quedan cortados en la captura.
+  element.style.overflow = 'visible';
 
   const sections = Array.isArray(data.reportSections) ? data.reportSections : [];
   const content = document.createElement('div');
@@ -450,7 +537,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
   const headerBackground = node.tableHeaderColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? '#ffffff' : primaryColor);
   const headerColor = node.tableHeaderTextColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff');
   const rowBackground = node.tableStripeColor || '#f8fafc';
-  const compact = tableLayout === 'compact' || sections.some(section => section.columns.length >= 6);
+  const compact = tableLayout === 'compact' || sections.some(section => section.columns.length >= 5);
 
   sections.forEach((section, sectionIndex) => {
     const styleIndex = section.templateIndex ?? sectionIndex;
@@ -466,12 +553,12 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
     Object.assign(table.style, { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(compact ? 6.5 : 7.5), lineHeight: compact ? '1.1' : '1.2' });
     table.setAttribute('data-responsive-cards', 'false');
     const head = table.createTHead().insertRow();
-    Object.assign(head.style, { backgroundColor: safeHtml2CanvasColor(sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(sectionStyle.headerTextColor || headerColor, headerColor) });
+    Object.assign(head.style, { backgroundColor: safeHtml2CanvasColor(sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(sectionStyle.headerTextColor || headerColor, headerColor), height: 'auto', lineHeight: compact ? '1.15' : '1.2' });
     section.columns.forEach((column, columnIndex) => {
       const cell = head.insertCell();
       cell.textContent = column.label;
       const configuredColumn = node.columns?.[columnIndex];
-      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, minWidth: '0', maxWidth: '100%', textAlign: column.align || 'left', padding: compact ? '3px 4px' : '5px 6px', backgroundColor: safeHtml2CanvasColor(column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || configuredColumn?.backgroundColor || sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || configuredColumn?.color || sectionStyle.headerTextColor || headerColor, headerColor), fontWeight: '700', fontSize: pdfPointsToCss(compact ? 6.2 : 7), textTransform: 'uppercase', borderBottom: `2px solid ${sectionStyle.headerColor || primaryColor}`, whiteSpace: 'normal', overflow: 'hidden', overflowWrap: 'anywhere', wordBreak: 'break-word' });
+      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, minWidth: '0', maxWidth: '100%', boxSizing: 'border-box', textAlign: column.align || 'left', verticalAlign: 'middle', padding: compact ? '4px 4px' : '6px 6px', backgroundColor: safeHtml2CanvasColor(column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || configuredColumn?.backgroundColor || sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || configuredColumn?.color || sectionStyle.headerTextColor || headerColor, headerColor), fontWeight: '700', fontSize: pdfPointsToCss(compact ? 6.2 : 7), lineHeight: compact ? '1.15' : '1.2', textTransform: 'uppercase', borderBottom: `2px solid ${sectionStyle.headerColor || primaryColor}`, whiteSpace: 'normal', overflow: 'visible', overflowWrap: 'anywhere', wordBreak: 'break-word' });
     });
     const body = table.createTBody();
     const rows = section.rows;
@@ -485,6 +572,26 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
       });
     });
     sectionElement.appendChild(table);
+    const tableSummary = data.tableSummary && typeof data.tableSummary === 'object'
+      ? data.tableSummary as Record<string, unknown>
+      : null;
+    if (tableSummary && sectionIndex === sections.length - 1) {
+      const footer = table.createTFoot().insertRow();
+      section.columns.forEach((column, columnIndex) => {
+        const cell = footer.insertCell();
+        const rawValue = tableSummary[column.token] ?? tableSummary[column.id] ?? (columnIndex === 0 ? tableSummary.label : '');
+        cell.textContent = escapeValue(rawValue);
+        cell.style.padding = compact ? '4px 4px' : '5px 6px';
+        cell.style.borderTop = `2px solid ${primaryColor}`;
+        cell.style.backgroundColor = '#f8fafc';
+        cell.style.color = textColor;
+        cell.style.fontWeight = '700';
+        cell.style.textAlign = column.align || 'left';
+        cell.style.whiteSpace = column.align === 'right' ? 'nowrap' : 'normal';
+        cell.style.overflow = 'visible';
+        cell.style.overflowWrap = column.align === 'right' ? 'normal' : 'anywhere';
+      });
+    }
     content.appendChild(sectionElement);
   });
   if (!sections.length) {
@@ -625,11 +732,28 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
   const width = settings.orientation === 'landscape' ? baseHeight : baseWidth;
   const height = settings.orientation === 'landscape' ? baseWidth : baseHeight;
   const isRepeatedLabel = getPdfTemplateTarget(targetKey).key === 'inventario.product-labels';
+  const adaptReportWidths = shouldAdaptReportWidths(targetKey);
   const reportSections = Array.isArray(renderData.reportSections)
     ? renderData.reportSections.filter(section => section && Array.isArray(section.columns) && Array.isArray(section.rows))
+      .map(section => ({ ...section, columns: adaptReportColumnWidths(section.columns, adaptReportWidths) }))
     : [];
   const reportNode = baseDefinition.nodes.find(node => node.type === 'report-sections' && node.enabled !== false);
-  const indexedReportSections = reportSections.map((section, sectionIndex) => ({ ...section, templateIndex: sectionIndex }));
+  const fallbackRows = asRows(renderData);
+  const fallbackColumns = Array.isArray(renderData.tableColumns)
+    ? adaptReportColumnWidths(renderData.tableColumns as PdfTemplateColumn[], adaptReportWidths)
+    : [];
+  // Algunos diseños globales guardados usan el nodo de secciones, mientras
+  // que los exportadores sencillos entregan filas y columnas normales. En ese
+  // caso convertimos el listado en una sección única para no perder la tabla.
+  const effectiveReportSections = reportSections.length || !reportNode || !fallbackRows.length || !fallbackColumns.length
+    ? reportSections
+    : [{
+      id: 'global-report',
+      title: String(renderData.document?.title || getPdfTemplateTarget(targetKey).label),
+      columns: fallbackColumns,
+      rows: fallbackRows,
+    }];
+  const indexedReportSections = effectiveReportSections.map((section, sectionIndex) => ({ ...section, templateIndex: sectionIndex }));
   const visibleReportSections = reportNode
     ? indexedReportSections.filter(section => reportNode.reportSectionVisibility?.[String(section.templateIndex)] !== false)
     : indexedReportSections;
@@ -640,7 +764,7 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
       : [null];
   const renderJobs: Array<{ definition: PdfTemplateDefinition; data: PdfTemplateData }> = [];
 
-  sectionGroups.forEach(sectionGroup => {
+  sectionGroups.forEach((sectionGroup, groupIndex) => {
     const section = sectionGroup?.[0];
     const reportMode = Boolean(reportNode && sectionGroup);
     const sectionData: PdfTemplateData = sectionGroup
@@ -656,23 +780,26 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
         tableColumns: section?.columns,
       }
       : renderData;
-    const effectiveDefinition = reportMode ? baseDefinition : applyRuntimeTableColumns(baseDefinition, sectionData);
+    const effectiveDefinition = reportMode ? baseDefinition : applyRuntimeTableColumns(baseDefinition, sectionData, adaptReportWidths);
     const rows = asRows(sectionData);
     const tableNode = effectiveDefinition.nodes.find(node => node.type === 'table' && node.enabled !== false);
     if (reportMode && sectionGroup) {
-      renderJobs.push({ definition: effectiveDefinition, data: { ...sectionData, reportSections: sectionGroup } });
+      renderJobs.push({ definition: effectiveDefinition, data: { ...sectionData, reportSections: sectionGroup, tableSummary: groupIndex === sectionGroups.length - 1 ? renderData.tableSummary : undefined } });
       return;
     }
     // La escala tipográfica hace que las tablas de reportes (normalmente con
     // seis o más columnas) necesiten menos filas por página para que correos,
     // direcciones e identificaciones no queden recortados por la caja fija.
     const denseTable = Boolean(tableNode && (tableNode.columns?.length || 0) >= 6);
-    const chunkSize = tableNode && denseTable ? 9 : tableNode && rows.length > 14 ? 14 : Math.max(rows.length, 1);
+    // Las tablas ahora crecen con sus filas; el límite anterior de 9 filas
+    // estaba pensado para una caja fija y producía demasiadas páginas en
+    // listados e historiales grandes.
+    const chunkSize = tableNode && denseTable ? 16 : tableNode && rows.length > 14 ? 14 : Math.max(rows.length, 1);
     const chunks = tableNode && rows.length ? Array.from({ length: Math.ceil(rows.length / chunkSize) }, (_, index) => rows.slice(index * chunkSize, (index + 1) * chunkSize)) : [[]];
     const renderChunks = isRepeatedLabel && rows.length ? rows.map(row => [row]) : chunks;
-    renderChunks.forEach(currentChunk => renderJobs.push({
+    renderChunks.forEach((currentChunk, chunkIndex) => renderJobs.push({
       definition: effectiveDefinition,
-      data: { ...sectionData, ...(tableNode || isRepeatedLabel ? { items: currentChunk, rows: currentChunk } : {}) },
+      data: { ...sectionData, ...(tableNode || isRepeatedLabel ? { items: currentChunk, rows: currentChunk } : {}), tableSummary: chunkIndex === renderChunks.length - 1 ? renderData.tableSummary : undefined },
     }));
   });
   const pdf = new jsPDF({ orientation: settings.orientation, unit: 'mm', format: [width, height], compress: true });
@@ -687,7 +814,8 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
       page.id = `pdf-template-page-${index}`;
       wrapper.appendChild(page);
       await waitForImages(page);
-      const canvas = await html2canvas(page, { scale: 2, backgroundColor: safeHtml2CanvasColor(job.definition.page.background, '#ffffff'), logging: false, useCORS: true, allowTaint: false, onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(page.id, clonedDoc, safeHtml2CanvasColor(settings.primaryColor, '#10b981')) });
+      const renderScale = Math.max(1, Math.min(2, Number((job.data as Record<string, unknown>).renderScale) || 2));
+      const canvas = await html2canvas(page, { scale: renderScale, backgroundColor: safeHtml2CanvasColor(job.definition.page.background, '#ffffff'), logging: false, useCORS: true, allowTaint: false, onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(page.id, clonedDoc, safeHtml2CanvasColor(settings.primaryColor, '#10b981')) });
       if (index > 0) pdf.addPage([width, height], settings.orientation === 'landscape' ? 'l' : 'p');
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, width, height, undefined, 'FAST');
       page.remove();

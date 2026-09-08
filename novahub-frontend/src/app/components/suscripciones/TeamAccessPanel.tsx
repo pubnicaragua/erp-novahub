@@ -397,7 +397,20 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     if (!name) return toast.error('El nombre del rol es obligatorio');
     setRoleSaving(true);
     try {
-      const permissions = normalizePermissions(editingRole.permissions).map((permission: any) => ({
+      const mergedPermissions = normalizePermissions(editingRole.permissions).reduce((result: any[], permission: any) => {
+        const module = permission.module === 'TICKETS_VIEW' ? 'TICKETS' : permission.module;
+        const existing = result.find((item) => item.module === module);
+        if (!existing) {
+          result.push({ ...permission, module });
+          return result;
+        }
+        permissionActions.forEach(({ key }) => {
+          existing[key] = Boolean(existing[key] || permissionValue(permission, key));
+        });
+        existing.write = Boolean(existing.write || permission.write);
+        return result;
+      }, []);
+      const permissions = mergedPermissions.map((permission: any) => ({
         ...permission,
         write: !!(permission.create || permission.edit || permission.write),
         ...Object.fromEntries(permissionActions.filter(({ key }) => key !== 'read').map(({ key }) => [key, permissionValue(permission, key)])),

@@ -1,4 +1,5 @@
 export type PdfDownloadFormat = 'configured' | 'letter' | 'oficio' | 'A4' | 'legal' | 'roll-80' | 'roll-58';
+export type PdfExportScope = 'page' | 'all';
 
 export const PDF_DOWNLOAD_OPTIONS: Array<{
   value: PdfDownloadFormat;

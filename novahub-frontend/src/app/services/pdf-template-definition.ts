@@ -100,6 +100,7 @@ export interface PdfTemplateData {
   items?: Array<Record<string, unknown>>;
   rows?: Array<Record<string, unknown>>;
   totals?: Record<string, unknown>;
+  tableSummary?: Record<string, unknown>;
   history?: Array<Record<string, unknown>>;
   reportSections?: PdfTemplateReportSection[];
   reportKpis?: PdfTemplateKpi[];

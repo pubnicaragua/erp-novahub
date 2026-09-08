@@ -45,12 +45,13 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { getPurchaseOrderStatusOption, normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES, PURCHASE_ORDER_STATUS_OPTIONS } from '../../utils/purchaseOrderStatus';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { getPurchaseOrderOriginBadge } from '../../utils/document-origin-badges';
 import { parseVariantImportWorkbook, type VariantImportCatalog } from '../../utils/variant-import';
 import { downloadCanonicalVariantImportTemplate } from '../../utils/variant-import-template';
 import { priceListsService } from '../../services/price-lists.service';
+import { fetchAllPaginatedRows } from '../../utils/export-utils';
 
 interface Props {
   data: PurchaseOrder[];
@@ -832,7 +833,7 @@ const buildPendingPurchaseCatalog = (catalog: VariantImportCatalog, row: Purchas
 
 export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertBetweenCurrencies } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-orders-layout', 'table', 24 * 365);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
@@ -1609,16 +1610,52 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       count: filtered.filter((order) => (order.items?.length || 0) === value).length,
     }));
 
-  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
     const exportToastId = toast.loading('Generando reporte de órdenes de compra...');
     try {
+      const allRows = scope === 'all'
+        ? await fetchAllPaginatedRows<PurchaseOrder>((page, pageSize) => purchaseOrdersService.getAll({
+          page,
+          pageSize,
+          search: searchTerm.trim() || undefined,
+          status: statusFilter !== 'ALL' && statusFilter !== 'TO_APPROVE' ? statusFilter : undefined,
+          branchId: selectedBranchId || undefined,
+        }))
+        : data;
+      const exportFiltered = allRows.filter((order) => {
+        const orderStatus = normalizePurchaseOrderStatus(order.status);
+        if (statusFilter === 'TO_APPROVE') {
+          if (!PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(orderStatus)) return false;
+        } else if (statusFilter !== 'ALL' && normalizePurchaseOrderStatus(statusFilter) !== orderStatus) {
+          return false;
+        }
+        if (!normalizedSearchTerm) return true;
+        const haystack = [
+          order.number,
+          order.supplier?.name,
+          order.address,
+          order.requestedBy,
+          order.notes,
+          ...(order.items || []).flatMap((item: any) => [item.code, item.name, item.category, item.description]),
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(normalizedSearchTerm);
+      });
+      const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      const totalOrders = exportRows.reduce((sum, order) => sum + convertBetweenCurrencies(
+        Number(order.total || 0),
+        (order.currency || displayCurrency) as any,
+        displayCurrency as any,
+        Number(order.exchangeRate || globalRate || 1),
+        Number(globalRate || 1),
+      ), 0);
       await generatePurchaseListPDF({
         title: 'Órdenes de compra',
-        rows: filteredData,
+        rows: exportRows,
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
-        targetKey: 'compras.purchase-order',
+        targetKey: 'compras.list',
+        summary: { label: 'Total general', value: formatConvertedAmount(totalOrders, displayCurrency as any, globalRate), columnIndex: 4 },
         columns: [
           { label: 'N° Orden', value: (row) => row.number },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
@@ -2816,7 +2853,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
-            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
             <PurchaseViewTutorial view="orders" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes de compra" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
