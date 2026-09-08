@@ -885,7 +885,7 @@ function paymentVariantDetails(transaction: any) {
       || item?.variant?.name
       || item?.variant?.attributes,
     ))
-    .map((item: any) => formatPdfItemDescription(item, item?.description || 'Producto', false))
+    .map((item: any) => commercialItemDescription(item, item?.description || 'Producto', false))
     .filter(Boolean);
   return lines.length ? `Detalle de variantes del documento aplicado:\n${lines.join('\n')}` : '';
 }
