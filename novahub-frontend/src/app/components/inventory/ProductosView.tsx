@@ -1954,51 +1954,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setTimeout(() => newRowRef.current?.focus(), 100);
   };
 
-  const handleEditRow = (product: any) => {
-    const editProduct: EditingProduct = {
-      id: product.id,
-      code: product.code,
-      name: product.name,
-      description: product.description || '',
-      commercialNote: product.commercialNote || '',
-      categoryId: product.categoryId || '',
-      salePrice: (() => {
-        const sourceCurrency = String(product.priceCurrency || baseCurrency).toUpperCase();
-        const originalAmount = Number(product.salePriceOriginal);
-        return sourceCurrency !== baseCurrency && originalAmount > 0 ? originalAmount : Number(product.salePrice) || 0;
-      })(),
-      priceCurrency: product.priceCurrency || baseCurrency,
-      priceExchangeRate: Number(product.priceExchangeRate || 1),
-      costPrice: Number(product.costPrice) || 0,
-      unit: product.unit || 'unidad',
-      minStock: Number(product.minStock) || 0,
-      maxStock: getProductMaxStock(product),
-      trackSerialNumbers: Boolean(
-        product.trackSerialNumbers ||
-        product.serialTracking ||
-        product.serialNumberTracking ||
-        String(product.trackingType || '').toUpperCase() === 'SERIAL',
-      ),
-      itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase() as 'PRODUCT' | 'SERVICE',
-      isActive: product.isActive !== false,
-      imageUrl: product.imageUrl,
-      imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
-      warehouseId: product.warehouseCatalogs?.[0]?.warehouseId || product.warehouseCatalogs?.[0]?.warehouse?.id,
-       initialAllocations: String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'SERVICE'
-         ? []
-        : (product.stockLevels && product.stockLevels.length > 0)
-        ? product.stockLevels.map((sl: any, idx: number) => ({
-            id: `alloc-edit-${Date.now()}-${idx}`,
-            warehouseId: sl.warehouseId,
-            quantity: Number(sl.quantity) || 0,
-            minStock: Number(sl.minStock || 0),
-            maxStock: Number(sl.maxStock || 0),
-          }))
-        : [{ id: `alloc-edit-${Date.now()}-0`, warehouseId: '', quantity: 0, minStock: Number(product.minStock || 0), maxStock: getProductMaxStock(product) }]
-    };
-    setEditingRows(new Map(editingRows.set(product.id, editProduct)));
-  };
-
   const handleCancelEdit = (id: string) => {
     const current = editingRows.get(id);
     if (current?.imagePreviewUrl) URL.revokeObjectURL(current.imagePreviewUrl);
@@ -2168,7 +2123,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           priceExchangeRate: Number(product.priceExchangeRate || 1),
            ...(canViewInventoryCost ? { costPrice: Number(product.costPrice || 0) } : {}),
           unit: product.unit || 'unidad',
-          minStock: Number(product.minStock || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           type: product.itemType || catalogItemType,
           itemType: product.itemType || 'PRODUCT',
@@ -2226,55 +2180,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           salePriceOriginal: Number(product.salePrice || 0),
           priceCurrency: product.priceCurrency || baseCurrency,
           priceExchangeRate: Number(product.priceExchangeRate || 1),
-           ...(canViewInventoryCost ? { costPrice: Number(product.costPrice || 0) } : {}),
+          ...(canViewInventoryCost ? { costPrice: Number(product.costPrice || 0) } : {}),
           unit: product.unit || 'unidad',
-          minStock: Number(product.minStock || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           type: product.itemType || catalogItemType,
           itemType: product.itemType || 'PRODUCT',
           isActive: product.isActive,
-           ...(product.itemType === 'SERVICE' ? {} : { warehouseId: undefined }),
           imageUrl: nextImageUrl,
         } as any);
-
-        const originalProduct = products.find(p => p.id === id);
-        const variantId = originalProduct?.variants?.[0]?.id;
-        if (product.itemType !== 'SERVICE' && variantId && product.initialAllocations) {
-          const allocations = product.initialAllocations.filter(item => item.warehouseId);
-          await Promise.all(
-            allocations.map(async (item) => {
-              const originalAlloc = originalProduct?.stockLevels?.find((sl: any) => sl.warehouseId === item.warehouseId);
-              const oldQuantity = Number(originalAlloc?.quantity || 0);
-              const newQuantity = Number(item.quantity || 0);
-              const oldMinStock = Number(originalAlloc?.minStock || 0);
-              const oldMaxStock = Number(originalAlloc?.maxStock || 0);
-              const newMinStock = Number(item.minStock ?? product.minStock ?? 0);
-              const newMaxStock = Number(item.maxStock ?? product.maxStock ?? 0);
-
-              if (oldQuantity !== newQuantity || oldMinStock !== newMinStock || oldMaxStock !== newMaxStock) {
-                await inventoryService.updateStockLevel({
-                  productId: id,
-                  warehouseId: item.warehouseId,
-                  variantId: variantId,
-                  quantity: newQuantity,
-                  minStock: newMinStock,
-                  maxStock: newMaxStock || undefined,
-                });
-                const diff = newQuantity - oldQuantity;
-                if (diff !== 0) {
-                  await inventoryService.createMovement({
-                    productId: id,
-                    warehouseId: item.warehouseId,
-                    variantId: variantId,
-                    type: diff > 0 ? 'IN' : 'OUT',
-                    quantity: Math.abs(diff),
-                    reference: `AJUSTE-EDICION-${product.code || id}`,
-                  });
-                }
-              }
-            })
-          );
-        }
 
         toast.success(`${entityLabelCap} actualizado`);
       }
@@ -2887,7 +2800,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         ...importPriceLists.map((list) => getProductPrice(product, list)),
         ...(canViewInventoryCost ? [convertBaseAmount(product.costPrice)] : []),
         product.trackSeries ?? product.details?.trackSeries ?? false ? 'SI' : 'NO',
-        product.imageUrl || '',
       ]);
       const variantHeaders = ['Código producto', 'SKU variante', 'Nombre variante', ...(canViewInventoryCost ? ['Costo variante'] : [])];
       const variantRows = customVariants.map(({ product, variant }) => [
@@ -2949,8 +2861,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const handleDownloadTemplate = useCallback(() => {
     const wb = XLSX.utils.book_new();
     if (isServiceView) {
-      const headers = ['Código / SKU', 'Nombre', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Duración estimada (min)', 'Precio', ...(canViewInventoryCost ? ['Costo del servicio'] : []), 'Disponible', 'Imagen URL'];
-      const sampleRow: any[] = ['SRV-001', 'Ejemplo de servicio', 'Descripción que aparecerá en ventas y documentos', 'Detalle comercial opcional', categories[0]?.name || 'Categoría de servicios', 'servicio', 60, 150, ...(canViewInventoryCost ? [80] : []), 'SI', ''];
+      const headers = ['Código', 'Nombre', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Duración estimada (min)', 'Precio', ...(canViewInventoryCost ? ['Costo del servicio'] : []), 'Disponible'];
+      const sampleRow: any[] = ['SRV-001', 'Ejemplo de servicio', 'Descripción que aparecerá en ventas y documentos', 'Detalle comercial opcional', categories[0]?.name || 'Categoría de servicios', 'servicio', 60, 150, ...(canViewInventoryCost ? [80] : []), 'SI'];
       const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
       ws['!cols'] = headers.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 2)) }));
       XLSX.utils.book_append_sheet(wb, ws, 'Servicios');
@@ -2958,14 +2870,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         ['GUÍA DE LLENADO · IMPORTACIÓN DE SERVICIOS'],
         ['Puedes importar servicios en cualquier momento. Revisa, normaliza y corrige la previsualización antes de confirmar.'],
         ['Campo', 'Regla'],
-        ['Código / SKU', 'Obligatorio y único dentro de la sucursal.'],
+        ['Código', 'Obligatorio y único dentro de la sucursal.'],
         ['Nombre', 'Obligatorio.'],
         ['Descripción', 'Opcional. Texto descriptivo del servicio.'],
         ['Nota comercial', 'Opcional; máximo 100 caracteres. Se muestra en ventas y documentos.'],
         ['Categoría', 'Debe existir y ser de tipo servicio.'],
         ['Precio', 'Obligatorio. Es el único precio de venta del servicio; no usa listas de precios ni precios alternos.'],
         ['Importante', 'Los servicios no llevan IVA, no se vinculan a bodegas, no manejan stock y no tienen variantes.'],
-        ['Imágenes', 'Imagen URL es opcional. También puedes cargar un ZIP/RAR y el sistema vinculará cada archivo por coincidencia exacta del SKU.'],
+        ['Imágenes', 'Las imágenes se cargan únicamente mediante ZIP/RAR y se vinculan por coincidencia exacta del código.'],
         ['Contabilidad', 'La importación de servicios no crea asiento de apertura porque no crea existencias físicas. El costo se conserva en el servicio y se contabiliza cuando corresponda en una venta.'],
       ]);
       guide['!cols'] = [{ wch: 36 }, { wch: 110 }];
@@ -2993,7 +2905,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const handleDownloadImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
-      'Código / SKU': row.code || '', Nombre: row.name || '', ...(isServiceView ? {
+      Código: row.code || '', Nombre: row.name || '', ...(isServiceView ? {
         Descripción: row.description || '',
         'Nota comercial': row.commercialNote || '',
         Categoría: row.category || '',
@@ -3002,7 +2914,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         Precio: row.salePrice ?? '',
         ...(canViewInventoryCost ? { 'Costo del servicio': row.costPrice ?? '' } : {}),
         Disponible: row.isActive === false ? 'NO' : 'SI',
-        'Imagen URL': row.imageUrl || '',
       } : {
         'Nota comercial': row.commercialNote || '',
         Categoría: row.category || '',
@@ -3166,7 +3077,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         const headers = raw[0].map((h: any) => normalizeImportHeader(h));
         const colMap: Record<string, number> = {};
         const aliases: Record<string, string[]> = {
-          code: ['código / sku', 'código', 'codigo', 'code', 'sku'], name: ['nombre', 'name', 'producto'], description: ['descripción', 'descripcion', 'description'], category: ['categoría', 'categoria', 'category', 'cat'], taxRate: ['tasa iva', 'iva', 'tax rate'], imageUrl: ['imagen url', 'imagen', 'image url'], barcode: ['código de barras', 'barcode'], brand: ['marca', 'brand'], model: ['modelo', 'model'], color: ['color'], weight: ['peso', 'weight'], weightUnit: ['unidad peso', 'weight unit'], dimensions: ['dimensiones', 'dimensions'], width: ['ancho', 'width'], height: ['alto', 'height'], depth: ['profundidad', 'depth'], dimensionUnit: ['unidad dimensión', 'dimension unit'], warranty: ['garantía', 'garantia', 'warranty'], estimatedDuration: ['duración estimada', 'duracion estimada'], servicePrice: ['precio', 'precio servicio', 'service price'], unit: ['unidad', 'unit', 'medida'], trackInventory: ['control de inventario', 'track inventory'], minStock: ['stock mínimo', 'stock minimo', 'min stock'], costPrice: ['costo', 'precio costo', 'cost price'], lastPurchasePrice: ['último costo', 'ultimo costo', 'last purchase price'], initialStock: ['stock inicial', 'initial stock', 'cantidad', 'qty'], warehouse: ['bodega', 'almacén', 'almacen', 'warehouse'], trackBatch: ['control de lotes', 'track batch'], trackSeries: ['control de series', 'track series'], attributes: ['atributos json', 'atributos', 'attributes'], retailPrice: ['precio minorista', 'minorista', 'retail price'], wholesalePrice: ['precio mayorista', 'mayorista', 'wholesale price'], distributorPrice: ['precio distribuidor', 'distribuidor', 'distributor price'],
+          code: ['código / sku', 'código', 'codigo', 'code', 'sku'], name: ['nombre', 'name', 'producto'], description: ['descripción', 'descripcion', 'description'], category: ['categoría', 'categoria', 'category', 'cat'], taxRate: ['tasa iva', 'iva', 'tax rate'], brand: ['marca', 'brand'], estimatedDuration: ['duración estimada', 'duracion estimada'], servicePrice: ['precio', 'precio servicio', 'service price'], unit: ['unidad', 'unit', 'medida'], trackInventory: ['control de inventario', 'track inventory'], minStock: ['stock mínimo', 'stock minimo', 'min stock'], costPrice: ['costo', 'precio costo', 'cost price'], initialStock: ['stock inicial', 'initial stock', 'cantidad', 'qty'], warehouse: ['bodega', 'almacén', 'almacen', 'warehouse'], trackBatch: ['control de lotes', 'track batch'], trackSeries: ['control de series', 'track series'], attributes: ['atributos json', 'atributos', 'attributes'], retailPrice: ['precio minorista', 'minorista', 'retail price'], wholesalePrice: ['precio mayorista', 'mayorista', 'wholesale price'], distributorPrice: ['precio distribuidor', 'distribuidor', 'distributor price'],
         };
           aliases.commercialNote = ['nota comercial', 'nota', 'commercial note', 'commercialnote'];
           aliases.isActive = ['disponible', 'estado', 'activo', 'active', 'is active'];
@@ -3209,7 +3120,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             category: String(get('category') || '').trim(),
             itemType: catalogItemType,
             commercialNote: String(get('commercialNote') || '').trim(),
-            description: String(get('description') || '').trim(), taxRate: catalogItemType === 'SERVICE' ? 0 : (toNumber('taxRate') ?? 0.15), isActive: !['NO', 'N', '0', 'FALSE', 'INACTIVO', 'NO DISPONIBLE'].includes(String(get('isActive') ?? 'SI').trim().toUpperCase()), imageUrl: String(get('imageUrl') || '').trim() || undefined, barcode: String(get('barcode') || '').trim() || undefined, brand: String(get('brand') || '').trim() || undefined, model: String(get('model') || '').trim() || undefined, color: String(get('color') || '').trim() || undefined, weight: toNumber('weight'), weightUnit: String(get('weightUnit') || '').trim() || undefined, dimensions: String(get('dimensions') || '').trim() || undefined, width: toNumber('width'), height: toNumber('height'), depth: toNumber('depth'), dimensionUnit: String(get('dimensionUnit') || '').trim() || undefined, warranty: String(get('warranty') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', lastPurchasePrice: toNumber('lastPurchasePrice'), trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
+            description: String(get('description') || '').trim(), taxRate: catalogItemType === 'SERVICE' ? 0 : (toNumber('taxRate') ?? 0.15), isActive: !['NO', 'N', '0', 'FALSE', 'INACTIVO', 'NO DISPONIBLE'].includes(String(get('isActive') ?? 'SI').trim().toUpperCase()), brand: String(get('brand') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
             unit: String(get('unit') ?? '').trim().toLowerCase(),
             salePrice: catalogItemType === 'SERVICE'
               ? servicePrice
@@ -3506,10 +3417,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           name: row.name,
           categoryId: cat?.id,
           commercialNote: row.commercialNote,
-          description: row.description, taxRate: isServiceView ? 0 : row.taxRate, imageUrl: row.imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
+          description: row.description, taxRate: isServiceView ? 0 : row.taxRate, brand: row.brand, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
           unit: String(row.unit ?? '').trim(),
           ...(canViewInventoryCost ? { costPrice: row.costPrice } : {}),
-          ...(canViewInventoryCost ? { lastPurchasePrice: row.lastPurchasePrice } : {}),
            ...(isServiceView ? {} : { initialStock: row.initialStock, minStock: row.minStock || 0, warehouseId: warehouse?.id }),
            prices: isServiceView ? undefined : row.prices,
            price: row.salePrice,
@@ -4334,7 +4244,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       aria-busy={String(openingId) === String(product.id) || undefined}
                       data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined}
                       onClick={() => openProductDetail(product)}
-                      onDoubleClick={() => canPerform(catalogPermissionModule, 'edit') && handleEditRow(product)}
+                      onDoubleClick={() => canPerform(catalogPermissionModule, 'edit') && setModalProduct(product)}
                      >
                      <TableCell className="w-10">
                        <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id, product); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60" aria-pressed={selectedIds.has(String(product.id))} aria-label={selectedIds.has(String(product.id)) ? `Quitar ${product.name} de la selección` : `Seleccionar ${product.name}`} title={selectedIds.has(String(product.id)) ? 'Quitar de la selección' : 'Agregar a la selección'}>
@@ -4539,7 +4449,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       <EditProductModal
         product={modalProduct}
         categories={categories}
-        warehouses={warehouses}
         itemType={catalogItemType}
         onClose={() => setModalProduct(null)}
         onRefresh={onRefresh}

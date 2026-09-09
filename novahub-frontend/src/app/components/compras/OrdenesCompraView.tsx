@@ -699,7 +699,7 @@ const getProductListFromResponse = (response: any): any[] => (
   Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : []
 );
 
-const normalizeProductCode = (product: any) => String(product?.code || product?.sku || '').trim().toLowerCase();
+const normalizeProductCode = (product: any) => String(product?.code || '').trim().toLowerCase();
 
 const getProductInventoryLevels = (product: any): any[] => (
   Array.isArray(product?.inventoryLevels)
@@ -835,27 +835,13 @@ const buildPendingPurchaseCatalog = (catalog: VariantImportCatalog, row: Purchas
       trackInventory: product.trackInventory,
       trackBatch: product.trackBatch,
       trackSeries: product.trackSeries,
-      barcode: product.barcode,
       brand: product.brand,
-      model: product.model,
-      color: product.color,
-      weight: product.weight,
-      weightUnit: product.weightUnit,
-      dimensions: product.dimensions,
-      width: product.width,
-      height: product.height,
-      depth: product.depth,
-      dimensionUnit: product.dimensionUnit,
-      warranty: product.warranty,
-      lastPurchasePrice: product.lastPurchasePrice,
-      imageUrl: product.imageUrl,
       isActive: product.isActive,
     },
     variant: variant ? {
       productCode: variant.productCode,
       sku: variant.sku,
       name: variant.name,
-      barcode: variant.barcode,
       costPrice: variant.costPrice ?? stockCost ?? (Number.isFinite(rowCost) ? rowCost : undefined),
       attributes: Array.isArray(variant.attributes) ? variant.attributes : [],
     } : null,
@@ -1037,7 +1023,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       const importedUnitPrice = Number(row.unitPrice);
       const productCost = linkedVariant && linkedVariant.costPrice !== null && linkedVariant.costPrice !== undefined
         ? Number(linkedVariant.costPrice)
-        : Number(linkedProduct?.costPrice ?? linkedProduct?.cost ?? linkedProduct?.lastPurchasePrice ?? 0) + Number(linkedVariant?.costModifier || 0);
+        : Number(linkedProduct?.costPrice ?? linkedProduct?.cost ?? 0) + Number(linkedVariant?.costModifier || 0);
       const unitPrice = linkedProduct && (!Number.isFinite(importedUnitPrice) || importedUnitPrice === 0) ? productCost : importedUnitPrice;
       const taxType = normalizeImportCatalogValue(row.taxType, importTaxOptions, 'GRAVADO');
       const withholdingType = normalizeImportCatalogValue(row.withholdingType, importWithholdingOptions, 'NONE', ['NONE', 'SIN RETENCION', 'NO APLICA', 'NINGUNA']);
@@ -2714,7 +2700,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                               label: p.name || 'Producto',
                               value: String(p.id),
                               description: [
-                                `${p.code || p.sku || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,
+                                `${p.code || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,
                                 p.commercialNote ? `Nota: ${p.commercialNote}` : null,
                               ].filter(Boolean).join(' · '),
                             }))

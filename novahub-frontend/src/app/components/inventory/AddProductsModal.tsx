@@ -46,18 +46,7 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   costPrice: '',
   taxRate: '0.15',
   unit: 'unidad',
-  barcode: '',
   brand: '',
-  model: '',
-  color: '',
-  weight: '',
-  weightUnit: '',
-  dimensions: '',
-  width: '',
-  height: '',
-  depth: '',
-  dimensionUnit: '',
-  warranty: '',
   minStock: '',
   maxStock: '',
   trackBatch: false,
@@ -637,19 +626,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           isActive: product.isActive !== false,
           description: product.description || '',
           commercialNote: product.commercialNote || '',
-          barcode: product.barcode || undefined,
           brand: product.brand || undefined,
-          model: product.model || undefined,
-          color: product.color || undefined,
-          weight: product.weight === '' ? undefined : Number(product.weight),
-          weightUnit: product.weightUnit || undefined,
-          dimensions: product.dimensions || undefined,
-          width: product.width === '' ? undefined : Number(product.width),
-          height: product.height === '' ? undefined : Number(product.height),
-          depth: product.depth === '' ? undefined : Number(product.depth),
-          dimensionUnit: product.dimensionUnit || undefined,
-           warranty: product.warranty || undefined,
-           ...(canViewInventoryCost ? { lastPurchasePrice: product.lastPurchasePrice === '' ? undefined : Number(product.lastPurchasePrice) } : {}),
           unit: product.unit || 'unidad',
           minStock: Number(product.minStock || 0),
           maxStock: product.maxStock === '' ? undefined : Number(product.maxStock),
@@ -803,7 +780,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     const selected = Object.values(nextResolutions).find((entry) => entry.action === 'USE_EXISTING' && entry.match)?.match;
     const similarityGroupKeys = new Set(similarGroups.map((candidate) => normalizeSimilarityInputKey(candidate.inputKey)));
     const productsToCreate = similarPendingProducts.filter((product) => {
-      const key = normalizeSimilarityInputKey(product.code || product.sku || product.name);
+      const key = normalizeSimilarityInputKey(product.code || product.name);
       return !similarityGroupKeys.has(key) || nextResolutions[key]?.action === 'CREATE_NEW';
     }).map((product) => ({ ...product, allowSimilarProductCreate: true }));
     setSimilarPendingProducts([]);
@@ -1004,66 +981,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     placeholder="Nota visible en ventas, compras y facturas"
                   />
                    <p className="mt-0.5 text-right text-[10px] text-muted-foreground">{Array.from(String(draftProduct.commercialNote || '')).length}/100</p>
-                   {catalogItemType !== 'SERVICE' && (
-                     <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 rounded-lg border border-border/60 bg-background/60 p-3 sm:grid-cols-2 lg:grid-cols-4">
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">SKU interno</label>
-                         <Input value={draftProduct.code} disabled className="mt-1 h-8 text-xs font-mono" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Código de barras</label>
-                         <Input value={draftProduct.barcode || ''} onChange={e => handleUpdateDraft('barcode', e.target.value)} className="mt-1 h-8 text-xs" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Modelo</label>
-                         <Input value={draftProduct.model || ''} onChange={e => handleUpdateDraft('model', e.target.value)} className="mt-1 h-8 text-xs" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Color</label>
-                         <Input value={draftProduct.color || ''} onChange={e => handleUpdateDraft('color', e.target.value)} className="mt-1 h-8 text-xs" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Peso</label>
-                         <Input type="number" min={0} step="any" value={draftProduct.weight ?? ''} onChange={e => handleUpdateDraft('weight', e.target.value)} className="mt-1 h-8 text-xs" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad de peso</label>
-                         <Input value={draftProduct.weightUnit || ''} onChange={e => handleUpdateDraft('weightUnit', e.target.value)} className="mt-1 h-8 text-xs" placeholder="kg, g..." />
-                       </div>
-                       <div className="sm:col-span-2">
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Dimensiones</label>
-                         <Input value={draftProduct.dimensions || ''} onChange={e => handleUpdateDraft('dimensions', e.target.value)} className="mt-1 h-8 text-xs" placeholder="Descripción o formato libre" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Ancho</label>
-                         <Input type="number" min={0} step="any" value={draftProduct.width ?? ''} onChange={e => handleUpdateDraft('width', e.target.value)} className="mt-1 h-8 text-xs" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Alto</label>
-                         <Input type="number" min={0} step="any" value={draftProduct.height ?? ''} onChange={e => handleUpdateDraft('height', e.target.value)} className="mt-1 h-8 text-xs" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Profundidad</label>
-                         <Input type="number" min={0} step="any" value={draftProduct.depth ?? ''} onChange={e => handleUpdateDraft('depth', e.target.value)} className="mt-1 h-8 text-xs" />
-                       </div>
-                       <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad de dimensión</label>
-                         <Input value={draftProduct.dimensionUnit || ''} onChange={e => handleUpdateDraft('dimensionUnit', e.target.value)} className="mt-1 h-8 text-xs" placeholder="cm, m..." />
-                       </div>
-                       <div className="sm:col-span-2">
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Garantía</label>
-                         <Input value={draftProduct.warranty || ''} onChange={e => handleUpdateDraft('warranty', e.target.value)} className="mt-1 h-8 text-xs" />
-                       </div>
-                       {canViewInventoryCost && <div>
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">Último costo de compra</label>
-                         <Input type="number" min={0} step="any" value={draftProduct.lastPurchasePrice ?? ''} onChange={e => handleUpdateDraft('lastPurchasePrice', e.target.value)} className="mt-1 h-8 text-xs text-right" />
-                       </div>}
-                       <div className="sm:col-span-2 lg:col-span-4">
-                         <label className="text-[10px] uppercase font-bold text-muted-foreground">URL de imagen (opcional)</label>
-                         <Input value={draftProduct.imageUrl || ''} onChange={e => handleUpdateDraft('imageUrl', e.target.value)} className="mt-1 h-8 text-xs" placeholder="https://... o referencia storage://" />
-                       </div>
-                     </div>
-                   )}
                  </div>
               </div>
               {!itemType && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-1' : 'col-span-1'}>

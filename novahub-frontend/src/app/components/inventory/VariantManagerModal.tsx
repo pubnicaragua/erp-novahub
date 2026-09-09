@@ -31,7 +31,6 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
 
   const [formSku, setFormSku] = useState('');
   const [formName, setFormName] = useState('');
-  const [formBarcode, setFormBarcode] = useState('');
   const [formPriceModifier, setFormPriceModifier] = useState('0');
   const [formCostModifier, setFormCostModifier] = useState('0');
   const [formCostPrice, setFormCostPrice] = useState('');
@@ -63,7 +62,6 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   const resetForm = () => {
     setFormSku('');
     setFormName('');
-    setFormBarcode('');
     setFormPriceModifier('0');
     setFormCostModifier('0');
     setFormCostPrice('');
@@ -79,7 +77,6 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   const openEdit = (variant: any) => {
     setFormSku(variant.sku);
     setFormName(variant.name || '');
-    setFormBarcode(variant.barcode || '');
     setFormPriceModifier(String(variant.priceModifier || 0));
     setFormCostModifier(String(variant.costModifier || 0));
     setFormCostPrice(variant.costPrice === null || variant.costPrice === undefined ? '' : String(variant.costPrice));
@@ -99,7 +96,6 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
       const data = {
         sku: formSku.trim().toUpperCase(),
         name: formName.trim() || formSku.trim().toUpperCase(),
-        barcode: formBarcode.trim() || undefined,
         priceModifier: parseFloat(formPriceModifier) || 0,
         ...(canViewInventoryCost ? { costModifier: parseFloat(formCostModifier) || 0 } : {}),
         ...(canViewInventoryCost ? { costPrice: formCostPrice.trim() === '' ? null : Number(formCostPrice) } : {}),
@@ -327,16 +323,6 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                 onChange={(e) => setFormName(e.target.value)}
                 className="h-9 text-xs"
                 placeholder="Ej: Talla S / Rojo"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] uppercase font-bold text-muted-foreground">Código de barras</label>
-              <Input
-                value={formBarcode}
-                onChange={(e) => setFormBarcode(e.target.value)}
-                className="h-9 text-xs font-mono"
-                placeholder="Opcional"
               />
             </div>
 

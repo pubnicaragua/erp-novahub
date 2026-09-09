@@ -401,7 +401,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       const variantCost = variant?.costPrice !== null && variant?.costPrice !== undefined
         ? Number(variant.costPrice)
         : (variant ? Number(product?.costPrice || product?.cost || 0) + Number(variant.costModifier || 0) : undefined);
-      const priceCandidates = [variantCost, item.unitPrice, product?.lastPurchasePrice, product?.costPrice, product?.cost, product?.price]
+      const priceCandidates = [variantCost, item.unitPrice, product?.costPrice, product?.cost, product?.price]
         .map((value) => Number(value))
         .filter((value) => Number.isFinite(value) && value > 0);
       // Las solicitudes nuevas traen un snapshot del costo funcional. Se
@@ -421,7 +421,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       return {
         productId: item.productId || null,
         variantId: item.variantId || variant?.id || null,
-        code: item.code || item.productCode || variant?.sku || product?.code || product?.sku || '',
+        code: item.code || item.productCode || variant?.sku || product?.code || '',
         name: item.name || product?.name || item.description || '',
         description: item.description || (variant?.name ? `${product?.name || ''} · ${variant.name}` : product?.name) || '',
         category: (product as any)?.category?.name || (product as any)?.category || item.category || '',

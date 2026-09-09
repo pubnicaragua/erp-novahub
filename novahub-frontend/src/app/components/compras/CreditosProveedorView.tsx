@@ -594,7 +594,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const handleItemProductPick = (idx: number, productId: string) => {
     if (!localDoc) return;
     const p = productCatalog.find((x: any) => x.id === productId);
-    const price = [p?.lastPurchasePrice, p?.costPrice, p?.cost, p?.price, p?.salePrice]
+    const price = [p?.costPrice, p?.cost, p?.price, p?.salePrice]
       .map((v) => Number(v))
       .find((v) => Number.isFinite(v) && v > 0) ?? 0;
     const newItems = [...(localDoc.items || [])];

@@ -18,10 +18,8 @@ import { useAuth } from '../../contexts/AuthContext';
 interface LabelProduct {
   id: string;
   code: string;
-  sku?: string;
   name: string;
   salePrice?: number;
-  barcode?: string;
   category?: { name?: string };
   brand?: string;
 }
@@ -79,7 +77,7 @@ export function LabelPrintModal({ open, onClose, products, companyName = 'Nova H
     return products.filter((p) => {
       if (search) {
         const s = search.toLowerCase();
-        if (!p.name?.toLowerCase().includes(s) && !p.code?.toLowerCase().includes(s) && !(p.sku?.toLowerCase().includes(s))) return false;
+        if (!p.name?.toLowerCase().includes(s) && !p.code?.toLowerCase().includes(s)) return false;
       }
       if (categoryFilter && p.category?.name !== categoryFilter) return false;
       if (brandFilter && p.brand !== brandFilter) return false;
@@ -242,7 +240,7 @@ export function LabelPrintModal({ open, onClose, products, companyName = 'Nova H
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold truncate">{product.name}</p>
-                    <p className="text-[10px] text-muted-foreground font-mono">{product.code || product.sku || '—'}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono">{product.code || '—'}</p>
                   </div>
                   {isSelected && (
                     <div className="flex items-center gap-1.5">

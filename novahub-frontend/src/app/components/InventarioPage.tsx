@@ -526,11 +526,11 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         const values = levels.map((level: any) => Number(level?.[field])).filter((value) => Number.isFinite(value));
         return values.length > 0 ? Math.max(...values) : '';
       };
-      const productHeaders = ['Código / SKU', 'Nombre', 'Marca', 'Categoría', 'Unidad', 'Nota comercial', 'Stock', 'Stock mínimo', 'Stock máximo', 'Bodegas', 'Precio de venta', ...(canViewInventoryCost ? ['Costo'] : []), 'Estado', 'Imagen URL'];
+      const productHeaders = ['Código', 'Nombre', 'Marca', 'Categoría', 'Unidad', 'Nota comercial', 'Stock', 'Stock mínimo', 'Stock máximo', 'Bodegas', 'Precio de venta', ...(canViewInventoryCost ? ['Costo'] : []), 'Estado'];
       const productRows = productsToExport.map((product: any) => {
         const levels = getScopedLevels(product);
         return [
-          product.code || product.details?.sku || '',
+          product.code || '',
           product.name || '',
           product.brand || product.details?.brand || '',
           product.category?.name || product.categoryName || '',
@@ -543,7 +543,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           product.salePrice ?? product.salePriceOriginal ?? '',
           ...(canViewInventoryCost ? [product.costPrice ?? product.details?.costPrice ?? ''] : []),
           product.isActive === false ? 'Inactivo' : 'Activo',
-          product.imageUrl || '',
         ];
       });
       const variantHeaders = ['Código producto', 'SKU variante', 'Nombre variante', 'Atributos y valores', ...(canViewInventoryCost ? ['Costo variante'] : [])];

@@ -17,20 +17,7 @@ export type VariantImportProduct = {
   trackInventory?: boolean;
   trackBatch?: boolean;
   trackSeries?: boolean;
-  barcode?: string;
   brand?: string;
-  model?: string;
-  color?: string;
-  weight?: number;
-  weightUnit?: string;
-  dimensions?: string;
-  width?: number;
-  height?: number;
-  depth?: number;
-  dimensionUnit?: string;
-  warranty?: string;
-  lastPurchasePrice?: number;
-  imageUrl?: string;
   isActive?: boolean;
 };
 
@@ -38,7 +25,6 @@ export type VariantImportVariant = {
   productCode: string;
   sku: string;
   name?: string;
-  barcode?: string;
   costPrice?: number;
   attributes: VariantImportAttribute[];
 };
@@ -110,22 +96,9 @@ const aliases: Record<string, string[]> = {
   costPrice: ['costo base', 'costo producto', 'costo variante', 'costo', 'precio costo', 'cost price', 'variant cost'],
   taxRate: ['tasa iva', 'iva', 'tax rate'],
   trackInventory: ['control inventario', 'control de inventario', 'track inventory'],
-  barcode: ['codigo barras', 'codigo de barras', 'barcode'],
   brand: ['marca', 'brand'],
-  model: ['modelo', 'model'],
-  color: ['color'],
-  weight: ['peso', 'weight'],
-  weightUnit: ['unidad peso', 'weight unit'],
-  dimensions: ['dimensiones', 'dimensions'],
-  width: ['ancho', 'width'],
-  height: ['alto', 'height'],
-  depth: ['profundidad', 'depth'],
-  dimensionUnit: ['unidad dimension', 'unidad dimensiones', 'dimension unit'],
-  warranty: ['garantia', 'warranty'],
   trackBatch: ['lotes', 'control lotes', 'control de lotes', 'track batch'],
   trackSeries: ['series', 'serie imei', 'serie/imei', 'control series', 'control de series', 'track series'],
-  lastPurchasePrice: ['ultimo costo', 'ultimo precio costo', 'last purchase price'],
-  imageUrl: ['imagen url', 'imagen', 'image url'],
   isActive: ['activo', 'disponible', 'estado', 'active', 'is active'],
   variantSku: ['sku variante', 'codigo variante', 'variant sku'],
   variantName: ['nombre variante', 'variante', 'variant name'],
@@ -147,9 +120,7 @@ const fixedVariantHeaders = new Set([
   ...aliases.productCode,
   ...aliases.variantSku,
   ...aliases.variantName,
-  ...aliases.barcode,
   ...aliases.costPrice,
-  ...aliases.imageUrl,
 ]);
 
 const nonEmptyRows = (rows: any[][] = []) => rows
@@ -225,20 +196,7 @@ export function parseVariantImportWorkbook(sheets: Record<string, any[][]>, pric
     trackInventory: yesValue(findValue(row, 'trackInventory'), true),
     trackBatch: yesValue(findValue(row, 'trackBatch'), false),
     trackSeries: yesValue(findValue(row, 'trackSeries'), false),
-    barcode: textValue(row, 'barcode') || undefined,
     brand: textValue(row, 'brand') || undefined,
-    model: textValue(row, 'model') || undefined,
-    color: textValue(row, 'color') || undefined,
-    weight: numberValue(row, 'weight'),
-    weightUnit: textValue(row, 'weightUnit') || undefined,
-    dimensions: textValue(row, 'dimensions') || undefined,
-    width: numberValue(row, 'width'),
-    height: numberValue(row, 'height'),
-    depth: numberValue(row, 'depth'),
-    dimensionUnit: textValue(row, 'dimensionUnit') || undefined,
-    warranty: textValue(row, 'warranty') || undefined,
-    lastPurchasePrice: numberValue(row, 'lastPurchasePrice'),
-    imageUrl: textValue(row, 'imageUrl') || undefined,
     isActive: yesValue(findValue(row, 'isActive'), true),
   }));
 
@@ -268,7 +226,6 @@ export function parseVariantImportWorkbook(sheets: Record<string, any[][]>, pric
       productCode,
       sku,
       name: textValue(row, 'variantName') || undefined,
-      barcode: textValue(row, 'barcode') || undefined,
       costPrice: numberValue(row, 'costPrice'),
       attributes,
     };

@@ -26,17 +26,6 @@ export interface ApiFilters {
   codes?: string;
   categoryId?: string;
   brand?: string;
-  barcode?: string | null;
-  model?: string | null;
-  color?: string | null;
-  weight?: number | null;
-  weightUnit?: string | null;
-  dimensions?: string | null;
-  width?: number | null;
-  height?: number | null;
-  depth?: number | null;
-  dimensionUnit?: string | null;
-  warranty?: string | null;
   trackBatch?: boolean;
   type?: string;
   warehouseId?: string;
@@ -1192,7 +1181,6 @@ export interface Product {
   id: string;
   tenantId: string;
   code: string;
-  sku: string;
   name: string;
   description?: string;
   commercialNote?: string | null;
@@ -1208,7 +1196,6 @@ export interface Product {
   priceExchangeRate?: number;
   salePriceOriginal?: number;
   costPrice: number;
-  lastPurchasePrice?: number;
   taxRate: number;
   stock: number;
   minStock: number;

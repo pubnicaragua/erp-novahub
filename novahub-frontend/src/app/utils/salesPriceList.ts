@@ -200,8 +200,8 @@ export function buildLineDescription(
  * Prioridad: SKU de variante → SKU de producto.
  */
 export function getLineSku(
-  product: { code?: string; sku?: string },
+  product: { code?: string },
   variant?: ProductVariant | null,
 ): string {
-  return variant?.sku || product?.code || product?.sku || '';
+  return variant?.sku || product?.code || '';
 }

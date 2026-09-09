@@ -144,7 +144,6 @@ interface ProdRow {
   id: string;
   code: string;
   name: string;
-  sku?: string;
   brand?: string;
   unit: string;
   categoryName: string;
@@ -234,9 +233,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             : Number(p.salePrice || 0) / Math.max(0.000001, Number(p.priceExchangeRate || 1));
         return {
           id: p.id,
-          code: p.code || p.sku || '',
+          code: p.code || '',
           name: p.name || 'Producto',
-          sku: p.sku,
           brand: p.brand,
           unit: p.unit || 'unidad',
           categoryName: p.category?.name || (typeof p.category === 'string' ? p.category : 'Sin categoría'),

@@ -9,23 +9,17 @@ import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
 import { Package, Check, Tag, X } from 'lucide-react';
-import { useCurrency } from '@/app/contexts/CurrencyContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 interface EditProductModalProps {
   product: any | null;
   categories: any[];
-  warehouses?: any[];
   itemType?: 'PRODUCT' | 'SERVICE';
   onClose: () => void;
   onRefresh: () => void;
 }
 
-export function EditProductModal({ product, categories, warehouses = [], itemType = 'PRODUCT', onClose, onRefresh }: EditProductModalProps) {
-  const { exchangeRate, baseCurrency } = useCurrency();
-  const { canPerform } = useAuth();
-  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
+export function EditProductModal({ product, categories, itemType = 'PRODUCT', onClose, onRefresh }: EditProductModalProps) {
   const [draft, setDraft] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
@@ -34,36 +28,6 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
   useEffect(() => {
     const timer = setTimeout(() => {
       if (product) {
-        const stockLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
-        const warehouseCatalogs = Array.isArray(product.warehouseCatalogs) ? product.warehouseCatalogs : [];
-        const allocationIds = Array.from(new Set([
-          ...stockLevels.map((level: any) => level.warehouseId).filter(Boolean),
-          ...warehouseCatalogs.map((catalog: any) => catalog.warehouseId).filter(Boolean),
-        ]));
-        const initialAllocations = isService ? [] : allocationIds.length > 0
-          ? allocationIds.map((warehouseId: string, i: number) => {
-              const sl = stockLevels.find((level: any) => level.warehouseId === warehouseId);
-              return {
-                id: `alloc-edit-${Date.now()}-${i}`,
-                warehouseId,
-                quantity: Number(sl?.quantity || 0),
-                minStock: Number(sl?.minStock ?? product.minStock ?? 0),
-                maxStock: Number(sl?.maxStock ?? product.maxStock ?? 0),
-                originalQuantity: Number(sl?.quantity || 0),
-                originalMinStock: Number(sl?.minStock ?? product.minStock ?? 0),
-                originalMaxStock: Number(sl?.maxStock ?? product.maxStock ?? 0),
-              };
-            })
-          : [{
-              id: `alloc-edit-${Date.now()}-0`,
-              warehouseId: '',
-              quantity: Number(product.stock || 0),
-              minStock: Number(product.minStock || 0),
-              maxStock: Number(product.maxStock || 0),
-              originalQuantity: Number(product.stock || 0),
-              originalMinStock: Number(product.minStock || 0),
-              originalMaxStock: Number(product.maxStock || 0),
-              }];
         const existingLinkedAttributes = (() => {
           if (Array.isArray(product.linkedAttributes) && product.linkedAttributes.length > 0) return product.linkedAttributes;
           if (Array.isArray(product.attributes) && product.attributes.length > 0) return product.attributes;
@@ -81,38 +45,18 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           name: product.name,
           description: product.description || '',
           commercialNote: product.commercialNote || '',
-          sku: product.sku || product.code || '',
-          barcode: product.barcode || '',
           brand: product.brand || '',
-          model: product.model || '',
-          color: product.color || '',
-          weight: product.weight ?? '',
-          weightUnit: product.weightUnit || '',
-          dimensions: product.dimensions || '',
-          width: product.width ?? '',
-          height: product.height ?? '',
-          depth: product.depth ?? '',
-          dimensionUnit: product.dimensionUnit || '',
-          warranty: product.warranty || '',
-          lastPurchasePrice: product.lastPurchasePrice ?? '',
           trackBatch: Boolean(product.trackBatch),
           categoryId: product.categoryId || '',
-          priceCurrency: baseCurrency || 'NIO',
-          salePrice: Number(product.salePrice) || 0,
-        ...(canViewInventoryCost ? { costPrice: Number(product.costPrice) || 0 } : {}),
           trackSerialNumbers: Boolean(
             product.trackSerialNumbers ||
             product.serialTracking ||
             product.serialNumberTracking ||
             String(product.trackingType || '').toUpperCase() === 'SERIAL',
           ),
-          imeiNumber: product.serialNumber || product.imei || '',
           itemType: (product.itemType || 'PRODUCT').toUpperCase(),
           isActive: product.isActive !== false,
-          minStock: Number(product.minStock) || 0,
-          maxStock: Number(product.maxStock) || 0,
           unit: product.unit || 'unidad',
-          initialAllocations,
           imageUrl: product.imageUrl,
           imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
           imageFile: null,
@@ -132,7 +76,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [product, baseCurrency, canViewInventoryCost]);
+  }, [product]);
 
   useEffect(() => {
     if (!product) return;
@@ -210,29 +154,6 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
     }, 1);
   };
 
-  const updateAllocation = (id: string, updates: any) => {
-    setDraft((prev: any) => ({
-      ...prev,
-      initialAllocations: prev.initialAllocations.map((a: any) => a.id === id ? { ...a, ...updates } : a)
-    }));
-  };
-
-  const handleCurrencyChange = (newCurrency: string) => {
-    if (!draft || newCurrency === draft.priceCurrency) return;
-    
-    let rate = 1;
-    // Si cambia a USD desde base, se divide entre la tasa. Si cambia a base desde USD, se multiplica.
-    if (newCurrency === 'USD' && draft.priceCurrency === baseCurrency) rate = 1 / exchangeRate;
-    if (newCurrency === baseCurrency && draft.priceCurrency === 'USD') rate = exchangeRate;
-
-    setDraft((prev: any) => ({
-      ...prev,
-      priceCurrency: newCurrency,
-      costPrice: prev.costPrice ? Number((Number(prev.costPrice) * rate).toFixed(4)) : prev.costPrice,
-      salePrice: prev.salePrice ? Number((Number(prev.salePrice) * rate).toFixed(4)) : prev.salePrice,
-    }));
-  };
-
   const handleImageSelected = (file: File) => {
     if (draft.imagePreviewUrl) URL.revokeObjectURL(draft.imagePreviewUrl);
     setDraft((prev: any) => ({ ...prev, imageFile: file, imagePreviewUrl: URL.createObjectURL(file), removeImage: false }));
@@ -260,100 +181,23 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
       }
       const nextImageUrl = uploadedImageUri ?? (draft.removeImage ? null : (draft.imageStorageUri || draft.imageUrl));
 
-      const rate = draft.priceCurrency !== baseCurrency ? 
-                    (draft.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate)) 
-                    : 1;
-
       await inventoryService.updateProduct(draft.id, {
         code: draft.code,
         name: draft.name,
         description: draft.description || '',
         commercialNote: draft.commercialNote || '',
         categoryId: draft.categoryId,
-         ...(canViewInventoryCost ? { costPrice: Number(draft.costPrice || 0) * rate } : {}),
         trackSerialNumbers: Boolean(draft.trackSerialNumbers),
         itemType: draft.itemType || 'PRODUCT',
         isVariable: Boolean(draft.isVariable),
         isActive: draft.isActive !== false,
-         unit: draft.unit,
-         sku: draft.sku || draft.code,
-         barcode: draft.barcode || '',
-         brand: draft.brand || '',
-         model: draft.model || '',
-         color: draft.color || '',
-         weight: draft.weight === '' ? null : Number(draft.weight),
-         weightUnit: draft.weightUnit || '',
-         dimensions: draft.dimensions || '',
-         width: draft.width === '' ? null : Number(draft.width),
-         height: draft.height === '' ? null : Number(draft.height),
-         depth: draft.depth === '' ? null : Number(draft.depth),
-         dimensionUnit: draft.dimensionUnit || '',
-         warranty: draft.warranty || '',
-         ...(canViewInventoryCost ? { lastPurchasePrice: draft.lastPurchasePrice === '' ? null : Number(draft.lastPurchasePrice) } : {}),
-         trackBatch: Boolean(draft.trackBatch),
-        minStock: draft.minStock,
-        maxStock: draft.maxStock,
-         ...(draft.itemType === 'SERVICE' ? {} : { warehouseId: undefined }),
-        warehouseIds: draft.itemType !== 'SERVICE' ? draft.initialAllocations?.map((a: any) => a.warehouseId).filter(Boolean) : undefined,
+        unit: draft.unit,
+        brand: draft.brand || '',
+        trackBatch: Boolean(draft.trackBatch),
         imageUrl: nextImageUrl,
         attributeIds: draft.attributeIds?.length > 0 ? draft.attributeIds : [],
         linkedAttributes: draft.linkedAttributes?.length > 0 ? draft.linkedAttributes : [],
       });
-
-      // Manejar IMEI/Serie si está habilitado
-      if (draft.trackSerialNumbers && draft.imeiNumber && draft.imeiNumber.trim()) {
-        try {
-          // Verificar si ya existe una serie para este producto
-          const existingSeries = await inventoryService.getSeries({ productId: draft.id } as any);
-          const seriesList = Array.isArray(existingSeries) ? existingSeries : ((existingSeries as any)?.data || []);
-          if (seriesList.length === 0) {
-            // Crear nueva serie
-            await inventoryService.createSeries({
-              productId: draft.id,
-              number: draft.imeiNumber.trim(),
-            });
-          }
-        } catch (seriesErr) {
-          console.error('Error managing serial number', seriesErr);
-        }
-      }
-
-      const variantId = product?.variants?.[0]?.id;
-      if (draft.itemType !== 'SERVICE' && variantId && draft.initialAllocations) {
-        const allocations = draft.initialAllocations.filter((item: any) => item.warehouseId);
-        await Promise.all(
-          allocations.map(async (item: any) => {
-            const oldQuantity = Number(item.originalQuantity || 0);
-            const newQuantity = Number(item.quantity || 0);
-            const oldMinStock = Number(item.originalMinStock || 0);
-            const oldMaxStock = Number(item.originalMaxStock || 0);
-            const newMinStock = Number(item.minStock ?? draft.minStock ?? 0);
-            const newMaxStock = Number(item.maxStock ?? draft.maxStock ?? 0);
-
-            if (oldQuantity !== newQuantity || oldMinStock !== newMinStock || oldMaxStock !== newMaxStock) {
-              await inventoryService.updateStockLevel({
-                productId: draft.id,
-                warehouseId: item.warehouseId,
-                variantId: variantId,
-                quantity: newQuantity,
-                minStock: newMinStock,
-                maxStock: newMaxStock || undefined,
-              });
-              const diff = newQuantity - oldQuantity;
-              if (diff !== 0) {
-                await inventoryService.createMovement({
-                  productId: draft.id,
-                  warehouseId: item.warehouseId,
-                  variantId: variantId,
-                  type: diff > 0 ? 'IN' : 'OUT',
-                  quantity: Math.abs(diff),
-                  reference: 'Ajuste desde edición de producto',
-                });
-              }
-            }
-          })
-        );
-      }
 
       if (draft.imageStorageUri && draft.imageStorageUri !== uploadedImageUri && (uploadedImageUri || draft.removeImage)) {
         storageService.deleteFile(draft.imageStorageUri).catch(() => {});
@@ -380,7 +224,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           <InventoryViewTutorial
             label={isService ? 'Cómo editar servicio' : 'Cómo editar producto'}
             targetPrefix="inventory-product-edit"
-            copy={{ data: { description: 'Actualiza código, nombre, categoría, moneda, costos, almacén y controles de stock.' }, actions: { description: 'Guarda los cambios para actualizar el catálogo.' } }}
+            copy={{ data: { description: 'Actualiza los datos del catálogo: código, nombre, categoría, precios y características.' }, actions: { description: 'Guarda los cambios para actualizar el catálogo.' } }}
           />
         </DialogHeader>
 
@@ -459,85 +303,6 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
               </div>
 
               {!isService && (
-                <div className="sm:col-span-2 md:col-span-5 grid grid-cols-1 gap-3 rounded-lg border border-border/60 bg-background/60 p-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Código/SKU interno</label>
-                    <Input value={draft.sku || ''} onChange={e => handleUpdate('sku', e.target.value)} className="mt-1 h-8 text-xs font-mono" placeholder="SKU-001" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Código de barras</label>
-                    <Input value={draft.barcode || ''} onChange={e => handleUpdate('barcode', e.target.value)} className="mt-1 h-8 text-xs" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Modelo</label>
-                    <Input value={draft.model || ''} onChange={e => handleUpdate('model', e.target.value)} className="mt-1 h-8 text-xs" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Color</label>
-                    <Input value={draft.color || ''} onChange={e => handleUpdate('color', e.target.value)} className="mt-1 h-8 text-xs" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Peso</label>
-                    <Input type="number" min={0} step="any" value={draft.weight ?? ''} onChange={e => handleUpdate('weight', e.target.value)} className="mt-1 h-8 text-xs" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad de peso</label>
-                    <Input value={draft.weightUnit || ''} onChange={e => handleUpdate('weightUnit', e.target.value)} className="mt-1 h-8 text-xs" placeholder="kg, g..." />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Dimensiones</label>
-                    <Input value={draft.dimensions || ''} onChange={e => handleUpdate('dimensions', e.target.value)} className="mt-1 h-8 text-xs" placeholder="Descripción o formato libre" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Ancho</label>
-                    <Input type="number" min={0} step="any" value={draft.width ?? ''} onChange={e => handleUpdate('width', e.target.value)} className="mt-1 h-8 text-xs" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Alto</label>
-                    <Input type="number" min={0} step="any" value={draft.height ?? ''} onChange={e => handleUpdate('height', e.target.value)} className="mt-1 h-8 text-xs" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Profundidad</label>
-                    <Input type="number" min={0} step="any" value={draft.depth ?? ''} onChange={e => handleUpdate('depth', e.target.value)} className="mt-1 h-8 text-xs" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Unidad de dimensión</label>
-                    <Input value={draft.dimensionUnit || ''} onChange={e => handleUpdate('dimensionUnit', e.target.value)} className="mt-1 h-8 text-xs" placeholder="cm, m..." />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Garantía</label>
-                    <Input value={draft.warranty || ''} onChange={e => handleUpdate('warranty', e.target.value)} className="mt-1 h-8 text-xs" />
-                  </div>
-                  {canViewInventoryCost && <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Último costo de compra</label>
-                    <Input type="number" min={0} step="any" value={draft.lastPurchasePrice ?? ''} onChange={e => handleUpdate('lastPurchasePrice', e.target.value)} className="mt-1 h-8 text-xs text-right" />
-                  </div>}
-                </div>
-              )}
-
-              <div className="sm:col-span-2">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
-                <Select value={draft.priceCurrency} onValueChange={handleCurrencyChange} disabled={isSaving}>
-                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NIO">NIO</SelectItem>
-                    <SelectItem value="USD">USD</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-                {canViewInventoryCost && <div className="col-span-1">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
-                <Input
-                  type="number" min={0} step="any"
-                  value={draft.costPrice}
-                  onChange={e => handleUpdate('costPrice', e.target.value)}
-                  className="h-8 text-xs text-right mt-1 tabular-nums"
-                   readOnly={!isService}
-                />
-              </div>}
-
-              {!isService && (
                 <div className="col-span-1">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">U. Medida</label>
                   <Select value={draft.unit || 'unidad'} onValueChange={v => handleUpdate('unit', v)} disabled={isSaving}>
@@ -583,47 +348,6 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                   {draft.trackBatch ? 'Sí' : 'No'}
                 </Button>
               </div>}
-
-              {!isService && draft.trackSerialNumbers && (
-                <div className="col-span-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">IMEI / Serie *</label>
-                  <Input
-                    value={draft.imeiNumber}
-                    onChange={e => handleUpdate('imeiNumber', e.target.value)}
-                    className="h-8 text-xs font-mono mt-1"
-                    placeholder="Número de serie o IMEI"
-                  />
-                </div>
-              )}
-
-              {!isService && (
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén</label>
-                  <Select value={draft.initialAllocations?.[0]?.warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations?.[0]?.id, { warehouseId: v })} disabled>
-                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Almacén..." /></SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {!isService && draft.initialAllocations?.[0] && (
-                <>
-                  <div className="col-span-1">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Actual</label>
-                    <Input type="number" disabled min={0} value={draft.initialAllocations[0].quantity} onChange={e => updateAllocation(draft.initialAllocations[0].id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })} className="h-8 text-xs text-right mt-1" placeholder="Stock" />
-                  </div>
-                  <div className="col-span-1">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Mínimo</label>
-                    <Input type="number" min={0} value={draft.initialAllocations[0].minStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { minStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-8 text-xs text-right mt-1" placeholder="Min" />
-                  </div>
-                  <div className="col-span-1">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Máximo</label>
-                    <Input type="number" min={0} value={draft.initialAllocations[0].maxStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { maxStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-8 text-xs text-right mt-1" placeholder="Max" />
-                  </div>
-                </>
-              )}
 
               {isService && (
                 <div className="col-span-1 sm:col-span-2 md:col-span-2">

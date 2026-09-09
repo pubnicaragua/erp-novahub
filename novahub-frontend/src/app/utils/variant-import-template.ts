@@ -10,7 +10,7 @@ export const getCanonicalProductImportHeaders = (
   priceLists: CanonicalImportPriceList[],
   canViewInventoryCost: boolean,
 ) => [
-  'Código / SKU',
+  'Código',
   'Nombre',
   'Descripción',
   'Nota comercial',
@@ -22,7 +22,6 @@ export const getCanonicalProductImportHeaders = (
   ...priceLists.map((list) => `Precio ${list.name}`),
   ...(canViewInventoryCost ? ['Costo'] : []),
   'Serie/IMEI',
-  'Imagen URL',
 ];
 
 export type CanonicalImportLocation = {
@@ -109,7 +108,7 @@ export const createCanonicalVariantImportWorkbook = (
     [mode === 'PURCHASE_ORDER' ? 'GUÍA · PLANTILLA CANÓNICA PARA ORDEN DE COMPRA' : 'GUÍA · PLANTILLA CANÓNICA DE PRODUCTOS CON VARIANTES'],
     ['Plantilla vacía', 'Las hojas de carga contienen únicamente encabezados. Registra tus propios productos, variantes, atributos, precios y destinos antes de importar.'],
     ['Contrato NOVAHUB_VARIANTS_V1. Las hojas Productos, Variantes, Atributos, Precios e Inventario se leen como una sola carga relacionada por código de producto y SKU de variante.'],
-    ['Productos', 'Una fila por producto padre. Usa los mismos datos de la creación: código, nombre, descripción, nota comercial, categoría, unidad, marca, indicador de variable, moneda, tres precios de venta, costo, serie/IMEI e imagen opcional.'],
+    ['Productos', 'Una fila por producto padre. Usa los mismos datos de la creación: código, nombre, descripción, nota comercial, categoría, unidad, marca, indicador de variable, moneda, tres precios de venta, costo y serie/IMEI.'],
     ['Variantes', 'Una fila por presentación vendible. El SKU variante debe ser único; el costo variante vacío hereda el costo del padre y un costo informado es propio de esa variante.'],
     ['Atributos', mode === 'PURCHASE_ORDER'
       ? 'Una fila por SKU variante + atributo + valor. Los atributos faltantes quedan pendientes y se crean al recepcionar la compra.'

@@ -1,6 +1,6 @@
 # Reglas del frontend de NovaHub
 
-Estas reglas complementan el [`AGENTS.md`](../AGENTS.md) del workspace. El frontend es un repositorio Git independiente y su aplicación vive en `Frontend/novahub-frontend`; ejecuta los comandos desde esa carpeta.
+Estas reglas complementan el [`AGENTS.md`](../AGENTS.md) del workspace cuando está disponible. El frontend es un repositorio Git independiente y su aplicación vive en `Frontend/novahub-frontend`; ejecuta los comandos desde esa carpeta. Una sesión iniciada directamente desde este repositorio debe poder seguir estas reglas sin asumir que el workspace contenedor fue cargado.
 
 ## Integración
 
@@ -9,6 +9,7 @@ Estas reglas complementan el [`AGENTS.md`](../AGENTS.md) del workspace. El front
 - Las vistas deben usar servicios existentes y `src/app/services/api.ts`; no agregar `fetch` ad hoc en componentes.
 - Para cache, búsquedas, paginación y estados de carga, seguir el patrón vigente de TanStack Query en Ventas: query keys estables, invalidación de dominio y debounce cuando corresponda.
 - Respetar `hasAccess`, `canPerform`, `enabledModules`, `useBranchScope` y las reglas de tenant/sucursal. Ocultar una acción mejora UX, pero el backend debe autorizarla también.
+- Si `../docs/ai/` no está disponible en un checkout aislado, usar el código, los contratos, los servicios y las pruebas como autoridad; registrar la ausencia documental como `NO CONFIRMADO`.
 
 ## UI y responsive
 

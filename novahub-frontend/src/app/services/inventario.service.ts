@@ -135,9 +135,9 @@ export const inventoryService = {
 
   // ==================== PRODUCT VARIANTS ====================
   getVariants: (productId: string, signal?: AbortSignal) => api.get<any[]>(`/inventory/products/${productId}/variants`, { signal }),
-  createVariant: (productId: string, data: { sku: string; name?: string; barcode?: string; priceModifier?: number; costModifier?: number; costPrice?: number | null; attributes?: any[] }) =>
+  createVariant: (productId: string, data: { sku: string; name?: string; priceModifier?: number; costModifier?: number; costPrice?: number | null; attributes?: any[] }) =>
     api.post<any>(`/inventory/products/${productId}/variants`, data),
-  updateVariant: (variantId: string, data: { sku?: string; name?: string; barcode?: string; priceModifier?: number; costModifier?: number; costPrice?: number | null; attributes?: any[] }) =>
+  updateVariant: (variantId: string, data: { sku?: string; name?: string; priceModifier?: number; costModifier?: number; costPrice?: number | null; attributes?: any[] }) =>
     api.patch<any>(`/inventory/variants/${variantId}`, data),
   deleteVariant: (variantId: string) => api.delete(`/inventory/variants/${variantId}`),
   regenerateVariants: (productId: string) => api.post<any[]>(`/inventory/products/${productId}/variants/regenerate`),

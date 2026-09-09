@@ -12,7 +12,6 @@ import {
   AlertCircle,
   Info,
   Layers,
-  Barcode,
   Truck,
   Calendar,
   DollarSign,
@@ -599,7 +598,7 @@ export function ProductDetailDrawer({
                   )}
                 </div>
                 <SheetDescription className="flex min-w-0 flex-wrap items-start gap-x-3 gap-y-1 text-xs">
-                  <span className="min-w-0 max-w-full break-words font-mono [overflow-wrap:anywhere]">{product?.code || product?.sku || '—'}</span>
+                  <span className="min-w-0 max-w-full break-words font-mono [overflow-wrap:anywhere]">{product?.code || '—'}</span>
                   {product?.category?.name && (
                     <>
                       <span className="text-border">·</span>
@@ -758,17 +757,9 @@ export function ProductDetailDrawer({
                         icon={Info}
                         muted={!product?.commercialNote}
                       />
-                      {!isService && canViewInventoryCost && (
-                        <InfoField
-                          label="Código de barras"
-                          value={product?.barcode || product?.ean || '—'}
-                          icon={Barcode}
-                          mono
-                        />
-                      )}
                       <InfoField
-                        label="SKU"
-                        value={product?.sku || product?.code || '—'}
+                        label="Código"
+                        value={product?.code || '—'}
                         icon={Hash}
                         mono
                       />

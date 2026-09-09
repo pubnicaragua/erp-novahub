@@ -1514,7 +1514,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                               label: p.name || 'Producto',
                               value: String(p.id),
                               description: [
-                                `${p.code || p.sku || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,
+                                `${p.code || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,
                                 p.commercialNote ? `Nota: ${p.commercialNote}` : null,
                               ].filter(Boolean).join(' · '),
                             })),
