@@ -20,12 +20,14 @@ export function useNotifications() {
             // Las alertas de Compras deben aparecer casi en tiempo real para
             // que la aprobación de una solicitud/orden no dependa de una
             // ventana de espera de 30 segundos.
-            refetchInterval: 5000,
+            // Las alertas siguen actualizándose automáticamente sin generar
+            // una consulta pesada cada pocos segundos mientras se exporta.
+            refetchInterval: 15_000,
             // El shell global mantiene el inbox activo aunque el usuario esté
             // en otra pestaña o módulo; el hook de alertas usa este cambio
             // para reproducir el aviso sin esperar a abrir Notificaciones.
             refetchIntervalInBackground: true,
-            refetchOnWindowFocus: true,
+            refetchOnWindowFocus: false,
         },
     );
     const notifications = notificationsQuery.data ?? [];

@@ -16,6 +16,7 @@ import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from 
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { buildReportDateFilters } from '../../utils/report-date-filters';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -74,13 +75,15 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
-  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'providers'], async (signal) => {
-    const filters = { pageSize: 5000, report: true };
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'providers', dateRange], async (signal) => {
+    const { start } = getRangeDates(dateRange);
+    const filters = { pageSize: 5000, report: true, ...buildReportDateFilters(start, new Date()) };
+    const supplierFilters = { ...filters, light: true };
     const [billRes, payRes, ordRes, suppRes] = await Promise.all([
-      fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => purchaseOrdersService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => suppliersService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => purchaseOrdersService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => suppliersService.getAll(pageFilters, signal), supplierFilters, signal),
     ]);
     return { bills: billRes, payments: payRes, orders: ordRes, suppliers: suppRes };
   }, { enabled: canViewPurchases, onError: (e) => toast.error(e.message || 'Error cargando proveedores') });

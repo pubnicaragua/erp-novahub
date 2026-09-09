@@ -44,6 +44,8 @@ export interface ApiFilters {
   sortOrder?: 'asc' | 'desc';
   /** Bounded bulk mode used by reports; regular lists remain capped at 200. */
   report?: boolean;
+  /** Omite relaciones pesadas cuando el exportador solo necesita columnas resumen. */
+  light?: boolean | string;
   /** Incluye ítems inactivos (p. ej. servicios "No disponible") en el listado de inventario. */
   includeInactive?: boolean | string;
 }

@@ -154,10 +154,10 @@ export function SupplierDetailDrawer({
 
     void Promise.allSettled([
       suppliersService.getById(supplierId),
-      purchaseOrdersService.getAll({ supplierId, page: 1, pageSize: 50 } as any, controller.signal),
-      supplierInvoicesService.getAll({ supplierId, page: 1, pageSize: 50 } as any, controller.signal),
-      expensesService.getAll({ supplierId, page: 1, pageSize: 50 } as any, controller.signal),
-      recurringExpensesService.getAll({ supplierId, page: 1, pageSize: 50 } as any, controller.signal),
+      purchaseOrdersService.getAll({ supplierId, page: 1, pageSize: 50, light: true } as any, controller.signal),
+      supplierInvoicesService.getAll({ supplierId, page: 1, pageSize: 50, light: true } as any, controller.signal),
+      expensesService.getAll({ supplierId, page: 1, pageSize: 50, light: true } as any, controller.signal),
+      recurringExpensesService.getAll({ supplierId, page: 1, pageSize: 50, light: true } as any, controller.signal),
     ]).then(([supplierResult, ordersResult, invoicesResult, expensesResult, recurringResult]) => {
       if (cancelled) return;
 
@@ -286,7 +286,10 @@ export function SupplierDetailDrawer({
         items: outputItems,
         tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa',
         tenantLogo: themeConfig?.logo,
-        formatAmount: (amount: number, currency?: string) => formatCurrencyAmount(amount, currency, true),
+        // La moneda ya se identifica en el encabezado de las columnas.
+        // En las celdas solo debe aparecer el símbolo (C$ o $), no el código
+        // repetido al final del importe.
+        formatAmount: (amount: number, currency?: string) => formatCurrencyAmount(amount, currency),
         outputCurrency: historyExportCurrency,
       });
       toast.success('Historial del proveedor descargado', { id: exportToastId });

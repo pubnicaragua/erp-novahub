@@ -499,9 +499,9 @@ export function ManagerShell({
     queryKey: ["manager-notifications", group?.id, user?.id],
     queryFn: ({ signal }) => notificationsService.getManagerInbox(group!.id, signal),
     enabled: Boolean(group?.id && user?.id),
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
     refetchIntervalInBackground: true,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
   const managerNotifications = managerNotificationsQuery.data || [];
   const unreadManagerNotifications = managerNotifications.filter((notification) => !notification.read);

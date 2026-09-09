@@ -142,19 +142,22 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     });
   }, [data, search, statusFilter]);
 
-  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter = 'all') => {
     const exportToastId = toast.loading('Generando reporte de solicitudes...');
     try {
       const allRows = scope === 'all'
         ? await fetchAllPaginatedRows<PurchaseRequest>((page, pageSize) => purchaseRequestsService.getAll({
           page,
           pageSize,
+          report: true,
+          light: true,
           search: search.trim() || undefined,
           status: statusFilter !== 'all' ? statusFilter : undefined,
           branchId: selectedBranchId || undefined,
         }))
         : data;
       const exportRows = allRows.filter((request) => {
+        if (exportFilter === 'approved' && normalizeRequestStatus(request.status) !== 'APPROVED') return false;
         if (statusFilter !== 'all' && normalizeRequestStatus(request.status) !== statusFilter) return false;
         if (!search) return true;
         const value = search.toLowerCase();
@@ -184,6 +187,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         format,
         targetKey: 'compras.purchase-request',
         summary: { label: 'Total general', value: formatConvertedAmount(totalRequests, displayCurrency as any, globalRate), columnIndex: 3 },
+        summaryPlacement: 'footer',
         columns: [
           { label: 'N° Solicitud', value: (row) => row.number },
           { label: 'Proveedor', value: (row) => row.supplier?.name || row.management?.[0]?.supplier?.name || 'Sin proveedor' },
@@ -598,7 +602,20 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           <Badge variant="secondary" className="text-xs">{data.length}</Badge>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
-        <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />
+        <PdfDownloadButton
+          label="Exportar"
+          includeRoll={false}
+          scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }}
+          filterSelector={{
+            label: 'Estado de solicitudes',
+            defaultValue: 'all',
+            options: [
+              { value: 'all', label: 'Todas las solicitudes', description: 'Incluye todos los estados' },
+              { value: 'approved', label: 'Solo aprobadas', description: 'Incluye únicamente solicitudes aprobadas' },
+            ],
+          }}
+          onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
+        />
         <PurchaseViewTutorial view="requests" />
         <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de solicitudes de compra" />
         </div>

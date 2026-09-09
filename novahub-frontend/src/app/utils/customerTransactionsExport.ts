@@ -42,7 +42,7 @@ const formatDate = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-NI');
 };
 
-const formatMoney = (value: unknown, currency?: string | null) => formatCurrencyAmount(value, currency || 'NIO', true);
+const formatMoney = (value: unknown, currency?: string | null, includeCode = false) => formatCurrencyAmount(value, currency || 'NIO', includeCode);
 
 function safeHex(value: string | null | undefined, fallback = '#10b981') {
   return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
@@ -97,7 +97,9 @@ export async function exportCustomerTransactionsExcel(options: CustomerTransacti
   options.rows.forEach((row, index) => {
     const excelRow = worksheet.addRow([
       row.kind || 'Transacción', row.number || '—', formatDate(row.date), pdfStatusLabel(row.status),
-      originalOnly || row.reportAmount == null ? formatMoney(row.amount, row.currency) : formatMoney(row.reportAmount, row.reportCurrency),
+      originalOnly || row.reportAmount == null
+        ? formatMoney(row.amount, row.currency, originalOnly || !options.outputCurrency)
+        : formatMoney(row.reportAmount, row.reportCurrency, !options.outputCurrency),
       `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}`,
     ]);
     excelRow.eachCell((cell) => {
@@ -136,7 +138,9 @@ export async function exportCustomerTransactionsPdf(options: CustomerTransaction
       { header: 'Número', value: (row) => row.number || '—' },
       { header: 'Fecha', align: 'center', value: (row) => formatDate(row.date) },
       { header: 'Estado', value: (row) => pdfStatusLabel(row.status) },
-      { header: amountHeader, align: 'right', value: (row) => originalOnly || row.reportAmount == null ? formatMoney(row.amount, row.currency) : formatMoney(row.reportAmount, row.reportCurrency) },
+      { header: amountHeader, align: 'right', value: (row) => originalOnly || row.reportAmount == null
+        ? formatMoney(row.amount, row.currency, originalOnly || !outputCurrency)
+        : formatMoney(row.reportAmount, row.reportCurrency, !outputCurrency) },
       { header: 'Tasa aplicada', value: (row) => row.reportRateLabel || '—' },
       { header: 'Descripción / sucursal', value: (row) => `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}` },
     ],

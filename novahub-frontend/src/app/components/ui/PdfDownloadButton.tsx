@@ -15,7 +15,7 @@ import {
 import { PDF_DOWNLOAD_OPTIONS, type PdfDownloadFormat, type PdfExportScope } from '../../utils/pdfDownloadFormats';
 
 interface PdfDownloadButtonProps {
-  onDownload: (format: PdfDownloadFormat, scope?: PdfExportScope) => void;
+  onDownload: (format: PdfDownloadFormat, scope?: PdfExportScope, filter?: string) => void;
   className?: string;
   disabled?: boolean;
   size?: 'default' | 'sm' | 'lg';
@@ -34,11 +34,17 @@ interface PdfDownloadButtonProps {
     pageCount?: number;
     totalCount?: number;
   };
+  filterSelector?: {
+    label?: string;
+    defaultValue?: string;
+    options: Array<{ value: string; label: string; description?: string }>;
+  };
 }
 
 /** Menú único para previsualizar una transacción sin ofrecer reportes de la tabla. */
-export function PdfDownloadButton({ onDownload, className, disabled = false, size = 'sm', includeRoll = true, label = 'Descargar', standardLabel = 'PDF normal', standardDescription = 'Diseño asignado o global', showStandardOptions = true, firstOption, scopeSelector }: PdfDownloadButtonProps) {
+export function PdfDownloadButton({ onDownload, className, disabled = false, size = 'sm', includeRoll = true, label = 'Descargar', standardLabel = 'PDF normal', standardDescription = 'Diseño asignado o global', showStandardOptions = true, firstOption, scopeSelector, filterSelector }: PdfDownloadButtonProps) {
   const [scope, setScope] = useState<PdfExportScope>(scopeSelector?.defaultScope || 'page');
+  const [filter, setFilter] = useState(filterSelector?.defaultValue || filterSelector?.options[0]?.value || '');
   const standardOptions = showStandardOptions ? PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'standard') : [];
   const rollOptions = includeRoll ? PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'roll') : [];
 
@@ -51,7 +57,7 @@ export function PdfDownloadButton({ onDownload, className, disabled = false, siz
           <ChevronDown className="size-3.5 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64 rounded-2xl p-1.5">
+      <DropdownMenuContent align="end" className="max-h-[min(80vh,34rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-2xl p-1.5">
         {firstOption && <DropdownMenuItem onClick={firstOption.onSelect} className="gap-2 rounded-xl py-2.5 [&_svg]:text-foreground/80 data-[highlighted]:[&_svg]:!text-primary-foreground">
           <Download className="size-4" />
           <span className="min-w-0 flex-1">
@@ -78,7 +84,21 @@ export function PdfDownloadButton({ onDownload, className, disabled = false, siz
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
         </>}
-        {showStandardOptions && <DropdownMenuItem onClick={() => onDownload('configured', scopeSelector ? scope : undefined)} className="gap-2 rounded-xl py-2.5 [&_svg]:text-foreground/80 data-[highlighted]:[&_svg]:!text-primary-foreground">
+        {filterSelector && <>
+          <DropdownMenuLabel className="px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75">{filterSelector.label || 'Filtro del reporte'}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={filter} onValueChange={setFilter}>
+            {filterSelector.options.map((option) => (
+              <DropdownMenuRadioItem key={option.value} value={option.value} className="py-2" onSelect={(event) => event.preventDefault()}>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-bold">{option.label}</span>
+                  {option.description && <span className="block text-[10px] text-popover-foreground/75">{option.description}</span>}
+                </span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+        </>}
+        {showStandardOptions && <DropdownMenuItem onClick={() => onDownload('configured', scopeSelector ? scope : undefined, filterSelector ? filter : undefined)} className="gap-2 rounded-xl py-2.5 [&_svg]:text-foreground/80 data-[highlighted]:[&_svg]:!text-primary-foreground">
           <Download className="size-4" />
           <span className="min-w-0 flex-1">
             <span className="block font-bold">{standardLabel}</span>
@@ -89,7 +109,7 @@ export function PdfDownloadButton({ onDownload, className, disabled = false, siz
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75">Tamaños de página</DropdownMenuLabel>
           {standardOptions.map((option) => (
-            <DropdownMenuItem key={option.value} onClick={() => onDownload(option.value, scopeSelector ? scope : undefined)} className="gap-2 rounded-xl py-2 [&_svg]:text-foreground/70 data-[highlighted]:[&_svg]:!text-primary-foreground">
+              <DropdownMenuItem key={option.value} onClick={() => onDownload(option.value, scopeSelector ? scope : undefined, filterSelector ? filter : undefined)} className="gap-2 rounded-xl py-2 [&_svg]:text-foreground/70 data-[highlighted]:[&_svg]:!text-primary-foreground">
               <Download className="size-3.5" />
               <span className="min-w-0 flex-1 font-medium">{option.label}</span>
               <span className="text-right text-[10px] leading-tight text-popover-foreground/75">{option.description}</span>
@@ -103,7 +123,7 @@ export function PdfDownloadButton({ onDownload, className, disabled = false, siz
               <ReceiptText className="size-3.5" /> Rollos / Voucher
             </DropdownMenuLabel>
             {rollOptions.map((option) => (
-              <DropdownMenuItem key={option.value} onClick={() => onDownload(option.value, scopeSelector ? scope : undefined)} className="gap-2 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
+              <DropdownMenuItem key={option.value} onClick={() => onDownload(option.value, scopeSelector ? scope : undefined, filterSelector ? filter : undefined)} className="gap-2 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
                 <ReceiptText className="size-3.5" />
                 <span className="min-w-0 flex-1 font-medium">{option.label}</span>
                 <span className="text-right text-[10px] leading-tight text-popover-foreground/75">{option.description}</span>

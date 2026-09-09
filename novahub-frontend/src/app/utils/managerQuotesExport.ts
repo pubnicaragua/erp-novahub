@@ -106,8 +106,8 @@ function excelColumnName(index: number) {
 }
 
 function displayedTotal(row: ManagerQuoteExportRow, displayMode: CurrencyDisplayMode = 'DEFAULT') {
-  if (displayMode === 'ORIGINAL' || row.reportTotal == null) return formatMoney(row.total, row.currency, true);
-  return formatMoney(row.reportTotal, row.reportCurrency, true);
+  if (displayMode === 'ORIGINAL' || row.reportTotal == null) return formatMoney(row.total, row.currency, displayMode === 'ORIGINAL');
+  return formatMoney(row.reportTotal, row.reportCurrency);
 }
 
 function displayedTotalNumber(row: ManagerQuoteExportRow, displayMode: CurrencyDisplayMode = 'DEFAULT') {
@@ -138,7 +138,7 @@ export async function exportManagerQuotesExcel(options: ManagerQuotesExportOptio
   worksheet.getCell('A2').value = `${options.tenantName} · ${filteredContext(options.filterSummary)}`;
   worksheet.getCell('A2').font = { italic: true, color: { argb: 'FF64748B' } };
   worksheet.mergeCells(`A3:${endColumn}3`);
-  worksheet.getCell('A3').value = `Total de cotizaciones: ${options.metrics?.total || options.rows.length} · Monto total: ${formatMoney(options.metrics?.amount, options.metrics?.amountCurrency, true)} · ${reportContext(options)} · Sucursal con más cotizaciones: ${options.metrics?.topBranchName || 'Sin datos'}`;
+  worksheet.getCell('A3').value = `Total de cotizaciones: ${options.metrics?.total || options.rows.length} · Monto total: ${formatMoney(options.metrics?.amount, options.metrics?.amountCurrency)} · ${reportContext(options)} · Sucursal con más cotizaciones: ${options.metrics?.topBranchName || 'Sin datos'}`;
   worksheet.getCell('A3').font = { bold: true, color: { argb: hexToArgb(primary) } };
 
   worksheet.addRow(headers);
@@ -211,7 +211,7 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
   currentY += 5;
   doc.text(reportContext(options), margin, currentY);
   currentY += 5;
-  doc.text(`Generado: ${new Date().toLocaleString('es-NI')} · Total de cotizaciones: ${options.metrics?.total || options.rows.length} · Monto total: ${formatMoney(options.metrics?.amount, options.metrics?.amountCurrency, true)}`, margin, currentY);
+  doc.text(`Generado: ${new Date().toLocaleString('es-NI')} · Total de cotizaciones: ${options.metrics?.total || options.rows.length} · Monto total: ${formatMoney(options.metrics?.amount, options.metrics?.amountCurrency)}`, margin, currentY);
   currentY += 7;
   doc.setDrawColor(primary[0], primary[1], primary[2]);
   doc.setLineWidth(0.8);
@@ -223,7 +223,7 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
       ? ['Número', 'Sucursal', 'Cliente', 'Fecha emisión', 'Total original', 'Cargos adicionales', 'Tasa utilizada', 'Estado', 'Validez']
       : ['Número', 'Sucursal', 'Cliente', 'Fecha emisión', amountHeader, 'Cargos adicionales', 'Tasa utilizada', 'Estado', 'Validez']],
     body: options.rows.map((row) => originalOnly
-      ? [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), `${formatMoney(row.total, row.currency, true)}\n${formatCurrencyDescriptor(row.currency)}`, additionalChargesLabel(row), rateContext(row), pdfStatusLabel(row.status), formatDate(row.expiryDate)]
+      ? [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), formatMoney(row.total, row.currency, true), additionalChargesLabel(row), rateContext(row), pdfStatusLabel(row.status), formatDate(row.expiryDate)]
       : [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), displayedTotal(row, displayMode), additionalChargesLabel(row), rateContext(row), pdfStatusLabel(row.status), formatDate(row.expiryDate)]),
     startY: currentY,
     margin: { left: margin, right: margin, bottom: 16 },

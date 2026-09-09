@@ -32,6 +32,7 @@ import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTena
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { buildReportDateFilters } from '../../utils/report-date-filters';
 
 const STATUS_LABEL: Record<string, string> = {
   PAID: 'Pagado',
@@ -137,28 +138,31 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
       ? endOfDay(shiftYearClamped(basePrevEnd, 1))
       : basePrevEnd;
     const now = new Date();
-    const filters = { pageSize: 5000, report: true };
+    // Finanzas solo necesita importes y fechas; evita traer líneas, variantes
+    // y relaciones de detalle que sí requieren los reportes comerciales.
+    const reportDateFilters = buildReportDateFilters(start, now, comparisonStart);
+    const filters = { pageSize: 5000, report: true, ...reportDateFilters };
     const [invR, payR, bilR, ppayR, incR, expR, rincR, rexpR, plR, plPrevR, bsR, bsStartR, tbR, bdR, accR, perR, recR, jR, regR, sesR] = await Promise.all([
-      canViewFinancial ? fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
-      canViewFinancial ? fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
-      canViewFinancial ? fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
-      canViewFinancial ? fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
-      canViewFinancial ? fetchAllReportPages((pageFilters) => incomeService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
-      canViewFinancial ? fetchAllReportPages((pageFilters) => expensesService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
-      canViewFinancial ? fetchAllReportPages((pageFilters) => recurringIncomesService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
-      canViewFinancial ? fetchAllReportPages((pageFilters) => recurringExpensesService.getAll(pageFilters, signal), filters) : Promise.resolve([]),
-      canViewFinancial ? contabilidadService.getProfitLoss({ dateFrom: toIso(start), dateTo: toIso(now) }, signal) : Promise.resolve(null),
-      canViewFinancial && comparisonStart && comparisonEnd ? contabilidadService.getProfitLoss({ dateFrom: toIso(comparisonStart), dateTo: toIso(comparisonEnd) }, signal) : Promise.resolve(null),
-      canViewFinancial ? contabilidadService.getBalanceSheet({ date: toIso(now) }, signal) : Promise.resolve(null),
-      canViewFinancial ? contabilidadService.getBalanceSheet({ date: toIso(new Date(start.getTime() - DAY_MS)) }, signal) : Promise.resolve(null),
-      canViewFinancial ? contabilidadService.getTrialBalance({ dateFrom: toIso(start), dateTo: toIso(now) }, signal) : Promise.resolve([]),
-      canViewFinancial ? contabilidadService.getBudgetItems(undefined, signal) : Promise.resolve([]),
-      canViewFinancial ? contabilidadService.getChartOfAccounts(false, signal) : Promise.resolve([]),
-      canViewFinancial ? contabilidadService.getPeriods(signal) : Promise.resolve([]),
-      canViewFinancial ? contabilidadService.getReconciliations(signal) : Promise.resolve([]),
-      canViewFinancial ? fetchAllReportPages((pageFilters) => contabilidadService.getJournals(pageFilters, signal), { pageSize: 200 }) : Promise.resolve([]),
-      canViewFinancial ? cajaService.getRegisters(true, signal) : Promise.resolve([]),
-      canViewFinancial ? cajaService.getSessionHistory(undefined, 1, signal) : Promise.resolve([]),
+      canViewSales ? fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters, signal) : Promise.resolve([]),
+      canViewSales ? fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters, signal) : Promise.resolve([]),
+      canViewPurchases ? fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters, signal) : Promise.resolve([]),
+      canViewPurchases ? fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters, signal) : Promise.resolve([]),
+      canViewFinancial ? fetchAllReportPages((pageFilters) => incomeService.getAll(pageFilters, signal), filters, signal) : Promise.resolve([]),
+      canViewFinancial ? fetchAllReportPages((pageFilters) => expensesService.getAll(pageFilters, signal), filters, signal) : Promise.resolve([]),
+      canViewFinancial ? fetchAllReportPages((pageFilters) => recurringIncomesService.getAll(pageFilters, signal), filters, signal) : Promise.resolve([]),
+      canViewFinancial ? fetchAllReportPages((pageFilters) => recurringExpensesService.getAll(pageFilters, signal), filters, signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getProfitLoss({ dateFrom: toIso(start), dateTo: toIso(now) }, signal) : Promise.resolve(null),
+      canViewAccounting && comparisonStart && comparisonEnd ? contabilidadService.getProfitLoss({ dateFrom: toIso(comparisonStart), dateTo: toIso(comparisonEnd) }, signal) : Promise.resolve(null),
+      canViewAccounting ? contabilidadService.getBalanceSheet({ date: toIso(now) }, signal) : Promise.resolve(null),
+      canViewAccounting ? contabilidadService.getBalanceSheet({ date: toIso(new Date(start.getTime() - DAY_MS)) }, signal) : Promise.resolve(null),
+      canViewAccounting ? contabilidadService.getTrialBalance({ dateFrom: toIso(start), dateTo: toIso(now) }, signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getBudgetItems(undefined, signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getChartOfAccounts(false, signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getPeriods(signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getReconciliations(signal) : Promise.resolve([]),
+      canViewAccounting ? fetchAllReportPages((pageFilters) => contabilidadService.getJournals(pageFilters, signal), { pageSize: 200, ...reportDateFilters }, signal) : Promise.resolve([]),
+      canViewPos ? cajaService.getRegisters(true, signal) : Promise.resolve([]),
+      canViewPos ? cajaService.getSessionHistory(undefined, 1, signal) : Promise.resolve([]),
     ]);
     const flatAccounts: any[] = [];
     const flatten = (nodes: any[]) => { for (const n of nodes) { flatAccounts.push(n); if (n.children) flatten(n.children); } };

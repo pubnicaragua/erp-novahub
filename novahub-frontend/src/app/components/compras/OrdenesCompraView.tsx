@@ -1781,13 +1781,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       count: filtered.filter((order) => (order.items?.length || 0) === value).length,
     }));
 
-  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter = 'all') => {
     const exportToastId = toast.loading('Generando reporte de órdenes de compra...');
     try {
       const allRows = scope === 'all'
         ? await fetchAllPaginatedRows<PurchaseOrder>((page, pageSize) => purchaseOrdersService.getAll({
           page,
           pageSize,
+          report: true,
+          light: true,
           search: searchTerm.trim() || undefined,
           status: statusFilter !== 'ALL' && statusFilter !== 'TO_APPROVE' ? statusFilter : undefined,
           branchId: selectedBranchId || undefined,
@@ -1795,6 +1797,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         : data;
       const exportFiltered = allRows.filter((order) => {
         const orderStatus = normalizePurchaseOrderStatus(order.status);
+        if (exportFilter === 'approved' && orderStatus !== 'APPROVED') return false;
         if (statusFilter === 'TO_APPROVE') {
           if (!PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(orderStatus)) return false;
         } else if (statusFilter !== 'ALL' && normalizePurchaseOrderStatus(statusFilter) !== orderStatus) {
@@ -1827,6 +1830,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         format,
         targetKey: 'compras.list',
         summary: { label: 'Total general', value: formatConvertedAmount(totalOrders, displayCurrency as any, globalRate), columnIndex: 4 },
+        summaryPlacement: 'footer',
         columns: [
           { label: 'N° Orden', value: (row) => row.number },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
@@ -1960,6 +1964,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             total: formatConvertedAmount(Number(item.total || (Number(item.quantity || 0) * Number(item.unitPrice || 0))), order.currency, order.exchangeRate || globalRate),
             secondary: [item.category, item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : ''].filter(Boolean).join(' · '),
           })),
+          totals: [
+            { label: 'Subtotal', value: formatConvertedAmount(Number(order.subtotal || 0), order.currency, order.exchangeRate || globalRate) },
+            { label: 'Impuestos', value: formatConvertedAmount(Number(order.taxAmount || order.tax || 0), order.currency, order.exchangeRate || globalRate) },
+            { label: 'Descuento', value: formatConvertedAmount(Number(order.withholdingAmount ?? order.withholdingTotal ?? 0), order.currency, order.exchangeRate || globalRate) },
+          ],
           total: formatConvertedAmount(Number(order.total || 0), order.currency, order.exchangeRate || globalRate),
           totalLabel: 'Total',
           notes: order.notes,
@@ -3044,7 +3053,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
-            {canPerform('PURCHASES_ORDERS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
+            {canPerform('PURCHASES_ORDERS', 'export') && <PdfDownloadButton
+              label="Exportar"
+              includeRoll={false}
+              scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }}
+              filterSelector={{
+                label: 'Estado de órdenes',
+                defaultValue: 'all',
+                options: [
+                  { value: 'all', label: 'Todas las órdenes', description: 'Incluye todos los estados' },
+                  { value: 'approved', label: 'Solo aprobadas', description: 'Incluye únicamente órdenes aprobadas' },
+                ],
+              }}
+              onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
+            />}
             <PurchaseViewTutorial view="orders" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes de compra" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

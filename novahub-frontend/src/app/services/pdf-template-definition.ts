@@ -119,6 +119,8 @@ export const TEMPLATE_TOKENS = [
   { token: 'document.number', label: 'Número', sample: 'COT-000123' },
   { token: 'document.date', label: 'Fecha', sample: '29/08/2026' },
   { token: 'document.status', label: 'Estado', sample: 'Pendiente' },
+  { token: 'document.period', label: 'Período del reporte', sample: 'Periodo: 01/08/2026 al 31/08/2026' },
+  { token: 'document.generated', label: 'Fecha de generación', sample: 'Generado: 08/09/2026 10:30' },
   { token: 'party.name', label: 'Entidad relacionada', sample: 'Entidad de ejemplo' },
   { token: 'party.taxId', label: 'Identificación de la entidad', sample: 'J0310000000000' },
   { token: 'party.address', label: 'Dirección de la entidad', sample: 'Dirección de la entidad' },
@@ -262,6 +264,38 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
   }
   if (target.key === 'inventario.product-labels') {
     return { ...base, document: { ...base.document, title: 'ETIQUETA DE PRODUCTO', barcode: '7501234567890', date: '29/08/2026' }, product: { name: 'Producto de muestra', code: 'SKU-0001', barcode: '7501234567890', price: 'C$ 500.00' }, items: [] };
+  }
+  if (target.key === 'ventas.cash-historical-report') {
+    const reportSections: PdfTemplateReportSection[] = [
+      reportSection('cash-summary', 'Resumen general', ['Sesiones', 'Cerradas', 'Ventas NIO', 'Ventas USD', 'Diferencia NIO', 'Depósitos NIO'], [
+        ['15', '12', 'C$ 21,636.68', '$ 0.00', 'C$ -9,654.93', 'C$ 5,000.00'],
+      ]),
+      reportSection('cash-payment-methods', 'Formas de pago', ['Forma de pago', 'Operaciones', 'Monto NIO', 'Monto USD'], [
+        ['Efectivo', '12', 'C$ 12,000.00', '$ 0.00'],
+        ['Tarjeta', '4', 'C$ 9,636.68', '$ 0.00'],
+      ]),
+      reportSection('cash-sessions', 'Detalle de sesiones', ['Fecha', 'Sucursal', 'Caja', 'Cajero', 'Estado', 'Ventas', 'Ventas NIO', 'Ventas USD', 'Dif. NIO', 'Depósito NIO'], [
+        ['08/09/2026', 'Tienda 1', 'CJ-01 · Caja 1', 'Gabriel Tinoco', 'Cerrada', '17', 'C$ 21,636.68', '$ 0.00', 'C$ -9,654.93', 'C$ 5,000.00'],
+        ['07/09/2026', 'Tienda 1', 'CJ-02 · Caja 2', 'Ana Martínez', 'Cerrada', '12', 'C$ 8,500.00', '$ 0.00', 'C$ 250.00', 'C$ 2,000.00'],
+      ]),
+    ];
+    return {
+      ...base,
+      party: undefined,
+      document: {
+        ...base.document,
+        title: 'REPORTE HISTÓRICO DE CAJA',
+        number: '',
+        status: '',
+        date: '08/09/2026',
+        period: 'Periodo: 01/08/2026 al 31/08/2026',
+        generated: 'Generado: 08/09/2026 10:30',
+        notes: '',
+      },
+      reportSections,
+      items: reportSections[2].rows,
+      rows: reportSections[2].rows,
+    };
   }
   if (target.module === 'reportes') {
     const reportKpisByTarget: Record<string, PdfTemplateKpi[]> = {
@@ -516,7 +550,7 @@ function defaultBorderStyle(type: PdfTemplateNodeType): PdfTemplateNode['borderS
 function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
   const presets: Record<string, string[]> = {
     'ventas.customer-history': ['Movimiento', 'Estado', 'Fecha', 'Monto'],
-    'ventas.cash-historical-report': ['Fecha', 'Sucursal', 'Caja', 'Estado'],
+    'ventas.cash-historical-report': ['Fecha', 'Sucursal', 'Caja', 'Cajero', 'Estado', 'Ventas', 'Ventas NIO', 'Ventas USD', 'Dif. NIO', 'Depósito NIO'],
     'ventas.cash-session': ['Referencia', 'Tipo', 'Descripción', 'Monto'],
     'compras.supplier-history': ['Movimiento', 'Estado', 'Fecha', 'Monto'],
     'compras.list': ['Documento', 'Proveedor', 'Fecha', 'Total'],
@@ -579,6 +613,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   const partyToken = party.mode === 'none' ? '' : `${party.tokenPrefix}.name`;
   const partySectionLabel = party.sectionLabel;
   const hasLogo = Boolean(settings?.logoUrl);
+  const isHistoricalCashReport = target.key === 'ventas.cash-historical-report';
 
   if (family === 'label') {
     return {
@@ -674,8 +709,13 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
       node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 24, width: 84, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
     ]
     : headerFields;
-  const nodes: PdfTemplateNode[] = [...headerNodes, logoNode, ...reportHeaderFields,
-    node({ type: 'field', label: 'Fecha', token: 'document.date', x: 8, y: headerLayout === 'compact' ? 20 : 24, width: 35, height: 4, fontSize: 8, color: text }, 'document-date'),
+  const historicalHeaderFields: PdfTemplateNode[] = [
+    ...headerFields.filter(item => !['document-number', 'document-status'].includes(item.id)),
+    node({ type: 'field', label: 'Período', token: 'document.period', x: 8, y: 24, width: 48, height: 4, fontSize: 8, color: text }, 'document-date'),
+  ];
+  const nodes: PdfTemplateNode[] = [...headerNodes, logoNode, ...(isHistoricalCashReport ? historicalHeaderFields : reportHeaderFields),
+    ...(isHistoricalCashReport ? [node({ type: 'field', label: 'Generado', token: 'document.generated', x: 58, y: 24, width: 34, height: 4, fontSize: 7, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated')] : []),
+    ...(isHistoricalCashReport ? [] : [node({ type: 'field', label: 'Fecha', token: 'document.date', x: 8, y: headerLayout === 'compact' ? 20 : 24, width: 35, height: 4, fontSize: 8, color: text }, 'document-date')]),
     node({ type: 'section', label: partySectionLabel, x: 5, y: 31, width: 90, height: 19, backgroundColor: '#f8fafc', borderColor: line, borderRadius: 3, color: text, borderStyle: 'none' }, 'party-section'),
     node({ type: 'field', label: partyLabel, token: partyToken, x: 8, y: 34, width: 50, height: 5.5, fontSize: 10, color: text, bold: true, borderStyle: 'none' }, 'party-name'),
     node({ type: 'field', label: party.labels.taxId, token: `${party.tokenPrefix}.taxId`, x: 62, y: 34, width: 30, height: 5.5, fontSize: 8, color: text, align: 'right', borderStyle: 'none' }, 'party-tax-id'),
@@ -711,7 +751,12 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     ]
     : defaultTableColumns(target.key);
   if (isTabular) {
-    if (target.module === 'reportes') {
+    if (isHistoricalCashReport) {
+      nodes.push(node({
+        type: 'report-sections', label: 'Secciones del reporte', x: 5, y: 31, width: 90, height: 60,
+        subsequentY: 31, subsequentHeight: 63, backgroundColor: '#ffffff', borderColor: line, color: text, columns: tableColumns, repeatHeader: true,
+      }, 'cash-report-sections'));
+    } else if (target.module === 'reportes') {
       nodes.push(node({
         type: 'report-sections', label: 'Secciones del reporte', x: 5, y: 46, width: 90, height: 45,
         subsequentY: 31, subsequentHeight: 63, backgroundColor: '#ffffff', borderColor: line, color: text, columns: tableColumns, repeatHeader: true,
@@ -727,10 +772,10 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 58, width: 90, height: 17, fontSize: 9, color: text }, 'document-notes'));
   }
 
-  if (family === 'transaction' || family === 'receipt' || family === 'cash') {
+  if ((family === 'transaction' || family === 'receipt' || family === 'cash') && !isHistoricalCashReport) {
     nodes.push(node({ type: 'totals', label: 'Totales', x: 55, y: 80, width: 40, height: 12, backgroundColor: '#f8fafc', borderColor: line, color: text }, 'totals'));
   }
-  if (target.module !== 'reportes') nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 80, width: 46, height: 10, fontSize: 8, color: text }, 'notes'));
+  if (target.module !== 'reportes' && !isHistoricalCashReport) nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 80, width: 46, height: 10, fontSize: 8, color: text }, 'notes'));
   const footerIsFilled = ['band', 'wave', 'layers', 'notch'].includes(footerLayout);
   if (footerLayout === 'band') {
     nodes.push(node({ type: 'section', label: 'Banda inferior', x: 5, y: 93, width: 90, height: 5, backgroundColor: primary, borderColor: primary, borderRadius: 1 }, 'footer-band'));
@@ -852,6 +897,38 @@ function safeReportSectionStyles(value: unknown): Record<string, PdfTemplateRepo
 }
 
 function upgradeReportTemplateNodes(nodes: PdfTemplateNode[], targetKey: string, settings?: Record<string, unknown>) {
+  const normalizedTarget = getPdfTemplateTarget(targetKey).key;
+  if (normalizedTarget === 'ventas.cash-historical-report') {
+    const fallback = createDefaultTemplateDefinition(normalizedTarget, settings);
+    const fallbackReportNode = fallback.nodes.find(item => item.id === 'cash-report-sections' || item.type === 'report-sections');
+    if (!fallbackReportNode) return nodes;
+    const existingReportNode = nodes.find(item => item.type === 'report-sections');
+    const existingTable = nodes.find(item => item.type === 'table');
+    const sourceReportNode = existingReportNode || existingTable;
+    const reportNode: PdfTemplateNode = {
+      ...fallbackReportNode,
+      ...(sourceReportNode || {}),
+      id: existingReportNode?.id || fallbackReportNode.id,
+      type: 'report-sections',
+      label: sourceReportNode?.label || 'Secciones del reporte',
+      x: sourceReportNode?.x ?? fallbackReportNode.x,
+      y: sourceReportNode?.y ?? fallbackReportNode.y,
+      width: sourceReportNode?.width ?? fallbackReportNode.width,
+      height: Math.max(Number(sourceReportNode?.height) || 0, fallbackReportNode.height),
+      subsequentY: fallbackReportNode.subsequentY,
+      subsequentHeight: fallbackReportNode.subsequentHeight,
+      columns: sourceReportNode?.columns?.length ? sourceReportNode.columns : fallbackReportNode.columns,
+    };
+    const generatedNode = nodes.find(item => item.id === 'document-generated')
+      || fallback.nodes.find(item => item.id === 'document-generated');
+    const preservedNodes = nodes
+      .filter(item => item.id !== existingTable?.id && item.id !== existingReportNode?.id)
+      .filter(item => !['document-number', 'document-status'].includes(item.id))
+      .map(item => item.id === 'document-date'
+        ? { ...item, label: 'Período', token: 'document.period', x: 8, y: 24, width: 48, height: 4 }
+        : item);
+    return [...preservedNodes, ...(generatedNode ? [generatedNode] : []), reportNode];
+  }
   if (getPdfTemplateTarget(targetKey).module !== 'reportes') return nodes;
   const fallback = createDefaultTemplateDefinition(targetKey, settings);
   const companySummaryNode = nodes.find(item => item.id === 'company-summary') || fallback.nodes.find(item => item.id === 'company-summary');

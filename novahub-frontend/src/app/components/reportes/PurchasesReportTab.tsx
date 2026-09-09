@@ -20,6 +20,7 @@ import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfi
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { buildReportDateFilters } from '../../utils/report-date-filters';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -208,16 +209,22 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
+  const [comparison, setComparison] = useState<'anterior' | 'anio-anterior'>('anterior');
 
-  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'purchases'], async (signal) => {
-    const filters = { pageSize: 5000, report: true };
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'purchases', dateRange, comparison], async (signal) => {
+    const { start, prevStart } = getRangeDates(dateRange);
+    const now = new Date();
+    const comparisonStart = comparison === 'anio-anterior' && prevStart
+      ? startOfDay(shiftYearClamped(prevStart, 1))
+      : prevStart;
+    const filters = { pageSize: 5000, report: true, ...buildReportDateFilters(start, now, comparisonStart) };
     const [billRes, payRes, credRes, ordRes, recRes, reqRes] = await Promise.all([
-      fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => supplierCreditsService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => purchaseOrdersService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => purchaseReceiptsService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => purchaseRequestsService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => billsService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => paymentsMadeService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => supplierCreditsService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => purchaseOrdersService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => purchaseReceiptsService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => purchaseRequestsService.getAll(pageFilters, signal), filters, signal),
     ]);
     return { bills: billRes, payments: payRes, credits: credRes, orders: ordRes, receipts: recRes, requests: reqRes };
   }, { enabled: canViewPurchases, onError: (e) => toast.error(e.message || 'Error cargando compras') });
@@ -234,7 +241,6 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const [evolutionTab, setEvolutionTab] = useState<'evolucion' | 'aging'>('evolucion');
   const [productMetric, setProductMetric] = useState<'monto' | 'unidades' | 'variacion'>('monto');
   const [payMode, setPayMode] = useState<'todos' | 'periodo'>('todos');
-  const [comparison, setComparison] = useState<'anterior' | 'anio-anterior'>('anterior');
   const [cicloTab, setCicloTab] = useState<'operativo' | 'incidencias' | 'retenciones'>('operativo');
   const [cicloCompleto, setCicloCompleto] = useState(false);
 

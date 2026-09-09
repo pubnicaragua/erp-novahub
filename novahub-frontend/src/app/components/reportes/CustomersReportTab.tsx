@@ -16,6 +16,7 @@ import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExpo
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { buildReportDateFilters } from '../../utils/report-date-filters';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -74,13 +75,15 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
-  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'customers'], async (signal) => {
-    const filters = { pageSize: 5000, report: true };
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'customers', dateRange], async (signal) => {
+    const { start } = getRangeDates(dateRange);
+    const filters = { pageSize: 5000, report: true, ...buildReportDateFilters(start, new Date()) };
+    const customerFilters = { ...filters, light: true };
     const [invRes, payRes, ordRes, cusRes] = await Promise.all([
-      fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => salesOrdersService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => customersService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => salesOrdersService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => customersService.getAll(pageFilters, signal), customerFilters, signal),
     ]);
     return { invoices: invRes, payments: payRes, orders: ordRes, customers: cusRes };
   }, { enabled: canViewSales, onError: (e) => toast.error(e.message || 'Error cargando clientes') });

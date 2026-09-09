@@ -402,7 +402,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     const exportToastId = toast.loading('Generando reporte de créditos...');
     try {
       const allRows = scope === 'all'
-        ? await fetchAllPaginatedRows<SupplierCredit>((page, pageSize) => vendorCreditsService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, branchId: selectedBranchId || undefined }))
+        ? await fetchAllPaginatedRows<SupplierCredit>((page, pageSize) => vendorCreditsService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, branchId: selectedBranchId || undefined, report: true, light: true }))
         : data;
       const exportFiltered = allRows.filter((credit) => {
         const status = String(credit.status || '').toLowerCase();
@@ -624,6 +624,11 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           supplier: credit.supplier?.name || 'Sin proveedor',
           fields: [{ label: 'Documento de origen', value: credit.supplierInvoice?.number || 'Sin factura asociada' }, { label: 'Moneda', value: resolveSourceCurrency((credit as any).currency) }],
           lines: ((credit as any).items || []).map((item: any) => ({ description: item.description || item.name || 'Artículo sin descripción', code: item.code, productCode: item.productCode, variantId: item.variantId, variantSku: item.variantSku, variantName: item.variantName, variantAttributes: item.variantAttributes, variant: item.variant, quantity: item.quantity || 0, unitPrice: formatConvertedAmount(Number(item.unitPrice || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate), total: formatConvertedAmount(Number(item.total || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate), secondary: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
+          totals: [
+            { label: 'Subtotal', value: formatConvertedAmount(Number(credit.subtotal || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate) },
+            { label: 'Impuestos', value: formatConvertedAmount(Number(credit.taxAmount || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate) },
+            { label: 'Descuento', value: formatConvertedAmount(Number(credit.discountAmount || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate) },
+          ],
           total: formatConvertedAmount(Number(credit.total || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate),
           totalLabel: 'Total del crédito',
         },

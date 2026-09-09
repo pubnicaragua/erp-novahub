@@ -86,6 +86,7 @@ import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/p
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { normalizeCurrency } from '../../utils/currency';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
+import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
 import { toast } from 'sonner';
 import type { Customer, Estimate, Invoice } from '../../types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
@@ -121,11 +122,11 @@ const unwrapList = (response: any): any[] => {
   return Array.isArray(value) ? value : [];
 };
 
-const fetchAllCustomerRecords = async (fetcher: (filters: any) => Promise<any>, customerId: string) => {
-  const first = await fetcher({ customerId, page: 1, pageSize: 5000, report: true });
+const fetchAllCustomerRecords = async (fetcher: (filters: any, signal?: AbortSignal) => Promise<any>, customerId: string, signal?: AbortSignal) => {
+  const first = await runWithReportRequestLimit(() => fetcher({ customerId, page: 1, pageSize: 5000, report: true }, signal), signal);
   const totalPages = Math.max(1, Number(first?.meta?.totalPages || 1));
   const remaining = totalPages > 1
-    ? await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => fetcher({ customerId, page: index + 2, pageSize: 5000, report: true })))
+    ? await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => runWithReportRequestLimit(() => fetcher({ customerId, page: index + 2, pageSize: 5000, report: true }, signal), signal)))
     : [];
   return [first, ...remaining].flatMap(unwrapList);
 };
@@ -244,6 +245,7 @@ export function CustomerDetailDrawer({
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     setSelectedInvoiceId(null);
     setSelectedMovement(null);
     setMovementFilter('ALL');
@@ -298,13 +300,13 @@ export function CustomerDetailDrawer({
     setLoadingRelated(true);
     (async () => {
       const results = await Promise.allSettled([
-        fetchAllCustomerRecords((filter) => estimatesService.getAll(filter), customerId),
-        fetchAllCustomerRecords((filter) => salesOrdersService.getAll(filter), customerId),
-        fetchAllCustomerRecords((filter) => invoicesService.getAll(filter), customerId),
-        fetchAllCustomerRecords((filter) => paymentsService.getAll(filter), customerId),
-        fetchAllCustomerRecords((filter) => recurringInvoicesService.getAll(filter), customerId),
-        fetchAllCustomerRecords((filter) => salesReturnsService.getAll(filter), customerId),
-        fetchAllCustomerRecords((filter) => creditNotesService.getAll(filter), customerId),
+        fetchAllCustomerRecords((filter, signal) => estimatesService.getAll(filter, signal), customerId, controller.signal),
+        fetchAllCustomerRecords((filter, signal) => salesOrdersService.getAll(filter, signal), customerId, controller.signal),
+        fetchAllCustomerRecords((filter, signal) => invoicesService.getAll(filter, signal), customerId, controller.signal),
+        fetchAllCustomerRecords((filter, signal) => paymentsService.getAll(filter, signal), customerId, controller.signal),
+        fetchAllCustomerRecords((filter, signal) => recurringInvoicesService.getAll(filter, signal), customerId, controller.signal),
+        fetchAllCustomerRecords((filter, signal) => salesReturnsService.getAll(filter, signal), customerId, controller.signal),
+        fetchAllCustomerRecords((filter, signal) => creditNotesService.getAll(filter, signal), customerId, controller.signal),
       ]);
       if (cancelled) return;
 
@@ -342,6 +344,7 @@ export function CustomerDetailDrawer({
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [customerId]);
 

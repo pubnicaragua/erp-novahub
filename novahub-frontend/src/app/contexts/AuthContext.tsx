@@ -34,6 +34,7 @@ function rememberSessionBranding(payload: any) {
     return;
   }
   localStorage.setItem(SESSION_BRANDING_KEY, JSON.stringify({
+    tenantId: apiUser?.clientTenantId || apiUser?.tenantId || apiUser?.enterpriseGroupId || '',
     logo,
     name: name || 'NovaHub ERP',
     kind: branding.kind || (apiUser?.clientTenant ? 'branch' : 'group'),
@@ -193,6 +194,7 @@ export interface User {
   } | null;
   /** Marca correspondiente al contexto que se está preparando (grupo o sucursal). */
   sessionBranding?: {
+    tenantId?: string;
     kind?: 'group' | 'branch' | 'platform';
     name?: string;
     logo?: string | null;

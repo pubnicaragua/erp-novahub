@@ -2,8 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
-import { createPdfPreview } from '../services/pdf-preview.service';
-import { getBase64Image, sanitizeHtml2CanvasOklch } from './export-utils';
+import { getBase64Image } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildDateFilteredPdfFileName, buildPdfFileName, buildSalesPdfFileName } from './exportFileNames';
@@ -11,7 +10,7 @@ import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
-import { createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
+import { createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 
@@ -23,6 +22,35 @@ type ReportPdfKpi = {
   detail: unknown;
   color: readonly number[];
 };
+
+// Las plantillas se invalidan explícitamente al guardar, eliminar o subir un
+// logo. Un TTL mayor evita pedir el mismo diseño antes de cada exportación
+// durante una sesión de trabajo con varios reportes.
+const PDF_DESIGN_CACHE_TTL_MS = 5 * 60_000;
+const pdfDesignCache = new Map<string, { value: any; expiresAt: number }>();
+const pdfDesignRequests = new Map<string, Promise<any>>();
+
+function pdfDesignCacheScope() {
+  if (typeof window === 'undefined') return 'server';
+  try {
+    const branding = JSON.parse(window.localStorage.getItem('nh-session-branding') || 'null');
+    // El diseño es por tenant. No usar solo logo/nombre evita reutilizar una
+    // plantilla al cambiar de usuario o de sucursal en el mismo navegador.
+    return String(branding?.tenantId || branding?.name || branding?.logo || 'browser');
+  } catch {
+    return 'browser';
+  }
+}
+
+export function clearPdfDesignCache(targetKey?: string) {
+  const normalizedTarget = targetKey ? getPdfTemplateTarget(targetKey).key : '';
+  for (const key of pdfDesignCache.keys()) {
+    if (!normalizedTarget || key.endsWith(`:${normalizedTarget}`)) pdfDesignCache.delete(key);
+  }
+  for (const key of pdfDesignRequests.keys()) {
+    if (!normalizedTarget || key.endsWith(`:${normalizedTarget}`)) pdfDesignRequests.delete(key);
+  }
+}
 
 function reportPdfLines(doc: jsPDF, value: unknown, maxWidth: number, fontSize: number, maxLines = 2) {
   doc.setFontSize(fontSize);
@@ -181,7 +209,7 @@ function pdfHexToRgb(value: unknown, fallback: PdfRgb): PdfRgb {
   return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
 }
 
-export async function getPdfDesign(targetKey: string) {
+async function loadPdfDesign(targetKey: string) {
   try {
     const target = getPdfTemplateTarget(targetKey);
     const savedDesign = await pdfDocumentDesignService.active(target.key);
@@ -189,17 +217,6 @@ export async function getPdfDesign(targetKey: string) {
       ? savedDesign.documentTypes.map(type => getPdfTemplateTarget(type).key)
       : [];
     const ownsTarget = designTypes.length === 1 && designTypes[0] === target.key;
-    if (savedDesign && !ownsTarget && designTypes.length !== 0) {
-      // Algunas versiones del endpoint devolvían una plantilla compartida o
-      // la primera plantilla del módulo. Preferimos el registro exclusivo del
-      // destino antes de renderizar para no propagar sus logos.
-      const designs = await pdfDocumentDesignService.list();
-      const exactDesign = (designs || []).find(design => design.isActive
-        && Array.isArray(design.documentTypes)
-        && design.documentTypes.length === 1
-        && getPdfTemplateTarget(design.documentTypes[0]).key === target.key);
-      if (exactDesign) return exactDesign;
-    }
     if (savedDesign && !ownsTarget) {
       // No existe un diseño propio para esta salida. Usamos su predeterminado
       // y no el registro de otra vista, aunque el endpoint lo haya devuelto.
@@ -213,6 +230,7 @@ export async function getPdfDesign(targetKey: string) {
         const settings = createSystemDefaultPdfSettings((savedDesign.settings || {}) as Record<string, unknown>);
         return {
           ...savedDesign,
+          isSystemDefaultRuntime: true,
           settings,
           layoutZones: {
             ...(savedDesign.layoutZones || {}),
@@ -231,6 +249,30 @@ export async function getPdfDesign(targetKey: string) {
     // El exportador conserva una salida editable aun cuando la consulta de
     // diseños no esté disponible momentáneamente.
     return createSystemDefaultPdfDesign(targetKey);
+  }
+}
+
+export async function getPdfDesign(targetKey: string) {
+  const normalizedTarget = getPdfTemplateTarget(targetKey).key;
+  const cacheKey = `${pdfDesignCacheScope()}:${normalizedTarget}`;
+  const cached = pdfDesignCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) pdfDesignCache.delete(cacheKey);
+  const existingRequest = pdfDesignRequests.get(cacheKey);
+  if (existingRequest) return existingRequest;
+
+  const request = loadPdfDesign(normalizedTarget);
+  pdfDesignRequests.set(cacheKey, request);
+  try {
+    const value = await request;
+    // Si la plantilla se guardó mientras esta consulta estaba pendiente, no
+    // permitimos que el resultado anterior vuelva a entrar en caché.
+    if (pdfDesignRequests.get(cacheKey) === request) {
+      pdfDesignCache.set(cacheKey, { value, expiresAt: Date.now() + PDF_DESIGN_CACHE_TTL_MS });
+    }
+    return value;
+  } finally {
+    if (pdfDesignRequests.get(cacheKey) === request) pdfDesignRequests.delete(cacheKey);
   }
 }
 
@@ -299,8 +341,33 @@ export function getPdfTemplateLogo(settings: Record<string, any> | undefined, te
   return templateLogo || tenantLogo || rememberedPdfSessionLogo() || '';
 }
 
+/** El diseño virtual no fue creado por el usuario; puede usar la salida nativa. */
+export function isVirtualSystemDefaultDesign(design: any) {
+  return Boolean(
+    design?.isSystemDefault
+    || design?.isSystemDefaultRuntime
+    || design?.templateKey === 'system-default'
+    || design?.layoutZones?.status === 'system-default'
+    || design?.layoutZones?.definition?.metadata?.preset === 'system-default'
+    || String(design?.id || '').startsWith('system-default:'),
+  );
+}
+
 export function pdfDesignColor(value: unknown, fallback: PdfRgb): PdfRgb {
   return pdfHexToRgb(value, fallback);
+}
+
+async function addNativePdfLogo(doc: jsPDF, settings: Record<string, any>, targetKey: string, tenantLogo?: string | null, x = 14, y = 10, width = 26, height = 16) {
+  const source = getPdfTemplateLogo(settings, tenantLogo, targetKey);
+  if (!source) return 0;
+  const logo = source.startsWith('data:') ? source : await getBase64Image(source);
+  if (!logo) return 0;
+  try {
+    doc.addImage(logo, 'PNG', x, y, width, height, undefined, 'FAST');
+    return width + 6;
+  } catch {
+    return 0;
+  }
 }
 
 function rememberedPdfSessionLogo(): string {
@@ -502,24 +569,42 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     ${design.showPageNumber !== false ? `<div style="position:absolute;right:8%;bottom:3%;font-size:.65em;opacity:.6;">${escapeHtml(design.pageNumberFormat === 'number-only' ? '1' : design.pageNumberFormat === 'custom' ? String(design.pageNumberCustom || 'Página {page} de {pages}').replace('{page}', '1').replace('{pages}', '1') : 'Página 1 de 1')}</div>` : ''}
     ${design.showQr ? '<div style="position:absolute;right:8%;bottom:7%;width:36px;height:36px;border:1px solid #94a3b8;"></div>' : ''}${design.showBarcode ? '<div style="position:absolute;right:18%;bottom:7%;width:80px;height:36px;border:1px solid #94a3b8;"></div>' : ''}
   </div>`;
-  const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:fixed;left:-100000px;top:0;z-index:-1;background:#fff;';
+  // Una plantilla HTML no debe hacer que html2canvas clone toda la pantalla
+  // del ERP. El documento aislado contiene únicamente la página exportable y
+  // evita el bloqueo del navegador cuando el detalle tiene listas grandes.
+  const renderFrame = document.createElement('iframe');
+  renderFrame.setAttribute('aria-hidden', 'true');
+  Object.assign(renderFrame.style, {
+    position: 'fixed', left: '-100000px', top: '0', width: `${pageWidthPx}px`, height: `${pageHeightPx}px`,
+    border: '0', opacity: '0', pointerEvents: 'none',
+  });
+  document.body.appendChild(renderFrame);
+  const renderDocument = renderFrame.contentDocument;
+  if (!renderDocument) {
+    renderFrame.remove();
+    throw new Error('No se pudo preparar el renderizador del PDF.');
+  }
+  renderDocument.open();
+  renderDocument.write('<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:visible;background:#fff}*{box-sizing:border-box}</style></head><body></body></html>');
+  renderDocument.close();
+  const wrapper = renderDocument.body;
+  Object.assign(wrapper.style, { width: `${pageWidthPx}px`, height: `${pageHeightPx}px`, background: '#fff' });
   wrapper.innerHTML = pageHtml;
-  document.body.appendChild(wrapper);
   try {
     const { default: html2canvas } = await import('html2canvas');
     const canvas = await html2canvas(wrapper.firstElementChild as HTMLElement, {
-      scale: 2,
+      // El HTML legado también se renderiza en una superficie aislada; usamos
+      // una escala de impresión para que el texto no pierda nitidez.
+      scale: 1.5,
       backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
-      onclone: (clonedDoc) => sanitizeHtml2CanvasOklch('pdf-template-canvas', clonedDoc, primary),
     });
     const { format, orientation } = pdfDesignPaper(design);
     const doc = new jsPDF({ orientation, unit: 'mm', format });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+    doc.addImage(canvas, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
     const blob = doc.output('blob');
     if (save) {
       const url = URL.createObjectURL(blob);
@@ -531,7 +616,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     }
     return { doc, blob };
   } finally {
-    wrapper.remove();
+    renderFrame.remove();
   }
 }
 
@@ -552,7 +637,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   // no lo hacen, el branding de sesión representa la sucursal activa y debe
   // ganar al fallback genérico de NovaHub.
   const resolvedTenantLogo = tenantLogo || rememberedPdfSessionLogo() || await getNovaHubLogoPng();
-  if (savedDesign?.layoutZones?.definition) {
+  if (savedDesign?.layoutZones?.definition && !isVirtualSystemDefaultDesign(savedDesign)) {
     const design = savedDesign.settings || {};
     const targetKey = getPdfTemplateTarget(documentType).key;
     const configuredItems = Array.isArray(estimate.items) ? estimate.items : Array.isArray(estimate.lines) ? estimate.lines : [];
@@ -571,7 +656,12 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       document: { title: ({ estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', 'credit-note': 'NOTA DE CRÉDITO' } as Record<string, string>)[documentType] || documentType.toUpperCase(), number: estimate.number || 'N/A', date: estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : 'N/A', status: estimate.status || '', notes: configuredNotes, terms: design.terms || '', legal: design.legalText || '' },
       customer: { name: estimate.customer?.name || estimate.client?.name || 'Cliente sin registrar', taxId: estimate.customer?.taxId || estimate.customer?.ruc || '', address: estimate.customer?.address || estimate.client?.address || '', phone: estimate.customer?.phone || estimate.customer?.telephone || estimate.client?.phone || '', email: estimate.customer?.email || estimate.client?.email || '', contact: estimate.customer?.contact || estimate.customer?.contactName || estimate.client?.contact || '' },
       items: configuredItems.map((item: any) => ({ description: commercialItemDescription(item), quantity: item.quantity || 0, unitPrice: formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate), total: formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate) })),
-      totals: { subtotal: formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate), tax: formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate), discount: formatAmount(Number(estimate.discount || 0), estimate.currency, estimate.exchangeRate), total: formatAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate) },
+      totals: {
+        subtotal: formatAmount(Number(estimate.subtotal ?? estimate.subTotal ?? 0), estimate.currency, estimate.exchangeRate),
+        tax: formatAmount(Number(estimate.taxAmount ?? estimate.tax ?? 0), estimate.currency, estimate.exchangeRate),
+        discount: formatAmount(Number(estimate.discountAmount ?? estimate.discount ?? estimate.discountTotal ?? 0), estimate.currency, estimate.exchangeRate),
+        total: formatAmount(Number(estimate.total ?? estimate.grandTotal ?? 0), estimate.currency, estimate.exchangeRate),
+      },
     };
     const settings = { ...design, paperSize: downloadFormat === 'configured' ? design.paperSize : paperSettingForDownload(downloadFormat as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>), orientation: design.orientation || 'portrait' };
     if (downloadFormat !== 'roll-58' && downloadFormat !== 'roll-80') {
@@ -579,7 +669,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       return rendered;
     }
   }
-  if (savedDesign?.engine === 'HTML_TEMPLATE' || savedDesign?.sourceType === 'UPLOADED_PDF') {
+  if (!isVirtualSystemDefaultDesign(savedDesign) && (savedDesign?.engine === 'HTML_TEMPLATE' || savedDesign?.sourceType === 'UPLOADED_PDF')) {
     return generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo: resolvedTenantLogo, documentType, format: downloadFormat, save });
   }
   // Las plantillas cargadas se exportan con el mismo motor HTML-estructurado
@@ -1641,6 +1731,7 @@ export async function previewSalesTransactionPDF({
   }
 
   writePdfPreviewLoadingPage(previewWindow, title);
+  let previewUrl = '';
   try {
     const { blob } = await generateSalesTransactionPDF({
       document: transaction,
@@ -1652,12 +1743,19 @@ export async function previewSalesTransactionPDF({
       save: false,
     });
     const fileName = buildSalesPdfFileName(documentType, transaction?.number, format);
-    const preview = await createPdfPreview(blob, fileName);
-    // La navegación directa permite que el visor nativo reciba tanto el
-    // nombre del último segmento de la URL como Content-Disposition.
-    previewWindow.location.replace(preview.url);
-    return { blob, previewUrl: preview.url, fileName: preview.fileName };
+    // El PDF ya fue generado en el navegador. Subirlo otra vez al backend
+    // antes de mostrarlo añadía una segunda latencia (y podía dejar la vista
+    // esperando mientras Render despertaba). El visor nativo puede abrir el
+    // Blob directamente, por lo que la previsualización queda disponible en
+    // cuanto termina el render, sin cambiar los datos ni el diseño aplicado.
+    previewUrl = URL.createObjectURL(blob);
+    previewWindow.location.replace(previewUrl);
+    // Mantener la URL durante la vida normal del visor y liberarla después
+    // para no acumular PDFs grandes si el usuario genera varios reportes.
+    window.setTimeout(() => URL.revokeObjectURL(previewUrl), 10 * 60 * 1000);
+    return { blob, previewUrl, fileName };
   } catch (error) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewWindow.close();
     throw error;
   }
@@ -1708,7 +1806,12 @@ export async function generateSalesTransactionPDF({
           customer: { name: transaction?.customer?.name || transaction?.customerName || 'Cliente general', taxId: transaction?.customer?.taxId || transaction?.customer?.ruc || '', address: transaction?.customer?.address || '', phone: transaction?.customer?.phone || '' },
           rows: paymentRows,
           items: paymentRows,
-          totals: { subtotal: formatAmount(paymentContext.financialTotal, paymentContext.financialCurrency, paymentContext.financialRate), tax: formatAmount(paymentContext.effectiveBalance, paymentContext.financialCurrency, paymentContext.financialRate), total: formatAmount(Number(transaction?.total ?? transaction?.amount ?? 0), transaction?.currency || paymentContext.financialCurrency, Number(transaction?.exchangeRate || paymentContext.financialRate || 1)) },
+          totals: {
+            subtotal: formatAmount(paymentContext.financialTotal, paymentContext.financialCurrency, paymentContext.financialRate),
+            tax: formatAmount(paymentContext.effectiveBalance, paymentContext.financialCurrency, paymentContext.financialRate),
+            discount: formatAmount(Number(paymentContext.financialDocument?.discountAmount ?? 0), paymentContext.financialCurrency, paymentContext.financialRate),
+            total: formatAmount(Number(transaction?.total ?? transaction?.amount ?? 0), transaction?.currency || paymentContext.financialCurrency, Number(transaction?.exchangeRate || paymentContext.financialRate || 1)),
+          },
         },
         save,
       });
@@ -1786,9 +1889,142 @@ const configuredHistoryPaper = (settings: Record<string, any>, format: PdfDownlo
   };
 };
 
+/**
+ * Salida rápida para reportes globales. Estos reportes solo heredan la
+ * identidad de la plantilla (encabezado, marca, logo y colores); no necesitan
+ * rasterizar un canvas completo por cada página como los documentos
+ * individuales.
+ */
+export async function generateFastGlobalReportPDF({ targetKey, title, tenantName, tenantLogo, settings, columns, rows, totals, tableSummary, fileName, save = true, subtitle }: {
+  targetKey: string;
+  title: string;
+  tenantName: string;
+  tenantLogo?: string | null;
+  settings: Record<string, any>;
+  columns: Array<{ header?: string; label?: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right'; width?: number }>;
+  rows: any[];
+  totals?: Record<string, unknown>;
+  tableSummary?: { label: string; value: unknown; columnIndex?: number };
+  fileName: string;
+  save?: boolean;
+  subtitle?: string;
+}) {
+  const doc = new jsPDF(pdfDesignPaper(settings));
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = Math.max(10, Math.min(18, Number(settings.margins) || 14));
+  const contentWidth = pageWidth - margin * 2;
+  const primary = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
+  const line = pdfDesignColor(settings.lineColor, [226, 232, 240]);
+  const logoSource = getPdfTemplateLogo(settings, tenantLogo, targetKey);
+  const logo = logoSource ? await getBase64Image(logoSource) : null;
+  const headerY = 8;
+  const headerHeight = 32;
+  const logoBox = 22;
+
+  doc.setFillColor(...primary);
+  doc.roundedRect(margin, headerY, contentWidth, headerHeight, 2, 2, 'F');
+  if (logo) {
+    try {
+      doc.addImage(logo, 'PNG', margin + 4, headerY + 5, logoBox, logoBox, undefined, 'FAST');
+    } catch { /* el reporte continúa con el encabezado de texto */ }
+  }
+  const identityX = margin + logoBox + 9;
+  const identityWidth = Math.max(40, contentWidth * 0.48);
+  const companyName = settings.showCompanyName === false ? '' : String(settings.companyName || tenantName || 'Nuestra Empresa');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12.5);
+  if (companyName) doc.text(doc.splitTextToSize(companyName, identityWidth), identityX, headerY + 11, { lineHeightFactor: 1.05 });
+  doc.setFontSize(9.5);
+  const titleX = margin + contentWidth - 4;
+  const titleWidth = Math.max(45, contentWidth * 0.42);
+  const titleLines = doc.splitTextToSize(title, titleWidth);
+  doc.text(titleLines.slice(0, 2), titleX, headerY + 11, { align: 'right', lineHeightFactor: 1.05 });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  const meta = [settings.slogan, settings.fiscalInfo, settings.address, settings.phone, settings.email, settings.website]
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean)
+    .join(' · ');
+  const metaX = identityX;
+  const metaWidth = Math.max(40, contentWidth - (identityX - margin) - 8);
+  if (meta) doc.text(doc.splitTextToSize(meta, metaWidth).slice(0, 2), metaX, headerY + 27, { lineHeightFactor: 1.05 });
+  if (subtitle) {
+    doc.setTextColor(...text);
+    doc.setFontSize(8);
+    doc.text(doc.splitTextToSize(subtitle, contentWidth), margin, headerY + headerHeight + 7);
+  }
+
+  const startY = headerY + headerHeight + (subtitle ? 14 : 8);
+  const columnHeader = (column: { header?: string; label?: string }) => String(column.header || column.label || '—');
+  const widths = columns.map(column => Number(column.width) > 0 ? Number(column.width) : 100 / Math.max(columns.length, 1));
+  const widthTotal = widths.reduce((sum, width) => sum + width, 0) || 100;
+  const columnStyles = Object.fromEntries(columns.map((column, index) => [index, {
+    halign: column.align || 'left',
+    cellWidth: contentWidth * widths[index] / widthTotal,
+  }]));
+  autoTable(doc, {
+    startY,
+    tableWidth: contentWidth,
+    margin: { left: margin, right: margin, bottom: 22 },
+    head: [columns.map(columnHeader)],
+    body: rows.length ? rows.map(row => columns.map(column => String(column.value(row) ?? '—'))) : [columns.map(() => '—')],
+    foot: tableSummary ? [(() => {
+      const summaryRow = columns.map(() => '');
+      const valueIndex = Math.min(Math.max(Number(tableSummary.columnIndex ?? columns.length - 1), 0), Math.max(columns.length - 1, 0));
+      const labelIndex = valueIndex > 0 ? valueIndex - 1 : 0;
+      summaryRow[labelIndex] = tableSummary.label;
+      summaryRow[valueIndex] = String(tableSummary.value ?? '—');
+      return summaryRow;
+    })()] : undefined,
+    showFoot: tableSummary ? 'lastPage' : undefined,
+    theme: 'grid',
+    headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', fontSize: 8, cellPadding: 3, halign: 'center' },
+    bodyStyles: { textColor: text, fontSize: 8, cellPadding: 3, valign: 'middle' },
+    footStyles: { fillColor: [248, 250, 252], textColor: text, fontStyle: 'bold', fontSize: 8, cellPadding: 3 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles,
+    styles: { overflow: 'linebreak', lineColor: line, lineWidth: 0.15, cellPadding: 3 },
+  });
+
+  const totalRows = Object.entries(totals || {}).filter(([, value]) => value !== undefined && value !== null && String(value) !== '');
+  if (totalRows.length) {
+    const finalY = Number((doc as any).lastAutoTable?.finalY || startY) + 5;
+    autoTable(doc, {
+      startY: finalY,
+      tableWidth: Math.min(contentWidth * 0.42, 82),
+      margin: { left: pageWidth - margin - Math.min(contentWidth * 0.42, 82), right: margin, bottom: 22 },
+      body: totalRows.map(([label, value]) => [label === 'tax' ? 'Impuestos' : label === 'discount' ? 'Descuento' : label === 'subtotal' ? 'Subtotal' : label === 'total' ? 'Total' : label, String(value)]),
+      theme: 'plain',
+      columnStyles: { 0: { fontStyle: 'bold', textColor: text }, 1: { halign: 'right', fontStyle: 'bold', textColor: text } },
+      styles: { fontSize: 8.5, cellPadding: 2.5, lineColor: line },
+      didParseCell: (hookData) => { if (hookData.row.index === totalRows.length - 1) hookData.cell.styles.lineWidth = { top: 0.3 } as any; },
+    });
+  }
+
+  const pageCount = (doc.internal as any).getNumberOfPages();
+  const footerText = String(settings.footerText || `Documento generado por ${tenantName || 'Nuestra Empresa'}`);
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(doc.splitTextToSize(footerText, Math.max(40, contentWidth - 42)), margin, pageHeight - 15, { lineHeightFactor: 1.05 });
+    if (settings.showPageNumber !== false) doc.text(`Página ${page} de ${pageCount}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+  }
+  const blob = doc.output('blob');
+  if (save) doc.save(/\.pdf$/i.test(String(fileName)) ? String(fileName) : buildPdfFileName([fileName], 'configured'));
+  return { doc, blob };
+}
+
 async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format = 'configured', fileName, designOverride, save = true }: { targetKey: string; data: PdfTemplateData; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; fileName: string; designOverride?: any; save?: boolean }) {
   if (format === 'roll-58' || format === 'roll-80') return null;
   const design = designOverride || await getPdfDesign(targetKey);
+  // Sin una plantilla guardada no hay que rasterizar el canvas: cada
+  // exportador conserva su salida nativa, que es vectorial y mucho más rápida.
+  if (isVirtualSystemDefaultDesign(design)) return null;
   if (!design?.layoutZones?.definition) return null;
   const baseSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
   const settings = configuredHistoryPaper(baseSettings, format);
@@ -1816,29 +2052,18 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
 
 export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; fileName: string; designOverride?: any }) {
   const design = designOverride || await getPdfDesign(targetKey);
-  if (!design || (design as any).isSystemDefault || String((design as any).id || '').startsWith('system-default:') || !design.layoutZones?.definition) return null;
   const sourceSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
   const settings = getGlobalReportSettings(sourceSettings, tenantName, tenantLogo, targetKey);
-  const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
-  const mappedRows = rows.map(row => {
-    const mapped: Record<string, unknown> = { description: columns[0] ? columns[0].value(row) : '', quantity: columns[1] ? columns[1].value(row) : '', unitPrice: columns[2] ? columns[2].value(row) : '', total: columns[3] ? columns[3].value(row) : '' };
-    columns.forEach((column, index) => { mapped[`column-${index}`] = column.value(row); mapped[column.header.toLowerCase().replace(/\s+/g, '_')] = column.value(row); });
-    return mapped;
-  });
-  const rendered = await renderPdfTemplateToPdf({
-    definition: createDefaultTemplateDefinition(targetKey, settings),
-    settings,
+  const rendered = await generateFastGlobalReportPDF({
     targetKey,
-    data: {
-      company: { name: settings.companyName || tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: configuredLogo || tenantLogo || rememberedPdfSessionLogo() },
-      document: { title, number: `${rows.length} registro(s)` },
-      rows: mappedRows,
-      totals: totals || {},
-      items: mappedRows,
-      tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' })),
-    },
+    title,
+    tenantName,
+    tenantLogo,
+    settings,
+    columns,
+    rows,
+    totals,
     fileName,
-    save: true,
   });
   return rendered.doc;
 }
@@ -1878,14 +2103,9 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   periodLabel?: string;
   designOverride?: any;
 }) {
-  if (getPdfTemplateTarget(targetKey).module !== 'reportes') return null;
   const design = designOverride || await getPdfDesign(targetKey);
-  if (!design || (design as any).isSystemDefault || String((design as any).id || '').startsWith('system-default:') || !design.layoutZones?.definition) return null;
-
   const baseSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
   const settings = getGlobalReportSettings(baseSettings, tenantName, tenantLogo, targetKey);
-  const definition = createDefaultTemplateDefinition(targetKey, settings);
-  if (!definition.nodes.some(node => (node.type === 'table' || node.type === 'report-sections') && node.enabled !== false)) return null;
 
   const reportSections: PdfTemplateReportSection[] = sections.filter(section => section && section.title && section.headers.length > 0).map((section, sectionIndex) => {
     const columns = section.headers.map((header, columnIndex) => ({
@@ -1900,43 +2120,77 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   });
   if (!reportSections.length) return null;
 
-  const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
-  const resolvedLogo = configuredLogo || tenantLogo || rememberedPdfSessionLogo() || undefined;
-  // El diseño no debe fabricar indicadores si la vista no los envía. La
-  // plantilla queda limpia y cada reporte conserva sus valores reales.
-  const reportKpis = kpis?.length ? kpis : [];
-  const rendered = await renderPdfTemplateToPdf({
-    definition,
-    settings,
-    targetKey,
-    data: {
-      logo: resolvedLogo,
-      company: {
-        name: settings.companyName || tenantName,
-        fiscalInfo: settings.fiscalInfo,
-        address: settings.address,
-        phone: settings.phone,
-        email: settings.email,
-        slogan: settings.slogan,
-        website: settings.website,
-        logo: resolvedLogo,
-      },
-      document: {
-        title,
-        number: `${reportSections.length} secciones`,
-        meta: `Generado: ${new Date().toLocaleDateString('es-NI')} · Período: ${periodLabel || 'Período seleccionado'} · Moneda: Córdobas (NIO)`,
-        notes: periodLabel || '',
-      },
-      reportKpis,
-      reportSections,
-      items: reportSections[0].rows,
-      rows: reportSections[0].rows,
-      tableColumns: reportSections[0].columns,
-    },
-    fileName,
-    save: true,
-  });
-  return rendered.doc;
+  const doc = new jsPDF(pdfDesignPaper(settings));
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = Math.max(10, Math.min(18, Number(settings.margins) || 14));
+  const contentWidth = pageWidth - margin * 2;
+  const primary = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
+  const line = pdfDesignColor(settings.lineColor, [226, 232, 240]);
+  const logoSource = getPdfTemplateLogo(settings, tenantLogo, targetKey);
+  const logo = logoSource ? await getBase64Image(logoSource) : null;
+  doc.setFillColor(...primary);
+  doc.roundedRect(margin, 8, contentWidth, 32, 2, 2, 'F');
+  if (logo) {
+    try { doc.addImage(logo, 'PNG', margin + 4, 13, 22, 22, undefined, 'FAST'); } catch { /* continúa sin logo */ }
+  }
+  const identityX = margin + 35;
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12.5);
+  if (settings.showCompanyName !== false) doc.text(doc.splitTextToSize(String(settings.companyName || tenantName || 'Nuestra Empresa'), contentWidth * 0.48), identityX, 20, { lineHeightFactor: 1.05 });
+  doc.setFontSize(10);
+  doc.text(doc.splitTextToSize(title, contentWidth * 0.42).slice(0, 2), pageWidth - margin - 4, 20, { align: 'right', lineHeightFactor: 1.05 });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  const meta = [settings.slogan, settings.fiscalInfo, settings.address, settings.phone, settings.email, settings.website]
+    .map(value => String(value ?? '').trim()).filter(Boolean).join(' · ');
+  if (meta) doc.text(doc.splitTextToSize(meta, contentWidth - 43).slice(0, 2), identityX, 34, { lineHeightFactor: 1.05 });
+  doc.setTextColor(...text);
+  doc.setFontSize(8);
+  const periodText = periodLabel ? `Período: ${periodLabel}` : `Generado: ${new Date().toLocaleDateString('es-NI')}`;
+  doc.text(periodText, margin, 47);
+
+  let currentY = 53;
+  if (kpis?.length) {
+    currentY = drawReportKpiCards({ doc, kpis: kpis.map(kpi => ({ ...kpi, color: primary })), marginX: margin, contentWidth, currentY, columns: Math.min(4, Math.max(1, kpis.length)), boxHeight: 22 });
+  }
+  for (const section of reportSections) {
+    if (currentY > pageHeight - 35) { doc.addPage(); currentY = 20; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...text);
+    doc.text(section.title, margin, currentY);
+    currentY += 4;
+    const widths = section.columns.map(column => Number(column.width) || 100 / Math.max(section.columns.length, 1));
+    const widthTotal = widths.reduce((sum, width) => sum + width, 0) || 100;
+    autoTable(doc, {
+      startY: currentY,
+      tableWidth: contentWidth,
+      margin: { left: margin, right: margin, bottom: 22 },
+      head: [section.columns.map(column => column.label)],
+      body: section.rows.length ? section.rows.map(row => section.columns.map(column => String(row[column.token] ?? row[column.id] ?? '—'))) : [section.columns.map(() => '—')],
+      theme: 'grid',
+      headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', fontSize: 7.5, cellPadding: 3, halign: 'center' },
+      bodyStyles: { textColor: text, fontSize: 7.5, cellPadding: 3, valign: 'middle' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: Object.fromEntries(section.columns.map((column, index) => [index, { halign: column.align || 'left', cellWidth: contentWidth * widths[index] / widthTotal }])),
+      styles: { overflow: 'linebreak', lineColor: line, lineWidth: 0.15, cellPadding: 3 },
+    });
+    currentY = Number((doc as any).lastAutoTable?.finalY || currentY) + 8;
+  }
+  const pageCount = (doc.internal as any).getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(String(settings.footerText || `Documento generado por ${tenantName || 'Nuestra Empresa'}`), margin, pageHeight - 15);
+    if (settings.showPageNumber !== false) doc.text(`Página ${page} de ${pageCount}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+  }
+  doc.save(buildPdfFileName([fileName], 'configured'));
+  return doc;
 }
 
 /** Genera el balance de comprobación con el diseño específico de Contabilidad. */
@@ -2042,7 +2296,7 @@ export const generateConfiguredHistoryPDF = async ({
   save = true,
 }: ConfiguredHistoryPdfOptions): Promise<{ doc: jsPDF; blob: Blob }> => {
   const configuredDesign = designOverride || await getPdfDesign(targetKey);
-  if (configuredDesign?.layoutZones?.definition) {
+  if (configuredDesign?.layoutZones?.definition && !isVirtualSystemDefaultDesign(configuredDesign)) {
     const fetchedDesignSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object' ? configuredDesign.settings : {};
     const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...configuredHistoryPaper(fetchedDesignSettings as Record<string, any>, format) };
     const mappedRows = rows.map(row => {
@@ -2072,7 +2326,7 @@ export const generateConfiguredHistoryPDF = async ({
       supplier: subject,
       items: mappedRows,
       rows: mappedRows,
-      renderScale: rows.length > 10 ? 1.5 : undefined,
+      renderScale: 1.5,
       tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' })),
     }, fileName, save });
     return rendered;
@@ -2323,7 +2577,8 @@ export const generateExpensePDF = async ({
   doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, 22);
+  const logoOffset = await addNativePdfLogo(doc, settings, targetKey, tenantLogo);
+  doc.text(tenantName || 'Nova Hub', 14 + logoOffset, 22);
 
   doc.setFontSize(12);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
@@ -2391,7 +2646,8 @@ export const generatePurchaseOrderPDF = async ({
   doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, 22);
+  const logoOffset = await addNativePdfLogo(doc, settings, 'compras.purchase-order', tenantLogo);
+  doc.text(tenantName || 'Nova Hub', 14 + logoOffset, 22);
 
   doc.setFontSize(12);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
@@ -2509,7 +2765,8 @@ export const generatePurchaseRequestPDF = async ({
   doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, 22);
+  const logoOffset = await addNativePdfLogo(doc, settings, 'compras.purchase-request', tenantLogo);
+  doc.text(tenantName || 'Nova Hub', 14 + logoOffset, 22);
 
   doc.setFontSize(12);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
@@ -2601,7 +2858,7 @@ export const generateRecurringInvoicePDF = async ({
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
 }) => {
   const recurringLines = Array.isArray(recurringInvoice.items) ? recurringInvoice.items : Array.isArray(recurringInvoice.lines) ? recurringInvoice.lines : [];
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.recurring', tenantName, tenantLogo, fileName: buildPdfFileName(['factura_recurrente', recurringInvoice.number || 'sin_numero']), data: { document: { title: 'FACTURA RECURRENTE', number: recurringInvoice.number || recurringInvoice.id || 'N/A', date: recurringInvoice.startDate || recurringInvoice.date, status: recurringInvoice.status, notes: [recurringInvoice.notes, recurringInvoice.frequency ? `Frecuencia: ${recurringInvoice.frequency}` : '', recurringInvoice.nextInvoiceDate ? `Próxima factura: ${new Date(recurringInvoice.nextInvoiceDate).toLocaleDateString('es-NI')}` : ''].filter(Boolean).join(' · ') }, party: { ...(recurringInvoice.customer || recurringInvoice.client || {}), name: recurringInvoice.customer?.name || recurringInvoice.client?.name || '' }, items: recurringLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(line.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(recurringInvoice.subtotal || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), tax: formatAmount(Number(recurringInvoice.taxAmount || recurringInvoice.tax || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(recurringInvoice.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) } } });
+  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.recurring', tenantName, tenantLogo, fileName: buildPdfFileName(['factura_recurrente', recurringInvoice.number || 'sin_numero']), data: { document: { title: 'FACTURA RECURRENTE', number: recurringInvoice.number || recurringInvoice.id || 'N/A', date: recurringInvoice.startDate || recurringInvoice.date, status: recurringInvoice.status, notes: [recurringInvoice.notes, recurringInvoice.frequency ? `Frecuencia: ${recurringInvoice.frequency}` : '', recurringInvoice.nextInvoiceDate ? `Próxima factura: ${new Date(recurringInvoice.nextInvoiceDate).toLocaleDateString('es-NI')}` : ''].filter(Boolean).join(' · ') }, party: { ...(recurringInvoice.customer || recurringInvoice.client || {}), name: recurringInvoice.customer?.name || recurringInvoice.client?.name || '' }, items: recurringLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(line.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(recurringInvoice.subtotal ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), tax: formatAmount(Number(recurringInvoice.taxAmount ?? recurringInvoice.tax ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), discount: formatAmount(Number(recurringInvoice.discountAmount ?? recurringInvoice.discount ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(recurringInvoice.total ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate) } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.recurring');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -2985,8 +3242,87 @@ export const generateHistoricalCashReportPDF = async ({
     salesNio: `C$ ${money(item.salesNIO)}`,
     salesUsd: `$ ${money(item.salesUSD)}`,
     difference: `C$ ${money(item.differenceNIO)}`,
+    depositNio: `C$ ${money(item.depositNIO)}`,
   }));
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-historical-report', tenantName, tenantLogo, fileName: buildDateFilteredPdfFileName(['reporte_historico_de_caja'], 'configured', report.filters?.dateFrom, report.filters?.dateTo), data: { document: { title: 'REPORTE HISTÓRICO DE CAJA', date: new Date().toLocaleDateString('es-NI'), notes: `Periodo: ${report.filters?.dateFrom || '—'} al ${report.filters?.dateTo || '—'}` }, rows: configuredRows, items: configuredRows, tableColumns: [{ id: 'date', label: 'Fecha', token: 'date', width: 10, align: 'left' }, { id: 'branch', label: 'Sucursal', token: 'branch', width: 15, align: 'left' }, { id: 'register', label: 'Caja', token: 'register', width: 15, align: 'left' }, { id: 'cashier', label: 'Cajero', token: 'cashier', width: 14, align: 'left' }, { id: 'status', label: 'Estado', token: 'status', width: 11, align: 'left' }, { id: 'sales', label: 'Ventas', token: 'sales', width: 7, align: 'right' }, { id: 'salesNio', label: 'Ventas NIO', token: 'salesNio', width: 14, align: 'right' }, { id: 'difference', label: 'Diferencia', token: 'difference', width: 14, align: 'right' }], totals: { subtotal: `C$ ${money(summary.salesNIO)}`, tax: `$ ${money(summary.salesUSD)}`, total: `C$ ${money(summary.differenceNIO)}` } } });
+  const reportDate = (value: any) => value ? String(value).slice(0, 10) : '—';
+  const paymentMethodRows = Object.entries(summary.byPaymentMethod || {}).map(([method, value]: [string, any]) => {
+    const label = method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'TRANSFER' ? 'Transferencia' : method === 'CHECK' ? 'Cheque' : 'Otro';
+    return {
+      method: label,
+      operations: String(value.count || 0),
+      amountNio: `C$ ${money(value.amountNIO)}`,
+      amountUsd: `$ ${money(value.amountUSD)}`,
+    };
+  });
+  const historicalReportSections: PdfTemplateReportSection[] = [
+    {
+      id: 'cash-summary',
+      title: 'Resumen general',
+      columns: [
+        { id: 'sessions', label: 'Sesiones', token: 'sessions', width: 12, align: 'center' },
+        { id: 'closedSessions', label: 'Cerradas', token: 'closedSessions', width: 12, align: 'center' },
+        { id: 'salesNio', label: 'Ventas NIO', token: 'salesNio', width: 19, align: 'right' },
+        { id: 'salesUsd', label: 'Ventas USD', token: 'salesUsd', width: 17, align: 'right' },
+        { id: 'differenceNio', label: 'Diferencia NIO', token: 'differenceNio', width: 20, align: 'right' },
+        { id: 'depositsNio', label: 'Depósitos NIO', token: 'depositsNio', width: 20, align: 'right' },
+      ],
+      rows: [{
+        sessions: String(summary.sessions || 0),
+        closedSessions: String(summary.closedSessions || 0),
+        salesNio: `C$ ${money(summary.salesNIO)}`,
+        salesUsd: `$ ${money(summary.salesUSD)}`,
+        differenceNio: `C$ ${money(summary.differenceNIO)}`,
+        depositsNio: `C$ ${money(summary.depositsNIO)}`,
+      }],
+    },
+    {
+      id: 'cash-payment-methods',
+      title: 'Formas de pago',
+      columns: [
+        { id: 'method', label: 'Forma de pago', token: 'method', width: 28, align: 'left' },
+        { id: 'operations', label: 'Operaciones', token: 'operations', width: 18, align: 'center' },
+        { id: 'amountNio', label: 'Monto NIO', token: 'amountNio', width: 27, align: 'right' },
+        { id: 'amountUsd', label: 'Monto USD', token: 'amountUsd', width: 27, align: 'right' },
+      ],
+      rows: paymentMethodRows,
+    },
+    {
+      id: 'cash-sessions',
+      title: 'Detalle de sesiones',
+      columns: [
+        { id: 'date', label: 'Fecha', token: 'date', width: 10, align: 'left' },
+        { id: 'branch', label: 'Sucursal', token: 'branch', width: 13, align: 'left' },
+        { id: 'register', label: 'Caja', token: 'register', width: 13, align: 'left' },
+        { id: 'cashier', label: 'Cajero', token: 'cashier', width: 12, align: 'left' },
+        { id: 'status', label: 'Estado', token: 'status', width: 8, align: 'left' },
+        { id: 'sales', label: 'Ventas', token: 'sales', width: 7, align: 'right' },
+        { id: 'salesNio', label: 'Ventas NIO', token: 'salesNio', width: 12, align: 'right' },
+        { id: 'salesUsd', label: 'Ventas USD', token: 'salesUsd', width: 10, align: 'right' },
+        { id: 'difference', label: 'Dif. NIO', token: 'difference', width: 8, align: 'right' },
+        { id: 'depositNio', label: 'Depósito NIO', token: 'depositNio', width: 7, align: 'right' },
+      ],
+      rows: configuredRows,
+    },
+  ];
+  const configured = await renderConfiguredDefinition({
+    targetKey: 'ventas.cash-historical-report',
+    tenantName,
+    tenantLogo,
+    fileName: buildDateFilteredPdfFileName(['reporte_historico_de_caja'], 'configured', report.filters?.dateFrom, report.filters?.dateTo),
+    data: {
+      document: {
+        title: 'REPORTE HISTÓRICO DE CAJA',
+        date: new Date().toLocaleDateString('es-NI'),
+        period: `Periodo: ${reportDate(report.filters?.dateFrom)} al ${reportDate(report.filters?.dateTo)}`,
+        generated: `Generado: ${new Date().toLocaleString('es-NI')}`,
+        notes: `Periodo: ${reportDate(report.filters?.dateFrom)} al ${reportDate(report.filters?.dateTo)}`,
+      },
+      reportSections: historicalReportSections,
+      rows: configuredRows,
+      items: configuredRows,
+      tableColumns: historicalReportSections[2].columns,
+    },
+  });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-historical-report');
   const doc = new jsPDF(pdfDesignPaper({ ...settings, orientation: 'landscape' }));
@@ -3002,7 +3338,6 @@ export const generateHistoricalCashReportPDF = async ({
   doc.text('REPORTE HISTÓRICO DE CAJA', 14, 27);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  const reportDate = (value: any) => value ? String(value).slice(0, 10) : '—';
   doc.text(`Periodo: ${reportDate(report.filters?.dateFrom)} al ${reportDate(report.filters?.dateTo)}`, 14, 34);
   doc.text(`Generado: ${new Date().toLocaleString()}`, 283, 18, { align: 'right' });
 
@@ -3023,12 +3358,7 @@ export const generateHistoricalCashReportPDF = async ({
     styles: { cellPadding: 3, halign: 'center' },
   });
 
-  const paymentRows = Object.entries(summary.byPaymentMethod || {}).map(([method, value]: [string, any]) => [
-    method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'TRANSFER' ? 'Transferencia' : method === 'CHECK' ? 'Cheque' : 'Otro',
-    String(value.count || 0),
-    `C$ ${money(value.amountNIO)}`,
-    `$ ${money(value.amountUSD)}`,
-  ]);
+  const paymentRows = paymentMethodRows.map(row => [row.method, row.operations, row.amountNio, row.amountUsd]);
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 8,
     head: [['Forma de pago', 'Operaciones', 'Monto NIO', 'Monto USD']],

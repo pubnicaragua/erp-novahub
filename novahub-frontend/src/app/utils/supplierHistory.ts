@@ -1,4 +1,5 @@
 import { purchaseOrdersService, supplierInvoicesService, expensesService, recurringExpensesService } from '../services/compras.service';
+import { runWithReportRequestLimit } from './report-request-limiter';
 
 export interface SupplierHistoryItem {
   date: string;
@@ -45,7 +46,7 @@ const fetchAllSupplierRecords = async (
   const rows: any[] = [];
   let page = 1;
   while (page <= 1000) {
-    const response = await fetcher({ supplierId, page, pageSize: 500, report: true }, signal);
+    const response = await runWithReportRequestLimit(() => fetcher({ supplierId, page, pageSize: 5000, report: true, light: true }, signal));
     rows.push(...unwrapList(response));
     const totalPages = Math.max(1, getTotalPages(response));
     if (page >= totalPages) break;

@@ -3,7 +3,7 @@ import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { createDefaultTemplateDefinition, PDF_DEFAULT_FONT_SCALE, resolveTemplateToken, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
-import { getBase64Image, safeHtml2CanvasColor, sanitizeHtml2CanvasOklch } from './export-utils';
+import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { pdfStatusLabel } from './pdfStatus';
 
 export interface PdfTemplateRenderSettings {
@@ -269,11 +269,17 @@ async function waitForImages(root: HTMLElement) {
     const finish = () => { if (settled) return; settled = true; resolve(); };
     image.addEventListener('load', finish, { once: true });
     image.addEventListener('error', finish, { once: true });
+    // Los logos se convierten a data URLs antes de llegar aquí. Cuando el
+    // navegador ya marcó la imagen como completa no hay motivo para esperar a
+    // que termine una decodificación secundaria antes de rasterizar la página.
     if (image.complete) {
-      if (typeof image.decode === 'function') void image.decode().catch(() => {}).finally(finish);
-      else finish();
+      finish();
+      return;
     }
-    window.setTimeout(finish, 2500);
+    // Solo las imágenes externas que todavía no terminaron de cargar usan un
+    // pequeño margen de seguridad. La espera fija anterior se repetía por
+    // cada página y podía sumar varios segundos en un reporte individual.
+    window.setTimeout(finish, 750);
   })));
 }
 
@@ -526,6 +532,8 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
       const rawValue = row[column.token] ?? row[column.id];
       cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue);
       cell.style.padding = compact ? '5px 6px' : tableLayout === 'compact' ? '5px 7px' : '7px 9px';
+      cell.style.height = 'auto';
+      cell.style.maxHeight = 'none';
       cell.style.minWidth = '0';
       cell.style.maxWidth = '100%';
       cell.style.borderTop = `1px solid ${lineColor}`;
@@ -631,7 +639,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
         const cell = tr.insertCell();
         const rawValue = row[column.token] ?? row[column.id];
         cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue ?? '—');
-        Object.assign(cell.style, { padding: compact ? '5px 6px' : '7px 8px', minWidth: '0', maxWidth: '100%', color: textColor, borderTop: `1px solid ${lineColor}`, textAlign: column.align || 'left', verticalAlign: 'middle', whiteSpace: 'pre-wrap', overflow: 'visible', overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: compact ? '1.25' : '1.35', backgroundColor: sectionStyle.rowColor || node.tableRowColor ? safeHtml2CanvasColor(sectionStyle.rowColor || node.tableRowColor, '#ffffff') : rowIndex % 2 === 1 && ['standard', 'striped', 'accent'].includes(tableLayout) ? safeHtml2CanvasColor(sectionStyle.stripeColor || rowBackground, '#f8fafc') : 'transparent' });
+        Object.assign(cell.style, { padding: compact ? '5px 6px' : '7px 8px', height: 'auto', maxHeight: 'none', minWidth: '0', maxWidth: '100%', color: textColor, borderTop: `1px solid ${lineColor}`, textAlign: column.align || 'left', verticalAlign: 'middle', whiteSpace: 'pre-wrap', overflow: 'visible', overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: compact ? '1.25' : '1.35', backgroundColor: sectionStyle.rowColor || node.tableRowColor ? safeHtml2CanvasColor(sectionStyle.rowColor || node.tableRowColor, '#ffffff') : rowIndex % 2 === 1 && ['standard', 'striped', 'accent'].includes(tableLayout) ? safeHtml2CanvasColor(sectionStyle.stripeColor || rowBackground, '#f8fafc') : 'transparent' });
       });
     });
     sectionElement.appendChild(table);
@@ -799,7 +807,7 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
  * después de la tabla, conservando sus anchos y posiciones horizontales.
  */
 function reflowIndividualPage(page: HTMLElement, definition: PdfTemplateDefinition) {
-  const tableNode = definition.nodes.find(node => node.enabled !== false && node.type === 'table');
+  const tableNode = definition.nodes.find(node => node.enabled !== false && (node.type === 'table' || node.type === 'report-sections'));
   if (!tableNode) return;
 
   const pageRect = page.getBoundingClientRect();
@@ -813,7 +821,7 @@ function reflowIndividualPage(page: HTMLElement, definition: PdfTemplateDefiniti
   const flowStart = tableBottom + gap;
   const tableY = Number(tableNode.y || 0);
   const candidates = definition.nodes
-    .filter(node => node.enabled !== false && node.type !== 'table')
+    .filter(node => node.enabled !== false && node.type !== 'table' && node.type !== 'report-sections')
     .filter(node => Number(node.y || 0) > tableY || node.type === 'totals' || node.id === 'notes')
     .map(node => {
       const element = renderedNodes.find(item => item.dataset.pdfNodeId === node.id);
@@ -856,7 +864,7 @@ function reflowIndividualPage(page: HTMLElement, definition: PdfTemplateDefiniti
  */
 function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition) {
   const partySectionNode = definition.nodes.find(node => node.enabled !== false && node.id === 'party-section');
-  const tableNode = definition.nodes.find(node => node.enabled !== false && node.type === 'table');
+  const tableNode = definition.nodes.find(node => node.enabled !== false && (node.type === 'table' || node.type === 'report-sections'));
   if (!partySectionNode || !tableNode) return;
 
   const pageRect = page.getBoundingClientRect();
@@ -1010,10 +1018,29 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
       data: { ...sectionData, ...(tableNode || isRepeatedLabel ? { items: currentChunk, rows: currentChunk } : {}), tableSummary: chunkIndex === renderChunks.length - 1 ? renderData.tableSummary : undefined },
     }));
   });
-  const pdf = new jsPDF({ orientation: renderOrientation, unit: 'mm', format: [width, height], compress: true });
-  const wrapper = document.createElement('div');
-  Object.assign(wrapper.style, { position: 'fixed', left: '-100000px', top: '0', width: '1px', height: '1px', overflow: 'visible', opacity: '1', pointerEvents: 'none' });
-  document.body.appendChild(wrapper);
+  const pdf = new jsPDF({ orientation: settings.orientation, unit: 'mm', format: [width, height], compress: true });
+  // html2canvas clona el documento completo que contiene el elemento. En una
+  // pantalla de detalle eso incluye tablas, paneles y listas que no forman
+  // parte del PDF y puede bloquear el hilo principal durante decenas de
+  // segundos. Un iframe del mismo origen deja al renderer únicamente la hoja
+  // que debe capturar, sin cambiar el diseño ni los datos del reporte.
+  const renderFrame = document.createElement('iframe');
+  renderFrame.setAttribute('aria-hidden', 'true');
+  Object.assign(renderFrame.style, {
+    position: 'fixed', left: '-100000px', top: '0', width: `${width}mm`, height: `${height}mm`,
+    border: '0', opacity: '0', pointerEvents: 'none',
+  });
+  document.body.appendChild(renderFrame);
+  const renderDocument = renderFrame.contentDocument;
+  if (!renderDocument) {
+    renderFrame.remove();
+    throw new Error('No se pudo preparar el renderizador del PDF.');
+  }
+  renderDocument.open();
+  renderDocument.write('<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:visible;background:#fff}*{box-sizing:border-box}</style></head><body></body></html>');
+  renderDocument.close();
+  const wrapper = renderDocument.body;
+  Object.assign(wrapper.style, { width: `${width}mm`, height: `${height}mm`, overflow: 'visible', background: '#fff' });
   try {
     for (let index = 0; index < renderJobs.length; index += 1) {
       const job = renderJobs[index];
@@ -1024,14 +1051,22 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
       await waitForImages(page);
       reflowPartySection(page, job.definition);
       reflowIndividualPage(page, job.definition);
-      const renderScale = Math.max(1, Math.min(2, Number((job.data as Record<string, unknown>).renderScale) || 2));
-      const canvas = await html2canvas(page, { scale: renderScale, backgroundColor: safeHtml2CanvasColor(job.definition.page.background, '#ffffff'), logging: false, useCORS: true, allowTaint: false, onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(page.id, clonedDoc, safeHtml2CanvasColor(settings.primaryColor, '#10b981')) });
-      if (index > 0) pdf.addPage([width, height], renderOrientation === 'landscape' ? 'l' : 'p');
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, width, height, undefined, 'FAST');
+      const requestedRenderScale = Number((job.data as Record<string, unknown>).renderScale);
+      const renderScale = Math.max(0.9, Math.min(1.5, requestedRenderScale || 1.5));
+      const canvas = await html2canvas(page, {
+        scale: renderScale,
+        backgroundColor: safeHtml2CanvasColor(job.definition.page.background, '#ffffff'),
+        logging: false,
+        useCORS: true,
+        allowTaint: false,
+        foreignObjectRendering: false,
+      });
+      if (index > 0) pdf.addPage([width, height], settings.orientation === 'landscape' ? 'l' : 'p');
+      pdf.addImage(canvas, 'PNG', 0, 0, width, height, undefined, 'FAST');
       page.remove();
     }
     const blob = pdf.output('blob');
     if (save) pdf.save(fileName || `${getPdfTemplateTarget(targetKey).key.replace(/[^a-z0-9.-]+/gi, '-')}.pdf`);
     return { doc: pdf, blob };
-  } finally { wrapper.remove(); }
+  } finally { renderFrame.remove(); }
 }

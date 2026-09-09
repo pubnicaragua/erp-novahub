@@ -198,6 +198,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         ? await fetchAllPaginatedRows<Expense>((page, pageSize) => expensesService.getAll({
           page,
           pageSize,
+          report: true,
+          light: true,
           search: searchTerm.trim() || undefined,
           dateFrom: appliedRange?.from,
           dateTo: appliedRange?.to,
@@ -213,13 +215,21 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         if (activeKpiFilter.type === 'category') return String(expense.category || '').toUpperCase() === activeKpiFilter.category;
         return true;
       });
+      const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      const totalExpenses = exportRows.reduce((sum, expense) => sum + convertAmount(
+        Number(expense.amount || 0),
+        expense.currency,
+        expense.exchangeRate,
+      ), 0);
       await generatePurchaseListPDF({
         title: 'Gastos',
-        rows: colFilters.applyTo(exportFiltered, filterGetters),
+        rows: exportRows,
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.list',
+        summary: { label: 'Total general', value: formatConvertedAmount(totalExpenses, displayCurrency, globalRate), columnIndex: 3 },
+        summaryPlacement: 'footer',
         columns: [
           { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
           { label: 'Categoría', value: (row) => row.category || '—' },
@@ -590,6 +600,11 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             { label: 'Categoría', value: String(expense.category || '').toUpperCase() === 'OTRO' ? expense.categoryCustom || 'Otro' : expense.category || '—' },
             { label: 'Fuente de pago', value: paymentSourceLabel(expense.paymentSource) },
             { label: 'Referencia', value: expense.reference || '—' },
+          ],
+          totals: [
+            { label: 'Subtotal', value: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate) },
+            { label: 'Impuestos', value: formatConvertedAmount(0, expense.currency, expense.exchangeRate) },
+            { label: 'Descuento', value: formatConvertedAmount(0, expense.currency, expense.exchangeRate) },
           ],
           total: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate),
           totalLabel: 'Monto',

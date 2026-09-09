@@ -191,7 +191,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     const exportToastId = toast.loading('Generando reporte de compras recurrentes...');
     try {
       const allRows = scope === 'all'
-        ? await fetchAllPaginatedRows<RecurringSupplierInvoice>((page, pageSize) => recurringSupplierInvoicesService.getAll({ page, pageSize, search: searchTerm.trim() || undefined }))
+        ? await fetchAllPaginatedRows<RecurringSupplierInvoice>((page, pageSize) => recurringSupplierInvoicesService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, report: true, light: true }))
         : data;
       const exportRows = allRows.filter((row) => {
         const status = String(row.status || '').toUpperCase();
@@ -243,6 +243,11 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
             { label: 'Dirección', value: invoice.address || '—' },
           ],
           lines: ((invoice as any).items || []).map((item: any) => ({ description: item.description || 'Concepto sin descripción', code: item.code, productCode: item.productCode, variantId: item.variantId, variantSku: item.variantSku, variantName: item.variantName, variantAttributes: item.variantAttributes, variant: item.variant, quantity: item.quantity || 0, unitPrice: formatCurrentAmount(Number(item.unitPrice || 0), invoice.currency || displayCurrency), total: formatCurrentAmount(Number(item.total || 0), invoice.currency || displayCurrency), secondary: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
+          totals: [
+            { label: 'Subtotal', value: formatCurrentAmount(Number(invoice.subtotal || 0), invoice.currency || displayCurrency) },
+            { label: 'Impuestos', value: formatCurrentAmount(Number(invoice.taxAmount || 0), invoice.currency || displayCurrency) },
+            { label: 'Descuento', value: formatCurrentAmount(Number(invoice.withholdingTotal || 0), invoice.currency || displayCurrency) },
+          ],
           total: formatCurrentAmount(Number(invoice.total || (invoice as any).amount || 0), invoice.currency || displayCurrency),
           totalLabel: 'Monto estimado',
         },

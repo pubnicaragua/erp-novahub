@@ -263,15 +263,17 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
   const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
 
-  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter = 'all') => {
     const exportToastId = toast.loading('Generando reporte de proveedores...');
     try {
       const allRows = scope === 'all'
-        ? await fetchAllPaginatedRows<Supplier>((page, pageSize) => suppliersService.getAll({ page, pageSize, search: searchTerm.trim() || undefined }))
+        ? await fetchAllPaginatedRows<Supplier>((page, pageSize) => suppliersService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, report: true, light: true }))
         : data;
       const exportRows = colFilters.applyTo(
         [...allRows].filter((supplier) => {
           const isActive = (supplier as any).isActive !== false && String((supplier as any).status || '').toUpperCase() !== 'INACTIVE';
+          if (exportFilter === 'active' && !isActive) return false;
+          if (exportFilter === 'inactive' && isActive) return false;
           if (statusFilter === 'ACTIVE' && !isActive) return false;
           if (statusFilter === 'INACTIVE' && isActive) return false;
           const search = searchTerm.toLowerCase();
@@ -519,7 +521,21 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="suppliers" />
-            {canPerform('PURCHASES_PROVIDERS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
+            {canPerform('PURCHASES_PROVIDERS', 'export') && <PdfDownloadButton
+              label="Exportar"
+              includeRoll={false}
+              scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }}
+              filterSelector={{
+                label: 'Estado de proveedores',
+                defaultValue: 'all',
+                options: [
+                  { value: 'all', label: 'Todos los proveedores', description: 'Incluye activos e inactivos' },
+                  { value: 'active', label: 'Solo activos', description: 'Incluye únicamente proveedores activos' },
+                  { value: 'inactive', label: 'Solo inactivos', description: 'Incluye únicamente proveedores inactivos' },
+                ],
+              }}
+              onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
+            />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de proveedores" />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />

@@ -332,14 +332,21 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     return invoice?.exchangeRate || payment.exchangeRate;
   };
 
-  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter = 'all') => {
     const exportToastId = toast.loading('Generando reporte de pagos...');
     try {
       const allRows = scope === 'all'
-        ? await fetchAllPaginatedRows<PaymentMade>((page, pageSize) => paymentsService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, branchId: selectedBranchId || undefined }))
+        ? await fetchAllPaginatedRows<PaymentMade>((page, pageSize) => paymentsService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, branchId: selectedBranchId || undefined, report: true, light: true }))
         : data;
       const allGroupedPayments = groupMadePayments(allRows, baseCurrency, globalRate, toBaseAmount);
       const exportFiltered = allGroupedPayments.filter((payment) => {
+        if (exportFilter !== 'all') {
+          const paymentMethods = [
+            payment.method,
+            ...(payment.payments || []).map((child) => child.method),
+          ].map((method) => String(method || '').toUpperCase());
+          if (!paymentMethods.includes(exportFilter.toUpperCase())) return false;
+        }
         if (!normalizedSearchTerm) return true;
         const linkedBill = bills.find((bill) => bill.id === payment.supplierInvoiceId);
         const haystack = [
@@ -374,6 +381,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         format,
         targetKey: 'compras.payment-made',
         summary: { label: 'Total pagado', value: formatConvertedAmount(totalPaid, displayCurrency as any, globalRate), columnIndex: 4 },
+        summaryPlacement: 'footer',
         columns: [
           { label: 'Referencia', value: (row) => row.displayReference || paymentReferenceLabel(row) },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
@@ -595,6 +603,11 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             { label: 'Referencia', value: payment.displayReference || paymentReferenceLabel(payment) },
           ],
           lines: paymentRows.map((row) => ({ description: getMethodLabel(row.method), quantity: 1, unitPrice: formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency), total: formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency), secondary: `Referencia: ${paymentReferenceLabel(row)}${row.bankAccountId ? ` · Banco: ${row.bankAccountId}` : ''}` })),
+          totals: [
+            { label: 'Subtotal', value: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency) },
+            { label: 'Impuestos', value: formatCurrentAmount(0, payment.currency || displayCurrency) },
+            { label: 'Descuento', value: formatCurrentAmount(0, payment.currency || displayCurrency) },
+          ],
           total: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency),
           totalLabel: 'Total pagado',
           notes: [payment.notes, paymentVariantDetails(payment)].filter(Boolean).join('\n'),
@@ -885,7 +898,21 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="payments" />
-            {canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
+            {canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton
+              label="Exportar"
+              includeRoll={false}
+              scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }}
+              filterSelector={{
+                label: 'Método de pago',
+                defaultValue: 'all',
+                options: [
+                  { value: 'all', label: 'Todos los métodos', description: 'Incluye todos los pagos' },
+                  ...methodOpts.map((method) => ({ value: method.value, label: method.label, description: `Incluye pagos por ${method.label.toLowerCase()}` })),
+                  { value: 'MIXED', label: 'Pago mixto', description: 'Incluye pagos con varios métodos' },
+                ],
+              }}
+              onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
+            />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos a proveedores" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
              {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && (

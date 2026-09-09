@@ -16,6 +16,7 @@ import { generateConfiguredReportTemplate, getPdfDesignSettings, getPdfTemplateL
 import { getBase64Image } from '../../utils/reportExportUtils';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -75,7 +76,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
   const { data: requests = [], isLoading: loading } = useTenantQuery(['reports', 'subscriptions'], async (signal) => {
-    const result = await subscriptionsService.getAllRequests({ report: true, pageSize: 5000 } as any, signal);
+    const result = await runWithReportRequestLimit(() => subscriptionsService.getAllRequests({ report: true, pageSize: 5000 } as any, signal), signal);
     return asList(result);
   }, { enabled: canViewSubscriptions, onError: (e) => toast.error(e.message || 'Error cargando suscripciones') });
 
