@@ -148,11 +148,14 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     'egresos': 'gastos', 
     'movimientos-recurrentes': 'recurrentes',
     'ingresos-recurrentes': 'ingresos-recurrentes',
-    'cuentas-financieras': 'cuentas-financieras',
+    // Compatibilidad con enlaces guardados: Cuentas financieras ahora vive en Caja y Bancos.
+    'cuentas-financieras': 'caja-bancos',
     'diario-financiero': 'diario-financiero',
     'libro-mayor-financiero': 'libro-mayor-financiero',
-    'presupuestos-financieros': 'presupuestos-financieros',
-    'reportes-financieros-detalle': 'reportes-financieros-detalle',
+    // Compatibilidad con enlaces guardados: Presupuestos ahora vive en Análisis.
+    'presupuestos-financieros': 'analisis',
+    // Compatibilidad con enlaces guardados: Reportes financieros ahora vive en Balance General.
+    'reportes-financieros-detalle': 'balance-general',
     'calendario-financiero': 'calendario',
     'analisis-ingresos-gastos': 'analisis',
     'balance-general': 'balance-general',
@@ -196,7 +199,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     expense: ['resumen', 'gastos', 'analisis', 'balance-general'].includes(activeTab),
     recurringExpense: ['resumen', 'recurrentes', 'calendario', 'analisis'].includes(activeTab),
     recurringIncome: ['resumen', 'recurrentes', 'ingresos-recurrentes', 'calendario', 'analisis'].includes(activeTab),
-    accounts: ['resumen', 'ingresos', 'gastos', 'recurrentes', 'ingresos-recurrentes', 'cuentas-financieras', 'balance-general'].includes(activeTab),
+    accounts: ['resumen', 'ingresos', 'gastos', 'recurrentes', 'ingresos-recurrentes', 'balance-general'].includes(activeTab),
   };
   const incomesQuery = useQuery({
     queryKey: ['finance', 'income', tenantKey, dateFrom, dateTo],
@@ -516,14 +519,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     { id: 'gastos', label: 'Gastos', icon: Wallet, module: 'FINANCIAL_EXPENSES', permission: ['FINANCIAL_EXPENSES'] },
     { id: 'recurrentes', label: 'Recurrentes', icon: RotateCcw, module: 'FINANCIAL_EXPENSES_REC', permission: ['FINANCIAL_EXPENSES_REC'] },
     { id: 'ingresos-recurrentes', label: 'Ingresos recurrentes', icon: TrendingUp, module: 'FINANCIAL_INCOMES_REC', permission: ['FINANCIAL_INCOMES_REC'] },
-    { id: 'cuentas-financieras', label: 'Cuentas financieras', icon: Landmark, module: 'FINANCIAL_ACCOUNTS', permission: ['FINANCIAL_ACCOUNTS'] },
     { id: 'diario-financiero', label: 'Diario financiero', icon: Calendar, module: 'FINANCIAL_JOURNAL', permission: ['FINANCIAL_JOURNAL'] },
     { id: 'libro-mayor-financiero', label: 'Libro mayor financiero', icon: BarChart3, module: 'FINANCIAL_LEDGER', permission: ['FINANCIAL_LEDGER'] },
-    { id: 'presupuestos-financieros', label: 'Presupuestos', icon: Wallet, module: 'FINANCIAL_BUDGET', permission: ['FINANCIAL_BUDGET'] },
-    { id: 'reportes-financieros-detalle', label: 'Reportes financieros', icon: BarChart3, module: 'FINANCIAL_REPORTS', permission: ['FINANCIAL_REPORTS'] },
     { id: 'calendario', label: 'Calendario', icon: CalendarClock, module: 'FINANCIAL_DASHBOARD', permission: ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD'] },
-    { id: 'analisis', label: 'Análisis', icon: BarChart3, module: 'FINANCIAL_BALANCE', permission: ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'] },
-    { id: 'balance-general', label: 'Balance Gral', icon: Landmark, module: 'FINANCIAL_BALANCE', permission: ['FINANCIAL_BALANCE'] },
+    { id: 'analisis', label: 'Análisis de ingresos y gastos', icon: BarChart3, module: 'FINANCIAL_BALANCE', permission: ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'] },
+    { id: 'balance-general', label: 'Balance General', icon: Landmark, module: 'FINANCIAL_BALANCE', permission: ['FINANCIAL_BALANCE'] },
     { id: 'perdidas', label: 'Pérdidas', icon: TrendingDown, module: 'FINANCIAL_EXPENSES', permission: ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'] },
   ];
 
@@ -604,8 +604,19 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView 
                     title="Ingresos"
-                    data={groupedIncomeRows.map((i: any) => ({ ...i, isPayment: !['Manual', 'manual', '', null, undefined].includes(i.source) }))}
+                    data={groupedIncomeRows.map((i: any) => ({
+                      ...i,
+                      isPayment: !['Manual', 'manual', '', null, undefined].includes(i.source),
+                    }))}
                     columns={INCOME_COLUMNS}
+                    exportSummary={(rows) => ({
+                      label: 'Total',
+                      columnIndex: 5,
+                      value: formatCurrentAmount(
+                        rows.reduce((sum, row) => sum + toDisplayAmount(Number(row.amount ?? row.baseAmount ?? 0), row.currency, row.exchangeRate), 0),
+                        displayCurrency,
+                      ),
+                    })}
                     onUpdate={handleUpdateIncome}
                     onAdd={handleAddIncome}
                     onDelete={async (id) => { await incomeService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] }); toast.success('Ingreso eliminado'); }}
@@ -626,8 +637,19 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView 
                     title="Gastos"
-                    data={fExpenses.map((e: any) => ({ ...e, isPayment: !['Manual', 'manual', '', null, undefined].includes(e.source) }))}
+                    data={fExpenses.map((e: any) => ({
+                      ...e,
+                      isPayment: !['Manual', 'manual', '', null, undefined].includes(e.source),
+                    }))}
                     columns={EXPENSE_COLUMNS}
+                    exportSummary={(rows) => ({
+                      label: 'Total',
+                      columnIndex: 5,
+                      value: formatCurrentAmount(
+                        rows.reduce((sum, row) => sum + toDisplayAmount(Number(row.amount ?? row.baseAmount ?? 0), row.currency, row.exchangeRate), 0),
+                        displayCurrency,
+                      ),
+                    })}
                     onUpdate={handleUpdateExpense}
                     onAdd={handleAddExpense}
                     onDelete={async (id) => {
@@ -719,24 +741,12 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 </motion.div>
               </TabsContent>
 
-              <TabsContent value="cuentas-financieras" className="m-0" asChild>
-                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinanceCashView /></motion.div>
-              </TabsContent>
-
               <TabsContent value="diario-financiero" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinancialJournalView kind="journal" /></motion.div>
               </TabsContent>
 
               <TabsContent value="libro-mayor-financiero" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinancialJournalView kind="ledger" /></motion.div>
-              </TabsContent>
-
-              <TabsContent value="presupuestos-financieros" className="m-0" asChild>
-                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinanceBalanceView incomes={fIncomes} expenses={fExpenses} recurringIncomes={fRecurringIncomes} recurringExpenses={fRecurringExpenses} /></motion.div>
-              </TabsContent>
-
-              <TabsContent value="reportes-financieros-detalle" className="m-0" asChild>
-                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}><FinanceGeneralBalanceView incomes={fIncomes} expenses={fExpenses} accounts={fAccounts} /></motion.div>
               </TabsContent>
 
               <TabsContent value="calendario" className="m-0" asChild>

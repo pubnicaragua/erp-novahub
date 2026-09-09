@@ -1,782 +1,152 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, useScroll, useTransform } from 'motion/react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
+  ArrowDownRight,
   ArrowRight,
   BarChart3,
-  Calculator,
+  Building2,
+  CalendarDays,
   Check,
+  ClipboardCheck,
   CircleDollarSign,
   FileText,
   Headphones,
-  LockKeyhole,
+  Layers3,
   Menu,
   Package,
   Receipt,
   ShieldCheck,
   ShoppingCart,
+  Sparkles,
   Store,
-  Users,
+  Truck,
   X,
   Zap,
 } from 'lucide-react';
 import facturacionCajaDemo from '../../assets/landing/facturacion-caja-demo.png';
-import { NovaHubLogo } from './NovaHubLogo';
+import novahubWordmarkLight from '../../assets/landing/novahub-wordmark-light.png';
 import { LandingChatModal } from './LandingChatModal';
 import { buildDownloadFileName } from '../utils/exportFileNames';
 
+const WHATSAPP_URL = 'https://wa.me/50588241003?text=Hola%2C%20quiero%20conocer%20NovaHub%20ERP';
 const EXCHANGE_RATE = 36.5;
 const ease = [0.22, 1, 0.36, 1] as const;
 
 const NAV_LINKS = [
   { label: 'Producto', href: '#producto' },
-  { label: 'Cómo funciona', href: '#proceso' },
   { label: 'Giros', href: '#giros' },
+  { label: 'Cómo funciona', href: '#flujo' },
   { label: 'Precios', href: '#precios' },
-  { label: 'Confianza', href: '#confianza' },
 ] as const;
 
 const MODULES = [
-  { title: 'Ventas', body: 'Cotizaciones, facturas, anticipos, créditos y seguimiento de clientes.', icon: Receipt },
-  { title: 'Inventario', body: 'Productos, bodegas, costos, existencias y transferencias entre sucursales.', icon: Package },
-  { title: 'Compras', body: 'Proveedores, órdenes de compra, recepción y control del margen.', icon: ShoppingCart },
-  { title: 'Caja y POS', body: 'Cobros, cierres de caja, tickets y operación por responsable.', icon: Store },
-  { title: 'Contabilidad', body: 'Plan de cuentas, asientos, balances y trazabilidad completa.', icon: Calculator },
-  { title: 'Reportes', body: 'Dashboard ejecutivo con métricas en tiempo real para tomar decisiones.', icon: BarChart3 },
-  { title: 'Personas', body: 'Usuarios, roles, permisos, sucursales y control de acceso.', icon: Users },
-  { title: 'Soporte', body: 'Tickets, evidencias, base de conocimiento y seguimiento.', icon: Headphones },
+  { title: 'Ventas', body: 'Cotiza, factura y cobra con el contexto completo del cliente.', icon: Receipt, tone: 'cyan' },
+  { title: 'Inventario', body: 'Existencias, costos, bodegas y transferencias siempre visibles.', icon: Package, tone: 'green' },
+  { title: 'Caja y POS', body: 'Una caja ordenada, con cierres y responsables trazables.', icon: Store, tone: 'amber' },
+  { title: 'Compras', body: 'Proveedores, recepción y margen conectados a la operación.', icon: ShoppingCart, tone: 'violet' },
+  { title: 'Contabilidad', body: 'Del movimiento diario a los estados financieros sin duplicar trabajo.', icon: CircleDollarSign, tone: 'blue' },
+  { title: 'Reportes', body: 'La lectura ejecutiva para decidir con datos, no con intuición.', icon: BarChart3, tone: 'rose' },
 ];
 
 const INDUSTRIES = [
-  { title: 'Comercio y retail', body: 'Productos, cajas, compras, promociones e inventario por sucursal.' },
-  { title: 'Restaurantes y POS', body: 'Mesas, comandas, cocina, menú digital y pedidos por QR.' },
-  { title: 'Distribución', body: 'Bodegas, rutas, precios, crédito y control de entregas.' },
-  { title: 'Servicios profesionales', body: 'Clientes, proyectos, horas, tareas y facturación.' },
-  { title: 'Empresas multisucursal', body: 'Grupos, rubros, permisos y operación consolidada.' },
-  { title: 'Empresas en crecimiento', body: 'Procesos ordenados sin cambiar de sistema cada año.' },
-];
-
-const PROCESS_STEPS = [
-  { kicker: 'Captura', title: 'Una venta deja de ser un dato aislado.', body: 'Cotizas, vendes o facturas una vez. El cliente, el producto y el responsable quedan registrados con contexto.' },
-  { kicker: 'Movimiento', title: 'Inventario y caja siguen el movimiento.', body: 'Existencias, pagos, créditos y cierres se actualizan alrededor del documento, no en hojas separadas.' },
-  { kicker: 'Control', title: 'Cada persona ve lo que necesita hacer.', body: 'Roles, permisos, sucursales y trazabilidad convierten la operación diaria en un proceso controlable.' },
-  { kicker: 'Decisión', title: 'La gerencia deja de adivinar.', body: 'Reportes, contabilidad y métricas muestran qué se vendió, qué falta, qué se cobró y dónde está el margen.' },
-];
+  { id: 'retail', label: 'Retail y tiendas', icon: Store, title: 'Vende más. Busca menos.', body: 'Catálogos, tallas, colores, cajas, promociones e inventario por sucursal en un mismo flujo.', points: ['Variantes y existencias por bodega', 'POS listo para el equipo de ventas', 'Margen y rotación por producto'] },
+  { id: 'logistica', label: 'Logística y transporte', icon: Truck, title: 'Cada entrega bajo control.', body: 'Coordina rutas, clientes, vehículos, servicios y cobros desde una operación que deja rastro.', points: ['Seguimiento de servicios y entregas', 'Costos y rentabilidad por operación', 'Documentos y responsables conectados'] },
+  { id: 'construccion', label: 'Construcción y proyectos', icon: Building2, title: 'Del presupuesto a la obra.', body: 'Convierte cotizaciones, compras, avances y costos de proyecto en una sola fuente de verdad.', points: ['Cotizaciones y presupuestos por proyecto', 'Compras y materiales con control', 'Avance, costos y rentabilidad'] },
+  { id: 'salud', label: 'Clínicas y consultorios', icon: CalendarDays, title: 'Más tiempo para atender.', body: 'Agenda, pacientes, cobros y operación administrativa alineados a la realidad de tu centro.', points: ['Citas y reservas configurables', 'Historial de clientes y servicios', 'Caja, inventario y reportes'] },
+  { id: 'talleres', label: 'Talleres y servicios', icon: ClipboardCheck, title: 'El trabajo entra. El control sale.', body: 'Órdenes de trabajo, agenda, cotizaciones, inventario y seguimiento sin perder conversaciones.', points: ['Órdenes de trabajo e historial', 'Notificaciones por WhatsApp y correo', 'POS, inventario y tareas'] },
+] as const;
 
 const PRICES = [
-  {
-    title: 'Base',
-    value: 600,
-    period: '/año',
-    note: '10 módulos incluidos con 5 usuarios',
-    features: ['Inventario', 'Ventas', 'Compras', 'Caja', 'Finanzas', 'Reportes', 'Actividades', 'Herramientas', 'Tickets', 'Conocimiento'],
-    featured: false,
-    cta: 'Empezar ahora',
-  },
-  {
-    title: 'Contabilidad',
-    value: 100,
-    period: '/mes',
-    note: 'Contabilidad completa para tu empresa',
-    features: ['Plan de cuentas', 'Asientos contables', 'Balance general', 'Estado de resultados', 'Conciliación bancaria', 'Reportes fiscales', 'IVA / IR automático', 'Cuentas por pagar/cobrar'],
-    featured: true,
-    cta: 'Lo quiero',
-  },
-  {
-    title: 'RRHH',
-    value: 85,
-    period: '/mes',
-    note: 'Gestión completa de Recursos Humanos',
-    features: ['Nómina Nicaragua (INSS/IR)', 'Control de asistencia', 'Vacaciones y permisos', 'Evaluaciones de desempeño', 'Capacitaciones', 'KPIs y métricas', 'Dashboard RRHH', 'Empleados y departamentos'],
-    featured: false,
-    cta: 'Agregar a mi plan',
-  },
+  { title: 'Base', note: 'Para ordenar la operación desde el primer día', price: 600, period: '/año', features: ['Ventas e inventario', 'Compras y caja', 'Reportes ejecutivos', 'Usuarios y permisos'], featured: false },
+  { title: 'Contabilidad', note: 'Para ver el negocio con números completos', price: 100, period: '/mes', features: ['Plan de cuentas', 'Asientos contables', 'Balance y resultados', 'Cuentas por cobrar/pagar'], featured: true },
+  { title: 'RRHH', note: 'Para administrar el equipo con claridad', price: 85, period: '/mes', features: ['Nómina Nicaragua', 'Asistencia y vacaciones', 'Evaluaciones y KPIs', 'Empleados y departamentos'], featured: false },
 ];
 
 function formatPrice(value: number, currency: 'USD' | 'NIO') {
-  return currency === 'NIO' ? `C$${(value * EXCHANGE_RATE).toLocaleString('es-NI')}` : `$${value.toLocaleString('en-US')}`;
+  return currency === 'NIO' ? `C$${(value * EXCHANGE_RATE).toLocaleString('es-NI', { maximumFractionDigits: 0 })}` : `$${value.toLocaleString('en-US')}`;
 }
-
-function planWhatsAppHref(title: string) {
-  const message = encodeURIComponent(`Hola, me interesa el plan ${title} de NovaHub ERP`);
-  return `https://wa.me/50588241003?text=${message}`;
-}
-
-/* ──────────── REUSABLE ──────────── */
 
 function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-60px' }}
-      transition={{ duration: 0.7, delay, ease }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
+  return <motion.div initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-70px' }} transition={{ duration: 0.7, delay, ease }} className={className}>{children}</motion.div>;
 }
 
-function Kicker({ children }: { children: ReactNode }) {
-  return (
-    <p className="mb-4 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.2em] text-[#22c55e]">
-      <span className="h-px w-8 bg-[#22c55e]" />
-      {children}
-    </p>
-  );
+function Kicker({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
+  return <p className={`mb-5 flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.25em] ${dark ? 'text-[#5ce1d5]' : 'text-[#0a9f7b]'}`}><span className={`h-px w-8 ${dark ? 'bg-[#5ce1d5]' : 'bg-[#16b978]'}`} />{children}</p>;
 }
 
-function Headline({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <h2 className={`text-4xl font-black leading-[1.02] tracking-[-0.04em] text-[#174a3a] sm:text-5xl lg:text-6xl ${className}`}>
-      {children}
-    </h2>
-  );
+function PrimaryButton({ href = WHATSAPP_URL, children, onClick, dark = false, className = '' }: { href?: string; children: ReactNode; onClick?: () => void; dark?: boolean; className?: string }) {
+  const classes = `group inline-flex items-center justify-center gap-3 rounded-full px-6 py-3.5 text-[11px] font-extrabold uppercase tracking-[0.16em] transition duration-300 hover:-translate-y-0.5 active:translate-y-0 ${dark ? 'bg-[#5ce1d5] text-[#06241f] shadow-[0_16px_45px_-18px_rgba(92,225,213,.9)] hover:bg-white' : 'bg-[#0eaa77] text-white shadow-[0_16px_40px_-18px_rgba(14,170,119,.7)] hover:bg-[#078b65]'} ${className}`;
+  const content = <><span>{children}</span><ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" /></>;
+  if (onClick) return <button type="button" onClick={onClick} className={classes}>{content}</button>;
+  return <a href={href} className={classes}>{content}</a>;
 }
-
-function CTA({ href, children, className = '', onClick, variant = 'solid' }: { href?: string; children: ReactNode; className?: string; onClick?: () => void; variant?: 'solid' | 'soft' }) {
-  const styles = variant === 'solid'
-    ? 'bg-[#22c55e] text-white shadow-[0_18px_45px_-16px_rgba(34,197,94,.5)] hover:bg-[#16a34a] hover:shadow-[0_24px_50px_-16px_rgba(34,197,94,.6)]'
-    : 'bg-white text-[#174a3a] border border-[#d8e3df] shadow-sm hover:bg-[#f0fdf4] hover:border-[#22c55e]';
-  const cls = `inline-flex -skew-x-6 items-center justify-center gap-2.5 rounded-[14px] px-8 py-4 text-sm font-bold uppercase tracking-[0.12em] transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] ${styles} ${className}`;
-  const inner = <span className="inline-flex skew-x-6 items-center gap-2.5">{children}</span>;
-  if (onClick) return <button type="button" onClick={onClick} className={cls}>{inner}</button>;
-  return <a href={href} className={cls}>{inner}</a>;
-}
-
-/* ──────────── HEADER ──────────── */
 
 function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const closeMenu = () => setMenuOpen(false);
-
-  return (
-    <header
-      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-        scrolled || menuOpen
-          ? 'border-b border-[#e0ebe4]/80 bg-white/95 shadow-[0_8px_40px_-20px_rgba(23,74,58,.08)] backdrop-blur-2xl'
-          : 'bg-white/80 backdrop-blur-xl'
-      }`}
-    >
-      <nav className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
-        <a href="/landing" className="flex items-center gap-2.5">
-          <NovaHubLogo size={34} />
-          <span className="flex flex-col leading-none">
-            <span className="text-[17px] font-black tracking-[-0.04em] text-[#174a3a]">Nova<span className="text-[#22c55e]">Hub</span></span>
-            <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-[#84a1ad]">ERP Platform</span>
-          </span>
-        </a>
-
-        <div className="flex items-center gap-3">
-          <a href="/login" className="hidden text-sm font-bold text-[#5d7884] transition-colors hover:text-[#174a3a] sm:block">
-            Iniciar sesión
-          </a>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
-            aria-expanded={menuOpen}
-            className="relative z-50 grid size-11 place-items-center rounded-xl border border-[#e0ebe4] bg-white text-[#174a3a] shadow-sm transition-colors hover:border-[#22c55e]"
-          >
-            <motion.span animate={menuOpen ? { rotate: 90, opacity: 0 } : { rotate: 0, opacity: 1 }} transition={{ duration: 0.2 }} className="absolute">
-              <Menu className="size-5" />
-            </motion.span>
-            <motion.span animate={menuOpen ? { rotate: 0, opacity: 1 } : { rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }} className="absolute">
-              <X className="size-5" />
-            </motion.span>
-          </button>
-        </div>
-      </nav>
-
-      <AnimatePresence>
-        {menuOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3, ease }}
-            className="overflow-hidden border-t border-[#e0ebe4]/60 bg-white/98 backdrop-blur-2xl"
-          >
-            <div className="mx-auto flex max-w-7xl flex-col gap-1 px-5 py-6 sm:px-8">
-              {NAV_LINKS.map((link) => (
-                <a key={link.href} href={link.href} onClick={closeMenu} className="rounded-xl px-4 py-4 text-base font-bold text-[#5d7884] transition-colors hover:bg-[#e5f5eb] hover:text-[#22c55e]">
-                  {link.label}
-                </a>
-              ))}
-              <div className="mt-4 flex flex-col gap-3 border-t border-[#e0ebe4]/60 pt-4">
-                <a href="/login" onClick={closeMenu} className="rounded-xl px-4 py-3.5 text-center text-sm font-bold text-[#5d7884]">
-                  Iniciar sesión
-                </a>
-                <CTA href="https://wa.me/50588241003?text=Hola%2C%20quiero%20agendar%20una%20llamada%20para%20conocer%20NovaHub%20ERP" className="w-full text-center">
-                  Agendar llamada
-                </CTA>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </header>
-  );
+  return <header className={`fixed inset-x-0 top-0 z-40 transition duration-300 ${scrolled ? 'bg-[#071b18]/90 shadow-[0_10px_40px_-25px_rgba(0,0,0,.8)] backdrop-blur-xl' : 'bg-transparent'}`}>
+    <div className="mx-auto flex h-[76px] max-w-[1280px] items-center justify-between px-5 sm:px-8 lg:px-10">
+      <a href="#inicio" className="flex items-center gap-3" aria-label="NovaHub ERP, inicio"><img src={novahubWordmarkLight} alt="NovaHub ERP" className="h-9 w-auto object-contain" /></a>
+      <nav className="hidden items-center gap-7 lg:flex" aria-label="Navegación principal">{NAV_LINKS.map((link) => <a key={link.href} href={link.href} className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/65 transition hover:text-[#5ce1d5]">{link.label}</a>)}</nav>
+      <div className="hidden items-center gap-5 sm:flex"><a href="/login" className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/70 transition hover:text-white">Iniciar sesión</a><PrimaryButton href={WHATSAPP_URL} dark className="px-5 py-3">Agendar demo</PrimaryButton></div>
+      <button type="button" onClick={() => setMenuOpen((value) => !value)} className="rounded-full border border-white/15 p-2.5 text-white lg:hidden" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}>{menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}</button>
+    </div>
+    <AnimatePresence>{menuOpen && <motion.nav initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="border-t border-white/10 bg-[#071b18]/95 px-5 py-4 backdrop-blur-xl lg:hidden"><div className="mx-auto flex max-w-[1280px] flex-col gap-1">{NAV_LINKS.map((link) => <a key={link.href} href={link.href} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 text-xs font-bold uppercase tracking-[0.15em] text-white/75 hover:bg-white/5 hover:text-[#5ce1d5]">{link.label}</a>)}<a href="/login" className="mt-2 rounded-xl border border-white/10 px-3 py-3 text-center text-xs font-bold uppercase tracking-[0.15em] text-white/75">Iniciar sesión</a></div></motion.nav>}</AnimatePresence>
+  </header>;
 }
-
-/* ──────────── HERO ──────────── */
 
 function HeroSection() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
-  const blobY = useTransform(scrollYProgress, [0, 1], [0, 60]);
-
-  return (
-    <section ref={ref} className="relative isolate overflow-hidden bg-white px-5 pt-36 sm:px-8 lg:px-10 lg:pt-44">
-      <div className="pointer-events-none absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(23,74,58,1) 1px, transparent 1px), linear-gradient(90deg, rgba(23,74,58,1) 1px, transparent 1px)', backgroundSize: '80px 80px' }} />
-      <motion.div style={{ y: blobY }} className="pointer-events-none absolute left-[-10%] top-[-10%] size-[40rem] rounded-full bg-[#22c55e]/10 blur-[140px]" />
-
-      <div className="relative mx-auto max-w-7xl pb-12 lg:pb-16">
-        <div className="mx-auto max-w-3xl text-center">
-          <Reveal>
-            <Kicker>Sistema de gestión empresarial</Kicker>
-            <h1 className="text-[2.5rem] font-black leading-[0.96] tracking-[-0.05em] text-[#174a3a] sm:text-6xl lg:text-[5.5rem]">
-              Un solo sistema para manejar{' '}
-              <span className="text-[#22c55e]">tu negocio completo.</span>
-            </h1>
-            <p className="mx-auto mt-8 max-w-xl text-lg leading-7 text-[#5d7884]">
-              Ventas, inventario, caja y contabilidad en el mismo lugar. Sin hojas de cálculo, sin coordinar por WhatsApp, sin perder datos.
-            </p>
-            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <CTA href="https://wa.me/50588241003?text=Hola%2C%20quiero%20agendar%20una%20llamada%20para%20conocer%20NovaHub%20ERP">
-                Agendar llamada <ArrowRight className="size-4" />
-              </CTA>
-              <CTA href="#precios" variant="soft">
-                Ver precios
-              </CTA>
-            </div>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm font-bold text-[#84a1ad]">
-              <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Sin tarjeta de crédito</span>
-              <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Soporte en español</span>
-              <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Desde $600/año</span>
-            </div>
-          </Reveal>
-        </div>
-
-        <Reveal delay={0.15} className="mt-16">
-          <ProductWindow />
-        </Reveal>
-      </div>
-      <WaveHero />
-    </section>
-  );
+  return <section id="inicio" className="relative isolate min-h-[790px] overflow-hidden bg-[#071b18] pt-28 text-white lg:min-h-[850px] lg:pt-36">
+    <div className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(92,225,213,.06)_1px,transparent_1px),linear-gradient(90deg,rgba(92,225,213,.06)_1px,transparent_1px)] [background-size:72px_72px]" /><div className="pointer-events-none absolute -left-40 top-24 size-[560px] rounded-full bg-[#0eaa77]/20 blur-[120px]" /><div className="pointer-events-none absolute right-[-180px] top-[-140px] size-[600px] rounded-full bg-[#24d9d0]/15 blur-[130px]" /><div className="pointer-events-none absolute bottom-[-260px] left-1/3 size-[600px] rounded-full bg-[#0eaa77]/10 blur-[120px]" />
+    <div className="relative mx-auto grid max-w-[1280px] items-center gap-16 px-5 pb-24 sm:px-8 lg:grid-cols-[.9fr_1.1fr] lg:gap-8 lg:px-10 lg:pb-32">
+      <div className="max-w-[650px]"><Reveal><div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#5ce1d5]/25 bg-[#5ce1d5]/[.07] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#9af5e9]"><span className="size-1.5 animate-pulse rounded-full bg-[#5ce1d5]" /> ERP diseñado para operar mejor</div><h1 className="max-w-[730px] text-[clamp(3.2rem,7vw,6.75rem)] font-black leading-[.9] tracking-[-0.07em] text-white">El control de tu negocio, <span className="text-[#5ce1d5]">en una sola señal.</span></h1><p className="mt-7 max-w-[580px] text-base leading-7 text-white/60 sm:text-lg">Ventas, inventario, caja, contabilidad y operación conectados en un ERP hecho para empresas que quieren crecer sin improvisar.</p><div className="mt-9 flex flex-col gap-3 sm:flex-row"><PrimaryButton href={WHATSAPP_URL} dark>Quiero ver NovaHub</PrimaryButton><a href="#producto" className="group inline-flex items-center justify-center gap-3 rounded-full border border-white/15 px-6 py-3.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/80 transition hover:border-[#5ce1d5]/60 hover:text-white">Explorar el sistema <ArrowDownRight className="size-4 transition group-hover:translate-x-0.5 group-hover:translate-y-0.5" /></a></div><div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40"><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> NIO y USD</span><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> Multisucursal</span><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> Soporte local</span></div></Reveal></div>
+      <motion.div initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .8, delay: .12, ease }} className="relative lg:pl-8"><div className="absolute -inset-10 rounded-[3rem] bg-[#5ce1d5]/10 blur-3xl" /><div className="relative rounded-[28px] border border-white/15 bg-white/[.07] p-2 shadow-[0_40px_100px_-35px_rgba(0,0,0,.9)] backdrop-blur-sm sm:p-3"><div className="flex items-center justify-between border-b border-white/10 px-3 py-3 sm:px-4"><div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#ff7c73]" /><span className="size-2 rounded-full bg-[#ffd166]" /><span className="size-2 rounded-full bg-[#5ce1d5]" /></div><span className="rounded-full bg-[#5ce1d5]/10 px-3 py-1 text-[8px] font-bold uppercase tracking-[.18em] text-[#8cf4e7]">NovaHub / vista ejecutiva</span></div><div className="overflow-hidden rounded-b-[20px] bg-[#f5faf8]"><img src={facturacionCajaDemo} alt="Vista de facturación y caja de NovaHub ERP" className="h-auto w-full object-cover object-top" /></div></div><motion.div animate={{ y: [0, -9, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} className="absolute -left-3 top-16 flex items-center gap-2 rounded-2xl border border-[#5ce1d5]/30 bg-[#0b332b]/90 px-3 py-2.5 shadow-2xl backdrop-blur-xl sm:-left-8"><span className="flex size-7 items-center justify-center rounded-xl bg-[#5ce1d5]/15"><Zap className="size-3.5 text-[#5ce1d5]" /></span><span><strong className="block text-[10px] text-white">Venta confirmada</strong><small className="text-[9px] text-white/45">Inventario actualizado</small></span></motion.div><motion.div animate={{ y: [0, 9, 0] }} transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: .8 }} className="absolute -right-2 bottom-12 flex items-center gap-2 rounded-2xl border border-white/15 bg-[#0b332b]/95 px-3 py-2.5 shadow-2xl backdrop-blur-xl sm:-right-7"><span className="flex size-7 items-center justify-center rounded-xl bg-[#0eaa77]/20"><BarChart3 className="size-3.5 text-[#6ef0bd]" /></span><span><strong className="block text-[10px] text-white">Margen visible</strong><small className="text-[9px] text-white/45">Decide con datos</small></span></motion.div></motion.div>
+    </div><div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-[#f8fbfa] to-transparent" />
+  </section>;
 }
 
-function ProductWindow() {
-  return (
-    <div className="relative mx-auto w-full max-w-[960px]">
-      <div className="absolute -inset-8 rounded-[3rem] bg-[#22c55e]/8 blur-[80px]" />
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.9, delay: 0.2, ease }}
-        className="relative overflow-hidden rounded-[18px] border border-[#e0ebe4] bg-[#f8faf9] p-2 shadow-[0_40px_90px_-30px_rgba(34,197,94,.2)] sm:p-3"
-      >
-        <div className="flex items-center justify-between rounded-t-[13px] bg-white px-4 py-3">
-          <div className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded-full bg-[#f59e9e]" />
-            <span className="size-2.5 rounded-full bg-[#f4c95d]" />
-            <span className="size-2.5 rounded-full bg-[#4acb8d]" />
-          </div>
-          <div className="rounded-full bg-[#f0fdf4] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#5d7884]">
-            Sistema en funcionamiento
-          </div>
-        </div>
-        <div className="relative overflow-hidden rounded-b-[13px] bg-white">
-          <img src={facturacionCajaDemo} alt="NovaHub ERP — Sistema de facturación e inventario" className="block h-auto w-full" loading="eager" />
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-[#22c55e]/5 via-transparent to-white/10" />
-        </div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.7, delay: 0.9, ease }}
-        className="absolute -bottom-5 -left-3 hidden rounded-2xl border border-[#d8e3df] bg-white px-5 py-3.5 shadow-xl sm:block"
-      >
-        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#84a1ad]">Conectado</p>
-        <p className="mt-1 text-sm font-bold text-[#174a3a]">Venta → caja → contabilidad</p>
-      </motion.div>
-    </div>
-  );
+function SignalStrip() {
+  const labels = ['Ventas', 'Inventario', 'Caja', 'Contabilidad', 'Cotizaciones', 'Reportes', 'Clientes', 'Proyectos', 'RRHH'];
+  return <div className="overflow-hidden border-y border-[#dbe8e3] bg-[#f7fbf9]"><style>{'@keyframes landing-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}'}</style><div className="flex min-w-max animate-[landing-marquee_30s_linear_infinite] items-center gap-8 py-4 text-[10px] font-extrabold uppercase tracking-[.22em] text-[#56776e]">{[...labels, ...labels].map((label, index) => <span key={`${label}-${index}`} className="flex items-center gap-8"><span>{label}</span><Sparkles className="size-3 text-[#12b77a]" /></span>)}</div></div>;
 }
 
-/* ──────────── SCROLLING BANNER ──────────── */
-
-function ScrollingBanner() {
-  const items = ['Ventas', 'Inventario', 'Caja', 'Contabilidad', 'Restaurant POS', 'Reportes', 'Compras', 'Recursos Humanos'];
-  return (
-    <div className="relative overflow-hidden border-t border-[#d1fae5] bg-[#f0fdf4] pt-5">
-      <motion.div className="flex w-max whitespace-nowrap" animate={{ x: ['0%', '-50%'] }} transition={{ duration: 45, repeat: Infinity, ease: 'linear' }}>
-        {[0, 1].map((copy) => (
-          <div key={copy} className="flex items-center" aria-hidden={copy === 1}>
-            {items.map((item) => (
-              <span key={item} className="flex items-center text-xs font-bold uppercase tracking-[0.18em] text-[#5d7884]">
-                <span className="mx-7">{item}</span>
-                <span className="text-[#22c55e]">✦</span>
-              </span>
-            ))}
-            <span className="flex items-center text-xs font-black uppercase tracking-[0.18em] text-[#22c55e]">
-              <span className="mx-7">NovaHub ERP</span>
-              <span>✦</span>
-            </span>
-          </div>
-        ))}
-      </motion.div>
-      <WaveBanner />
-    </div>
-  );
+function ConnectedOperation() {
+  const items = [{ n: '01', title: 'Captura', body: 'Una cotización, venta o servicio entra una sola vez.' }, { n: '02', title: 'Conexión', body: 'El sistema actualiza inventario, caja, clientes y documentos.' }, { n: '03', title: 'Control', body: 'Cada responsable ve el trabajo, el permiso y el siguiente paso.' }, { n: '04', title: 'Decisión', body: 'La gerencia entiende qué está pasando y dónde actuar.' }];
+  return <section id="flujo" className="bg-[#f8fbfa] px-5 py-24 sm:px-8 lg:px-10 lg:py-36"><div className="mx-auto grid max-w-[1280px] gap-14 lg:grid-cols-[.8fr_1.2fr] lg:gap-24"><Reveal><Kicker>La diferencia está en el flujo</Kicker><h2 className="max-w-[520px] text-4xl font-black leading-[.98] tracking-[-.06em] text-[#0c3d31] sm:text-6xl">No son módulos sueltos. Es una operación que se entiende.</h2><p className="mt-7 max-w-[480px] text-base leading-7 text-[#58766e]">NovaHub conecta lo que tu equipo hace todos los días para que la información no se pierda entre chats, hojas de cálculo y sistemas que no conversan.</p><a href="#producto" className="mt-8 inline-flex items-center gap-3 border-b-2 border-[#0eaa77] pb-2 text-[11px] font-extrabold uppercase tracking-[.18em] text-[#0c3d31] transition-colors hover:text-[#0eaa77]">Ver el recorrido <ArrowRight className="size-4" /></a></Reveal><div className="relative grid gap-0 sm:grid-cols-2">{items.map((item, index) => <Reveal key={item.n} delay={index * .07} className="relative border-t border-[#cfe0d9] py-7 sm:pr-8"><span className="text-[10px] font-extrabold tracking-[.18em] text-[#0eaa77]">{item.n}</span><h3 className="mt-3 text-xl font-extrabold tracking-[-.03em] text-[#0c3d31]">{item.title}</h3><p className="mt-2 max-w-[240px] text-sm leading-6 text-[#69837d]">{item.body}</p><ArrowRight className="absolute right-4 top-8 size-4 text-[#b3c9c0] sm:right-8" /></Reveal>)}</div></div></section>;
 }
-
-/* ──────────── WAVE DIVIDERS — dos capas, sin franja posterior ──────────── */
-
-type WaveDestination = '#f0fdf4' | '#ffffff' | '#174a3a';
-type WaveShape = 'hero' | 'banner' | 'process' | 'standard';
-
-const WAVE_SHAPES: Record<WaveShape, { green: string; destination: string }> = {
-  hero: {
-    green: 'M0 42 C150 4 300 26 450 54 C610 84 760 12 920 38 C1080 64 1240 62 1440 20 L1440 140 L0 140 Z',
-    destination: 'M0 96 C150 58 300 80 450 108 C610 136 760 66 920 92 C1080 118 1240 116 1440 74 L1440 140 L0 140 Z',
-  },
-  banner: {
-    green: 'M0 34 C180 82 360 6 540 48 C720 90 900 18 1080 58 C1240 94 1360 24 1440 42 L1440 140 L0 140 Z',
-    destination: 'M0 94 C180 132 360 56 540 98 C720 136 900 68 1080 108 C1240 140 1360 74 1440 92 L1440 140 L0 140 Z',
-  },
-  process: {
-    green: 'M0 30 C120 74 240 4 360 38 C480 72 600 8 720 42 C840 76 960 10 1080 44 C1200 78 1320 12 1440 40 L1440 140 L0 140 Z',
-    destination: 'M0 92 C120 128 240 58 360 96 C480 130 600 66 720 100 C840 134 960 68 1080 102 C1200 136 1320 70 1440 98 L1440 140 L0 140 Z',
-  },
-  standard: {
-    green: 'M0 38 C160 0 320 28 480 54 C640 80 800 16 960 42 C1120 68 1280 64 1440 24 L1440 140 L0 140 Z',
-    destination: 'M0 96 C160 60 320 88 480 112 C640 136 800 72 960 98 C1120 124 1280 120 1440 82 L1440 140 L0 140 Z',
-  },
-};
-
-function WaveDivider({ destination, shape = 'standard', bleed = false }: { destination: WaveDestination; shape?: WaveShape; bleed?: boolean }) {
-  const paths = WAVE_SHAPES[shape];
-  return (
-    <div className={`relative -mt-px h-20 overflow-hidden leading-none sm:h-32 ${bleed ? '-mx-5 sm:-mx-8 lg:-mx-10' : ''}`} aria-hidden="true">
-      <svg viewBox="0 0 1440 140" preserveAspectRatio="none" className="block h-full w-full">
-        <path d={paths.green} fill="#22c55e" />
-        <path d={paths.destination} fill={destination} />
-      </svg>
-    </div>
-  );
-}
-
-function WaveHero() { return <WaveDivider destination="#f0fdf4" shape="hero" bleed />; }
-function WaveBanner() { return <WaveDivider destination="#ffffff" shape="banner" />; }
-function WaveProduct() { return <WaveDivider destination="#f0fdf4" bleed />; }
-function WaveProcess() { return <WaveDivider destination="#ffffff" shape="process" bleed />; }
-function WaveModules() { return <WaveDivider destination="#f0fdf4" bleed />; }
-function WaveIndustries() { return <WaveDivider destination="#ffffff" shape="banner" bleed />; }
-function WavePricing() { return <WaveDivider destination="#f0fdf4" shape="process" bleed />; }
-function WaveTrust() { return <WaveDivider destination="#174a3a" shape="hero" bleed />; }
-
-/* ──────────── PRODUCTO ──────────── */
 
 function ProductSection() {
-  return (
-    <section id="producto" className="relative overflow-hidden bg-white px-5 pt-24 sm:px-8 lg:px-10 lg:pt-32">
-      <div className="relative mx-auto max-w-7xl pb-12 lg:pb-16">
-        <div className="grid gap-14 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
-          <Reveal>
-            <Kicker>La diferencia está en el flujo</Kicker>
-            <Headline className="mt-4 max-w-lg">
-              Todo conectado desde la primera venta.
-            </Headline>
-            <p className="mt-6 max-w-md text-lg leading-7 text-[#5d7884]">
-              La operación que ves arriba es la que tu equipo usaría: con sus documentos, sus responsables, sus sucursales y sus números.
-            </p>
-            <a href="#proceso" className="mt-8 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#174a3a] underline decoration-[#22c55e] decoration-2 underline-offset-8 transition-colors hover:text-[#22c55e]">
-              Ver el recorrido <ArrowRight className="size-4" />
-            </a>
-          </Reveal>
-
-          <div className="space-y-0">
-            {[
-              { title: 'Una sola captura', body: 'La información entra una vez y se conserva desde la cotización hasta el cobro.' },
-              { title: 'Una lectura compartida', body: 'Ventas, inventario, caja y contabilidad trabajan con el mismo contexto.' },
-              { title: 'Un control por responsabilidad', body: 'Cada usuario tiene acceso por rol, módulo, empresa, rubro y sucursal.' },
-              { title: 'Una decisión más rápida', body: 'La dirección deja de perseguir datos y empieza a leer la operación.' },
-            ].map((item, i) => (
-              <Reveal key={item.title} delay={i * 0.06}>
-                <div className="group border-t border-[#e0ebe4] py-6 transition-colors hover:border-[#22c55e]">
-                  <h3 className="text-lg font-bold text-[#174a3a]">{item.title}</h3>
-                  <p className="mt-2 max-w-sm text-base leading-6 text-[#5d7884]">{item.body}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </div>
-      <WaveProduct />
-    </section>
-  );
+  return <section id="producto" className="bg-white px-5 py-24 sm:px-8 lg:px-10 lg:py-36"><div className="mx-auto max-w-[1280px]"><Reveal className="max-w-[740px]"><Kicker>Un centro de control para tu negocio</Kicker><h2 className="text-4xl font-black leading-[.98] tracking-[-.06em] text-[#0c3d31] sm:text-6xl">Lo que pasa en tu empresa, <span className="text-[#0eaa77]">por fin tiene contexto.</span></h2><p className="mt-6 max-w-[620px] text-base leading-7 text-[#617e76]">Desde la primera cotización hasta el cierre de caja. Cada movimiento conserva su historia y alimenta la siguiente decisión.</p></Reveal><Reveal delay={.12} className="mt-14"><div className="relative overflow-hidden rounded-[30px] border border-[#dce9e4] bg-[#ecf8f3] p-3 shadow-[0_35px_90px_-55px_rgba(8,76,57,.45)] sm:p-5"><div className="absolute -right-20 -top-20 size-72 rounded-full bg-[#5ce1d5]/25 blur-3xl" /><div className="relative grid items-center gap-8 rounded-[22px] border border-white/80 bg-white/75 p-5 backdrop-blur sm:p-8 lg:grid-cols-[1.1fr_.9fr] lg:p-12"><div><div className="mb-5 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.2em] text-[#0eaa77]"><span className="size-2 rounded-full bg-[#0eaa77]" /> Tu operación, en vivo</div><h3 className="max-w-[540px] text-3xl font-black leading-[1] tracking-[-.05em] text-[#0c3d31] sm:text-5xl">Una vista ejecutiva que te dice dónde está el negocio.</h3><p className="mt-5 max-w-[490px] text-sm leading-6 text-[#6d8980]">Ingresos, margen, inventario, cajas y transacciones recientes en una lectura limpia, accionable y lista para compartir.</p><div className="mt-8 flex flex-wrap gap-2"><span className="rounded-full bg-[#e6f7ef] px-3 py-2 text-[10px] font-bold text-[#0a9f7b]">Datos conectados</span><span className="rounded-full bg-[#e6f5f7] px-3 py-2 text-[10px] font-bold text-[#138c95]">Tiempo real</span><span className="rounded-full bg-[#f1f4f2] px-3 py-2 text-[10px] font-bold text-[#56776e]">Por sucursal</span></div></div><div className="relative rounded-[22px] border border-[#d9e9e2] bg-[#f8fcfa] p-4 shadow-[0_20px_45px_-30px_rgba(8,76,57,.5)]"><div className="flex items-center justify-between"><div><p className="text-[9px] font-bold uppercase tracking-[.14em] text-[#8aa39c]">Ingresos del mes</p><strong className="mt-1 block text-3xl font-black tracking-[-.06em] text-[#0c3d31]">C$ 1,985.60</strong></div><span className="rounded-xl bg-[#dff8ec] px-2.5 py-2 text-[10px] font-extrabold text-[#0eaa77]">+18.4%</span></div><div className="mt-7 flex h-28 items-end gap-2 border-b border-[#dcebe5] pb-2">{[35, 46, 39, 63, 55, 76, 68, 92, 82, 100, 88, 112].map((height, index) => <motion.span key={index} initial={{ height: 0 }} whileInView={{ height: `${height / 1.15}%` }} viewport={{ once: true }} transition={{ duration: .7, delay: index * .04, ease }} className={`flex-1 rounded-t-md ${index === 9 ? 'bg-[#5ce1d5]' : 'bg-[#b9e8d5]'}`} />)}</div><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-white p-3"><p className="text-[9px] text-[#8aa39c]">Margen líder</p><strong className="mt-1 block text-lg font-black text-[#0c3d31]">50.0%</strong></div><div className="rounded-xl bg-white p-3"><p className="text-[9px] text-[#8aa39c]">Stock bajo</p><strong className="mt-1 block text-lg font-black text-[#f48a56]">10</strong></div></div></div></div></div></Reveal></div></section>;
 }
-
-/* ──────────── CÓMO FUNCIONA ──────────── */
-
-function ProcessSection() {
-  return (
-    <section id="proceso" className="relative overflow-hidden bg-[#f0fdf4] px-5 pt-24 text-[#174a3a] sm:px-8 lg:px-10 lg:pt-32">
-      <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(rgba(34,197,94,1) 1px, transparent 1px), linear-gradient(90deg, rgba(34,197,94,1) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
-
-      <div className="relative mx-auto grid max-w-7xl gap-14 pb-12 lg:grid-cols-[0.45fr_1.55fr] lg:pb-16">
-        <div className="lg:sticky lg:top-32 lg:h-fit">
-          <Reveal>
-            <Kicker>El recorrido completo</Kicker>
-            <Headline className="mt-4 max-w-sm">
-              Cada venta alimenta tu inventario, caja y contabilidad.
-            </Headline>
-            <p className="mt-6 max-w-sm text-lg leading-7 text-[#5d7884]">
-              Así funciona un sistema cuando todo está conectado.
-            </p>
-            <div className="mt-10 flex items-center gap-3 text-sm font-bold uppercase tracking-[0.14em] text-[#84a1ad]">
-              <span className="h-px w-9 bg-[#22c55e]" /> Desliza para avanzar
-            </div>
-          </Reveal>
-        </div>
-
-        <div className="relative space-y-10 sm:space-y-14">
-          <div className="absolute bottom-8 left-4 top-8 w-px bg-gradient-to-b from-transparent via-[#22c55e]/30 to-transparent sm:left-9" />
-
-          {PROCESS_STEPS.map((step, index) => (
-            <Reveal key={step.kicker} delay={index * 0.06}>
-              <article className={`relative max-w-2xl border border-[#d1fae5] bg-white p-6 shadow-[0_24px_60px_-45px_rgba(34,197,94,.15)] sm:p-9 ${index % 2 ? 'ml-4 sm:ml-16' : 'mr-4 sm:mr-16'}`}>
-                <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#22c55e]">{step.kicker}</p>
-                <h3 className="mt-4 max-w-2xl text-2xl font-black leading-[1.05] tracking-[-0.03em] text-[#174a3a] sm:text-4xl">{step.title}</h3>
-                <p className="mt-4 max-w-xl text-base leading-7 text-[#5d7884]">{step.body}</p>
-              </article>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-      <WaveProcess />
-    </section>
-  );
-}
-
-/* ──────────── MÓDULOS ──────────── */
 
 function ModulesSection() {
-  return (
-    <section className="bg-white px-5 pt-24 sm:px-8 lg:px-10 lg:pt-32">
-      <div className="mx-auto max-w-7xl pb-12 lg:pb-16">
-        <Reveal>
-          <div className="flex flex-col justify-between gap-6 border-b border-[#e0ebe4] pb-8 sm:flex-row sm:items-end">
-            <div>
-              <Kicker>Módulos que trabajan juntos</Kicker>
-              <Headline className="mt-2">
-                Todo conectado.<br className="hidden sm:block" /> Sin trabajo duplicado.
-              </Headline>
-            </div>
-            <p className="max-w-xs text-base leading-6 text-[#5d7884]">
-              Activa lo que necesitas hoy. Mañana creces sin cambiar de sistema.
-            </p>
-          </div>
-        </Reveal>
-
-        <div className="mt-10 grid gap-px overflow-hidden border border-[#e0ebe4] bg-[#e0ebe4] sm:grid-cols-2 lg:grid-cols-4">
-          {MODULES.map((mod, index) => {
-            const Icon = mod.icon;
-            return (
-              <Reveal key={mod.title} delay={index * 0.04} className="bg-white">
-                <div className="group h-full p-6 transition-colors hover:bg-[#f0fdf4]">
-                  <Icon className="size-5 text-[#22c55e]" />
-                  <h3 className="mt-8 text-lg font-bold text-[#174a3a]">{mod.title}</h3>
-                  <p className="mt-3 text-base leading-6 text-[#5d7884]">{mod.body}</p>
-                  <div className="mt-6 h-1 w-7 bg-[#22c55e]/25 transition-all group-hover:w-14 group-hover:bg-[#22c55e]" />
-                </div>
-              </Reveal>
-            );
-          })}
-        </div>
-      </div>
-      <WaveModules />
-    </section>
-  );
+  return <section className="bg-[#071b18] px-5 py-24 text-white sm:px-8 lg:px-10 lg:py-36"><div className="mx-auto max-w-[1280px]"><Reveal><div className="grid items-end gap-8 lg:grid-cols-[.8fr_1.2fr]"><div><Kicker dark>Todo lo que tu equipo necesita</Kicker><h2 className="max-w-[520px] text-4xl font-black leading-[.98] tracking-[-.06em] sm:text-6xl">Menos fricción. <span className="text-[#5ce1d5]">Más avance.</span></h2></div><p className="max-w-[520px] text-base leading-7 text-white/55">Empieza con lo esencial y agrega capacidades cuando tu empresa las necesite. El sistema crece contigo, no te obliga a cambiar de operación.</p></div></Reveal><div className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{MODULES.map((module, index) => { const Icon = module.icon; const tone = module.tone === 'cyan' ? 'text-[#5ce1d5] bg-[#5ce1d5]/10' : module.tone === 'green' ? 'text-[#6ef0bd] bg-[#6ef0bd]/10' : module.tone === 'amber' ? 'text-[#ffd166] bg-[#ffd166]/10' : module.tone === 'violet' ? 'text-[#c9b6ff] bg-[#c9b6ff]/10' : module.tone === 'blue' ? 'text-[#91c7ff] bg-[#91c7ff]/10' : 'text-[#ff9eae] bg-[#ff9eae]/10'; return <Reveal key={module.title} delay={index * .05}><a href={WHATSAPP_URL} className="group block h-full rounded-[22px] border border-white/10 bg-white/[.045] p-6 transition duration-300 hover:-translate-y-1 hover:border-[#5ce1d5]/45 hover:bg-white/[.08]"><div className="flex items-start justify-between"><span className={`flex size-11 items-center justify-center rounded-2xl ${tone}`}><Icon className="size-5" /></span><ArrowRight className="size-4 text-white/20 transition group-hover:translate-x-1 group-hover:text-[#5ce1d5]" /></div><h3 className="mt-8 text-xl font-extrabold tracking-[-.03em]">{module.title}</h3><p className="mt-2 max-w-[270px] text-sm leading-6 text-white/48">{module.body}</p></a></Reveal>; })}</div></div></section>;
 }
-
-/* ──────────── INDUSTRIAS ──────────── */
 
 function IndustriesSection() {
-  return (
-    <section id="giros" className="bg-[#f0fdf4] px-5 pt-24 sm:px-8 lg:px-10 lg:pt-32">
-      <div className="mx-auto grid max-w-7xl gap-14 pb-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-start lg:pb-16">
-        <Reveal>
-          <Kicker>Funciona para tu tipo de negocio</Kicker>
-          <Headline className="mt-4 max-w-md">
-            No importa cómo vendes. Importa que puedas controlarlo.
-          </Headline>
-          <p className="mt-6 max-w-md text-lg leading-7 text-[#5d7884]">
-            Desde una tienda hasta un grupo empresarial con varias sucursales, NovaHub ordena la operación alrededor de tus procesos.
-          </p>
-        </Reveal>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          {INDUSTRIES.map((industry, index) => (
-            <Reveal key={industry.title} delay={index * 0.04}>
-              <div className="group relative min-h-[160px] overflow-hidden border border-[#d1fae5] bg-white p-6 shadow-[0_20px_50px_-40px_rgba(34,197,94,.12)]">
-                <div className="pointer-events-none absolute -right-8 -top-8 size-24 rotate-12 border-8 border-[#d1fae5]/50" />
-                <h3 className="text-lg font-bold text-[#174a3a]">{industry.title}</h3>
-                <p className="mt-2 max-w-xs text-base leading-6 text-[#5d7884]">{industry.body}</p>
-                <div className="absolute bottom-0 left-0 h-1 w-0 bg-[#22c55e] transition-all duration-300 group-hover:w-full" />
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-      <WaveIndustries />
-    </section>
-  );
+  const [activeId, setActiveId] = useState<(typeof INDUSTRIES)[number]['id']>('retail');
+  const active = INDUSTRIES.find((industry) => industry.id === activeId) ?? INDUSTRIES[0];
+  const ActiveIcon = active.icon;
+  return <section id="giros" className="relative overflow-hidden bg-[#f8fbfa] px-5 py-24 sm:px-8 lg:px-10 lg:py-36"><div className="pointer-events-none absolute right-[-120px] top-20 size-80 rounded-full bg-[#c8fff2] blur-[100px]" /><div className="relative mx-auto max-w-[1280px]"><Reveal><Kicker>Una base. Muchos negocios.</Kicker><div className="grid gap-8 lg:grid-cols-[.85fr_1.15fr] lg:items-end"><h2 className="max-w-[600px] text-4xl font-black leading-[.98] tracking-[-.06em] text-[#0c3d31] sm:text-6xl">La tecnología se adapta a tu giro, <span className="text-[#0eaa77]">no al revés.</span></h2><p className="max-w-[500px] text-base leading-7 text-[#617e76]">Configura lo que necesitas para tu realidad: citas, órdenes de trabajo, proyectos, rutas, variantes, cajas y más.</p></div></Reveal><div className="mt-14 grid gap-4 lg:grid-cols-[.72fr_1.28fr]"><div className="flex flex-col gap-2">{INDUSTRIES.map((industry) => { const Icon = industry.icon; const selected = industry.id === activeId; return <button key={industry.id} type="button" onClick={() => setActiveId(industry.id)} className={`group flex items-center justify-between rounded-2xl border px-5 py-4 text-left transition ${selected ? 'border-[#0eaa77] bg-[#0c3d31] text-white shadow-[0_18px_40px_-28px_rgba(8,76,57,.8)]' : 'border-[#dce9e4] bg-white text-[#0c3d31] hover:border-[#9dd9c1]'}`}><span className="flex items-center gap-3"><Icon className={`size-4 ${selected ? 'text-[#5ce1d5]' : 'text-[#0eaa77]'}`} /><span className="text-sm font-extrabold">{industry.label}</span></span><ArrowRight className={`size-4 transition ${selected ? 'translate-x-1 text-[#5ce1d5]' : 'text-[#b4cac2] group-hover:translate-x-1'}`} /></button>; })}</div><AnimatePresence mode="wait"><motion.div key={active.id} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .35, ease }} className="relative overflow-hidden rounded-[28px] bg-[#0c3d31] p-7 text-white sm:p-10"><div className="absolute -bottom-28 -right-16 size-72 rounded-full border-[35px] border-[#5ce1d5]/10" /><div className="absolute right-16 top-12 size-2 rounded-full bg-[#5ce1d5] shadow-[0_0_0_8px_rgba(92,225,213,.1)]" /><div className="relative"><div className="flex size-12 items-center justify-center rounded-2xl bg-[#5ce1d5]/15"><ActiveIcon className="size-5 text-[#5ce1d5]" /></div><h3 className="mt-8 max-w-[540px] text-3xl font-black leading-[1] tracking-[-.05em] sm:text-5xl">{active.title}</h3><p className="mt-5 max-w-[560px] text-base leading-7 text-white/58">{active.body}</p><div className="mt-8 grid gap-3 sm:grid-cols-3">{active.points.map((point) => <div key={point} className="rounded-2xl border border-white/10 bg-white/[.05] p-4 text-sm leading-5 text-white/80"><Check className="mb-4 size-4 text-[#5ce1d5]" />{point}</div>)}</div><a href={WHATSAPP_URL} className="mt-9 inline-flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[.17em] text-[#5ce1d5]">Diseñar mi operación <ArrowRight className="size-4" /></a></div></motion.div></AnimatePresence></div></div></section>;
 }
 
-/* ──────────── PRECIOS ──────────── */
-
-function PricingSection({ currency, setCurrency }: { currency: 'USD' | 'NIO'; setCurrency: (c: 'USD' | 'NIO') => void }) {
-  return (
-    <section id="precios" className="relative overflow-hidden bg-white px-5 pt-24 text-[#174a3a] sm:px-8 lg:px-10 lg:pt-32">
-      <div className="relative mx-auto max-w-7xl pb-12 lg:pb-16">
-        <div className="flex flex-col justify-between gap-8 border-b border-[#e0ebe4] pb-8 sm:flex-row sm:items-end">
-          <Reveal>
-            <Kicker>Planes claros. Sin sorpresas.</Kicker>
-            <Headline className="mt-2">
-              Empieza con lo esencial.<br className="hidden sm:block" /> Crece con la operación.
-            </Headline>
-          </Reveal>
-
-          <div className="flex items-center gap-2 self-start rounded-xl border border-[#e0ebe4] bg-[#f0fdf4] p-1">
-            <button type="button" onClick={() => setCurrency('USD')} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-all ${currency === 'USD' ? 'bg-[#22c55e] text-white shadow-md' : 'text-[#6a8490]'}`}>
-              USD
-            </button>
-            <button type="button" onClick={() => setCurrency('NIO')} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-all ${currency === 'NIO' ? 'bg-[#22c55e] text-white shadow-md' : 'text-[#6a8490]'}`}>
-              NIO
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-10 grid gap-4 lg:grid-cols-3">
-          {PRICES.map((plan, index) => (
-            <Reveal key={plan.title} delay={index * 0.07}>
-              <article className={`relative h-full border p-6 sm:p-8 ${plan.featured ? 'border-[#22c55e] bg-[#f0fdf4]' : 'border-[#e0ebe4] bg-white'}`}>
-                {plan.featured && (
-                  <span className="absolute right-5 top-5 rounded-full bg-[#22c55e] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-md">
-                    Popular
-                  </span>
-                )}
-                <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#22c55e]">{plan.title}</p>
-                <p className="mt-3 text-base text-[#5d7884]">{plan.note}</p>
-                <div className="mt-8 flex items-end gap-2">
-                  <span className="text-5xl font-black tracking-[-0.05em] text-[#174a3a]">{formatPrice(plan.value, currency)}</span>
-                  <span className="mb-1.5 text-base text-[#5d7884]">{plan.period}</span>
-                </div>
-                <ul className="mt-8 space-y-3">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-base text-[#5d7884]">
-                      <Check className="mt-0.5 size-4 shrink-0 text-[#22c55e]" /> {f}
-                    </li>
-                  ))}
-                </ul>
-                <CTA href={planWhatsAppHref(plan.title)} variant={plan.featured ? 'solid' : 'soft'} className="mt-8 w-full text-center">
-                  {plan.cta}
-                </CTA>
-              </article>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-      <WavePricing />
-    </section>
-  );
+function PricingSection() {
+  const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD');
+  return <section id="precios" className="bg-white px-5 py-24 sm:px-8 lg:px-10 lg:py-36"><div className="mx-auto max-w-[1280px]"><Reveal><div className="flex flex-col justify-between gap-7 sm:flex-row sm:items-end"><div><Kicker>Crece por etapas</Kicker><h2 className="text-4xl font-black leading-[.98] tracking-[-.06em] text-[#0c3d31] sm:text-6xl">Empieza con lo que necesitas.</h2><p className="mt-5 max-w-[560px] text-base leading-7 text-[#617e76]">Una inversión clara para una operación más ordenada. La propuesta final se define según tu empresa, módulos y alcance.</p></div><div className="flex items-center gap-1 rounded-full border border-[#dce9e4] bg-[#f7fbf9] p-1"><button type="button" onClick={() => setCurrency('USD')} className={`rounded-full px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.15em] transition ${currency === 'USD' ? 'bg-[#0c3d31] text-white' : 'text-[#7b968e]'}`}>USD</button><button type="button" onClick={() => setCurrency('NIO')} className={`rounded-full px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.15em] transition ${currency === 'NIO' ? 'bg-[#0c3d31] text-white' : 'text-[#7b968e]'}`}>NIO</button></div></div></Reveal><div className="mt-14 grid gap-4 lg:grid-cols-3">{PRICES.map((plan, index) => <Reveal key={plan.title} delay={index * .07}><div className={`relative flex h-full flex-col rounded-[24px] border p-7 transition duration-300 hover:-translate-y-1 ${plan.featured ? 'border-[#0eaa77] bg-[#eafaf2] shadow-[0_25px_60px_-38px_rgba(14,170,119,.65)]' : 'border-[#dce9e4] bg-white'}`}>{plan.featured && <span className="absolute right-6 top-6 rounded-full bg-[#0eaa77] px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-[.16em] text-white">Más elegido</span>}<p className="text-[11px] font-extrabold uppercase tracking-[.2em] text-[#0eaa77]">{plan.title}</p><p className="mt-3 min-h-10 max-w-[250px] text-sm leading-5 text-[#617e76]">{plan.note}</p><div className="mt-7 flex items-baseline gap-2"><strong className="text-5xl font-black tracking-[-.07em] text-[#0c3d31]">{formatPrice(plan.price, currency)}</strong><span className="text-sm text-[#78938b]">{plan.period}</span></div><div className="my-7 h-px bg-[#dce9e4]" /><ul className="flex-1 space-y-4">{plan.features.map((feature) => <li key={feature} className="flex gap-3 text-sm text-[#54746a]"><Check className="mt-0.5 size-4 shrink-0 text-[#0eaa77]" />{feature}</li>)}</ul><a href={`${WHATSAPP_URL}%20Plan%3A%20${encodeURIComponent(plan.title)}`} className={`mt-8 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3.5 text-[10px] font-extrabold uppercase tracking-[.16em] transition ${plan.featured ? 'bg-[#0eaa77] text-white hover:bg-[#078b65]' : 'border border-[#cbded6] text-[#0c3d31] hover:border-[#0eaa77] hover:text-[#0eaa77]'}`}>Hablar de este plan <ArrowRight className="size-4" /></a></div></Reveal>)}</div><p className="mt-7 text-center text-xs text-[#8aa39c]">Precios de referencia. Implementación, personalizaciones e impuestos se cotizan según alcance.</p></div></section>;
 }
-
-/* ──────────── CONFIANZA ──────────── */
 
 function TrustSection() {
-  const items = [
-    { icon: ShieldCheck, title: 'Control de acceso', body: 'Cada usuario ve solo lo que le corresponde por rol, módulo y sucursal.' },
-    { icon: LockKeyhole, title: 'Sesiones seguras', body: 'Autenticación y autorización protegidas en cada petición.' },
-    { icon: CircleDollarSign, title: 'Trazabilidad', body: 'Cada movimiento financiero se conecta con documentos, responsables y fechas.' },
-    { icon: Zap, title: 'Monitoreo activo', body: 'Registros y alertas para detectar problemas antes de que crezcan.' },
-  ];
-
-  return (
-    <section id="confianza" className="bg-[#f0fdf4] px-5 pt-24 sm:px-8 lg:px-10 lg:pt-32">
-      <div className="mx-auto max-w-7xl pb-12 lg:pb-16">
-        <div className="grid gap-14 lg:grid-cols-[0.74fr_1.26fr]">
-          <Reveal>
-            <Kicker>Control total sobre quién ve qué</Kicker>
-            <Headline className="mt-4 max-w-md">
-              La seguridad se refleja en cada detalle.
-            </Headline>
-            <p className="mt-6 max-w-md text-lg leading-7 text-[#5d7884]">
-              Cómo acceden los usuarios, cómo se separan las empresas y cómo se registra cada acción.
-            </p>
-          </Reveal>
-
-          <div className="grid gap-px border border-[#d1fae5] bg-[#d1fae5] sm:grid-cols-2">
-            {items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.title} className="bg-[#f0fdf4] p-6 sm:p-8">
-                  <Icon className="size-6 text-[#22c55e]" />
-                  <h3 className="mt-6 text-lg font-bold text-[#174a3a]">{item.title}</h3>
-                  <p className="mt-3 text-base leading-6 text-[#5d7884]">{item.body}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-      <WaveTrust />
-    </section>
-  );
+  const assurances = [{ icon: ShieldCheck, title: 'Acceso por responsabilidad', body: 'Roles, permisos, empresas y sucursales para que cada persona vea lo que corresponde.' }, { icon: Layers3, title: 'Una sola fuente de verdad', body: 'La información entra una vez y se conserva desde la cotización hasta el cobro.' }, { icon: Headphones, title: 'Acompañamiento local', body: 'Implementación, capacitación y soporte en español para que el sistema se use de verdad.' }];
+  return <section id="confianza" className="bg-[#f8fbfa] px-5 py-24 sm:px-8 lg:px-10 lg:py-32"><div className="mx-auto max-w-[1280px]"><Reveal><Kicker>Hecho para crecer con confianza</Kicker><h2 className="max-w-[760px] text-4xl font-black leading-[.98] tracking-[-.06em] text-[#0c3d31] sm:text-6xl">La claridad también es una ventaja competitiva.</h2></Reveal><div className="mt-14 grid gap-3 md:grid-cols-3">{assurances.map(({ icon: Icon, title, body }, index) => <Reveal key={title} delay={index * .07}><div className="h-full rounded-[22px] border border-[#dce9e4] bg-white p-6"><Icon className="size-5 text-[#0eaa77]" /><h3 className="mt-8 text-lg font-extrabold tracking-[-.03em] text-[#0c3d31]">{title}</h3><p className="mt-3 text-sm leading-6 text-[#6d8980]">{body}</p></div></Reveal>)}</div></div></section>;
 }
-
-/* ──────────── CTA FINAL ──────────── */
-
-function CTASection({ onDownloadContract }: { onDownloadContract: () => void }) {
-  return (
-    <section id="contacto" className="relative overflow-hidden bg-[#174a3a] px-5 pt-24 pb-12 sm:px-8 lg:px-10 lg:pt-32 lg:pb-16">
-      <div className="pointer-events-none absolute -right-32 top-0 size-[30rem] rounded-full bg-[#22c55e]/10 blur-[120px]" />
-
-      <div className="relative mx-auto flex max-w-7xl flex-col justify-between gap-10 lg:flex-row lg:items-end">
-        <Reveal>
-          <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#22c55e]">No esperes más</p>
-          <h2 className="mt-4 max-w-3xl text-4xl font-black leading-[0.96] tracking-[-0.05em] text-white sm:text-6xl">
-            Tu negocio merece un sistema que funcione.
-          </h2>
-          <p className="mt-5 max-w-xl text-lg leading-7 text-white/60">
-            Agenda una demo y te mostramos cómo NovaHub ordena tu operación en minutos.
-          </p>
-        </Reveal>
-
-        <div className="flex flex-col gap-4 sm:flex-row lg:flex-col">
-          <CTA href="https://wa.me/50588241003?text=Hola%2C%20quiero%20agendar%20una%20llamada%20para%20conocer%20NovaHub%20ERP">
-            Agendar llamada ahora <ArrowRight className="size-4" />
-          </CTA>
-          <button type="button" onClick={onDownloadContract} className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.12em] text-white/50 transition-colors hover:text-white">
-            <FileText className="size-4" /> Descargar contrato modelo
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ──────────── FOOTER ──────────── */
-
-function Footer() {
-  return (
-    <footer className="bg-[#0d1f1a] px-5 pt-16 pb-10 text-white sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-12 lg:grid-cols-[1.2fr_1fr_1fr]">
-          {/* Marca */}
-          <div>
-            <div className="flex items-center gap-2.5">
-              <NovaHubLogo size={30} />
-              <span className="flex flex-col leading-none">
-                <span className="text-[16px] font-black tracking-[-0.04em] text-white">Nova<span className="text-[#22c55e]">Hub</span></span>
-                <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-white/40">ERP Platform</span>
-              </span>
-            </div>
-            <p className="mt-5 max-w-sm text-sm leading-5 text-white/50">
-              Una forma más clara de vender, controlar y hacer crecer tu empresa.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3 text-xs font-bold uppercase tracking-[0.1em] text-white/40">
-              <a href="/login" className="transition-colors hover:text-[#22c55e]">Iniciar sesión</a>
-              <a href="/register" className="transition-colors hover:text-[#22c55e]">Crear cuenta</a>
-              <a href="#precios" className="transition-colors hover:text-[#22c55e]">Precios</a>
-              <a href="#contacto" className="transition-colors hover:text-[#22c55e]">Contacto</a>
-            </div>
-          </div>
-
-          {/* Seguridad y datos */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#22c55e]">Seguridad y datos</h4>
-            <ul className="mt-5 space-y-3 text-sm leading-5 text-white/50">
-              <li className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-[#22c55e]/60" /> Control de acceso por rol, módulo y sucursal. Cada usuario ve solo lo que le corresponde.</li>
-              <li className="flex items-start gap-2"><LockKeyhole className="mt-0.5 size-4 shrink-0 text-[#22c55e]/60" /> Autenticación y autorización protegidas en cada petición. Sesiones seguras con expiración.</li>
-              <li className="flex items-start gap-2"><CircleDollarSign className="mt-0.5 size-4 shrink-0 text-[#22c55e]/60" /> Trazabilidad completa: cada movimiento financiero se conecta con documentos, responsables y fechas.</li>
-              <li className="flex items-start gap-2"><Zap className="mt-0.5 size-4 shrink-0 text-[#22c55e]/60" /> Copias de seguridad automáticas diarias. Monitoreo activo con alertas para detectar problemas.</li>
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#22c55e]">Legal</h4>
-            <ul className="mt-5 space-y-3 text-sm leading-5 text-white/50">
-              <li><a href="#privacidad" className="transition-colors hover:text-[#22c55e]">Política de Privacidad</a></li>
-              <li><a href="#terminos" className="transition-colors hover:text-[#22c55e]">Términos y Condiciones</a></li>
-              <li><a href="#datos" className="transition-colors hover:text-[#22c55e]">Tratamiento de Datos</a></li>
-              <li><a href="#backups" className="transition-colors hover:text-[#22c55e]">Copias de Seguridad</a></li>
-            </ul>
-            <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs leading-5 text-white/40">
-                Tus datos son tuyos. NovaHub no comparte información con terceros. Puedes exportar o eliminar tu información en cualquier momento.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Línea inferior */}
-        <div className="mt-12 flex flex-col justify-between gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center">
-          <p className="text-xs text-white/30">© {new Date().getFullYear()} NovaHub ERP. Todos los derechos reservados.</p>
-          <div className="flex gap-6 text-xs text-white/30">
-            <a href="#privacidad" className="transition-colors hover:text-[#22c55e]">Privacidad</a>
-            <a href="#terminos" className="transition-colors hover:text-[#22c55e]">Términos</a>
-            <a href="#datos" className="transition-colors hover:text-[#22c55e]">Datos</a>
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-/* ──────────── MOBILE STICKY CTA ──────────── */
-
-function MobileStickyCTA() {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const onScroll = () => setVisible(window.scrollY > 500);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ y: 100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 100, opacity: 0 }}
-          transition={{ duration: 0.3, ease }}
-          className="fixed bottom-0 inset-x-0 z-30 border-t border-[#d1fae5] bg-white/95 px-5 py-3 shadow-[0_-10px_40px_-15px_rgba(34,197,94,.15)] backdrop-blur-xl lg:hidden"
-        >
-          <CTA href="https://wa.me/50588241003?text=Hola%2C%20quiero%20agendar%20una%20llamada%20para%20conocer%20NovaHub%20ERP" className="w-full text-center">
-            Agendar llamada
-          </CTA>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-/* ──────────── CONTRACT PDF ──────────── */
 
 function downloadContract() {
   void import('jspdf').then(({ jsPDF }) => {
@@ -784,53 +154,29 @@ function downloadContract() {
     const width = doc.internal.pageSize.getWidth();
     const height = doc.internal.pageSize.getHeight();
     const margin = 22;
-    let y = 48;
-    const green = [34, 197, 94] as const;
-    const forest = [23, 74, 58] as const;
-    const body = [71, 92, 99] as const;
-    const footer = () => { doc.setDrawColor(...green); doc.line(margin, height - 17, width - margin, height - 17); doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(120, 135, 137); doc.text('NovaHub ERP · Modelo comercial sujeto a revisión y firma de las partes.', width / 2, height - 11, { align: 'center' }); };
-    const header = () => { doc.setFillColor(23, 74, 58); doc.rect(0, 0, width, 34, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(255, 255, 255); doc.text('NOVAHUB', margin, 22); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(190, 225, 205); doc.text('ERP PLATFORM · MODELO SAAS', margin + 48, 22); doc.setFillColor(...green); doc.rect(0, 34, width, 1.5, 'F'); };
-    const nextPage = () => { footer(); doc.addPage(); header(); y = 51; };
-    const ensure = (space: number) => { if (y + space > height - 26) nextPage(); };
-    const heading = (text: string) => { ensure(16); doc.setFillColor(231, 245, 235); doc.roundedRect(margin, y - 5, width - margin * 2, 9, 1.5, 1.5, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...forest); doc.text(text.toUpperCase(), margin + 4, y + 1); y += 13; };
-    const paragraph = (text: string) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...body); const lines = doc.splitTextToSize(text, width - margin * 2); ensure(lines.length * 4.5 + 6); lines.forEach((line: string) => { doc.text(line, margin, y); y += 4.5; }); y += 4; };
-    header(); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...forest); doc.text('CONTRATO DE LICENCIA DE USO DE SOFTWARE', width / 2, y, { align: 'center' }); y += 8; doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...body); doc.text('Modelo Software como Servicio (SaaS)', width / 2, y, { align: 'center' }); y += 14;
-    heading('I. Partes contratantes'); paragraph('EL PROVEEDOR: NovaHub, empresa de tecnología y software. EL CLIENTE: la persona natural o jurídica que suscribe el documento.');
-    ['Razón social / nombre', 'RUC / cédula', 'Representante legal', 'Correo electrónico', 'Dirección', 'Teléfono'].forEach((label) => { ensure(9); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...body); doc.text(`${label}:`, margin, y); doc.line(margin + 42, y + 0.5, width - margin, y + 0.5); y += 8; });
-    heading('II. Objeto y licencia'); paragraph('EL PROVEEDOR otorga a EL CLIENTE una licencia de uso no exclusiva, intransferible y limitada del NovaHub ERP para sus operaciones internas, conforme al plan, módulos y usuarios contratados.');
-    heading('III. Precio y forma de pago'); paragraph('Los precios de referencia se detallan en la cotización vigente. La propuesta final, impuestos, implementación, equipos, alcance y forma de pago serán confirmados por escrito antes de la activación.');
-    [['Plan base', 'USD 600 / año'], ['Contabilidad', 'USD 100 / mes'], ['Recursos humanos', 'USD 85 / mes'], ['Usuario adicional', 'USD 5 / mes'], ['Implementación', 'USD 200 / pago único'], ['Dominio, hosting y 5 correos', 'USD 100 / año']].forEach(([label, value]) => { ensure(7); doc.setFontSize(8.5); doc.text(`• ${label}`, margin + 4, y); doc.setFont('helvetica', 'bold'); doc.text(value, width - margin, y, { align: 'right' }); doc.setFont('helvetica', 'normal'); y += 5.5; }); y += 4;
-    heading('IV. Seguridad, confidencialidad y datos'); paragraph('Las partes tratarán como confidencial la información a la que tengan acceso. NovaHub aplicará controles de autenticación, autorización, separación por empresa y medidas técnicas razonables para proteger la información.');
-    heading('V. Implementación y soporte'); paragraph('La implementación puede incluir configuración inicial, carga de catálogos, permisos, capacitación y acompañamiento. El soporte cubre incidencias técnicas y consultas de uso según el horario y nivel contratado.');
-    heading('VI. Vigencia y aceptación'); paragraph('La vigencia, renovación, terminación y exportación de información se determinarán en la propuesta aceptada. Este archivo es un modelo comercial descargable y no sustituye asesoría legal.');
-    ensure(32); y += 10; doc.line(margin, y, margin + 70, y); doc.line(width - margin - 70, y, width - margin, y); y += 5; doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text('EL PROVEEDOR', margin + 35, y, { align: 'center' }); doc.text('EL CLIENTE', width - margin - 35, y, { align: 'center' }); footer(); doc.save(buildDownloadFileName(['contrato_licencia_novahub_erp'], 'pdf'));
+    const green = [14, 170, 119] as const;
+    const forest = [12, 61, 49] as const;
+    doc.setFillColor(...forest); doc.rect(0, 0, width, 34, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(255, 255, 255); doc.text('NOVAHUB', margin, 22); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(190, 235, 220); doc.text('ERP PLATFORM · MODELO COMERCIAL', margin + 48, 22); doc.setFillColor(...green); doc.rect(0, 34, width, 1.5, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...forest); doc.text('CONTRATO DE LICENCIA DE USO DE SOFTWARE', width / 2, 55, { align: 'center' }); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(80, 110, 102); doc.text('Modelo Software como Servicio (SaaS)', width / 2, 63, { align: 'center' });
+    const lines = ['EL PROVEEDOR: NovaHub, empresa de tecnología y software.', 'EL CLIENTE: la persona natural o jurídica que suscribe el documento.', '', 'Este modelo resume las condiciones de licencia, implementación, soporte, seguridad y datos.', 'La propuesta final, impuestos, alcance y forma de pago serán confirmados por escrito antes de la activación.', '', 'Datos del cliente', 'Razón social / nombre: ________________________________________________', 'RUC / cédula: ________________________________________________________', 'Representante legal: _________________________________________________', 'Correo electrónico: _________________________________________________', 'Dirección: __________________________________________________________', 'Teléfono: ___________________________________________________________', '', 'Este archivo es un modelo comercial descargable y no sustituye asesoría legal.'];
+    let y = 82; doc.setFontSize(9); lines.forEach((line) => { if (line === 'Datos del cliente') { doc.setFont('helvetica', 'bold'); doc.setTextColor(...forest); } else { doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 110, 102); } doc.text(line, margin, y); y += line ? 8 : 5; }); doc.setDrawColor(...green); doc.line(margin, height - 18, width - margin, height - 18); doc.setFontSize(7); doc.setTextColor(125, 145, 140); doc.text('NovaHub ERP · Modelo sujeto a revisión y firma de las partes.', width / 2, height - 11, { align: 'center' }); doc.save(buildDownloadFileName(['contrato_licencia_novahub_erp'], 'pdf'));
   });
 }
 
-/* ──────────── MAIN ──────────── */
+function FinalCTA() {
+  return <section id="contacto" className="relative overflow-hidden bg-[#0c3d31] px-5 py-24 text-white sm:px-8 lg:px-10 lg:py-32"><div className="pointer-events-none absolute -right-20 -top-32 size-[520px] rounded-full border-[70px] border-[#5ce1d5]/[.07]" /><div className="pointer-events-none absolute bottom-[-220px] left-[-80px] size-[450px] rounded-full bg-[#0eaa77]/20 blur-[110px]" /><div className="relative mx-auto flex max-w-[1280px] flex-col gap-12 lg:flex-row lg:items-end lg:justify-between"><Reveal><Kicker dark>El siguiente paso es más claro</Kicker><h2 className="max-w-[780px] text-5xl font-black leading-[.92] tracking-[-.07em] sm:text-7xl">Tu negocio merece un sistema que <span className="text-[#5ce1d5]">funcione contigo.</span></h2><p className="mt-7 max-w-[560px] text-base leading-7 text-white/60">Agenda una conversación y te mostramos cómo NovaHub puede ordenar tu operación sin perder la forma en que ya trabajas.</p></Reveal><Reveal delay={.1} className="shrink-0"><div className="flex flex-col gap-3 sm:flex-row lg:flex-col"><PrimaryButton href={WHATSAPP_URL} dark>Agendar llamada ahora</PrimaryButton><button type="button" onClick={downloadContract} className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[10px] font-extrabold uppercase tracking-[.16em] text-white/55 transition hover:text-white"><FileText className="size-4" /> Descargar contrato modelo</button></div></Reveal></div></section>;
+}
+
+function Footer() {
+  return <footer className="bg-[#061511] px-5 py-14 text-white sm:px-8 lg:px-10"><div className="mx-auto max-w-[1280px]"><div className="grid gap-12 md:grid-cols-[1.2fr_.8fr_.8fr] lg:gap-24"><div><img src={novahubWordmarkLight} alt="NovaHub ERP" className="h-10 w-auto object-contain" /><p className="mt-6 max-w-[340px] text-sm leading-6 text-white/45">Una forma más clara de vender, controlar y hacer crecer tu empresa.</p><a href={WHATSAPP_URL} className="mt-7 inline-flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.17em] text-[#5ce1d5]">Hablar con NovaHub <ArrowRight className="size-4" /></a></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#5ce1d5]">Explorar</p><div className="mt-5 flex flex-col gap-3 text-sm text-white/48"><a href="#producto" className="transition hover:text-white">Producto</a><a href="#giros" className="transition hover:text-white">Giros de negocio</a><a href="#precios" className="transition hover:text-white">Precios</a><a href="/login" className="transition hover:text-white">Iniciar sesión</a></div></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#5ce1d5]">Confianza</p><div className="mt-5 flex flex-col gap-3 text-sm text-white/48"><a href="#confianza" className="transition hover:text-white">Seguridad y datos</a><a href="#contacto" className="transition hover:text-white">Soporte en español</a><a href="#contacto" className="transition hover:text-white">Solicitar información</a></div></div></div><div className="mt-14 flex flex-col justify-between gap-4 border-t border-white/10 pt-6 text-[10px] text-white/30 sm:flex-row"><span>© {new Date().getFullYear()} NovaHub ERP. Todos los derechos reservados.</span><span>Diseñado para empresas que quieren avanzar.</span></div></div></footer>;
+}
+
+function MobileCTA() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { const onScroll = () => setVisible(window.scrollY > 520); window.addEventListener('scroll', onScroll, { passive: true }); return () => window.removeEventListener('scroll', onScroll); }, []);
+  return <AnimatePresence>{visible && <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }} className="fixed inset-x-0 bottom-0 z-30 border-t border-[#dce9e4] bg-white/95 p-3 shadow-[0_-18px_40px_-25px_rgba(8,76,57,.45)] backdrop-blur-xl sm:hidden"><a href={WHATSAPP_URL} className="flex items-center justify-center gap-2 rounded-full bg-[#0eaa77] py-3 text-[10px] font-extrabold uppercase tracking-[.16em] text-white">Agendar demo <ArrowRight className="size-4" /></a></motion.div>}</AnimatePresence>;
+}
 
 export default function LandingPage() {
-  const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD');
-
-  return (
-    <div id="novahub-landing" className="min-h-screen overflow-x-hidden bg-white text-[#174a3a] antialiased selection:bg-[#22c55e]/20 selection:text-[#174a3a]">
-      <Header />
-
-      <main>
-        <HeroSection />
-        <ScrollingBanner />
-        <ProductSection />
-        <ProcessSection />
-        <ModulesSection />
-        <IndustriesSection />
-        <PricingSection currency={currency} setCurrency={setCurrency} />
-        <TrustSection />
-        <CTASection onDownloadContract={downloadContract} />
-      </main>
-
-      <Footer />
-      <MobileStickyCTA />
-      <LandingChatModal />
-    </div>
-  );
+  useEffect(() => { document.title = 'NovaHub ERP | El control de tu negocio, en una sola señal'; }, []);
+  return <div id="novahub-landing" className="min-h-screen overflow-x-hidden bg-white text-[#0c3d31] antialiased selection:bg-[#5ce1d5]/30 selection:text-[#0c3d31]"><Header /><main><HeroSection /><SignalStrip /><ConnectedOperation /><ProductSection /><ModulesSection /><IndustriesSection /><PricingSection /><TrustSection /><FinalCTA /></main><Footer /><MobileCTA /><LandingChatModal /></div>;
 }

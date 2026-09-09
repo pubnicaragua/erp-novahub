@@ -458,6 +458,15 @@ export interface PlatformQuote {
   taxRate: number;
   taxAmount: number;
   total: number;
+  displayInitialTotal?: number | null;
+  displaySubtotal?: number | null;
+  displayMonthlyTotal?: number | null;
+  showInitialTotal?: boolean;
+  showSubtotal?: boolean;
+  showDiscount?: boolean;
+  showMonthlyTotal?: boolean;
+  showTax?: boolean;
+  showTotal?: boolean;
   status: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
   enterpriseGroup?: { id: string; name: string; slug: string } | null;
   clientTenant?: { id: string; name: string; slug: string } | null;

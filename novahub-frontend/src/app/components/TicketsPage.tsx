@@ -171,7 +171,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
                   <KnowledgeBaseView data={data.knowledgeBase} loading={loading} onRefresh={fetchData} onHelp={() => setShowTutorial(true)} />
                 )}
                 {activeTab === 'agents' && (
-                  <AgentsView data={data.agents} tickets={data.tickets} loading={loading} onRefresh={fetchData} onHelp={() => setShowTutorial(true)} />
+                  <AgentsView data={data.agents} tickets={data.tickets} loading={loading} onHelp={() => setShowTutorial(true)} />
                 )}
               </motion.div>
             </AnimatePresence>

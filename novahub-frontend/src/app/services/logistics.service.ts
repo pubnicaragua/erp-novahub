@@ -687,6 +687,9 @@ export interface ReceptionBatch {
   invoiceNumber?: string | null;
   totalAmount: number;
   packageCount: number;
+  totalPhysicalWeight?: number;
+  totalSupplierWeight?: number;
+  totalBillableWeight?: number;
   createdById?: string | null;
   createdByName?: string | null;
   confirmedById?: string | null;
@@ -698,15 +701,18 @@ export interface ReceptionBatch {
 
 export interface BatchPackageRow {
   line?: number;
-  warehouseId?: string;
+  warehouseId?: string | null;
   trackingCode?: string;
   shipmentModeCode?: string;
+  productDescription?: string;
   item?: string;
   quantity?: number;
   unitPrice?: number;
   subtotal?: number;
   discount?: number;
   physicalWeight?: number;
+  /** Peso declarado en la factura/ticket del proveedor. */
+  supplierWeight?: number;
   weightUnit?: string;
   warehouseValue?: string;
   agency?: OwnerInfo;

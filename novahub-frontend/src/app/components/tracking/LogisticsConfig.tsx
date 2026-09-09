@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { Combobox } from '../ui/Combobox';
 import { getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { suppliersService } from '../../services/compras.service';
@@ -66,13 +67,19 @@ export function LogisticsConfig() {
   useEffect(() => {
     suppliersService.getAll({ page: 1, pageSize: 200 } as any)
       .then((sup: any) => {
-        const list = sup?.data || sup?.items || [];
+        const payload = sup?.data ?? sup;
+        const data = payload?.data ?? payload;
+        const list = Array.isArray(data) ? data : data?.items || data?.rows || [];
         setSuppliers(list.map((s: any) => ({ id: s.id, name: s.name })));
       })
       .catch(() => { /* opcional */ });
   }, []);
 
   const [settingsForm, setSettingsForm] = useState<Partial<LogisticsSettings>>({});
+  const supplierOptions = [
+    { label: 'Sin proveedor', value: '' },
+    ...suppliers.map((supplier) => ({ label: supplier.name, value: supplier.name })),
+  ];
 
   const saveSettings = async () => {
     if (!canEditConfig || !settings) return;
@@ -241,10 +248,7 @@ export function LogisticsConfig() {
             <Input disabled={!canEditConfig} placeholder="País *" value={whForm.country || ''} onChange={(e) => setWhForm((f) => ({ ...f, country: e.target.value }))} className="rounded-xl" />
             <Input disabled={!canEditConfig} placeholder="Nombre *" value={whForm.name || ''} onChange={(e) => setWhForm((f) => ({ ...f, name: e.target.value }))} className="rounded-xl" />
             <Input disabled={!canEditConfig} placeholder="Nº / código" value={whForm.code || ''} onChange={(e) => setWhForm((f) => ({ ...f, code: e.target.value }))} className="rounded-xl font-mono" />
-            <select disabled={!canEditConfig} value={whForm.provider || ''} onChange={(e) => setWhForm((f) => ({ ...f, provider: e.target.value }))} className="rounded-xl border border-input bg-background px-3 py-2 text-sm">
-              <option value="">Sin proveedor</option>
-              {suppliers.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
+            <Combobox disabled={!canEditConfig} value={whForm.provider || ''} onChange={(value) => setWhForm((f) => ({ ...f, provider: value }))} options={supplierOptions} placeholder="Sin proveedor" searchPlaceholder="Buscar proveedor…" emptyMessage="No se encontró ese proveedor." className="h-10 rounded-xl text-sm" contentClassName="min-w-[280px]" />
             <select disabled={!canEditConfig} value={whForm.unitOfMeasure || 'lb'} onChange={(e) => setWhForm((f) => ({ ...f, unitOfMeasure: e.target.value }))} className="rounded-xl border border-input bg-background px-3 py-2 text-sm">
               {['lb', 'kg', 'oz', 'unidades'].map((u) => <option key={u} value={u}>{u}</option>)}
             </select>

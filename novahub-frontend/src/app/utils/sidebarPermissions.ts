@@ -105,11 +105,8 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'FINANCIAL_EXPENSES', label: 'Gastos', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_EXPENSES_REC', label: 'Movimientos recurrentes', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_INCOMES_REC', label: 'Ingresos recurrentes', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_ACCOUNTS', label: 'Cuentas financieras', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_JOURNAL', label: 'Diario financiero', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_LEDGER', label: 'Libro mayor financiero', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_BUDGET', label: 'Presupuestos financieros', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_REPORTS', label: 'Reportes financieros', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_CALENDAR', label: 'Calendario Financiero', parent: 'FINANCIAL', subscription: false },
   { id: 'FINANCIAL_ANALYSIS', label: 'Análisis de ingresos y gastos', parent: 'FINANCIAL', subscription: false },
   { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
@@ -174,7 +171,6 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
   { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
   { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
-  { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
 
   // Financiamiento PyME
   { id: 'FINANCING_APPLICATIONS', label: 'Solicitudes', parent: 'FINANCING' },
@@ -273,11 +269,8 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'balance-general': ['FINANCIAL_BALANCE'],
   'finanzas:perdidas': ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
   'ingresos-recurrentes': ['FINANCIAL_INCOMES_REC'],
-  'cuentas-financieras': ['FINANCIAL_ACCOUNTS'],
   'diario-financiero': ['FINANCIAL_JOURNAL'],
   'libro-mayor-financiero': ['FINANCIAL_LEDGER'],
-  'presupuestos-financieros': ['FINANCIAL_BUDGET'],
-  'reportes-financieros-detalle': ['FINANCIAL_REPORTS'],
 
   'mi-sucursal': ['CONFIG_COMPANY'],
   'plan-sucursal': ['SUBSCRIPTIONS'],
@@ -337,7 +330,6 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'reportes-clientes': ['REPORTS_CLIENTS'],
   'reportes-proveedores': ['REPORTS_PROVIDERS'],
   'reportes-rrhh': ['REPORTS_HR'],
-  'reportes-suscripciones': ['REPORTS_SUBSCRIPTIONS'],
 
   'solicitudes-financiamiento': ['FINANCING_APPLICATIONS'],
   'calculadora-financiamiento': ['FINANCING_CALCULATOR'],

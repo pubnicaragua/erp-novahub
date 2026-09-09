@@ -1996,7 +1996,16 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
       startY: finalY,
       tableWidth: Math.min(contentWidth * 0.42, 82),
       margin: { left: pageWidth - margin - Math.min(contentWidth * 0.42, 82), right: margin, bottom: 22 },
-      body: totalRows.map(([label, value]) => [label === 'tax' ? 'Impuestos' : label === 'discount' ? 'Descuento' : label === 'subtotal' ? 'Subtotal' : label === 'total' ? 'Total' : label, String(value)]),
+      body: totalRows.map(([label, value]) => [
+        label === 'tax' ? 'Impuestos'
+          : label === 'discount' ? 'Descuento'
+            : label === 'subtotal' ? 'Subtotal'
+              : label === 'total' ? 'Total'
+                : label === 'debitos' ? 'Débitos'
+                  : label === 'creditos' ? 'Créditos'
+                    : label,
+        String(value),
+      ]),
       theme: 'plain',
       columnStyles: { 0: { fontStyle: 'bold', textColor: text }, 1: { halign: 'right', fontStyle: 'bold', textColor: text } },
       styles: { fontSize: 8.5, cellPadding: 2.5, lineColor: line },
@@ -2050,7 +2059,7 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
   return renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(design.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data: enrichedData, fileName, save });
 }
 
-export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; fileName: string; designOverride?: any }) {
+export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, tableSummary, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; tableSummary?: { label: string; value: unknown; columnIndex?: number }; fileName: string; designOverride?: any }) {
   const design = designOverride || await getPdfDesign(targetKey);
   const sourceSettings = (design.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
   const settings = getGlobalReportSettings(sourceSettings, tenantName, tenantLogo, targetKey);
@@ -2063,6 +2072,7 @@ export async function generateConfiguredReportTemplate({ targetKey, title, tenan
     columns,
     rows,
     totals,
+    tableSummary,
     fileName,
   });
   return rendered.doc;

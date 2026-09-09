@@ -86,7 +86,7 @@ export function useIncomingNotificationAlert() {
         const notification = new Notification(newest.title || 'Nueva notificación', {
           body: newest.message || '',
           tag: notificationEventKey(newest),
-          icon: '/favicon.svg',
+          icon: '/novahub-isotipo.png',
         });
         notification.onclick = () => {
           window.focus();

@@ -6,8 +6,7 @@ export type ManagerReportsView =
   | 'inventory'
   | 'customers'
   | 'providers'
-  | 'hr'
-  | 'subscriptions';
+  | 'hr';
 
 export const MANAGER_REPORTS_VIEWS: Array<{ id: ManagerReportsView; label: string }> = [
   { id: 'overview', label: 'Resumen de reportes' },
@@ -18,5 +17,4 @@ export const MANAGER_REPORTS_VIEWS: Array<{ id: ManagerReportsView; label: strin
   { id: 'customers', label: 'Clientes' },
   { id: 'providers', label: 'Proveedores' },
   { id: 'hr', label: 'Recursos Humanos' },
-  { id: 'subscriptions', label: 'Suscripciones' },
 ];

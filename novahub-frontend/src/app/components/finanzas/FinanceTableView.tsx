@@ -46,6 +46,8 @@ interface Column {
 interface FinanceTableViewProps {
   data: any[];
   columns: Column[];
+  exportColumns?: Column[];
+  exportSummary?: (rows: any[]) => { label: string; value: unknown; columnIndex?: number } | undefined;
   onUpdate: (id: string, updates: any) => Promise<void>;
   onAdd: () => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -64,6 +66,8 @@ interface FinanceTableViewProps {
 export function FinanceTableView({
   data,
   columns,
+  exportColumns,
+  exportSummary,
   onUpdate,
   onAdd,
   onDelete,
@@ -246,6 +250,8 @@ export function FinanceTableView({
     if (!canExport) return;
     try {
       toast.info("Generando Excel, por favor espere...");
+      const reportColumns = exportColumns || columns;
+      const summary = exportSummary?.(filteredData);
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Reporte');
       const primaryColor = themeConfig.colors.primary || '#10b981';
@@ -253,14 +259,14 @@ export function FinanceTableView({
       const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
 
       // Set base column widths (no headers here to avoid repeating on row 1)
-      ws.columns = columns.map(c => ({
+      ws.columns = reportColumns.map(c => ({
         header: '',
         key: c.key,
         width: Math.max(15, c.label.length + 5)
       }));
 
       let currentRow = 1;
-      const totalcols = columns.length;
+      const totalcols = reportColumns.length;
       const lastColChar = String.fromCharCode(64 + totalcols);
 
       // Logo - Centered at top
@@ -308,7 +314,7 @@ export function FinanceTableView({
 
       // Table Header
       const headerRow = ws.getRow(currentRow);
-      headerRow.values = columns.map(c => c.label);
+      headerRow.values = reportColumns.map(c => c.label);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.alignment = { horizontal: 'center' };
       headerRow.eachCell(cell => {
@@ -319,8 +325,8 @@ export function FinanceTableView({
 
       // Data Rows
       filteredData.forEach(item => {
-        const rowData = columns.map(col => {
-          if (col.type === 'currency') return Number(item[col.key] || 0);
+        const rowData = reportColumns.map(col => {
+          if (col.type === 'currency') return col.key === 'total' ? '' : Number(item[col.key] || 0);
           if (col.type === 'date' || col.type === 'datetime') return item[col.key] ? new Date(item[col.key]) : null;
           if (col.type === 'select') return getLabelForValue(col, item[col.key]);
           if (col.key === 'description' || col.key === 'notes') return translatePaymentMethodText(item[col.key]);
@@ -329,7 +335,7 @@ export function FinanceTableView({
         const r = ws.getRow(currentRow);
         r.values = rowData;
         
-        columns.forEach((col, idx) => {
+        reportColumns.forEach((col, idx) => {
           const cell = r.getCell(idx + 1);
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
           if (col.type === 'currency') {
@@ -342,6 +348,20 @@ export function FinanceTableView({
         });
         currentRow++;
       });
+
+      if (summary) {
+        const summaryRow = ws.getRow(currentRow);
+        const valueIndex = Math.min(Math.max(Number(summary.columnIndex ?? reportColumns.length - 1), 0), Math.max(reportColumns.length - 1, 0));
+        const labelIndex = valueIndex > 0 ? valueIndex - 1 : 0;
+        summaryRow.getCell(labelIndex + 1).value = summary.label;
+        summaryRow.getCell(valueIndex + 1).value = summary.value as any;
+        summaryRow.eachCell({ includeEmpty: true }, cell => {
+          cell.font = { bold: true, color: { argb: `FF${hexColor}` } };
+          cell.border = { top: { style: 'medium', color: { argb: `FF${hexColor}` } } };
+          if (cell.column === valueIndex + 1) cell.alignment = { horizontal: 'right' };
+        });
+        currentRow++;
+      }
 
       // Autofit col widths (simplified)
       ws.columns.forEach(column => {
@@ -371,9 +391,11 @@ export function FinanceTableView({
     if (!canExport) return;
     try {
       toast.info("Generando PDF, por favor espere...");
+      const reportColumns = exportColumns || columns;
+      const summary = exportSummary?.(filteredData);
       const pdfSettings = await getPdfDesignSettings('finanzas.transactions');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings));
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: columns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), fileName: buildDateFilteredDownloadFileName([title], 'pdf', dateRange.start, dateRange.end) });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredDownloadFileName([title], 'pdf', dateRange.start, dateRange.end) });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const pageWidth = doc.internal.pageSize.getWidth();
       const primaryColor = themeConfig.colors.primary || '#10b981';
@@ -419,18 +441,29 @@ export function FinanceTableView({
 
       doc.setTextColor(0, 0, 0);
 
-      const head = [columns.map(c => c.label)];
-      const body = filteredData.map(item => columns.map(col => {
-        if (col.type === 'currency') return formatConvertedAmount(Number(item[col.key] || 0), item.currency, item.exchangeRate);
+      const head = [reportColumns.map(c => c.label)];
+      const body = filteredData.map(item => reportColumns.map(col => {
+        if (col.type === 'currency') return col.key === 'total' ? '' : formatConvertedAmount(Number(item[col.key] || 0), item.currency, item.exchangeRate);
         if (col.type === 'date' || col.type === 'datetime') return item[col.key] ? new Date(item[col.key]).toLocaleString('es-NI') : '-';
         if (col.type === 'select') return col.key.toLowerCase().includes('status') || col.key.toLowerCase().includes('estado') ? pdfStatusLabel(getLabelForValue(col, item[col.key])) : getLabelForValue(col, item[col.key]);
         if (col.key === 'description' || col.key === 'notes') return translatePaymentMethodText(item[col.key]);
-        return String(item[col.key] || '-');
+        return String(item[col.key] ?? '-');
       }));
+
+      const foot = summary ? [(() => {
+        const summaryRow = reportColumns.map(() => '');
+        const valueIndex = Math.min(Math.max(Number(summary.columnIndex ?? reportColumns.length - 1), 0), Math.max(reportColumns.length - 1, 0));
+        const labelIndex = valueIndex > 0 ? valueIndex - 1 : 0;
+        summaryRow[labelIndex] = summary.label;
+        summaryRow[valueIndex] = String(summary.value ?? '');
+        return summaryRow;
+      })()] : undefined;
 
       autoTable(doc, {
         head,
         body,
+        foot,
+        showFoot: summary ? 'lastPage' : undefined,
         startY: currentY,
         styles: { fontSize: 8, cellPadding: 3 },
         headStyles: {
@@ -440,6 +473,7 @@ export function FinanceTableView({
           halign: 'center',
         },
         alternateRowStyles: { fillColor: [245, 245, 245] },
+        footStyles: { fillColor: [248, 250, 252], textColor: [60, 60, 60], fontStyle: 'bold' },
         margin: { left: 14, right: 14 },
       });
 

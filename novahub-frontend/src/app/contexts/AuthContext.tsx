@@ -621,6 +621,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const profileRefreshAtRef = React.useRef(0);
 
   React.useEffect(() => {
+    if (window.location.pathname === '/landing') return;
     const remembered = isLoading ? getRememberedSessionBranding() : {};
     const workspaceName = user?.sessionBranding?.name
       || user?.clientTenant?.name
@@ -860,7 +861,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       reportes: [
         'REPORTS',
-        'REPORTS_SALES', 'REPORTS_PURCHASES', 'REPORTS_FINANCIAL', 'REPORTS_INVENTORY', 'REPORTS_CLIENTS', 'REPORTS_PROVIDERS', 'REPORTS_HR', 'REPORTS_SUBSCRIPTIONS',
+        'REPORTS_SALES', 'REPORTS_PURCHASES', 'REPORTS_FINANCIAL', 'REPORTS_INVENTORY', 'REPORTS_CLIENTS', 'REPORTS_PROVIDERS', 'REPORTS_HR',
       ],
       tickets: [
         'TICKETS', 'TICKETS_LIST', 'TICKETS_KNOWLEDGE_BASE', 'TICKETS_AGENTS',

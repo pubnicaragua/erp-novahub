@@ -65,10 +65,15 @@ export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
   const subtotal = charged.filter((item) => isBase(item) && !item.isOptional).reduce((sum, item) => sum + amountOf(item), 0);
   const optionalSubtotal = charged.filter((item) => !isBase(item) || item.isOptional).reduce((sum, item) => sum + amountOf(item), 0);
   const gross = subtotal + optionalSubtotal;
-  const discount = Math.min(gross, Math.max(0, Number(quote.discountAmount || 0)));
-  const taxable = Math.max(0, gross - discount);
+  const initialTotal = charged.filter((item) => !String(item.periodicity || '').toLowerCase().includes('mens')).reduce((sum, item) => sum + amountOf(item), 0);
+  const monthlyTotal = charged.filter((item) => String(item.periodicity || '').toLowerCase().includes('mens')).reduce((sum, item) => sum + amountOf(item), 0);
+  const displaySubtotal = Math.max(0, Number(quote.displaySubtotal ?? gross));
+  const displayInitialTotal = Math.max(0, Number(quote.displayInitialTotal ?? initialTotal));
+  const displayMonthlyTotal = Math.max(0, Number(quote.displayMonthlyTotal ?? monthlyTotal));
+  const discount = Math.min(displaySubtotal, Math.max(0, Number(quote.discountAmount || 0)));
+  const taxable = Math.max(0, displaySubtotal - discount);
   const taxAmount = taxable * Math.max(0, Number(quote.taxRate || 0)) / 100;
-  return { subtotal, optionalSubtotal, referenceTotal: gross, discount, commercialSubtotal: taxable, taxAmount, total: taxable + taxAmount };
+  return { subtotal, optionalSubtotal, referenceTotal: gross, displaySubtotal, initialTotal, monthlyTotal, displayInitialTotal, displayMonthlyTotal, discount, commercialSubtotal: taxable, taxAmount, total: taxable + taxAmount, visibility: { showInitialTotal: quote.showInitialTotal !== false, showSubtotal: quote.showSubtotal !== false, showDiscount: quote.showDiscount !== false, showMonthlyTotal: quote.showMonthlyTotal !== false, showTax: quote.showTax !== false, showTotal: quote.showTotal !== false } };
 }
 
 function itemPriceLabel(item: PlatformQuote['items'][number], currency: PlatformQuote['currency']) {
@@ -225,6 +230,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   const totals = calculatePlatformQuoteTotals(quote);
   const includedCount = items.filter(isIncludedItem).length;
   const rows: RowInput[] = [];
+  const discountRowIndex = items.findIndex((item) => !isIncludedItem(item) && amountOf(item) > 0);
   let currentSection = '';
   let lineNumber = 0;
   for (const item of items) {
@@ -233,7 +239,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       rows.push([
         {
           content: currentSection,
-          colSpan: 6,
+          colSpan: 7,
           styles: { fillColor: [225, 245, 233], textColor: forest, fontStyle: 'bold', fontSize: 7.5 },
         },
       ]);
@@ -244,6 +250,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       item.description || 'Concepto',
       quantity(item.quantity),
       itemPriceLabel(item, quote.currency),
+      lineNumber - 1 === discountRowIndex && totals.discount > 0 ? `-${money(totals.discount, quote.currency)}` : '-',
       itemBillingLabel(item),
       item.detail?.trim() || (isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
     ]);
@@ -252,7 +259,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   autoTable(doc, {
     startY: y,
     margin: { top: 39, left: margin, right: margin, bottom: 22 },
-    head: [['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Cobro', 'Descripción / alcance']],
+    head: [['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Descuento', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: {
@@ -278,13 +285,14 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       1: { cellWidth: 35 },
       2: { cellWidth: 17, halign: 'center' },
       3: { cellWidth: 27, halign: 'right' },
-      4: { cellWidth: 28, halign: 'center' },
-      5: { cellWidth: 'auto' },
+      4: { cellWidth: 24, halign: 'right' },
+      5: { cellWidth: 28, halign: 'center' },
+      6: { cellWidth: 'auto' },
     },
     didParseCell: (data) => {
       const sectionRow = Array.isArray(data.row.raw) && data.row.raw.length === 1;
       if (sectionRow) return;
-      if (data.section === 'body' && data.column.index === 4) {
+      if (data.section === 'body' && data.column.index === 5) {
         const value = String(data.cell.raw || '').toLowerCase();
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.textColor = value.includes('valor')
@@ -302,6 +310,10 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
               ? [235, 242, 255]
               : [248, 250, 252];
       }
+      if (data.section === 'body' && data.column.index === 4 && String(data.cell.raw || '').startsWith('-')) {
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = [220, 38, 38];
+      }
       if (data.section === 'body' && data.column.index === 3 && String(data.cell.raw || '') === 'Incluido') {
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.textColor = darkGreen;
@@ -315,7 +327,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
 
   y = ((doc as any).lastAutoTable?.finalY || y + 30) + 10;
   const noteLines = quote.notes ? doc.splitTextToSize(quote.notes, 91).slice(0, 3) : [];
-  const summaryRows = 1 + (totals.optionalSubtotal > 0 ? 1 : 0) + (totals.discount > 0 ? 1 : 0) + (totals.taxAmount > 0 ? 1 : 0);
+  const summaryRows = (totals.visibility.showInitialTotal ? 1 : 0) + (totals.visibility.showSubtotal ? 1 : 0) + (totals.visibility.showDiscount && totals.discount > 0 ? 1 : 0) + (totals.visibility.showMonthlyTotal ? 1 : 0) + (totals.visibility.showTax && totals.taxAmount > 0 ? 1 : 0) + (totals.visibility.showTotal ? 1 : 0);
   const summaryHeight = Math.max(
     isInvoice ? 60 : 45,
     24 + summaryRows * 5,
@@ -352,20 +364,23 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
     doc.text(money(value, quote.currency), width - margin - 6, totalY, { align: 'right' });
     totalY += 5.5;
   };
-  drawTotalLine('Servicios base', totals.subtotal);
-  if (totals.optionalSubtotal > 0) drawTotalLine('Servicios adicionales', totals.optionalSubtotal);
-  if (totals.discount > 0) drawTotalLine('Descuento aplicado', -totals.discount, [220, 38, 38]);
-  if (totals.taxAmount > 0) drawTotalLine(`IVA / impuestos (${quote.taxRate}%)`, totals.taxAmount);
-  doc.setDrawColor(...brandGreen);
-  doc.setLineWidth(0.55);
-  doc.line(totalsX, totalY - 2, width - margin - 6, totalY - 2);
-  totalY += 6;
-  doc.setTextColor(...forest);
-  doc.setFontSize(11.5);
-  doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL', totalsX, totalY);
-  doc.setTextColor(...darkGreen);
-  doc.text(money(totals.total, quote.currency), width - margin - 6, totalY, { align: 'right' });
+  if (totals.visibility.showInitialTotal) drawTotalLine('Total inicial', totals.displayInitialTotal);
+  if (totals.visibility.showSubtotal) drawTotalLine('Subtotal', totals.displaySubtotal);
+  if (totals.visibility.showDiscount && totals.discount > 0) drawTotalLine('Descuento aplicado', -totals.discount, [220, 38, 38]);
+  if (totals.visibility.showMonthlyTotal) drawTotalLine('Total mensual', totals.displayMonthlyTotal);
+  if (totals.visibility.showTax && totals.taxAmount > 0) drawTotalLine(`IVA / impuestos (${quote.taxRate}%)`, totals.taxAmount);
+  if (totals.visibility.showTotal) {
+    doc.setDrawColor(...brandGreen);
+    doc.setLineWidth(0.55);
+    doc.line(totalsX, totalY - 2, width - margin - 6, totalY - 2);
+    totalY += 6;
+    doc.setTextColor(...forest);
+    doc.setFontSize(11.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL', totalsX, totalY);
+    doc.setTextColor(...darkGreen);
+    doc.text(money(totals.total, quote.currency), width - margin - 6, totalY, { align: 'right' });
+  }
 
   doc.setTextColor(...forest);
   doc.setFont('helvetica', 'bold');

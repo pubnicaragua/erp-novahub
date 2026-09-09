@@ -189,7 +189,6 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   REPORTS_CLIENTS: 'Clientes',
   REPORTS_PROVIDERS: 'Proveedores',
   REPORTS_HR: 'Recursos Humanos',
-  REPORTS_SUBSCRIPTIONS: 'Suscripciones',
   DOCUMENTS_FILES: 'Archivos',
   DOCUMENTS_FOLDERS: 'Carpetas',
   DOCUMENTS_CONTRACTS: 'Contratos',

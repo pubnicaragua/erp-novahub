@@ -200,7 +200,6 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
   { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
   { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
-  { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
   
   // Mi Empresa
   { id: 'CONFIG_COMPANY', label: 'Datos generales', parent: 'MY_COMPANY' },

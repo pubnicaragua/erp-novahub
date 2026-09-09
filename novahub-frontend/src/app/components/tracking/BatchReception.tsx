@@ -49,6 +49,7 @@ const emptyRow = (index: number): GridRow => ({
   subtotal: undefined,
   discount: undefined,
   physicalWeight: undefined,
+  supplierWeight: undefined,
   warehouseValue: '',
   trackingCode: '',
 });
@@ -203,7 +204,7 @@ export function BatchReception() {
         });
         return logisticsService.pdfPreview(file.name, base64);
       }));
-      const incoming = results.flatMap((result) => result.rows).map((row, index) => ({ ...row, id: `${Date.now()}-${index}` }));
+      const incoming = results.flatMap((result) => result.rows).map((row, index) => ({ ...row, id: `${Date.now()}-${index}`, supplierWeight: row.supplierWeight ?? row.physicalWeight, physicalWeight: row.physicalWeight }));
       setRows((prev) => {
         const base = prev.length > 0 && prev.some((row) => row.item || row.trackingCode || row.physicalWeight) ? prev : [];
         return [...base, ...incoming];
@@ -238,6 +239,7 @@ export function BatchReception() {
       subtotal: r.subtotal !== undefined && r.subtotal !== null && !Number.isNaN(r.subtotal) ? Number(r.subtotal) : undefined,
       discount: r.discount !== undefined && r.discount !== null && !Number.isNaN(r.discount) ? Number(r.discount) : undefined,
       physicalWeight: r.physicalWeight !== undefined && r.physicalWeight !== null && !Number.isNaN(r.physicalWeight) ? Number(r.physicalWeight) : undefined,
+      supplierWeight: r.supplierWeight !== undefined && r.supplierWeight !== null && !Number.isNaN(r.supplierWeight) ? Number(r.supplierWeight) : undefined,
       warehouseValue: r.warehouseValue?.trim() || undefined,
       subagency: commonOwner.subagencyName ? { id: commonOwner.subagencyId || undefined, name: commonOwner.subagencyName } : undefined,
       customer: commonOwner.customerName ? { id: commonOwner.customerId || undefined, name: commonOwner.customerName } : undefined,
@@ -307,13 +309,13 @@ export function BatchReception() {
             </p>
           </div>
           {false && (
-            <Button className="rounded-xl text-xs" onClick={() => setConfirmOpen(true)} disabled={detail.packages.length === 0} data-tour="log-batch-confirm">
+            <Button className="rounded-xl text-xs" onClick={() => setConfirmOpen(true)} disabled={!detail?.packages.length} data-tour="log-batch-confirm">
               <CheckCircle2 className="size-4" /> Confirmar referencia
             </Button>
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Paquetes</p>
             <p className="mt-1 text-2xl font-black">{detail.packages.length}</p>
@@ -321,6 +323,10 @@ export function BatchReception() {
           <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total compra</p>
             <p className="mt-1 text-2xl font-black text-primary">${Number(batch.totalAmount || 0).toFixed(2)}</p>
+          </Card>
+          <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Peso real</p>
+            <p className="mt-1 text-2xl font-black">{detail.packages.reduce((sum, item) => sum + Number(item.physicalWeight || 0), 0).toFixed(2)} lb</p>
           </Card>
           <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Factura de compra</p>
@@ -449,6 +455,8 @@ export function BatchReception() {
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Tracking</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Item</TableHead>
                 <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Costo</TableHead>
+                <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso factura</TableHead>
+                <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso real</TableHead>
                 <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso cobrable</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Propietario</TableHead>
@@ -456,7 +464,7 @@ export function BatchReception() {
             </TableHeader>
             <TableBody>
               {detail.packages.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="py-10 text-center">
+                <TableRow><TableCell colSpan={8} className="py-10 text-center">
                   <PackageSearch className="mx-auto size-8 text-muted-foreground/40" />
                   <p className="mt-2 text-sm font-bold">Sin paquetes todavía</p>
                   <p className="text-xs text-muted-foreground">Importa un PDF o agrega filas para cargar paquetes.</p>
@@ -466,6 +474,8 @@ export function BatchReception() {
                   <TableCell className="font-mono text-xs font-bold text-primary">{p.trackingCode || '—'}</TableCell>
                   <TableCell className="text-xs">{p.skuName || '—'}</TableCell>
                   <TableCell className="text-right text-xs font-black">${Number(p.costPrice ?? p.purchasePrice ?? 0).toFixed(2)}</TableCell>
+                  <TableCell className="text-right text-xs">{p.supplierWeight ?? '—'} {p.supplierWeight != null ? p.weightUnit : ''}</TableCell>
+                  <TableCell className="text-right text-xs">{p.physicalWeight} {p.weightUnit}</TableCell>
                   <TableCell className="text-right text-xs font-black">{p.billableWeight} {p.weightUnit}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{p.warehouseValue || p.warehouseName || '—'}</TableCell>
                   <TableCell className="text-xs">{p.customerName || p.subagencyName || '—'}</TableCell>
@@ -560,6 +570,8 @@ export function BatchReception() {
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha</TableHead>
               <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Paquetes</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso real</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso factura</TableHead>
               <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Factura</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
@@ -567,9 +579,9 @@ export function BatchReception() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={8} className="py-10 text-center text-xs text-muted-foreground">Cargando referencias…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="py-10 text-center text-xs text-muted-foreground">Cargando referencias…</TableCell></TableRow>
             ) : (data?.items.length ?? 0) === 0 ? (
-              <TableRow><TableCell colSpan={8} className="py-10 text-center">
+              <TableRow><TableCell colSpan={10} className="py-10 text-center">
                 <ReceiptText className="mx-auto size-8 text-muted-foreground/40" />
                 <p className="mt-2 text-sm font-bold">Sin referencias</p>
                 <p className="text-xs text-muted-foreground">Las nuevas referencias se crean automáticamente desde Recepción.</p>
@@ -581,6 +593,8 @@ export function BatchReception() {
                 <TableCell className="py-3 text-xs text-muted-foreground">{b.warehouseName || '—'}</TableCell>
                 <TableCell className="py-3 text-xs text-muted-foreground">{formatDate(b.date)}</TableCell>
                 <TableCell className="py-3 text-right text-xs font-black">{b.packageCount}</TableCell>
+                <TableCell className="py-3 text-right text-xs">{Number(b.totalPhysicalWeight || 0).toFixed(2)} lb</TableCell>
+                <TableCell className="py-3 text-right text-xs">{Number(b.totalSupplierWeight || 0).toFixed(2)} lb</TableCell>
                 <TableCell className="py-3 text-right text-xs font-black">${Number(b.totalAmount || 0).toFixed(2)}</TableCell>
                 <TableCell className="py-3 text-xs">{b.invoiceNumber || '—'}</TableCell>
                 <TableCell className="py-3">
