@@ -426,10 +426,63 @@ main.module-overview [data-slot="card-description"] {
   background: var(--muted) !important;
   background-image: none !important;
   box-shadow: none !important;
-  justify-content: flex-start !important;
+  justify-content: safe center !important;
   gap: 2px !important;
   padding: 4px !important;
   scroll-padding-inline: 8px;
+}
+
+/* Keep collapsed-sidebar module navigation visually centered without hiding
+   the first/last option when the navigation overflows horizontally. */
+:is(main[class*="module-"], .manager-shell, .master-console-module) :is(.manager-module-subnav, .sales-subnav) {
+  justify-content: safe center;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) .erp-module-tabs-rail {
+  justify-content: safe center;
+  border-radius: 8px;
+  border-color: var(--border);
+  background: var(--muted);
+  background-image: none;
+  box-shadow: none;
+  gap: 2px;
+  padding: 4px;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) .erp-module-tabs-rail > button {
+  min-height: 36px;
+  border-radius: 6px;
+  background: transparent !important;
+  color: var(--muted-foreground) !important;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: normal;
+  box-shadow: none;
+}
+
+:is(main[class*="module-"], .manager-shell, .master-console-module) .erp-module-tabs-rail > button[data-state="active"] {
+  background: color-mix(in srgb, var(--primary) 12%, var(--card)) !important;
+  color: var(--foreground) !important;
+  border-bottom: 3px solid var(--primary) !important;
+  box-shadow: none;
+}
+
+.accounting-tabs-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary) transparent;
+}
+
+.accounting-tabs-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.accounting-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.accounting-tabs-scroll::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 999px;
 }
 
 :is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="tabs-trigger"] {

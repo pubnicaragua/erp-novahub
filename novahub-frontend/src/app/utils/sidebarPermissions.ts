@@ -174,7 +174,6 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
   { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
   { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
-  { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
 
   // Financiamiento PyME
   { id: 'FINANCING_APPLICATIONS', label: 'Solicitudes', parent: 'FINANCING' },
@@ -337,7 +336,6 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'reportes-clientes': ['REPORTS_CLIENTS'],
   'reportes-proveedores': ['REPORTS_PROVIDERS'],
   'reportes-rrhh': ['REPORTS_HR'],
-  'reportes-suscripciones': ['REPORTS_SUBSCRIPTIONS'],
 
   'solicitudes-financiamiento': ['FINANCING_APPLICATIONS'],
   'calculadora-financiamiento': ['FINANCING_CALCULATOR'],

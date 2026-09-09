@@ -225,7 +225,6 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   REPORTS_CLIENTS: ['read', 'export'],
   REPORTS_PROVIDERS: ['read', 'export'],
   REPORTS_HR: ['read', 'export'],
-  REPORTS_SUBSCRIPTIONS: ['read', 'export'],
 
   FINANCING_APPLICATIONS: ['read', 'create', 'edit', 'approve'],
   FINANCING_CALCULATOR: ['read'],

@@ -51,7 +51,6 @@ import {
   Scale,
   Wallet,
   ListChecks,
-  Layers,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -203,7 +202,6 @@ const MANAGER_REPORTS_VIEW_ICONS: Record<ManagerReportsView, LucideIcon> = {
   customers: UserRound,
   providers: Users,
   hr: UserRound,
-  subscriptions: Layers,
 };
 
 const MANAGER_HR_VIEW_ICONS: Record<ManagerHrView, LucideIcon> = {
