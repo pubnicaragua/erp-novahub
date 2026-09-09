@@ -422,7 +422,11 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       const pageHeight = doc.internal.pageSize.getHeight();
       const companyName = (themeConfig.tenantName || user?.tenantName || 'Mi Empresa').toUpperCase();
       const logoUrl = themeConfig.logo || '';
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.balance', title: 'Balance general', tenantName: companyName, tenantLogo: logoUrl, rows: [...fIncomes, ...fExpenses], columns: [{ header: 'Concepto', value: row => row.description || row.concept || row.category || '—' }, { header: 'Tipo', value: row => row.type || (row.amount >= 0 ? 'Ingreso' : 'Gasto') }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Monto', value: row => fmtNum(Math.abs(cv(row))), align: 'right' }], totals: { subtotal: fmtNum(totalIncome), tax: fmtNum(totalExpense), total: fmtNum(balance) }, fileName: buildDateFilteredDownloadFileName(['balance_general'], 'pdf', dateRange.start, dateRange.end) });
+      const reportRows = [
+        ...fIncomes.map((row: any) => ({ ...row, reportType: 'Ingreso' })),
+        ...fExpenses.map((row: any) => ({ ...row, reportType: 'Gasto' })),
+      ];
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.balance', title: 'Balance general', tenantName: companyName, tenantLogo: logoUrl, rows: reportRows, columns: [{ header: 'Concepto', value: row => row.description || row.concept || row.category || '—' }, { header: 'Tipo', value: row => row.reportType }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Monto', value: row => fmtNum(Math.abs(cv(row))), align: 'right' }], totals: { 'Total Ingresos': fmtNum(totalIncome), 'Total Gastos': fmtNum(totalExpense), 'Balance Neto': fmtNum(balance) }, fileName: buildDateFilteredDownloadFileName(['balance_general'], 'pdf', dateRange.start, dateRange.end) });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const primaryColor = themeConfig.colors.primary || '#10b981';
       const rgbPrimary = primaryColor.startsWith('#') 

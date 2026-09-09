@@ -6,16 +6,6 @@ import { Input } from '../ui/input';
 import { CircleHelp, Users, UserCheck, UserX, Search, RefreshCw } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
-import { toast } from 'sonner';
-import { supportAgentsService } from '../../services/support.service';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
-import { useAuth } from '../../contexts/AuthContext';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 interface SupportAgent {
@@ -31,17 +21,19 @@ interface AgentsViewProps {
   data: SupportAgent[];
   tickets: Array<{ assignedToId?: string | null }>;
   loading: boolean;
-  onRefresh: () => void;
   onHelp: () => void;
 }
 
-// Manager es un tipo de usuario global y no un rol operativo del tenant.
-const roleOptions = ['ADMIN', 'EMPLOYEE', 'VIEWER', 'PARTNER'];
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrador',
+  EMPLOYEE: 'Empleado',
+  VIEWER: 'Visualizador',
+  PARTNER: 'Socio',
+  MANAGER: 'Gerente',
+};
 
-export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, onRefresh, onHelp }) => {
-  const { canPerform } = useAuth();
+export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, onHelp }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [savingId, setSavingId] = useState<string | null>(null);
 
   const assignedCount = useMemo(() => {
     return tickets.reduce<Record<string, number>>((acc, item) => {
@@ -60,19 +52,6 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
         .some((field) => field.includes(q)),
     );
   }, [data, searchTerm]);
-
-  const updateAgent = async (id: string, updates: Partial<SupportAgent>) => {
-    try {
-      setSavingId(id);
-      await supportAgentsService.update(id, updates as any);
-      toast.success('Agente actualizado');
-      onRefresh();
-    } catch (error: any) {
-      toast.error(error?.message || 'Error al actualizar agente');
-    } finally {
-      setSavingId(null);
-    }
-  };
 
   const activeAgents = data.filter((agent) => agent.isActive !== false).length;
   const inactiveAgents = data.length - activeAgents;
@@ -126,7 +105,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
                 <th className="text-left p-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Estado</th>
                 <th className="text-left p-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Tickets Asignados</th>
                 <th className="text-left p-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Último Acceso</th>
-                <th className="text-right p-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Acción</th>
+                <th className="text-right p-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Acceso</th>
               </tr>
             </thead>
             <tbody>
@@ -139,7 +118,6 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
               )}
 
               {filtered.map((agent) => {
-                const isRowSaving = savingId === agent.id;
                 const isActive = agent.isActive !== false;
                 return (
                   <tr key={agent.id} className="border-t border-border/40 hover:bg-muted/10">
@@ -148,22 +126,9 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
                     </td>
                     <td className="p-3 text-muted-foreground">{agent.email || '-'}</td>
                     <td className="p-3 min-w-[160px]">
-                      <Select
-                        value={String(agent.role || 'EMPLOYEE').toUpperCase()}
-                        onValueChange={(value) => updateAgent(agent.id, { role: value as any })}
-                        disabled={isRowSaving || !canPerform('CONFIG_USERS', 'edit')}
-                      >
-                        <SelectTrigger className="h-9 w-[150px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roleOptions.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {role}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Badge variant="outline" className="font-semibold">
+                        {ROLE_LABELS[String(agent.role || 'EMPLOYEE').toUpperCase()] || agent.role || 'Empleado'}
+                      </Badge>
                     </td>
                     <td className="p-3">
                       <Badge
@@ -181,15 +146,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
                       {agent.lastLoginAt ? format(new Date(agent.lastLoginAt), 'MMM dd, yyyy HH:mm') : 'Sin acceso'}
                     </td>
                     <td className="p-3 text-right">
-                      <Button
-                        variant={isActive ? 'outline' : 'default'}
-                        size="sm"
-                        disabled={isRowSaving || !canPerform('CONFIG_USERS', 'edit')}
-                        onClick={() => updateAgent(agent.id, { isActive: !isActive })}
-                        className="h-8 text-[10px] font-black uppercase tracking-widest"
-                      >
-                        {isRowSaving ? 'Guardando...' : isActive ? 'Desactivar' : 'Activar'}
-                      </Button>
+                      <span className="text-xs text-muted-foreground">Solo lectura</span>
                     </td>
                   </tr>
                 );

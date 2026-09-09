@@ -138,7 +138,6 @@ export function BalanceComprobacionView() {
     const exportRows = grouped.flatMap(group => group.rows);
     const exportTotalDebitos = exportRows.reduce((sum, row) => sum + row.debitos, 0);
     const exportTotalCreditos = exportRows.reduce((sum, row) => sum + row.creditos, 0);
-    const exportTotalSaldos = exportRows.reduce((sum, row) => sum + Math.abs(row.saldo), 0);
     try {
       await generateTrialBalancePDF({
         rows: exportRows,
@@ -147,9 +146,8 @@ export function BalanceComprobacionView() {
         dateFrom,
         dateTo,
         totals: {
-          subtotal: fmt(exportTotalDebitos),
-          tax: fmt(exportTotalCreditos),
-          total: fmt(exportTotalSaldos),
+          debitos: fmt(exportTotalDebitos),
+          creditos: fmt(exportTotalCreditos),
         },
       });
       toast.success('Balance de comprobación generado con la plantilla de esta vista');
