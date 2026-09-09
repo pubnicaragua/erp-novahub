@@ -31,9 +31,9 @@ const ACCOUNT_TYPES = [
 
 export function CategoriasGastosView() {
   const { canPerform } = useAuth();
-  const canCreate = canPerform('ACCOUNTING', 'create');
-  const canEdit = canPerform('ACCOUNTING', 'edit');
-  const canDeactivate = canPerform('ACCOUNTING', 'deactivate');
+  const canCreate = canPerform('ACCOUNTING_EXPENSE_CATEGORIES', 'create');
+  const canEdit = canPerform('ACCOUNTING_EXPENSE_CATEGORIES', 'edit');
+  const canDeactivate = canPerform('ACCOUNTING_EXPENSE_CATEGORIES', 'delete');
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');

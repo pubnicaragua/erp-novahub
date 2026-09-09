@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react';
+﻿import { useState, useMemo, type ReactNode } from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 import {
   Plus, Search, Upload, FileDown, Pencil,
@@ -179,9 +179,10 @@ function flattenTree(nodes: AccountNode[]): AccountNode[] {
 
 interface PlanCuentasViewProps {
   isSidebarCollapsed?: boolean;
+  helpTrigger?: ReactNode;
 }
 
-export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewProps) {
+export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: PlanCuentasViewProps) {
   const { canPerform, user } = useAuth();
   const canExportAccounts = canPerform('ACCOUNTING_CHART', 'export');
   const { baseCurrency, formatConvertedAmount } = useCurrency();
@@ -749,7 +750,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Plan de Cuentas</h1>
         </div>
-        <div className="erp-toolbar-primary-group flex w-full flex-wrap gap-2 sm:w-auto">
+        <div className="erp-toolbar-primary-group flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          {helpTrigger}
           {canExportAccounts && (
             <Button variant="outline" size="sm" onClick={handleExport}>
               <FileDown className="w-4 h-4 mr-1" /> Exportar

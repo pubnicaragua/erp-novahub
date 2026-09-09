@@ -513,7 +513,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           onKeyDownCapture={handleTableKeyDown}
           onMouseDown={() => tableScrollRef.current?.focus({ preventScroll: true })}
           aria-label="Tabla navegable. Usa las flechas para moverte entre filas y columnas."
-          className="w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="w-full min-w-0 max-w-full overflow-x-auto overflow-y-clip outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
         <Table
           containerClassName={fitContent ? 'w-full min-w-0 max-w-none overflow-visible' : undefined}

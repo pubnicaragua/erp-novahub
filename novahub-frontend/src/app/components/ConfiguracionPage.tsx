@@ -35,7 +35,12 @@ import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
-import { HIDDEN_PERMISSION_MODULE_IDS, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
+import {
+  HIDDEN_PERMISSION_MODULE_IDS,
+  LEGACY_VIEW_PERMISSION_ALIASES,
+  SIDEBAR_PERMISSION_PARENT_ALIASES,
+  SIDEBAR_PERMISSION_PARENT_ORDER,
+} from '../utils/sidebarPermissions';
 import { PERMISSION_SUBMODULES } from '../utils/sidebarPermissions';
 import { getReadableForeground } from '../utils/color-contrast';
 import { formatExchangeRate } from '../utils/currency';
@@ -235,13 +240,20 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
 // arreglo histórico anterior arriba solo para compatibilidad con datos viejos.
 export const SUBMODULES_FOR_PERMS = PERMISSION_SUBMODULES.map((item) => ({ ...item }));
 
-// Fusionar para la lista de permisos anidando los submódulos justo debajo de sus padres
-export const ALL_PERM_MODULES = AVAILABLE_MODULES.flatMap(mod => [
-  mod,
-  ...SUBMODULES_FOR_PERMS
-    .filter(sub => sub.parent === mod.id)
-    .map(s => ({ ...s, icon: Activity, description: `Vista de ${mod.label}` }))
-]);
+// Fusionar para la lista de permisos anidando los submódulos justo debajo de
+// sus padres. El orden de los padres sale del sidebar, no de un catálogo
+// histórico de configuración.
+const AVAILABLE_MODULES_BY_ID = new Map(AVAILABLE_MODULES.map((module) => [module.id, module]));
+export const ALL_PERM_MODULES = SIDEBAR_PERMISSION_PARENT_ORDER.flatMap((moduleId) => {
+  const mod = AVAILABLE_MODULES_BY_ID.get(moduleId);
+  if (!mod) return [];
+  return [
+    mod,
+    ...SUBMODULES_FOR_PERMS
+      .filter(sub => sub.parent === mod.id)
+      .map(s => ({ ...s, icon: Activity, description: `Vista de ${mod.label}` })),
+  ];
+});
 
 function oklchToApproxHex(oklch: string): string {
   // Simple approximation - extract lightness and hue for a rough color
@@ -664,56 +676,68 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const canCreatePdf = canPerform('CONFIG_PDF', 'create');
   const canDeletePdf = canPerform('CONFIG_PDF', 'delete');
 
+  // La API de suscripciones devuelve el alcance efectivo de la sucursal
+  // (grupo + unidad). Mientras carga, usamos el alcance de la sesión para no
+  // dejar la matriz vacía y luego sustituimos la lista por la respuesta
+  // autoritativa del backend.
+  const [enabledModules, setEnabledModules] = useState<string[]>(() => user?.enabledModules || []);
+  const [enabledModulesLoaded, setEnabledModulesLoaded] = useState(false);
+
+  useEffect(() => {
+    setEnabledModules(user?.enabledModules || []);
+    setEnabledModulesLoaded(false);
+  }, [user?.tenantId]);
+
   const tenantPermModules = React.useMemo(() => {
     if (!user) return [];
-    
+    const normalize = (value: unknown) => String(value || '').trim().toUpperCase();
+    const sessionModules = (enabledModulesLoaded ? enabledModules : user.enabledModules)
+      .map(normalize)
+      .filter(Boolean);
+    const enabled = new Set(sessionModules);
+    const hasParentScope = (moduleId: string) => enabled.has(moduleId)
+      || sessionModules.some((candidate) => candidate.startsWith(`${moduleId}_`));
 
-    return ALL_PERM_MODULES.filter(m => !HIDDEN_PERMISSION_MODULE_IDS.has(String(m.id).toUpperCase())).filter(m => {
-      const parentMod = 'parent' in m ? (m as any).parent : null;
-      const permissionModules = Array.isArray(user.permissions) ? user.permissions.map(permission => String(permission.module).toUpperCase()) : [];
-      if (parentMod === 'CONFIGURATION' && (
-        user.enabledModules.includes('CONFIGURATION') ||
-        permissionModules.includes('CONFIGURATION') ||
-        permissionModules.includes('CONFIGURACION') ||
-        user.isTenantAdmin
-      )) return true;
+    return ALL_PERM_MODULES
+      .filter(m => !HIDDEN_PERMISSION_MODULE_IDS.has(String(m.id).toUpperCase()))
+      .filter(m => {
+        const moduleId = normalize(m.id);
+        const parentMod = 'parent' in m ? normalize((m as any).parent) : null;
+        const directAliases = [
+          ...(SIDEBAR_PERMISSION_PARENT_ALIASES[moduleId] || []),
+          ...(LEGACY_VIEW_PERMISSION_ALIASES[moduleId] || []),
+        ];
+        const hasDirectAccess = enabled.has(moduleId)
+          || directAliases.some((alias) => enabled.has(normalize(alias)));
 
-      // Las subvistas internas no consumen una suscripción propia. Si el
-      // tenant tiene habilitado el módulo padre o cualquier vista del grupo,
-      // deben permanecer disponibles para configurar el rol.
-      if (parentMod && (m as any).subscription === false) {
-        const parentAliasesForInternal = SIDEBAR_PERMISSION_PARENT_ALIASES[parentMod] || [];
-        if (
-          user.enabledModules.includes(parentMod)
-          || parentAliasesForInternal.some((alias) => user.enabledModules.includes(alias))
-          || user.enabledModules.some((enabled) => enabled.startsWith(`${parentMod}_`))
-          || permissionModules.includes(parentMod)
-          || parentAliasesForInternal.some((alias) => permissionModules.includes(alias))
-        ) return true;
-      }
+        // Dashboard y los permisos administrativos internos pertenecen a la
+        // sucursal aunque no tengan una fila de suscripción operativa.
+        if (moduleId === 'DASHBOARD') return true;
+        if (parentMod === 'CONFIGURATION' && (
+          user.isTenantAdmin
+          || enabled.has('CONFIGURATION')
+        )) return true;
+        if (parentMod === 'MY_COMPANY' && (
+          enabled.has('MY_COMPANY')
+          || user.isTenantAdmin
+        )) return true;
 
-      // 1. Direct check
-      if (user.enabledModules.includes(m.id)) return true;
+        // Las vistas marcadas como internas comparten el alcance del módulo
+        // padre; no son módulos facturables independientes.
+        if (parentMod && (m as any).subscription === false && hasParentScope(parentMod)) return true;
+        if (hasDirectAccess) return true;
+        if (parentMod && enabled.has(parentMod)) return true;
 
-      // Mi Empresa y Configuración son entradas únicas del sidebar; sus
-      // pestañas internas conservan compatibilidad mediante el permiso padre.
-      const directAliases = SIDEBAR_PERMISSION_PARENT_ALIASES[m.id] || [];
-      const inheritedAliases = parentMod ? (SIDEBAR_PERMISSION_PARENT_ALIASES[parentMod] || []) : [];
-      if ([...directAliases, ...inheritedAliases].some((alias) => user.enabledModules.includes(alias))) return true;
+        // Un padre se conserva cuando la sucursal recibió solo una o varias
+        // vistas hijas. Los hermanos que no están en el alcance no entran.
+        return !parentMod && sessionModules.some((candidate) => candidate.startsWith(`${moduleId}_`));
+      });
+  }, [enabledModules, enabledModulesLoaded, user]);
 
-      // 2. Fallback check for submodules
-      if (parentMod && user.enabledModules.includes(parentMod)) {
-        return true;
-      }
-
-      // 3. Fallback check for main modules
-      if (!parentMod && user.enabledModules.some(mod => mod.startsWith(`${m.id}_`))) {
-        return true;
-      }
-
-      return false;
-    });
-  }, [user]);
+  const tenantPermModuleIds = React.useMemo(
+    () => new Set(tenantPermModules.map((module) => String(module.id).toUpperCase())),
+    [tenantPermModules],
+  );
 
   const isPermissionActionAvailable = (moduleId: string, action: PermissionMatrixAction) => action === 'viewCost'
     ? supportsInventoryCostPermission(moduleId)
@@ -992,8 +1016,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const [roles, setRoles] = useState<RoleManagement[]>([]);
-  // @ts-ignore
-  const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   const [pendingDeleteRole, setPendingDeleteRole] = useState<RoleManagement | null>(null);
 
@@ -1058,7 +1080,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         tenantId && canViewCompany ? api.get<any>(`/tenants/${tenantId}/industries`, { signal }) : Promise.resolve([]),
         // Los roles se administran exclusivamente desde Mi Empresa > Mi Equipo.
         Promise.resolve([]),
-        tenantId && (user?.isTenantAdmin || canPerform('SUBSCRIPTIONS', 'view'))
+        // La matriz de roles necesita el alcance completo de la sucursal,
+        // aunque quien administra roles no tenga permiso para editar el plan.
+        // El endpoint solo permite consultar el tenant propio.
+        tenantId && (user?.isTenantAdmin || canViewRoles)
           ? subscriptionsService.getEnabledModules(tenantId, undefined, signal)
           : Promise.resolve(user?.enabledModules || []),
       ]);
@@ -1146,6 +1171,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setIndustryOptions(industries);
     setRoles(rolesList);
     setEnabledModules(modulesList);
+    setEnabledModulesLoaded(true);
   }, [configurationData]);
 
   const handleCreateRole = () => {
@@ -1175,8 +1201,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     const currentPerms = normalizePermissions(role.permissions);
     const fullPerms = tenantPermModules.map(m => {
       // Buscar permiso existente (ignorando mayúsculas/minúsculas y buscando por ID o Label)
+      const moduleCandidates = [m.id, ...(LEGACY_VIEW_PERMISSION_ALIASES[m.id] || [])]
+        .map((candidate) => String(candidate).toUpperCase());
       const existing = currentPerms.find(p => 
-        p.module?.toUpperCase() === m.id.toUpperCase() ||
+        moduleCandidates.includes(String(p.module || '').toUpperCase()) ||
         p.module?.toUpperCase() === m.label.toUpperCase()
       ) as any;
       
@@ -1252,9 +1280,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       const { id, _count, createdAt, updatedAt, ...cleanRole } = editingRole as any;
       
       const mergedPermissions = normalizePermissions(cleanRole.permissions).reduce((result: any[], permission: any) => {
-        // TICKETS_VIEW es el identificador visual de la subvista Tickets;
-        // el backend continúa usando TICKETS como permiso canónico.
-        const module = permission.module === 'TICKETS_VIEW' ? 'TICKETS' : permission.module;
+        // TICKETS_VIEW es el identificador histórico; la vista real del
+        // sidebar se guarda ahora como TICKETS_LIST.
+        const module = permission.module === 'TICKETS_VIEW' ? 'TICKETS_LIST' : permission.module;
         const existing = result.find((item) => item.module === module);
         if (!existing) {
           result.push({ ...permission, module });
@@ -1266,7 +1294,12 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         existing.write = Boolean(existing.write || permission.write);
         return result;
       }, []);
-      const permissions = mergedPermissions.map((p: any) => ({
+      const permissions = mergedPermissions
+        .filter((p: any) => {
+          const module = String(p.module || '').toUpperCase();
+          return tenantPermModuleIds.has(module) && !HIDDEN_PERMISSION_MODULE_IDS.has(module);
+        })
+        .map((p: any) => ({
         ...p,
         // El backend conserva `write` por compatibilidad con roles antiguos;
         // las acciones visibles de la matriz siguen siendo las canónicas.
@@ -1321,7 +1354,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
 
     // Verificar si es un módulo padre (tiene hijos en SUBMODULES_FOR_PERMS)
-    const childModules = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === module);
+    const childModules = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === module && tenantPermModuleIds.has(sub.id));
     
     if (childModules.length > 0) {
       // Es un PADRE → propagar a todos los hijos
@@ -1349,7 +1382,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       // Es un HIJO → recalcular el estado del padre
       const parentPerm = newPerms.find(p => p.module === submoduleDef.parent) as any;
       if (parentPerm) {
-        const siblings = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === submoduleDef.parent);
+        const siblings = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === submoduleDef.parent && tenantPermModuleIds.has(sub.id));
         const siblingPerms: any[] = siblings.map(s => newPerms.find(p => p.module === s.id)).filter(Boolean);
         
         // El padre está ON solo si TODOS los hijos tienen ese permiso ON

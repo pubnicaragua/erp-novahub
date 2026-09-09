@@ -220,9 +220,11 @@ interface PurchaseImportPreviewProps {
   onDownloadErrors: () => void;
   onConfirm: () => void;
   onBack: () => void;
+  similarityPendingCount?: number;
+  onReviewSimilarities?: () => void;
 }
 
-function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, importing, progress, currency, importCurrency, warehouseName, conversionRate, categoryOptions, exchangeRate, taxOptions, withholdingOptions, onRowUpdate, onCategoryChange, onCreateCategory, onImportCurrencyChange, onDownloadErrors, onConfirm, onBack }: PurchaseImportPreviewProps) {
+function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, importing, progress, currency, importCurrency, warehouseName, conversionRate, categoryOptions, exchangeRate, taxOptions, withholdingOptions, onRowUpdate, onCategoryChange, onCreateCategory, onImportCurrencyChange, onDownloadErrors, onConfirm, onBack, similarityPendingCount = 0, onReviewSimilarities }: PurchaseImportPreviewProps) {
   useImportPreviewLayout();
   const validRows = rows.filter((row) => !row._hasError).length;
   const errorRows = rows.filter((row) => row._hasError).length;
@@ -447,6 +449,18 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel={hasGroupedVariants ? 'variantes (líneas)' : 'productos'} />
 
+        {similarityPendingCount > 0 && (
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs" role="alert">
+            <div className="min-w-0">
+              <p className="font-black text-amber-800 dark:text-amber-200">Hay {similarityPendingCount} coincidencia(s) pendiente(s) por revisar.</p>
+              <p className="mt-1 text-amber-700 dark:text-amber-300">Selecciona el producto existente o resuelve cada alerta antes de agregarlo a la orden.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="shrink-0 border-amber-500/50 text-amber-800 dark:text-amber-200" onClick={onReviewSimilarities} disabled={importing || !onReviewSimilarities}>
+              Revisar coincidencias
+            </Button>
+          </section>
+        )}
+
         {hasGroupedVariants && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs">
             <p className="min-w-0 flex-1 text-muted-foreground"><span className="font-black text-foreground">Catálogo agrupado:</span> {groupedParents.length} producto(s) padre · {rows.filter((row) => row._advanced && row.variantLabel).length} variante(s). El padre es informativo; solo sus variantes se agregarán a la orden.</p>
@@ -577,7 +591,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} /></div>}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/50 bg-background pt-3">
           <Button variant="outline" onClick={onBack} disabled={importing}><ChevronLeft className="mr-2 size-4" />Volver a la carga</Button>
-          <Button onClick={onConfirm} disabled={importing || validRows === 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Agregando... ${progress}%` : `Agregar ${validRows} válidos · omitir ${errorRows}`}</Button>
+          <Button onClick={onConfirm} disabled={importing || validRows === 0 || similarityPendingCount > 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Agregando... ${progress}%` : similarityPendingCount > 0 ? 'Resuelve las coincidencias pendientes' : `Agregar ${validRows} válidos · omitir ${errorRows}`}</Button>
         </div>
       </div>
       <Dialog open={categoryDialogOpen} onOpenChange={(open) => { if (!creatingCategory) setCategoryDialogOpen(open); }}>
@@ -927,6 +941,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[] } | null>(null);
   const [similarPurchaseGroups, setSimilarPurchaseGroups] = useState<SimilarProductGroup[]>([]);
   const [similarPurchaseResolvingKey, setSimilarPurchaseResolvingKey] = useState<string | null>(null);
+  const [similarPurchaseAlertOpen, setSimilarPurchaseAlertOpen] = useState(false);
   const availableWarehouseCatalog = useMemo(() => {
     const currentWarehouse = localDoc?.warehouse;
     const entries = currentWarehouse?.id
@@ -1208,6 +1223,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setImportProcessing(true);
     setPreviewLoading(true);
     setPreviewProgress(3);
+    setSimilarPurchaseGroups([]);
+    setSimilarPurchaseResolvingKey(null);
+    setSimilarPurchaseAlertOpen(false);
     try {
           const { rows: raw, sheets } = await parseSpreadsheetInWorker(file, undefined, true, (progress) => {
             setPreviewProgress(Math.min(84, Math.max(3, progress)));
@@ -1300,6 +1318,26 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     }
   }, [importCurrency, purchasePriceLists, resolveImportProducts, taxOptions, validateImportRows, withholdingOptions]);
 
+  const checkPurchaseImportSimilarity = useCallback(async (rows: PurchaseImportRow[]) => {
+    const rowsToReview = rows.filter((row) => !row._hasError && row.similarityResolution !== 'USE_EXISTING' && row.similarityResolution !== 'CREATE_NEW');
+    if (rowsToReview.length === 0) return [];
+    const response = await inventoryService.checkSimilarProducts(rowsToReview.map((row) => ({
+      code: row.sku,
+      sku: row.sku,
+      name: row.description,
+      description: row.description,
+      brand: row.brand,
+      attributes: row.attributes,
+    })));
+    const matches = response?.matches || [];
+    if (matches.length > 0) {
+      setSimilarPurchaseGroups(matches);
+      setSimilarPurchaseAlertOpen(true);
+      toast.warning(`Se detectaron ${matches.length} posible(s) coincidencia(s) en la orden de compra.`);
+    }
+    return matches;
+  }, []);
+
   const handleOpenPurchaseImportPreview = useCallback(() => {
     if (previewLoading || importProcessing || importing || importData.length === 0) return;
     const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency);
@@ -1314,7 +1352,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     }
     setImportModalOpen(false);
     setImportPreviewOpen(true);
-  }, [displayCurrency, globalRate, importData.length, importDataCurrency, importProcessing, importing, localDoc?.currency, previewLoading, validateImportRows]);
+    void checkPurchaseImportSimilarity(importData).catch((error: any) => {
+      toast.error(error?.message || 'No se pudo validar si los productos de la orden ya existen.');
+    });
+  }, [checkPurchaseImportSimilarity, displayCurrency, globalRate, importData, importDataCurrency, importProcessing, importing, localDoc?.currency, previewLoading, validateImportRows]);
 
   const handlePurchaseImportRowUpdate = (index: number, field: keyof PurchaseImportRow, value: any) => {
     setImportData((current) => validateImportRows(current.map((row, rowIndex) => {
@@ -1428,20 +1469,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const handlePurchaseImportConfirm = async () => {
     const validRows = importData.filter((row) => !row._hasError);
     if (!validRows.length) return toast.error('No hay filas válidas para importar');
+    if (similarPurchaseGroups.length > 0) {
+      setSimilarPurchaseAlertOpen(true);
+      return toast.warning('Resuelve las coincidencias pendientes antes de agregar productos a la orden.');
+    }
     if (validRows.length !== importData.length) toast.warning(`Se omitirán ${importData.length - validRows.length} fila(s) con errores`);
     const rowsToReview = validRows.filter((row) => row.similarityResolution !== 'USE_EXISTING' && row.similarityResolution !== 'CREATE_NEW');
     if (rowsToReview.length > 0) {
       try {
-        const response = await inventoryService.checkSimilarProducts(rowsToReview.map((row) => ({
-          code: row.sku,
-          sku: row.sku,
-          name: row.description,
-          description: row.description,
-          brand: row.brand,
-          attributes: row.attributes,
-        })));
-        if (response?.matches?.length) {
-          setSimilarPurchaseGroups(response.matches);
+        const matches = await checkPurchaseImportSimilarity(rowsToReview);
+        if (matches.length) {
           setImportConfirmOpen(false);
           return;
         }
@@ -1506,7 +1543,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   const createPurchaseSimilarityAsNew = useCallback((group: SimilarProductGroup) => {
     const groupKey = normalizeSimilarityInputKey(group.inputKey);
-    const exactSku = group.matches.some((match) => [match.code, match.sku]
+    const exactSku = group.matches.some((match) => [match.code, match.sku, ...(match.variants || []).map((variant) => variant.sku)]
       .some((value) => normalizeSimilarityInputKey(value) === groupKey));
     if (exactSku) {
       toast.error('Ese SKU ya existe. Cambia el SKU o selecciona el producto existente.');
@@ -1586,6 +1623,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       setImportData([]);
       setImportFileName('');
       setAdvancedImportCatalog(null);
+      setSimilarPurchaseGroups([]);
+      setSimilarPurchaseResolvingKey(null);
+      setSimilarPurchaseAlertOpen(false);
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo agregar la plantilla a la orden');
     } finally {
@@ -2281,12 +2321,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     return (
       <>
         <ProductSimilarityAlert
-          open={similarPurchaseGroups.length > 0}
+          open={similarPurchaseAlertOpen && similarPurchaseGroups.length > 0}
           groups={similarPurchaseGroups}
-          title="Observación: posible producto existente en la orden"
-          description="Revisa los productos encontrados. Puedes seleccionar el producto o la variante correcta, o confirmar que esta fila debe crearse como un producto nuevo al recepcionar."
+          title="Alerta: posible producto existente en la orden"
+          description="Se encontraron coincidencias por nombre, marca, SKU o atributos. Revisa los datos mostrados y selecciona el producto o la variante existente cuando corresponda. Un SKU exacto no puede duplicarse; si la coincidencia no es exacta, puedes crear un producto nuevo al recepcionar."
           resolvingKey={similarPurchaseResolvingKey}
-          onOpenChange={(value) => { if (!value) { setSimilarPurchaseGroups([]); setSimilarPurchaseResolvingKey(null); } }}
+          onOpenChange={(value) => { setSimilarPurchaseAlertOpen(value); if (!value) setSimilarPurchaseResolvingKey(null); }}
           onSelectExisting={(group, match, variant) => resolvePurchaseSimilarity(group, match, variant)}
           onCreateNew={(group) => createPurchaseSimilarityAsNew(group)}
         />
@@ -2310,7 +2350,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           onImportCurrencyChange={handlePurchaseImportCurrencyChange}
           onDownloadErrors={handleDownloadPurchaseImportErrors}
           onConfirm={handlePurchaseImportConfirm}
-          onBack={() => { setImportPreviewOpen(false); setImportModalOpen(true); }}
+          similarityPendingCount={similarPurchaseGroups.length}
+          onReviewSimilarities={() => setSimilarPurchaseAlertOpen(true)}
+          onBack={() => { setSimilarPurchaseGroups([]); setSimilarPurchaseResolvingKey(null); setSimilarPurchaseAlertOpen(false); setImportPreviewOpen(false); setImportModalOpen(true); }}
         />
         <Dialog open={importConfirmOpen && !importing} onOpenChange={setImportConfirmOpen}>
           <DialogContent className="max-w-md rounded-2xl">
@@ -2864,7 +2906,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <Dialog open={importModalOpen} onOpenChange={(open) => {
           if (importing || importProcessing) return;
           setImportModalOpen(open);
-          if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setAdvancedImportCatalog(null); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
+          if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setSimilarPurchaseGroups([]); setSimilarPurchaseResolvingKey(null); setSimilarPurchaseAlertOpen(false); setImportData([]); setAdvancedImportCatalog(null); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
         }}>
           <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
             <DialogHeader data-tour="purchases-order-import-title">

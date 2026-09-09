@@ -10,10 +10,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from 'sonner';
 import { rolesService } from '../../services/roles.service';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
+import { subscriptionsService } from '../../services/subscriptions.service';
+import { useAuth } from '../../contexts/AuthContext';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { allowedModulesFromPermissions, getPermissionActionKeys, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
-import { HIDDEN_PERMISSION_MODULE_IDS, PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_MODULE_IDS } from '../../utils/sidebarPermissions';
+import { HIDDEN_PERMISSION_MODULE_IDS, LEGACY_VIEW_PERMISSION_ALIASES, PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_MODULE_IDS } from '../../utils/sidebarPermissions';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
@@ -130,7 +132,9 @@ function hydratePermissions(role: any) {
   const current = normalizePermissions(role?.permissions)
     .filter((permission: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(permission.module || '').toUpperCase()));
   const hydrated = ROLE_PERMISSION_MODULES.map((module: any) => {
-    const existing = current.find((permission: any) => String(permission.module || '').toUpperCase() === String(module.id).toUpperCase());
+    const candidates = [module.id, ...(LEGACY_VIEW_PERMISSION_ALIASES[module.id] || [])]
+      .map((candidate) => String(candidate).toUpperCase());
+    const existing = current.find((permission: any) => candidates.includes(String(permission.module || '').toUpperCase()));
     const parent = module.parent
       ? current.find((permission: any) => String(permission.module || '').toUpperCase() === String(module.parent).toUpperCase())
       : undefined;
@@ -142,6 +146,7 @@ function hydratePermissions(role: any) {
 }
 
 export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesChange, canViewRoles = true, canCreateRoles = true, canEditRoles = true, canDeleteRoles = true, roleHighlightRequest = null }: TeamAccessPanelProps) {
+  const { user: currentUser } = useAuth();
   const [roleView, setRoleView] = useState<'list' | 'editor' | 'preview'>('list');
   const [roleSaving, setRoleSaving] = useState(false);
   const [editingRole, setEditingRole] = useState<any | null>(null);
@@ -152,6 +157,43 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
   const [rolesLayout, setRolesLayout] = useState<ViewLayoutMode>('table');
   const isCompactRolesViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveRolesLayout: ViewLayoutMode = isCompactRolesViewport ? 'cards' : rolesLayout;
+
+  const { data: enabledModulesData, isPending: enabledModulesLoading } = useTenantQuery<string[]>(
+    ['role-permission-scope', tenantId],
+    async (signal) => asList(await subscriptionsService.getEnabledModules(tenantId, undefined, signal)) as string[],
+    {
+      enabled: Boolean(tenantId && canViewRoles),
+      onError: (error) => toast.error(error.message || 'No se pudo cargar el alcance de módulos de la sucursal'),
+    },
+  );
+
+  const rolePermissionModules = useMemo(() => {
+    const fallback = currentUser?.tenantId === tenantId && Array.isArray(currentUser.enabledModules)
+      ? currentUser.enabledModules
+      : [];
+    const scope = new Set((enabledModulesData ?? fallback).map((module) => String(module || '').trim().toUpperCase()).filter(Boolean));
+    const hasScope = (moduleId: string) => scope.has(moduleId)
+      || (LEGACY_VIEW_PERMISSION_ALIASES[moduleId] || []).some((alias) => scope.has(String(alias).toUpperCase()));
+    const hasParentScope = (parent: string) => hasScope(parent)
+      || [...scope].some((module) => module.startsWith(`${parent}_`));
+
+    // Las vistas administrativas son internas de la sucursal: quien ya tiene
+    // acceso a Roles puede administrarlas, aunque no sean módulos facturables.
+    return ROLE_PERMISSION_MODULES.filter((module: any) => {
+      if (HIDDEN_PERMISSION_MODULE_IDS.has(String(module.id).toUpperCase())) return false;
+      if (module.id === 'DASHBOARD') return true;
+      if (module.parent === 'MY_COMPANY' || module.parent === 'CONFIGURATION') return true;
+      if (module.parent && module.subscription === false) return hasParentScope(module.parent);
+      if (hasScope(module.id)) return true;
+      if (!module.parent) return hasParentScope(module.id);
+      return hasParentScope(module.parent) && scope.has(module.parent);
+    });
+  }, [currentUser, enabledModulesData, tenantId]);
+
+  const rolePermissionModuleIds = useMemo(
+    () => new Set(rolePermissionModules.map((module: any) => String(module.id).toUpperCase())),
+    [rolePermissionModules],
+  );
 
   useEffect(() => {
     if (!roleHighlightRequest?.roleId) return;
@@ -196,11 +238,11 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     }
   };
 
-  const groupedModules = useMemo(() => ROLE_PERMISSION_MODULES.reduce((groups: Record<string, any[]>, module: any) => {
+  const groupedModules = useMemo(() => rolePermissionModules.reduce((groups: Record<string, any[]>, module: any) => {
     const group = module.parent || module.id;
     (groups[group] ||= []).push(module);
     return groups;
-  }, {}), []);
+  }, {}), [rolePermissionModules]);
 
   const actionIsAvailable = (moduleId: string, action: PermissionMatrixAction) => action === 'viewCost'
     ? supportsInventoryCostPermission(moduleId)
@@ -210,7 +252,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
   const setAllExpanded = (expanded: boolean) => {
     setExpandedSections(Object.fromEntries(Object.keys(groupedModules).map((group) => [group, expanded])));
-    setExpandedViews(Object.fromEntries(ROLE_PERMISSION_MODULES.map((module: any) => [module.id, expanded])));
+    setExpandedViews(Object.fromEntries(rolePermissionModules.map((module: any) => [module.id, expanded])));
   };
   const expandAll = () => setAllExpanded(true);
   const collapseAll = () => setAllExpanded(false);
@@ -321,7 +363,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     setEditingRole((current: any) => {
       if (!current) return current;
       const permissions = normalizePermissions(current.permissions).map((permission: any) => ({ ...permission }));
-      ROLE_PERMISSION_MODULES.forEach((module: any) => {
+      rolePermissionModules.forEach((module: any) => {
         const target = permissions.find((permission: any) => permission.module === module.id);
         if (target) updatePermissionActions(target, module.id, shouldEnable);
       });
@@ -345,7 +387,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       && (module.id !== 'SALES_PRICE_LISTS' || priceListScopeIsComplete(permission));
   };
 
-  const isAllPermissionsEnabled = () => ROLE_PERMISSION_MODULES.length > 0 && ROLE_PERMISSION_MODULES.every((module: any) => isViewFullyEnabled(module));
+  const isAllPermissionsEnabled = () => rolePermissionModules.length > 0 && rolePermissionModules.every((module: any) => isViewFullyEnabled(module));
 
   const openEditRole = (role: any) => {
     if (!canEditRoles) return;
@@ -416,7 +458,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     setRoleSaving(true);
     try {
       const mergedPermissions = normalizePermissions(editingRole.permissions).reduce((result: any[], permission: any) => {
-        const module = permission.module === 'TICKETS_VIEW' ? 'TICKETS' : permission.module;
+        const module = permission.module === 'TICKETS_VIEW' ? 'TICKETS_LIST' : permission.module;
         const existing = result.find((item) => item.module === module);
         if (!existing) {
           result.push({ ...permission, module });
@@ -428,7 +470,9 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         existing.write = Boolean(existing.write || permission.write);
         return result;
       }, []);
-      const permissions = mergedPermissions.map((permission: any) => ({
+      const permissions = mergedPermissions
+        .filter((permission: any) => rolePermissionModuleIds.has(String(permission.module || '').toUpperCase()))
+        .map((permission: any) => ({
         ...permission,
         write: !!(permission.create || permission.edit || permission.write),
         ...Object.fromEntries(permissionActions.filter(({ key }) => key !== 'read').map(({ key }) => [key, permissionValue(permission, key)])),
@@ -554,7 +598,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
           <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><ShieldCheck className="size-4 text-primary" /> Datos del rol</CardTitle><CardDescription className="mt-1 text-xs">El nombre y la descripción ayudan a identificar el alcance del equipo.</CardDescription></CardHeader><CardContent className="grid min-w-0 gap-4 p-4 sm:p-6 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="role-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del rol</Label><Input id="role-name" data-tour="role-name" value={editingRole.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ej: Gerencia" className="h-11" /></div><div className="space-y-2"><Label htmlFor="role-description" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción (opcional)</Label><Input id="role-description" data-tour="role-description" value={editingRole.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe el alcance del rol" className="h-11" /></div>{editingRole.id && <div className="md:col-span-2"><AuditHistoryDisclosure entity="ROLE" entityId={String(editingRole.id)} createdAt={editingRole.createdAt} /></div>}</CardContent></Card>
 
-        <Card data-tour="role-permissions" className="min-w-0 border-border/50"><CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-sm font-black uppercase tracking-wider">Permisos</CardTitle><CardDescription className="mt-1 text-xs">Cada sección es un módulo y cada tarjeta es una vista o tab real. Despliega o contrae los módulos y sus vistas para definir el acceso.</CardDescription></div><Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{ROLE_PERMISSION_MODULES.length} módulos y vistas</Badge></div><div data-tour="role-permission-actions" className="flex flex-wrap items-center gap-2 border-t border-border/30 pt-3"><RolePermissionsTutorial mode="editor" /><Button type="button" variant="outline" size="sm" onClick={expandAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsDown className="size-3.5" /> Expandir todo</Button><Button type="button" variant="outline" size="sm" onClick={collapseAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsUp className="size-3.5" /> Contraer todo</Button><Button type="button" variant="secondary" size="sm" onClick={toggleAllPermissions} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ListChecks className="size-3.5" /> {isAllPermissionsEnabled() ? 'Desmarcar todo' : 'Marcar todo'}</Button><span className="text-[10px] text-muted-foreground">Puedes marcar una vista, un módulo o todos los permisos.</span></div></CardHeader><CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
+        <Card data-tour="role-permissions" className="min-w-0 border-border/50"><CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-sm font-black uppercase tracking-wider">Permisos</CardTitle><CardDescription className="mt-1 text-xs">Cada sección es un módulo y cada tarjeta es una vista o tab real. Despliega o contrae los módulos y sus vistas para definir el acceso.</CardDescription></div><div className="flex items-center gap-2"><Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{rolePermissionModules.length} módulos y vistas</Badge>{enabledModulesLoading && <span className="text-[10px] text-muted-foreground">Validando alcance…</span>}</div></div><div data-tour="role-permission-actions" className="flex flex-wrap items-center gap-2 border-t border-border/30 pt-3"><RolePermissionsTutorial mode="editor" /><Button type="button" variant="outline" size="sm" onClick={expandAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsDown className="size-3.5" /> Expandir todo</Button><Button type="button" variant="outline" size="sm" onClick={collapseAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsUp className="size-3.5" /> Contraer todo</Button><Button type="button" variant="secondary" size="sm" onClick={toggleAllPermissions} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ListChecks className="size-3.5" /> {isAllPermissionsEnabled() ? 'Desmarcar todo' : 'Marcar todo'}</Button><span className="text-[10px] text-muted-foreground">Puedes marcar una vista, un módulo o todos los permisos.</span></div></CardHeader><CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
            {Object.entries(groupedModules).map(([group, modules]) => {
              const expanded = expandedSections[group] ?? false;
              const groupModules = modules as any[];

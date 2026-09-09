@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode, SlidersHorizontal, Tag } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode, SlidersHorizontal, Tag } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -35,6 +35,7 @@ import { EditProductModal } from './EditProductModal';
 import { LabelPrintModal } from './LabelPrintModal';
 import { VariantManagerModal } from './VariantManagerModal';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { ViewLayoutSelect, useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import type { SalesPaginationControls } from '../../types';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -48,6 +49,7 @@ import { normalizePurchasePriority, PURCHASE_PRIORITY_OPTIONS } from '../../util
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { formatExchangeRate } from '../../utils/currency';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -89,6 +91,13 @@ const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
   .replace(/\s+/g, ' ')
   .toLowerCase();
 
+const similarityGroupHasResolution = (group: SimilarProductGroup, resolutions: SimilarityResolution[]) => {
+  const resolution = resolutions.find((candidate) => normalizeSimilarityInputKey(candidate.inputKey) === normalizeSimilarityInputKey(group.inputKey));
+  if (!resolution) return false;
+  if (resolution.action === 'CREATE_NEW') return true;
+  return Boolean(resolution.productId && group.matches.some((match) => match.id === resolution.productId));
+};
+
 const getImportCurrencySymbol = (currency: string) => String(currency || '').toUpperCase() === 'USD' ? '$' : 'C$';
 
 const formatImportAmount = (value: unknown) => {
@@ -119,6 +128,7 @@ const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
 
 export type ProductStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 type InitialImportReimportMode = 'REJECT' | 'MERGE';
+type SimilarityAlertMode = 'preview' | 'confirm';
 
 const PRODUCT_TABLE_WIDTHS = {
   selector: '40px',
@@ -173,6 +183,8 @@ interface ProductosViewProps {
   series?: any[];
   movements?: any[];
   onRefresh: () => void;
+  onExport?: () => void;
+  isRefreshing?: boolean;
   onCreateProduct?: () => void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
@@ -250,6 +262,8 @@ interface ImportPreviewPageProps {
   onConfirm: () => void;
   onBack: () => void;
   onReady?: () => void;
+  similarityPendingCount?: number;
+  onReviewSimilarities?: () => void;
   isService?: boolean;
   priceLists?: Array<Pick<PriceList, 'code' | 'name'>>;
 }
@@ -340,7 +354,7 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
     <TableRow
       data-index={index}
       aria-busy={importing}
-      style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', height: isService ? '84px' : hasVariants ? '78px' : '58px', marginBottom: '8px', boxSizing: 'border-box', transform: `translateY(${start}px)` }}
+      style={{ display: 'grid', gridTemplateColumns: gridTemplate, columnGap: '8px', position: 'absolute', left: 0, top: 0, width: '100%', height: isService ? '84px' : hasVariants ? '78px' : '58px', marginBottom: '8px', boxSizing: 'border-box', transform: `translateY(${start}px)` }}
       className={expandable ? 'border-y-2 border-primary/20 bg-primary/5' : row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}
     >
       <TableCell className="p-1">
@@ -452,11 +466,11 @@ const ProductImportVariantPreviewRow = memo(function ProductImportVariantPreview
   return (
     <TableRow
       data-index={entry.key}
-      style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', minHeight: '84px', marginBottom: '8px', boxSizing: 'border-box', transform: `translateY(${start}px)` }}
-      className="border-b-2 border-primary/15 bg-primary/[0.025]"
+      style={{ display: 'grid', gridTemplateColumns: gridTemplate, columnGap: '8px', position: 'absolute', left: 0, top: 0, width: '100%', minHeight: '84px', marginBottom: '8px', boxSizing: 'border-box', transform: `translateY(${start}px)` }}
+      className="border-b-2 border-border/70 bg-muted/20"
     >
       <TableCell colSpan={99} style={{ gridColumn: '1 / -1' }} className="p-0 whitespace-normal">
-        <div className="flex min-w-0 flex-wrap items-start gap-x-5 gap-y-2 border-l-4 border-primary/35 px-4 py-4 pl-6 text-xs">
+        <div className="flex min-w-0 flex-wrap items-start gap-x-5 gap-y-2 border-y border-border/70 border-l-4 border-primary/50 bg-muted/20 px-4 py-4 pl-6 text-xs">
           <div className="min-w-[170px]">
             <p className="text-[9px] font-black uppercase tracking-[0.14em] text-primary">Variante</p>
             <p className="mt-1 break-words font-mono font-black text-foreground">{variantSku || 'Sin SKU'}</p>
@@ -506,6 +520,8 @@ function ImportPreviewPage({
   onConfirm,
   onBack,
   onReady,
+  similarityPendingCount = 0,
+  onReviewSimilarities,
   isService = false,
   priceLists = DEFAULT_IMPORT_PRICE_LISTS,
 }: ImportPreviewPageProps) {
@@ -756,6 +772,18 @@ function ImportPreviewPage({
 
       <ImportReviewSummary total={importData.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel={isService ? 'servicios' : 'productos'} />
 
+      {similarityPendingCount > 0 && !isService && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs" role="alert">
+          <div className="min-w-0">
+            <p className="font-black text-amber-800 dark:text-amber-200">Hay {similarityPendingCount} coincidencia(s) pendiente(s) por revisar.</p>
+            <p className="mt-1 text-amber-700 dark:text-amber-300">Selecciona el producto existente o resuelve cada alerta antes de importar.</p>
+          </div>
+          <Button type="button" variant="outline" size="sm" className="shrink-0 border-amber-500/50 text-amber-800 dark:text-amber-200" onClick={onReviewSimilarities} disabled={importing || !onReviewSimilarities}>
+            Revisar coincidencias
+          </Button>
+        </section>
+      )}
+
       {groupedParents.length > 0 && !isService && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs">
           <p className="min-w-0 flex-1 text-muted-foreground"><span className="font-black text-foreground">Catálogo agrupado:</span> {groupedParents.length} producto(s) padre · {variantCount} variante(s). Los atributos se conservan por SKU y el stock se distribuye por variante/bodega.</p>
@@ -854,7 +882,7 @@ function ImportPreviewPage({
       <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table responsiveCards={false} containerClassName="w-max min-w-full max-w-none overflow-visible" className={`block ${isService ? 'min-w-[1420px]' : 'min-w-[1500px]'}`}>
             <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
-              <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
+              <TableRow className="[&>th]:flex [&>th]:items-center" style={{ display: 'grid', gridTemplateColumns: gridTemplate, columnGap: '8px' }}>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">Código</TableHead>
                 <TableHead className="min-w-[220px] text-[10px] uppercase">{isService ? 'Nombre / descripción' : 'Nombre'}</TableHead>
@@ -899,13 +927,13 @@ function ImportPreviewPage({
       {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${importProgress}%` }} /></div>}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/50 bg-background pt-3">
         <Button variant="outline" onClick={onBack} disabled={importing}><ChevronLeft className="mr-2 size-4" />Volver a la carga</Button>
-        <Button onClick={onConfirm} disabled={importing || validRows === 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Importando... ${importProgress}%` : `Importar ${validRows} válidos · omitir ${errorRows}`}</Button>
+        <Button onClick={onConfirm} disabled={importing || validRows === 0 || similarityPendingCount > 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Importando... ${importProgress}%` : similarityPendingCount > 0 ? 'Resuelve las coincidencias pendientes' : `Importar ${validRows} válidos · omitir ${errorRows}`}</Button>
       </div>
     </div>
   );
 }
 
-export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, onCreateProduct, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, onExport, isRefreshing = false, onCreateProduct, pagination, onSearchChange, onCategoryChange, onBrandChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, brandFilter: controlledBrandFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
   const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
@@ -916,6 +944,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     ? 'INVENTORY_SERVICES'
     : 'INVENTORY_PRODUCTS';
   const canViewInventoryCost = canPerform(catalogPermissionModule, 'viewCost');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('inventory-products-layout', 'table', 24 * 365);
+  const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
+  const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
+  const catalogTableScrollRef = useRef<HTMLDivElement>(null);
+  // El ancho debe ser finito para que el contenedor w-max no entre en un
+  // cálculo circular con width: 100% y produzca un scrollbar casi inútil.
+  const catalogTableWidth = isServiceView
+    ? canViewInventoryCost ? 1444 : 1332
+    : canViewInventoryCost ? 1744 : 1632;
   const [configuredPriceLists, setConfiguredPriceLists] = useState<PriceList[]>([]);
   useEffect(() => {
     const controller = new AbortController();
@@ -1090,6 +1127,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [similarImportGroups, setSimilarImportGroups] = useState<SimilarProductGroup[]>([]);
   const [similarImportResolutions, setSimilarImportResolutions] = useState<Record<string, SimilarityResolution>>({});
   const [similarImportResolvingKey, setSimilarImportResolvingKey] = useState<string | null>(null);
+  const [similarImportAlertMode, setSimilarImportAlertMode] = useState<SimilarityAlertMode | null>(null);
+  const [similarImportAlertOpen, setSimilarImportAlertOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
   const [variantManagerProduct, setVariantManagerProduct] = useState<any | null>(null);
@@ -2772,16 +2811,35 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   };
 
   // ==================== EXCEL IMPORT ====================
-  const handleDownloadSelectedTemplate = useCallback(() => {
+  const handleDownloadSelectedTemplate = useCallback(async () => {
     if (selectedIds.size === 0) {
       toast.error('Selecciona al menos un producto');
       return;
     }
+    if (selectedCatalogProducts.length !== selectedIds.size) {
+      toast.error('No se pudieron resolver todos los productos seleccionados. Actualiza la vista e inténtalo de nuevo.');
+      return;
+    }
     try {
-      // Este botón mantiene su ubicación dentro de la tarjeta de selección,
-      // pero la descarga siempre es una plantilla vacía. No se deben exportar
-      // productos actuales del catálogo a un archivo destinado a una nueva carga.
-      const catalogProducts: any[] = [];
+      // La exportación parte de los registros ya visibles y completa cada uno
+      // con su detalle para incluir variantes, listas de precios y existencias.
+      // El endpoint mantiene el tenant y el alcance autorizados del usuario.
+      const catalogProducts = await Promise.all(selectedCatalogProducts.map(async (product: any) => {
+        if (!product?.id) return product;
+        try {
+          const detail = await inventoryService.getProduct(String(product.id));
+          return { ...product, ...detail };
+        } catch {
+          // La tabla sigue siendo una fuente válida para exportar los campos
+          // básicos si un detalle puntual no está disponible.
+          return product;
+        }
+      }));
+      const exportWarehouseIds = new Set(
+        (stockWarehouseIds.length > 0 ? stockWarehouseIds : importWarehouseOptions.map((warehouse: any) => warehouse.id))
+          .map((id) => String(id || '').trim())
+          .filter(Boolean),
+      );
 
       const priceListsByKey = new Map(importPriceLists.map((list) => [normalizePriceListImportKey(list.code), list]));
       importPriceLists.forEach((list) => priceListsByKey.set(normalizePriceListImportKey(list.name), list));
@@ -2850,7 +2908,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         const variantIsCustom = variant && isCustomVariant(product, variant);
         return [[variantIsCustom ? 'VARIANTE' : 'PRODUCTO', product.code || '', variantIsCustom ? variant.sku || '' : '', list.name, convertBaseAmount(item.basePrice ?? item.price)]];
       }));
-      const stockRows = catalogProducts.flatMap((product) => (product.stockLevels || []).map((level: any) => {
+      const stockRows = catalogProducts.flatMap((product) => (product.stockLevels || [])
+        .filter((level: any) => !selectedBranchId || exportWarehouseIds.size === 0 || exportWarehouseIds.has(String(level.warehouseId || level.warehouse?.id || '').trim()))
+        .map((level: any) => {
         const variant = (product.variants || []).find((candidate: any) => String(candidate.id) === String(level.variantId || ''));
         const variantIsCustom = variant && isCustomVariant(product, variant);
         const warehouse = level.warehouse?.name || importWarehouseOptions.find((candidate: any) => String(candidate.id) === String(level.warehouseId))?.name || '';
@@ -2868,8 +2928,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       appendSheet(workbook, 'Precios', [['Alcance', 'Código producto', 'SKU variante', 'Lista', 'Precio'], ...priceRows]);
       appendSheet(workbook, 'Inventario', [['Código producto', 'SKU variante', 'Bodega', 'Stock inicial', 'Stock mínimo', 'Stock máximo', 'Costo entrada', 'Moneda costo', 'Tasa costo'], ...stockRows]);
       const guide = XLSX.utils.aoa_to_sheet([
-        ['GUÍA · PLANTILLA VACÍA DE PRODUCTOS Y VARIANTES'],
-        ['Plantilla vacía', 'No incluye productos actuales ni datos del catálogo. Completa las hojas Productos, Variantes, Atributos, Precios e Inventario antes de importarla.'],
+        ['GUÍA · PRODUCTOS REGISTRADOS PARA IMPORTACIÓN'],
+        ['Productos exportados', `Incluye ${catalogProducts.length} producto(s) ya registrados, con sus datos actuales, variantes, atributos, precios y existencias disponibles en el alcance seleccionado.`],
         ['Productos', 'Usa los campos de la creación actual: código, nombre, descripción, nota comercial, categoría, unidad, marca, variable, moneda, precios minorista/mayorista/distribuidor, costo, serie/IMEI e imagen URL opcional.'],
         ['Listas de precios', importPriceLists.map((list) => list.name).join(' · ') || 'Sin listas configuradas'],
         ['Variantes', 'Registra una fila por SKU en Variantes y sus atributos en Atributos. Los productos simples usan su SKU padre.'],
@@ -2879,12 +2939,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       ]);
       guide['!cols'] = [{ wch: 28 }, { wch: 120 }];
       XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
-      XLSX.writeFile(workbook, 'plantilla_importacion_productos_seleccionados.xlsx');
-      toast.success('Plantilla vacía descargada');
+      XLSX.writeFile(workbook, 'productos_registrados_seleccionados.xlsx');
+      toast.success(`Excel descargado con ${catalogProducts.length} producto(s)`);
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo generar la plantilla seleccionada');
+      toast.error(error?.message || 'No se pudo generar el Excel de productos seleccionados');
     }
-  }, [baseCurrency, canViewInventoryCost, exchangeRate, importCurrency, importExchangeRate, importPriceLists, importWarehouseOptions, selectedIds]);
+  }, [baseCurrency, canViewInventoryCost, exchangeRate, importCurrency, importExchangeRate, importPriceLists, importWarehouseOptions, selectedBranchId, selectedCatalogProducts, selectedIds, stockWarehouseIds]);
 
   const handleDownloadTemplate = useCallback(() => {
     const wb = XLSX.utils.book_new();
@@ -3072,6 +3132,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setImportProcessing(true);
     setPreviewLoading(true);
     setPreviewProgress(3);
+    setSimilarImportGroups([]);
+    setSimilarImportResolutions({});
+    setSimilarImportResolvingKey(null);
+    setSimilarImportAlertMode(null);
+    setSimilarImportAlertOpen(false);
     try {
         const { rows: raw, sheets } = await parseSpreadsheetInWorker(file, undefined, true, (progress) => {
           setPreviewProgress(Math.min(84, Math.max(3, progress)));
@@ -3191,6 +3256,37 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
   }, [validateImportRows]);
 
+  const buildImportSimilarityItems = useCallback((rows: any[], catalog: VariantImportCatalog | null) => rows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    description: row.description,
+    brand: row.brand,
+    attributes: row.attributes,
+    variants: catalog?.variants
+      .filter((variant) => String(variant.productCode || '').trim().toLowerCase() === String(row._sourceCode || row.code).trim().toLowerCase())
+      .map((variant) => ({ sku: variant.sku, attributes: variant.attributes })),
+  })), []);
+
+  const checkImportSimilarity = useCallback(async (
+    rows: any[],
+    catalog: VariantImportCatalog | null,
+    mode: SimilarityAlertMode,
+    resolutions: SimilarityResolution[] = [],
+  ) => {
+    if (isServiceView) return [];
+    const similarityItems = buildImportSimilarityItems(rows, catalog);
+    if (similarityItems.length === 0) return [];
+    const similarityResponse = await inventoryService.checkSimilarProducts(similarityItems);
+    const unresolvedGroups = (similarityResponse?.matches || []).filter((group) => !similarityGroupHasResolution(group, resolutions));
+    if (unresolvedGroups.length > 0) {
+      setSimilarImportGroups(unresolvedGroups);
+      setSimilarImportAlertMode(mode);
+      setSimilarImportAlertOpen(true);
+      toast.warning(`Se detectaron ${unresolvedGroups.length} posible(s) coincidencia(s) en la importación.`);
+    }
+    return unresolvedGroups;
+  }, [buildImportSimilarityItems, isServiceView]);
+
   const handleOpenImportPreview = useCallback(() => {
     if (previewLoading || previewMounting || importProcessing || importing || importData.length === 0) return;
     setPreviewMounting(true);
@@ -3200,8 +3296,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       previewMountTimerRef.current = null;
       setPreviewProgress(45);
       startTransition(() => setImportPreviewOpen(true));
+      void checkImportSimilarity(importData, advancedImportCatalog, 'preview').catch((error: any) => {
+        toast.warning(`No se pudo validar coincidencias: ${error?.message || 'intenta revisar la importación nuevamente.'}`);
+      });
     }, 80);
-  }, [importData.length, importProcessing, importing, previewLoading, previewMounting]);
+  }, [advancedImportCatalog, checkImportSimilarity, importData, importProcessing, importing, previewLoading, previewMounting]);
 
   const handleImportPreviewReady = useCallback(() => {
     setPreviewProgress(100);
@@ -3315,11 +3414,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       toast.error('No hay registros válidos para importar');
       return;
     }
+    if (similarImportGroups.length > 0) {
+      setSimilarImportAlertOpen(true);
+      toast.warning('Resuelve las coincidencias pendientes antes de formalizar la importación.');
+      return;
+    }
     if (valid.length !== importData.length) {
       toast.warning(`Se omitirán ${importData.length - valid.length} fila(s) con errores. Las advertencias no impedirán la carga.`);
     }
     setInitialImportConfirmOpen(true);
-  }, [catalogPermissionModule, canPerform, importData, isServiceView]);
+  }, [catalogPermissionModule, canPerform, importData, isServiceView, similarImportGroups.length]);
 
   const uploadInitialImportImages = useCallback(async (rows: any[], onProgress?: (progress: number) => void) => {
     const imageRows = rows.filter((row) => imageArchiveEntries.has(productImageKey(row.code)));
@@ -3378,19 +3482,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const effectiveSimilarityResolutions = resolutionList || Object.values(similarImportResolutions);
     if (!skipSimilarityCheck) {
       try {
-        const similarityItems = valid.map((row) => ({
-          code: row.code,
-          name: row.name,
-          description: row.description,
-          brand: row.brand,
-          attributes: row.attributes,
-          variants: advancedImportCatalog?.variants
-            .filter((variant) => String(variant.productCode || '').trim().toLowerCase() === String(row._sourceCode || row.code).trim().toLowerCase())
-            .map((variant) => ({ sku: variant.sku, attributes: variant.attributes })),
-        }));
-        const similarityResponse = await inventoryService.checkSimilarProducts(similarityItems);
-        if (similarityResponse?.matches?.length) {
-          setSimilarImportGroups(similarityResponse.matches);
+        const unresolvedGroups = await checkImportSimilarity(valid, advancedImportCatalog, 'confirm', effectiveSimilarityResolutions);
+        if (unresolvedGroups.length) {
           setInitialImportConfirmOpen(false);
           return;
         }
@@ -3510,11 +3603,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
        setInitialImportConfirmOpen(false);
        setImportPreviewOpen(false);
        setInitialImportConfirmText('');
-       setInitialImportReimportMode('REJECT');
-       setSimilarImportGroups([]);
-       setSimilarImportResolutions({});
-       setSimilarImportResolvingKey(null);
-      setImportData([]);
+        setInitialImportReimportMode('REJECT');
+        setSimilarImportGroups([]);
+        setSimilarImportResolutions({});
+        setSimilarImportResolvingKey(null);
+        setSimilarImportAlertMode(null);
+        setSimilarImportAlertOpen(false);
+       setImportData([]);
       setAdvancedImportCatalog(null);
       setImportFileName('');
       setInitialImportCompleted(true);
@@ -3524,6 +3619,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const responseData = e?.data || e?.response?.data;
       if (responseData?.code === 'PRODUCT_SIMILAR_MATCH' && Array.isArray(responseData.matches) && responseData.matches.length > 0) {
         setSimilarImportGroups(responseData.matches);
+        setSimilarImportAlertMode('confirm');
+        setSimilarImportAlertOpen(true);
         setSimilarImportConfirmOpen(false);
         toast.warning('La validación detectó otra coincidencia. Revisa la alerta antes de continuar.');
       } else {
@@ -3533,13 +3630,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setImporting(false);
       setImportProgress(0);
     }
-  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView, similarImportResolutions, catalogPermissionModule, canPerform]);
+  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView, similarImportResolutions, catalogPermissionModule, canPerform, checkImportSimilarity]);
 
   const resolveImportSimilarity = useCallback(async (group: SimilarProductGroup, action: SimilarityResolution['action'], match?: SimilarProductMatch) => {
     const inputKey = normalizeSimilarityInputKey(group.inputKey);
     if (!inputKey) return;
     if (action === 'CREATE_NEW') {
-      const exactSku = group.matches.some((candidate) => [candidate.code, candidate.sku]
+      const exactSku = group.matches.some((candidate) => [candidate.code, candidate.sku, ...(candidate.variants || []).map((variant) => variant.sku)]
         .some((value) => normalizeSimilarityInputKey(value) === inputKey));
       if (exactSku) {
         toast.error('Ese SKU ya existe. Cambia el SKU o selecciona el producto existente.');
@@ -3563,12 +3660,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       return;
     }
     try {
-      toast.info('Coincidencias resueltas. Continuando con la importación…');
-      await handleFinalInitialImport(true, Object.values(nextResolutions));
+      if (similarImportAlertMode === 'preview') {
+        setSimilarImportAlertMode(null);
+        setSimilarImportAlertOpen(false);
+        toast.success('Coincidencias resueltas. Revisa la previsualización y confirma la importación cuando estés listo.');
+      } else {
+        toast.info('Coincidencias resueltas. Continuando con la importación…');
+        await handleFinalInitialImport(true, Object.values(nextResolutions));
+      }
     } finally {
       setSimilarImportResolvingKey(null);
     }
-  }, [handleFinalInitialImport, similarImportGroups, similarImportResolutions]);
+  }, [handleFinalInitialImport, similarImportAlertMode, similarImportGroups, similarImportResolutions]);
 
   const handleBulkImageArchiveSelected = useCallback(async (file: File) => {
     if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
@@ -3681,12 +3784,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           canCreateCategory={canPerform('INVENTORY_ATTRIBUTES', 'create')}
           canViewInventoryCost={canViewInventoryCost}
           onConfirm={handleImportConfirm}
+          similarityPendingCount={similarImportGroups.length}
+          onReviewSimilarities={() => setSimilarImportAlertOpen(true)}
           onBack={() => {
             if (previewMountTimerRef.current !== null) window.clearTimeout(previewMountTimerRef.current);
             if (previewFinishTimerRef.current !== null) window.clearTimeout(previewFinishTimerRef.current);
             setPreviewMounting(false);
             setPreviewProgress(0);
             setImportPreviewOpen(false);
+            setSimilarImportGroups([]);
+            setSimilarImportResolutions({});
+            setSimilarImportResolvingKey(null);
+            setSimilarImportAlertMode(null);
+            setSimilarImportAlertOpen(false);
             setImportModalOpen(true);
           }}
           onReady={handleImportPreviewReady}
@@ -3697,11 +3807,44 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         <>
       {/* ─── Encabezado + KPIs ─── */}
       <div className="mb-4" data-tour="inventory-products-title">
-        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+        <div className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h2 className="text-xl font-black tracking-tight">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">{displayWarehouseOptions.length} bodegas visibles</p>
           </div>
-          <p className="text-xs font-medium text-muted-foreground">{displayWarehouseOptions.length} bodegas visibles</p>
+          <div className="erp-toolbar-primary-group flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
+            <ViewLayoutSelect
+              value={layoutMode}
+              onChange={setLayoutMode}
+              ariaLabel={`Elegir distribución de ${isServiceView ? 'servicios' : 'productos'}`}
+              dataTour="inventory-products-layout"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
+              title={`Actualizar ${isServiceView ? 'servicios' : 'productos'}`}
+            >
+              <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Actualizar
+            </Button>
+            {!isServiceView && onExport && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onExport}
+                className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
+                title="Exportar productos registrados a Excel"
+              >
+                <Download className="size-4" />
+                Exportar Excel
+              </Button>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-tour="inventory-products-kpis">
           {inventoryKpis.map((item) => (
@@ -3929,15 +4072,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 <Check className="size-4 shrink-0" /> Productos seleccionados
                 <Badge variant="secondary" className="text-[10px]">{selectedIds.size}</Badge>
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">La selección permanece aunque cambies la búsqueda, los filtros o la página. Puedes quitar productos aquí o continuar con la solicitud.</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">La selección permanece aunque cambies la búsqueda, los filtros o la página. Puedes exportar sus datos actuales o continuar con la solicitud.</p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
               {canCreatePurchaseRequest && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={openSelectedSolicitud}>
                 <PackageSearch className="mr-1.5 size-3.5" /> Solicitar compra
               </Button>}
-              {canPerform(catalogPermissionModule, 'import') && <Button type="button" size="sm" variant="outline" aria-label="Descargar plantilla vacía de productos" title="Descargar una plantilla vacía para productos y variantes" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={() => void handleDownloadSelectedTemplate()}>
-                <Download className="mr-1.5 size-3.5" /> Plantilla
-              </Button>}
+            {canPerform(catalogPermissionModule, 'export') && <Button type="button" size="sm" variant="outline" aria-label="Exportar Excel de productos seleccionados" title="Exportar los productos seleccionados con sus datos actuales" className="h-8 rounded-lg border-primary/40 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={() => void handleDownloadSelectedTemplate()}>
+              <Download className="mr-1.5 size-3.5" /> Exportar Excel
+            </Button>}
               <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-destructive" onClick={clearSelectedProducts}>
                 <X className="mr-1.5 size-3.5" /> Quitar todos
               </Button>
@@ -3959,8 +4102,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         </section>
       )}
 
-      {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}
-      <div className="space-y-3 xl:hidden" data-tour="inventory-products-table">
+      {/* Cards are selectable on wide screens and remain the compact layout below 1280px. */}
+      <div className={`${effectiveLayoutMode === 'cards' ? '' : 'hidden'} max-w-full space-y-3`} data-tour="inventory-products-table">
         {paginatedProducts.length === 0 ? (
           <Card className="rounded-2xl border-border/40 p-6 text-center">
             <Package className="mx-auto mb-2 size-9 opacity-20" />
@@ -4054,13 +4197,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 </div>
               </div>
               <div className="mt-4 flex justify-end gap-1 border-t border-border/40 pt-3">
-                {canPerform(catalogPermissionModule, 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
+                {canPerform(catalogPermissionModule, 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar producto" aria-label="Editar producto" onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
                 {canPerform(catalogPermissionModule, 'create') && product.isActive !== false && (
                   <Button
                     variant="ghost"
                     size="icon"
                     className="size-8 text-sky-600 hover:bg-sky-700 hover:text-white"
                     title="Duplicar producto"
+                    aria-label="Duplicar producto"
                     disabled={duplicatingId === product.id}
                     onClick={(e) => { e.stopPropagation(); handleDuplicateProduct(product); }}
                   >
@@ -4073,6 +4217,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     size="icon"
                     className="size-8 text-primary hover:bg-primary/10"
                     title="Gestionar variantes"
+                    aria-label="Gestionar variantes"
                     onClick={(e) => { e.stopPropagation(); setVariantManagerProduct(product); }}
                   >
                     <Tag className="size-3.5" />
@@ -4093,8 +4238,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       </div>
 
       {/* Desktop table */}
-      <div className="hidden max-w-full overflow-x-auto rounded-lg border xl:block" data-tour="inventory-products-table">
-        <Table className="w-full table-fixed" style={{ minWidth: isServiceView ? '1100px' : '1500px' }}>
+      <div className={`${effectiveLayoutMode === 'table' ? '' : 'hidden'} min-w-0 max-w-full`} data-tour="inventory-products-table">
+        <HorizontalTableScroller
+          scrollRef={catalogTableScrollRef}
+          className="min-w-0 max-w-full"
+          tableClassName="overflow-x-auto overflow-y-clip scrollbar-overlay"
+          label="Desplazamiento horizontal · columna por columna"
+        >
+        <Table
+          responsiveCards={false}
+          containerClassName="w-max min-w-full max-w-none overflow-visible"
+          className="table-fixed"
+          style={{ width: `${catalogTableWidth}px`, minWidth: `${catalogTableWidth}px`, maxWidth: 'none' }}
+        >
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead style={{ width: PRODUCT_TABLE_WIDTHS.selector, minWidth: PRODUCT_TABLE_WIDTHS.selector }}>
@@ -4127,7 +4283,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>Precio</TableHead>}
                {isServiceView && canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Costo servicio</TableHead>}
                {!isServiceView && canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Precio Costo</TableHead>}
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.actions, minWidth: PRODUCT_TABLE_WIDTHS.actions }}>Acciones</TableHead>
+              <TableHead data-actions-column="compact" className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.actions, minWidth: PRODUCT_TABLE_WIDTHS.actions }}>Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -4284,13 +4440,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                      {isServiceView && <TableCell className="text-right"><CurrencyValuationAmount {...getServicePricePresentation(product)} className="font-medium" /></TableCell>}
                      {isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={baseCurrency} sourceExchangeRate={1} className="font-medium" /></TableCell>}
                       {!isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
-                     <TableCell className="text-right">
-                         <div className="flex items-center justify-end gap-1 transition-opacity">
+                     <TableCell data-actions-column="compact" className="text-right">
+                         <div data-action-group="true" className="flex min-w-max items-center justify-end gap-1">
                          {canPerform(catalogPermissionModule, 'edit') && (
                              <Button 
                                variant="ghost" 
                                size="icon" 
                               className="size-7"
+                              title="Editar producto"
+                              aria-label="Editar producto"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setModalProduct(product);
@@ -4305,6 +4463,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                              size="icon" 
                             className="size-7 text-sky-600 hover:text-sky-700 hover:bg-sky-500/10"
                             title="Duplicar producto"
+                            aria-label="Duplicar producto"
                             disabled={duplicatingId === product.id}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -4320,6 +4479,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             size="icon"
                             className="size-7 text-primary hover:bg-primary/10"
                             title="Gestionar variantes"
+                            aria-label="Gestionar variantes"
                             onClick={(e) => {
                               e.stopPropagation();
                               setVariantManagerProduct(product);
@@ -4351,6 +4511,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             )}
           </TableBody>
         </Table>
+        </HorizontalTableScroller>
       </div>
 
       {/* Pagination Footer */}
@@ -4515,11 +4676,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         series={series}
       />
       <ProductSimilarityAlert
-        open={similarImportGroups.length > 0}
+        open={similarImportAlertOpen && similarImportGroups.length > 0}
         groups={similarImportGroups}
-        title="Observación: la importación contiene posibles coincidencias"
-        description={`Revisa nombre, marca, SKU, atributos, precios y costos. Selecciona el registro correcto o confirma crear como nuevo para cada coincidencia. Al seleccionar un existente, los datos compatibles de la plantilla se aplican a ese registro conservando su ID, historial y existencias; el stock inicial no se suma.`}
-        onOpenChange={(value) => { if (!value) { setSimilarImportGroups([]); setSimilarImportResolutions({}); setSimilarImportResolvingKey(null); } }}
+        title="Alerta: posible producto existente"
+        description={`Se encontraron coincidencias por nombre, marca, SKU o atributos. Revisa los datos mostrados y selecciona el producto o variante existente cuando corresponda. Un SKU exacto no puede duplicarse; si la coincidencia no es exacta, puedes crear un registro nuevo.`}
+        onOpenChange={(value) => { setSimilarImportAlertOpen(value); if (!value) setSimilarImportResolvingKey(null); }}
         resolvingKey={similarImportResolvingKey}
         onSelectExisting={(group, match) => { void resolveImportSimilarity(group, 'USE_EXISTING', match); }}
         onCreateNew={(group) => { void resolveImportSimilarity(group, 'CREATE_NEW'); }}

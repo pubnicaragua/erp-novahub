@@ -68,7 +68,7 @@ function Table({ className, containerClassName, containerStyle, responsiveCards 
       data-slot="table-container"
       data-responsive-cards-container={responsiveCards ? "true" : undefined}
       style={containerStyle}
-      className={cn("relative w-full max-w-full overflow-x-auto", containerClassName)}
+      className={cn("relative w-full max-w-full overflow-x-auto overflow-y-clip", containerClassName)}
     >
       <table
         data-slot="table"
@@ -84,6 +84,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
+      data-sticky-table-header="true"
       className={cn("[&_tr]:border-b", className)}
       {...props}
     />

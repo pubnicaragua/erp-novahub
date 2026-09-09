@@ -10,6 +10,7 @@ interface ServiciosViewProps {
   series?: any[];
   movements?: any[];
   onRefresh: () => void;
+  isRefreshing?: boolean;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   onCategoryChange?: (value: string[]) => void;

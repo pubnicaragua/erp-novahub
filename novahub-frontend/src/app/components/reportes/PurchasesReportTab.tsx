@@ -204,8 +204,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
-  const canViewPurchases = canPerform('PURCHASES', 'view');
-  const canViewAccounting = canPerform('ACCOUNTING', 'view');
+  const canViewPurchases = canPerform('REPORTS_PURCHASES', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -251,7 +250,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   };
 
   useEffect(() => {
-    if (!canViewAccounting) {
+    if (!canViewPurchases) {
       setBudgetItems([]);
       setBudgetAccounts([]);
       return;
@@ -266,19 +265,19 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       setBudgetAccounts(flatAccounts);
     }).catch(() => null);
     return () => { active = false; };
-  }, [canViewAccounting]);
+  }, [canViewPurchases]);
 
   const { start: currentStart, prevStart, prevEnd, durationDays } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 
   useEffect(() => {
-    if (currentStart.getTime() === 0 || !canViewAccounting) return;
+    if (currentStart.getTime() === 0 || !canViewPurchases) return;
     contabilidadService.getTrialBalance({
       dateFrom: currentStart.toISOString(),
       dateTo: new Date().toISOString()
     }).catch(() => null).then((res: any) => {
       setBudgetTrial(res?.rows || []);
     });
-  }, [currentStart, canViewAccounting]);
+  }, [currentStart, canViewPurchases]);
 
   const navigateToBudget = () => {
     window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'contabilidad', subModule: 'presupuestos' } }));

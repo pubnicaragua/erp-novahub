@@ -758,10 +758,15 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
   const baseDefinition = safeLogo && definition.metadata?.preset === 'system-default'
     ? createDefaultTemplateDefinition(targetKey, { ...settings, logoUrl: safeLogo })
     : definition;
-  const [baseWidth, baseHeight] = pageDimensions(settings.paperSize);
-  const width = settings.orientation === 'landscape' ? baseHeight : baseWidth;
-  const height = settings.orientation === 'landscape' ? baseWidth : baseHeight;
   const isRepeatedLabel = getPdfTemplateTarget(targetKey).key === 'inventario.product-labels';
+  // LABEL ya define sus dimensiones físicas como 70 × 38 mm. No se debe
+  // volver a intercambiar ese par por la orientación, porque jsPDF terminaría
+  // creando una hoja vertical y la captura quedaría comprimida en la parte
+  // superior con espacio blanco debajo.
+  const renderOrientation = isRepeatedLabel ? 'landscape' : settings.orientation;
+  const [baseWidth, baseHeight] = pageDimensions(settings.paperSize);
+  const width = isRepeatedLabel ? baseWidth : renderOrientation === 'landscape' ? baseHeight : baseWidth;
+  const height = isRepeatedLabel ? baseHeight : renderOrientation === 'landscape' ? baseWidth : baseHeight;
   const adaptReportWidths = shouldAdaptReportWidths(targetKey);
   const reportSections = Array.isArray(renderData.reportSections)
     ? renderData.reportSections.filter(section => section && Array.isArray(section.columns) && Array.isArray(section.rows))
@@ -832,7 +837,7 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
       data: { ...sectionData, ...(tableNode || isRepeatedLabel ? { items: currentChunk, rows: currentChunk } : {}), tableSummary: chunkIndex === renderChunks.length - 1 ? renderData.tableSummary : undefined },
     }));
   });
-  const pdf = new jsPDF({ orientation: settings.orientation, unit: 'mm', format: [width, height], compress: true });
+  const pdf = new jsPDF({ orientation: renderOrientation, unit: 'mm', format: [width, height], compress: true });
   const wrapper = document.createElement('div');
   Object.assign(wrapper.style, { position: 'fixed', left: '-100000px', top: '0', width: '1px', height: '1px', overflow: 'visible', opacity: '1', pointerEvents: 'none' });
   document.body.appendChild(wrapper);
@@ -846,7 +851,7 @@ export async function renderPdfTemplateToPdf({ definition, settings, targetKey, 
       await waitForImages(page);
       const renderScale = Math.max(1, Math.min(2, Number((job.data as Record<string, unknown>).renderScale) || 2));
       const canvas = await html2canvas(page, { scale: renderScale, backgroundColor: safeHtml2CanvasColor(job.definition.page.background, '#ffffff'), logging: false, useCORS: true, allowTaint: false, onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(page.id, clonedDoc, safeHtml2CanvasColor(settings.primaryColor, '#10b981')) });
-      if (index > 0) pdf.addPage([width, height], settings.orientation === 'landscape' ? 'l' : 'p');
+      if (index > 0) pdf.addPage([width, height], renderOrientation === 'landscape' ? 'l' : 'p');
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, width, height, undefined, 'FAST');
       page.remove();
     }

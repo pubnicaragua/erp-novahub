@@ -84,6 +84,44 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('es-NI', { day: '2
 
 const safeNumber = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
 
+const TRANSACTION_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Pendiente',
+  IN_PROCESS: 'En proceso',
+  IN_PROGRESS: 'En progreso',
+  APPROVED: 'Aprobado',
+  CONFIRMED: 'Confirmado',
+  PAID: 'Pagada',
+  PARTIAL: 'Pago parcial',
+  DRAFT: 'Borrador',
+  COMPLETED: 'Completado',
+  SENT: 'Enviada',
+  SUBMITTED: 'Enviada',
+  IN_REVIEW: 'En revisión',
+  PENDING_REVIEW: 'Pendiente de revisión',
+  PENDING_APPROVAL: 'Pendiente de aprobación',
+  IN_QUOTATION: 'En cotización',
+  RETURNED_FOR_CORRECTION: 'Devuelta para corrección',
+  CONVERTED_TO_ORDER: 'Convertida a orden',
+  CLOSED: 'Cerrada',
+  SHIPPED: 'Enviada',
+  DELIVERED: 'Entregada',
+  REJECTED: 'Rechazada',
+  CANCELLED: 'Cancelada',
+  EXPIRED: 'Vencida',
+  OVERDUE: 'Vencida',
+  WITH_INCIDENTS: 'Con incidencias',
+  ISSUED: 'Emitida',
+  CREDIT: 'A crédito',
+  REFUNDED: 'Reembolsada',
+  VOIDED: 'Anulada',
+  POSTED: 'Registrada',
+};
+
+const formatTransactionStatus = (value: unknown) => {
+  const normalized = String(value || '').trim().toUpperCase();
+  return TRANSACTION_STATUS_LABELS[normalized] || (normalized ? 'Sin estado' : 'Pagada');
+};
+
 const readPreferences = (key: string): DashboardPreferences => {
   const raw = safeGetItem(key);
   if (!raw) return DEFAULT_PREFERENCES;
@@ -425,7 +463,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
           {preferences.blocks.includes('registers') && <section className="executive-panel executive-registers-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Puntos de venta</span><h2>Ventas por caja</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: 'ALL' })}>Ver control de caja <ArrowUpRight /></button></div><div className="executive-register-list">{registers.length ? registers.slice(0, 6).map((register: any, index: number) => { const max = Math.max(...registers.map((item: any) => safeNumber(item.total)), 1); const percent = Math.round(safeNumber(register.total) / max * 100); return <button type="button" className="executive-register-row" key={register.registerId || index} onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: register.registerId })}><span className="executive-register-label"><span><Store className="size-4" /> {register.registerName || `Caja ${register.registerCode}`}</span><strong>{money(register.total)}</strong></span><span className="executive-progress"><i style={{ width: `${percent}%` }} /></span><small>{safeNumber(register.count)} operaciones · {percent}% de la caja líder</small></button>; }) : <div className="executive-no-data">No hay ventas por caja en el período.</div>}</div></section>}
         </div>
 
-        {preferences.blocks.includes('transactions') && <section className="executive-panel executive-transactions-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Trazabilidad</span><h2>Actividad reciente</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('ventas', { subModule: 'facturas' })}>Ver facturas <ArrowUpRight /></button></div><div className="executive-table-wrap"><table><thead><tr><th>Documento</th><th>Origen</th><th>Cliente</th><th className="align-right">Monto</th><th>Estado</th></tr></thead><tbody>{transactions.slice(0, 8).map((transaction: any, index: number) => <tr key={`${transaction.id || 'transaction'}-${index}`} onClick={() => openTransaction(transaction)}><td><strong>{transaction.number || `Factura ${index + 1}`}</strong><small>{transaction.date ? new Date(transaction.date).toLocaleDateString('es-NI') : '—'}</small></td><td>{transaction.register?.name || transaction.origin || 'Factura de venta'}</td><td>{transaction.customer || 'Cliente general'}</td><td className="align-right"><CurrencyValuationAmount amount={safeNumber(transaction.sourceTotal ?? transaction.total)} sourceCurrency={transaction.currency || data?.baseCurrency} sourceExchangeRate={transaction.exchangeRate} showDifference={false} /></td><td><span className="executive-status"><Check className="size-3" /> {transaction.status || 'Pagada'}</span></td></tr>)}</tbody></table>{!transactions.length && <div className="executive-no-data">No hay transacciones recientes en este período.</div>}</div></section>}
+        {preferences.blocks.includes('transactions') && <section className="executive-panel executive-transactions-panel"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Trazabilidad</span><h2>Actividad reciente</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('ventas', { subModule: 'facturas' })}>Ver facturas <ArrowUpRight /></button></div><div className="executive-table-wrap"><table><thead><tr><th>Documento</th><th>Origen</th><th>Cliente</th><th className="align-right">Monto</th><th>Estado</th></tr></thead><tbody>{transactions.slice(0, 8).map((transaction: any, index: number) => <tr key={`${transaction.id || 'transaction'}-${index}`} onClick={() => openTransaction(transaction)}><td><strong>{transaction.number || `Factura ${index + 1}`}</strong><small>{transaction.date ? new Date(transaction.date).toLocaleDateString('es-NI') : '—'}</small></td><td>{transaction.register?.name || transaction.origin || 'Factura de venta'}</td><td>{transaction.customer || 'Cliente general'}</td><td className="align-right"><CurrencyValuationAmount amount={safeNumber(transaction.sourceTotal ?? transaction.total)} sourceCurrency={transaction.currency || data?.baseCurrency} sourceExchangeRate={transaction.exchangeRate} showDifference={false} /></td><td><span className="executive-status"><Check className="size-3" /> {formatTransactionStatus(transaction.status)}</span></td></tr>)}</tbody></table>{!transactions.length && <div className="executive-no-data">No hay transacciones recientes en este período.</div>}</div></section>}
       </>}
 
       <div className="executive-footnote"><CircleHelp className="size-4" /><span>Los importes de ventas y gastos provienen del resumen de Caja. Para utilidad contable, costo de ventas, cuentas por cobrar y cuentas por pagar, utiliza los reportes financieros y contables.</span></div>

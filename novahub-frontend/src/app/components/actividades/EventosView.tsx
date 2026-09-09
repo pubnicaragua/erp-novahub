@@ -65,6 +65,10 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   const [searchTerm, setSearchTerm] = useState('');
   const { currency, displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform } = useAuth();
+  const canPerformEventAction = (action: Parameters<typeof canPerform>[1]) => (
+    ['ACTIVITIES_EVENTS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS'].some((module) => canPerform(module, action))
+  );
+  const canCompleteEvent = canPerform('ACTIVITIES_EVENTS', 'approve') || canPerform('ACTIVITIES_MEETINGS', 'approve');
   const canViewFinance = canPerform('FINANCIAL', 'view');
   const canViewAccounts = canViewFinance || canPerform('FINANCIAL_ACCOUNTS', 'view');
   const canViewAccountingConfig = canPerform('ACCOUNTING', 'view');
@@ -156,13 +160,13 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   });
 
   const columns: ColumnDef<Event>[] = [
-    { key: 'title', header: 'Título', width: '25%', editable: canPerform('ACTIVITIES_EVENTS', 'edit') },
-    { key: 'location', header: 'Ubicación', width: '20%', editable: canPerform('ACTIVITIES_EVENTS', 'edit') },
-    { key: 'startDate', header: 'Fecha Inicio', width: '130px', editable: canPerform('ACTIVITIES_EVENTS', 'edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
-    { key: 'endDate', header: 'Fecha Fin', width: '130px', editable: canPerform('ACTIVITIES_EVENTS', 'edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'title', header: 'Título', width: '25%', editable: canPerformEventAction('edit') },
+    { key: 'location', header: 'Ubicación', width: '20%', editable: canPerformEventAction('edit') },
+    { key: 'startDate', header: 'Fecha Inicio', width: '130px', editable: canPerformEventAction('edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'endDate', header: 'Fecha Fin', width: '130px', editable: canPerformEventAction('edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
     { key: 'status', header: 'Estado', width: '110px', editable: false, render: (val: any, row: Event) => { const status = completedEventIds.has(String(row.id)) ? 'COMPLETED' : String(val || 'PENDING').toUpperCase(); const label = status === 'COMPLETED' ? 'Completado' : status === 'CANCELLED' ? 'Cancelado' : 'Pendiente'; return <span className={cn('text-[10px] font-black uppercase', status === 'COMPLETED' ? 'text-emerald-600' : status === 'CANCELLED' ? 'text-rose-600' : 'text-amber-600')}>{label}</span>; } },
-    { key: 'cost', header: 'Costo', width: '100px', editable: canPerform('ACTIVITIES_EVENTS', 'edit'), type: 'number', render: (val: any, row: Event) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency || 'USD'} sourceExchangeRate={row.exchangeRate} className="font-bold text-rose-500" /> },
-    { key: 'income', header: 'Ingreso', width: '100px', editable: canPerform('ACTIVITIES_EVENTS', 'edit'), type: 'number', render: (val: any, row: Event) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency || 'USD'} sourceExchangeRate={row.exchangeRate} className="font-bold text-emerald-500" /> },
+    { key: 'cost', header: 'Costo', width: '100px', editable: canPerformEventAction('edit'), type: 'number', render: (val: any, row: Event) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency || 'USD'} sourceExchangeRate={row.exchangeRate} className="font-bold text-rose-500" /> },
+    { key: 'income', header: 'Ingreso', width: '100px', editable: canPerformEventAction('edit'), type: 'number', render: (val: any, row: Event) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency || 'USD'} sourceExchangeRate={row.exchangeRate} className="font-bold text-emerald-500" /> },
     { key: 'guestEmails', header: 'Invitados', width: '110px', render: (_: any, row: Event) => <span className="inline-flex items-center gap-1 text-[11px] font-bold"><Users className="size-3.5 text-primary" />{row.guestEmails?.length || row.attendees?.length || 0}</span> },
     { key: 'balance', header: 'Balance', width: '100px', render: (_: any, row: Event) => {
         const balance = (Number(row.income) || 0) - (Number(row.cost) || 0);
@@ -244,7 +248,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   };
 
   const handleCompleteEvent = async (event: Event) => {
-    if (!canPerform('ACTIVITIES_EVENTS', 'approve') || String(event.status || '').toUpperCase() === 'COMPLETED') return;
+    if (!canCompleteEvent || String(event.status || '').toUpperCase() === 'COMPLETED') return;
     const eventId = String(event.id);
     const cost = Number(event.cost || 0);
     const income = Number(event.income || 0);
@@ -440,7 +444,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son los Eventos" targetPrefix="eventos-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Eventos', description: 'Los eventos representan reuniones, conferencias, ferias o cualquier actividad programada. Puedes registrar costos e ingresos asociados para análisis financiero.' }, data: { title: 'Crear evento', description: 'Haz clic en "Nuevo Evento". Define título, ubicación, fechas de inicio/fin, y opcionalmente costos e ingresos.' }, actions: { title: 'Seguimiento', description: 'Edita en la tabla, revisa los KPIs de balance y exporta los datos.' } }} />
             <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('ACTIVITIES_EVENTS', 'create') && (
+            {canPerformEventAction('create') && (
               <Button data-toolbar-role="primary" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> Nuevo Evento</Button>
             )}
           </div>
@@ -448,14 +452,14 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         <EditableDataTable 
           data={filtered} 
           columns={columns} 
-          onRowUpdate={canPerform('ACTIVITIES_EVENTS', 'edit') ? handleUpdate : undefined} 
+          onRowUpdate={canPerformEventAction('edit') ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedEvent(row)}
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_EVENTS', 'delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined}
+          onRowDelete={canPerformEventAction('delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined}
           actions={(row: Event) => (
             <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <Button type="button" variant="ghost" size="icon" title="Ver detalle del evento" aria-label="Ver detalle del evento" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedEvent(row)}><Eye className="size-4" /></Button>
-              {!completedEventIds.has(String(row.id)) && String(row.status || '').toUpperCase() !== 'COMPLETED' && canPerform('ACTIVITIES_EVENTS', 'approve') && <Button type="button" variant="ghost" size="icon" title="Completar evento y generar asiento" aria-label="Completar evento y generar asiento" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" disabled={completingEventId === String(row.id)} onClick={() => { setSelectedEvent(null); void handleCompleteEvent(row); }}>{completingEventId === String(row.id) ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}</Button>}
+              {!completedEventIds.has(String(row.id)) && String(row.status || '').toUpperCase() !== 'COMPLETED' && canCompleteEvent && <Button type="button" variant="ghost" size="icon" title="Completar evento y generar asiento" aria-label="Completar evento y generar asiento" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" disabled={completingEventId === String(row.id)} onClick={() => { setSelectedEvent(null); void handleCompleteEvent(row); }}>{completingEventId === String(row.id) ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}</Button>}
             </div>
           )}
           actionsWidth="w-36"

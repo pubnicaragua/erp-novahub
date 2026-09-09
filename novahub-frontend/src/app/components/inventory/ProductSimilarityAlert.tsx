@@ -42,7 +42,9 @@ export function ProductSimilarityAlert({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          {groups.map((group) => (
+          {groups.map((group) => {
+            const groupHasExactSkuMatch = group.matches.some((match) => (match.reasons || []).includes('SKU'));
+            return (
             <section key={group.inputKey} className="space-y-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.03] p-3 sm:p-4" aria-label={`Coincidencias para ${group.inputKey}`}>
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 pb-3">
                 <div className="min-w-0">
@@ -97,15 +99,17 @@ export function ProductSimilarityAlert({
                 );
               })}
               {hasDynamicResolution && (
-                <div className="flex justify-end">
-                  <Button type="button" size="sm" variant="outline" className="gap-2 border-amber-500/50 text-amber-800 hover:bg-amber-500/10 dark:text-amber-200" disabled={resolvingKey === `${group.inputKey}:CREATE_NEW`} onClick={() => onCreateNew?.(group)}>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  {groupHasExactSkuMatch && <span className="text-right text-[11px] font-semibold text-amber-800 dark:text-amber-200">SKU exacto: selecciona el registro existente</span>}
+                  <Button type="button" size="sm" variant="outline" className="gap-2 border-amber-500/50 text-amber-800 hover:bg-amber-500/10 dark:text-amber-200" disabled={resolvingKey === `${group.inputKey}:CREATE_NEW` || groupHasExactSkuMatch} onClick={() => onCreateNew?.(group)}>
                     {resolvingKey === `${group.inputKey}:CREATE_NEW` ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                    Crear como nuevo
+                    {groupHasExactSkuMatch ? 'No se puede duplicar el SKU' : 'Crear como nuevo'}
                   </Button>
-                </div>
+                  </div>
               )}
             </section>
-          ))}
+            );
+          })}
         </div>
         <DialogFooter className="shrink-0 border-t pt-3">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Revisar datos</Button>

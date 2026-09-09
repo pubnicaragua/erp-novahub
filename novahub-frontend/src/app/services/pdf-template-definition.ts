@@ -583,7 +583,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   if (family === 'label') {
     return {
       version: 1,
-      page: { paperSize: settingsValue(settings, 'paperSize', 'LABEL'), orientation: 'portrait', background },
+      page: { paperSize: settingsValue(settings, 'paperSize', 'LABEL'), orientation: 'landscape', background },
       nodes: [
         node({ type: 'image', label: 'Logotipo de la sucursal', x: 68, y: 1, width: 25, height: 6, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent', align: 'right' }, 'label-logo'),
         node({ type: 'barcode', label: 'Código de barras', token: 'product.barcode', x: 7, y: 7, width: 86, height: 38, fontSize: 7, color: text, borderStyle: 'none', padding: 0.2 }, 'label-barcode'),
@@ -782,7 +782,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
 export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Record<string, unknown>) {
   const target = getPdfTemplateTarget(targetKey);
   const settings = createSystemDefaultPdfSettings({
-    ...(target.key === 'inventario.product-labels' ? { paperSize: 'LABEL', orientation: 'portrait', margins: 2, fontFamily: 'helvetica', fontSize: 8 } : {}),
+    ...(target.key === 'inventario.product-labels' ? { paperSize: 'LABEL', orientation: 'landscape', margins: 2, fontFamily: 'helvetica', fontSize: 8 } : {}),
     ...(overrides || {}),
   });
   return {

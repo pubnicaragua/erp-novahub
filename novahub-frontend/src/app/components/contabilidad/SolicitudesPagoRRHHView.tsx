@@ -116,10 +116,10 @@ export function SolicitudesPagoRRHHView() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newRequestCount, setNewRequestCount] = useState(0);
   const knownRequestIdsRef = useRef<Set<string> | null>(null);
-  const canApproveRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'approve') || canPerform('ACCOUNTING_JOURNAL', 'approve');
-  const canRejectRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'reject') || canPerform('ACCOUNTING_JOURNAL', 'reject');
-  const canPayRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'pay') || canPerform('ACCOUNTING_JOURNAL', 'pay');
-  const canReadPaymentRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'view') || canPerform('ACCOUNTING', 'view');
+  const canApproveRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'approve');
+  const canRejectRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'reject');
+  const canPayRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'pay');
+  const canReadPaymentRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'view');
   const paymentCurrency = paymentLines[0]?.currency || displayCurrency;
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(exchangeRate || 1);
   const paymentLine = (method: string, amount = '0', currency: 'NIO' | 'USD' = displayCurrency): PaymentLine => ({

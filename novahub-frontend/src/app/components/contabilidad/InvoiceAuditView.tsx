@@ -52,7 +52,7 @@ const HISTORY_ACTIONS = [
 
 export function InvoiceAuditView() {
   const { canPerform } = useAuth();
-  const canViewInvoiceAudit = canPerform('ACCOUNTING_INVOICE_AUDIT', 'view') || canPerform('ACCOUNTING', 'view');
+  const canViewInvoiceAudit = canPerform('ACCOUNTING_INVOICE_AUDIT', 'view');
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('invoices');
   const [kind, setKind] = useState<AuditKind>('SALE');

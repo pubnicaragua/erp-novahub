@@ -29,9 +29,9 @@ const PERIODS = [
 
 export function BudgetItemsView() {
   const { canPerform } = useAuth();
-  const canCreate = canPerform('ACCOUNTING', 'create');
-  const canEdit = canPerform('ACCOUNTING', 'edit');
-  const canDeactivate = canPerform('ACCOUNTING', 'deactivate');
+  const canCreate = canPerform('ACCOUNTING_BUDGET', 'create');
+  const canEdit = canPerform('ACCOUNTING_BUDGET', 'edit');
+  const canDeactivate = canPerform('ACCOUNTING_BUDGET', 'delete');
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');

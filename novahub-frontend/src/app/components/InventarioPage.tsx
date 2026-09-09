@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
 import {
   Package,
   Warehouse,
   Truck,
   Scale,
   History,
-  Download,
   RefreshCw,
   BriefcaseBusiness,
   Settings2,
@@ -76,6 +76,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const canReadInventory = canPerform('INVENTORY', 'view')
     || INVENTORY_SECTIONS.some((section) => canViewInventorySection(section.id));
   const canExportInventory = canPerform('INVENTORY_PRODUCTS', 'export');
+  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const queryClient = useQueryClient();
   const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches, accessibleBranches, refreshBranches } = useBranchScope();
   const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
@@ -503,24 +504,73 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const handleExportData = async () => {
     if (!canExportInventory) return;
     try {
-      const csvContent = [
-        ['Código', 'Nombre', 'Categoría', 'Stock', 'Precio Venta', 'Precio Costo'].join(','),
-        ...productItems.map((p: any) => [
-          p.code,
-          `"${p.name}"`,
-          p.category?.name || '',
-          p.stock || 0,
-          p.salePrice || 0,
-          p.costPrice || 0
-        ].join(','))
-      ].join('\n');
-      
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = buildDateFilteredDownloadFileName(['reporte_inventario'], 'csv', dateFrom, dateTo);
-      link.click();
-      toast.success('Archivo CSV descargado');
+      // La consulta de resumen contiene el catálogo completo dentro del
+      // alcance actual; usarla evita exportar únicamente la página visible.
+      const productsToExport = (summaryProducts.length > 0 ? summaryProducts : productItems)
+        .filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE');
+      const exportWarehouseIds = new Set(productScopeWarehouseIds.map((id) => String(id || '').trim()).filter(Boolean));
+      const inExportScope = (level: any) => !selectedBranchId
+        || exportWarehouseIds.size === 0
+        || exportWarehouseIds.has(String(level?.warehouseId || level?.warehouse?.id || '').trim());
+      const getScopedLevels = (product: any) => (Array.isArray(product?.stockLevels) ? product.stockLevels : []).filter(inExportScope);
+      const getWarehouseNames = (product: any, levels: any[]) => [...new Set([
+        ...(Array.isArray(product?.warehouseCatalogs) ? product.warehouseCatalogs : []).filter(inExportScope).map((entry: any) => entry?.warehouse?.name || entry?.warehouseName),
+        ...levels.map((level: any) => level?.warehouse?.name || level?.warehouseName),
+      ].map((name) => String(name || '').trim()).filter(Boolean))].join(' · ');
+      const getStock = (product: any, levels: any[]) => levels.length > 0
+        ? levels.reduce((total: number, level: any) => total + Number(level?.quantity || 0), 0)
+        : Number(product?.stock || 0);
+      const getConfiguredStockLimit = (product: any, levels: any[], field: 'minStock' | 'maxStock') => {
+        const directValue = product?.[field] ?? product?.details?.[field];
+        if (directValue !== undefined && directValue !== null && directValue !== '') return directValue;
+        const values = levels.map((level: any) => Number(level?.[field])).filter((value) => Number.isFinite(value));
+        return values.length > 0 ? Math.max(...values) : '';
+      };
+      const productHeaders = ['Código / SKU', 'Nombre', 'Marca', 'Categoría', 'Unidad', 'Nota comercial', 'Stock', 'Stock mínimo', 'Stock máximo', 'Bodegas', 'Precio de venta', ...(canViewInventoryCost ? ['Costo'] : []), 'Estado', 'Imagen URL'];
+      const productRows = productsToExport.map((product: any) => {
+        const levels = getScopedLevels(product);
+        return [
+          product.code || product.details?.sku || '',
+          product.name || '',
+          product.brand || product.details?.brand || '',
+          product.category?.name || product.categoryName || '',
+          product.unit || product.details?.unit || 'unidad',
+          product.commercialNote || '',
+          getStock(product, levels),
+          getConfiguredStockLimit(product, levels, 'minStock'),
+          getConfiguredStockLimit(product, levels, 'maxStock'),
+          getWarehouseNames(product, levels),
+          product.salePrice ?? product.salePriceOriginal ?? '',
+          ...(canViewInventoryCost ? [product.costPrice ?? product.details?.costPrice ?? ''] : []),
+          product.isActive === false ? 'Inactivo' : 'Activo',
+          product.imageUrl || '',
+        ];
+      });
+      const variantHeaders = ['Código producto', 'SKU variante', 'Nombre variante', 'Atributos y valores', ...(canViewInventoryCost ? ['Costo variante'] : [])];
+      const variantRows = productsToExport.flatMap((product: any) => (Array.isArray(product.variants) ? product.variants : []).map((variant: any) => [
+        product.code || '',
+        variant.sku || '',
+        variant.name || '',
+        (Array.isArray(variant.attributes) ? variant.attributes : []).map((attribute: any) => `${attribute.attributeName || attribute.name || ''}: ${attribute.value || ''}`).filter(Boolean).join(' · '),
+        ...(canViewInventoryCost ? [variant.costPrice ?? ''] : []),
+      ]));
+      const appendSheet = (workbook: XLSX.WorkBook, name: string, rows: any[][]) => {
+        const sheet = XLSX.utils.aoa_to_sheet(rows);
+        sheet['!cols'] = (rows[0] || []).map((header) => ({ wch: Math.max(14, Math.min(36, String(header).length + 3)) }));
+        XLSX.utils.book_append_sheet(workbook, sheet, name);
+      };
+      const workbook = XLSX.utils.book_new();
+      appendSheet(workbook, 'Productos', [productHeaders, ...productRows]);
+      appendSheet(workbook, 'Variantes', [variantHeaders, ...variantRows]);
+      appendSheet(workbook, 'Guía de llenado', [
+        ['Exportación de productos registrados'],
+        [`Este archivo contiene ${productsToExport.length} producto(s) ya ingresados en el catálogo, dentro del alcance de la sucursal actual.`],
+        ['Productos', 'Incluye código, nombre, marca, categoría, unidad, nota comercial, existencias, límites de stock, bodegas, precio, estado e imagen.'],
+        ['Variantes', 'Incluye el SKU, nombre, atributos y costo de cada variante disponible.'],
+        ['Alcance', selectedBranchId ? 'Se exportaron los registros disponibles para la sucursal seleccionada.' : 'Se exportaron los registros disponibles para el alcance actual del usuario.'],
+      ]);
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_inventario_productos_registrados'], 'xlsx', dateFrom, dateTo));
+      toast.success(`Archivo Excel descargado con ${productsToExport.length} producto(s)`);
     } catch {
       toast.error('Error al exportar datos');
     }
@@ -528,30 +578,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
 
   return (
     <div className="inventory-module mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-3 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
-      <div className="flex w-full flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fetchData()}
-            disabled={refreshing}
-            className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none"
-          >
-            <RefreshCw className={`size-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-          {activeTab === 'productos' && canExportInventory && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportData}
-              className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none"
-            >
-              <Download className="size-4 mr-2" />
-              Exportar
-            </Button>
-          )}
-        </div>
-
       <CurrencyValuationBanner />
 
       {/* Branch Scope Filter */}
@@ -652,6 +678,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                         series={data.series}
                         movements={data.movements}
                         onRefresh={() => fetchData('products')}
+                        onExport={canExportInventory ? () => void handleExportData() : undefined}
+                        isRefreshing={refreshing}
                         onCreateProduct={() => setCreateProductViewOpen(true)}
                         pagination={productsPagination}
                         onSearchChange={(value) => updateSearch('productos', value)}
@@ -698,6 +726,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     series={data.series}
                     movements={data.movements}
                     onRefresh={() => fetchData()}
+                    isRefreshing={refreshing}
                     pagination={productsPagination}
                     onSearchChange={(value) => updateSearch('servicios', value)}
                     onCategoryChange={(value) => updateProductFilters('servicios', 'categoryIds', value)}

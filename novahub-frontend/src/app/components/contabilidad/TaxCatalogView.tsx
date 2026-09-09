@@ -55,9 +55,9 @@ const labelOf = (map: Record<string, string>, value: unknown, fallback: string) 
 
 export function TaxCatalogView() {
   const { canPerform } = useAuth()
-  const canCreate = canPerform('ACCOUNTING', 'create')
-  const canEdit = canPerform('ACCOUNTING', 'edit')
-  const canDeactivate = canPerform('ACCOUNTING', 'deactivate')
+  const canCreate = canPerform('ACCOUNTING_CONFIG', 'create')
+  const canEdit = canPerform('ACCOUNTING_CONFIG', 'edit')
+  const canDeactivate = canPerform('ACCOUNTING_CONFIG', 'delete')
   const queryClient = useQueryClient()
   const [newEntry, setNewEntry] = useState<TaxEntry>({
     name: '', code: '', type: 'WITHHOLDING', category: 'IR',

@@ -316,9 +316,6 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
   const { canPerform } = useAuth();
   const visibleSections = SECTIONS.filter(section => {
     const permission = SECTION_PERMISSIONS[section.id];
-    if (section.id === 'solicitudes-pago') {
-      return canPerform(permission, 'view') || canPerform('ACCOUNTING_JOURNAL', 'view');
-    }
     return canPerform(permission, 'view');
   });
   const fallbackSection = visibleSections[0]?.id || 'plan-cuentas';
@@ -327,6 +324,22 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
   const [showHelp, setShowHelp] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const help = HELP_DATA[activeSection] || (activeSection === 'balance-general-contable' ? HELP_DATA['balance-general'] : undefined);
+  const helpLabel = `Cómo usar ${SECTIONS.find((section) => section.id === activeSection)?.label || 'esta vista'}`;
+  const helpTrigger = (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => { setShowHelp(!showHelp); setOpenFaq(null); }}
+      className={cn(
+        'size-8 shrink-0 rounded-lg text-muted-foreground',
+        showHelp && 'bg-primary/10 border-primary/30 text-primary',
+      )}
+      aria-label={helpLabel}
+      title={helpLabel}
+    >
+      <HelpCircle className="size-4" />
+    </Button>
+  );
 
   useEffect(() => {
     if (!visibleSections.some(section => section.id === activeSection)) {
@@ -362,19 +375,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
             <div className="min-w-0 flex-1">
               <CurrencyValuationBanner />
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => { setShowHelp(!showHelp); setOpenFaq(null); }}
-              className={cn(
-                'size-8 shrink-0 rounded-lg text-muted-foreground',
-                showHelp && 'bg-primary/10 border-primary/30 text-primary',
-              )}
-              aria-label={`Cómo usar ${SECTIONS.find((section) => section.id === activeSection)?.label || 'esta vista'}`}
-              title={`Cómo usar ${SECTIONS.find((section) => section.id === activeSection)?.label || 'esta vista'}`}
-            >
-              <HelpCircle className="size-4" />
-            </Button>
+            {activeSection !== 'plan-cuentas' && helpTrigger}
           </div>
 
           {/* Horizontal tab navigation */}
@@ -414,7 +415,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   exit={{ opacity: 0, y: -12 }}
                   transition={{ duration: 0.2 }}
                 >
-                  {activeSection === 'plan-cuentas' && <PlanCuentasView isSidebarCollapsed={isSidebarCollapsed} />}
+                  {activeSection === 'plan-cuentas' && <PlanCuentasView isSidebarCollapsed={isSidebarCollapsed} helpTrigger={helpTrigger} />}
                   {activeSection === 'solicitudes-pago' && <SolicitudesPagoRRHHView />}
                   {activeSection === 'diario' && <DiarioView />}
                   {activeSection === 'libro-mayor' && <LibroMayorView />}

@@ -1896,7 +1896,10 @@ export async function generateProductLabelsPDF({ products, configs, tenantName, 
 }) {
   const targetKey = 'inventario.product-labels';
   const design = await getPdfDesign(targetKey);
-  const settings = { paperSize: 'LABEL', orientation: 'portrait' as const, ...(design?.settings || {}) };
+  // Las etiquetas usan 70 × 38 mm en formato horizontal. El predeterminado
+  // histórico guardaba portrait y jsPDF lo convertía en una hoja vertical con
+  // el contenido arriba y un espacio blanco innecesario debajo.
+  const settings = { ...(design?.settings || {}), paperSize: 'LABEL', orientation: 'landscape' as const };
   const rows = products.flatMap(product => {
     const config = configs.get(product.id);
     if (!config) return [];

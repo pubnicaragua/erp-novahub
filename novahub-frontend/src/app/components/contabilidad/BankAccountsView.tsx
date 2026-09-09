@@ -33,9 +33,9 @@ const SUBTYPE_LABELS: Record<string, string> = {
 
 export function BankAccountsView() {
   const { canPerform } = useAuth();
-  const canCreateBankAccount = canPerform('ACCOUNTING', 'create');
-  const canEditBankAccount = canPerform('ACCOUNTING', 'edit');
-  const canDeactivateBankAccount = canPerform('ACCOUNTING', 'deactivate');
+  const canCreateBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'create');
+  const canEditBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'edit');
+  const canDeactivateBankAccount = canPerform('FINANCIAL_ACCOUNTS', 'delete');
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);

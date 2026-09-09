@@ -81,7 +81,7 @@ function rateSourceLabel(source?: string | null) {
 
 export function DiferenciasCambiariasView() {
   const { canPerform } = useAuth();
-  const canCreate = canPerform('ACCOUNTING', 'create');
+  const canCreate = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'create');
   const canApprove = canPerform('ACCOUNTING_EXCHANGE_DIFFERENCES', 'approve');
   const [asOfDate, setAsOfDate] = useState(today());
   const [rateInput, setRateInput] = useState('');

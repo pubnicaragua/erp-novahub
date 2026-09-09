@@ -237,6 +237,8 @@
 
   .print-table thead {
     display: table-header-group !important;
+    position: static !important;
+    top: auto !important;
   }
 
   .print-table tbody {
@@ -249,6 +251,8 @@
   }
 
   .print-table th {
+    position: static !important;
+    top: auto !important;
     background: #f0f0f0 !important;
     color: #000 !important;
     font-weight: 700;

@@ -20,6 +20,7 @@ function enhanceNativeTables(scope?: Iterable<HTMLTableElement>) {
   tables.forEach((table) => {
     if (table.matches('[data-slot="table"], [data-responsive-cards="false"]')) return;
     const headerRow = table.tHead?.rows[0];
+    if (table.tHead) table.tHead.dataset.stickyTableHeader = 'true';
     const labels = headerRow
       ? Array.from(headerRow.cells).map((cell) => normalizeLabel(cell.textContent))
       : [];

@@ -751,6 +751,7 @@ th .column-filter-menu .column-filter-icon,
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
+  overflow-y: clip;
   scrollbar-gutter: stable;
 }
 
@@ -786,6 +787,42 @@ th .column-filter-menu .column-filter-icon,
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Encabezados persistentes para todas las tablas del ERP. El encabezado y
+   sus celdas usan la misma capa para que siga visible tanto cuando el scroll
+   vertical pertenece al módulo como cuando pertenece a una tabla acotada.
+   La fila/celda hereda el fondo del thead, pero cualquier color semántico
+   definido por la vista conserva prioridad. */
+:where(table:not([data-sticky-table="false"]) > thead) {
+  position: sticky;
+  top: var(--table-sticky-top, 0px);
+  z-index: 20;
+  background-color: hsl(var(--muted) / 0.96);
+  background-clip: padding-box;
+}
+
+:where(table:not([data-sticky-table="false"]) > thead > tr) {
+  background-color: inherit;
+}
+
+:where(table:not([data-sticky-table="false"]) > thead > tr > th) {
+  position: sticky;
+  top: var(--table-sticky-top, 0px);
+  z-index: 21;
+  background-color: inherit;
+  background-clip: padding-box;
+}
+
+/* Un wrapper con overflow-x-auto no debe convertirse en el dueño del scroll
+   vertical si no tiene una altura propia; overflow-y: clip deja que el main
+   o el contenedor vertical explícito mantenga el sticky en su sitio. Los
+   wrappers que declaran overflow-y-auto/scroll/overflow-auto quedan fuera. */
+:where(
+  [class~="overflow-x-auto"]:has(> table),
+  [class~="overflow-x-auto"]:has(table)
+):not([class~="overflow-y-auto"]):not([class~="overflow-y-scroll"]):not([class~="overflow-auto"]):not([data-import-preview-horizontal-scroller="true"]) {
+  overflow-y: clip;
 }
 
 /* Action controls keep their own space instead of being squeezed into the
@@ -1302,7 +1339,7 @@ th .column-filter-menu .column-filter-icon,
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: clip;
   scrollbar-gutter: stable;
 }
 

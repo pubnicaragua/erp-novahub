@@ -13,6 +13,33 @@ export interface SidebarPermissionDefinition {
   subscription?: boolean;
 }
 
+/** Orden de los módulos padres tal como aparecen en el sidebar del tenant. */
+export const SIDEBAR_PERMISSION_PARENT_ORDER = [
+  'DASHBOARD',
+  'SALES',
+  'PURCHASES',
+  'RESTAURANT',
+  'TRACKING',
+  'INVENTORY',
+  'FINANCIAL',
+  'ACCOUNTING',
+  'REPORTS',
+  'HR',
+  'ACTIVITIES',
+  'PROJECTS',
+  'FORCE_SALES',
+  'TICKETS',
+  'HR_TRAINING',
+  'SUPPORT_TECH',
+  'LEGAL',
+  'FINANCING',
+  'NOVACHAT',
+  'DOCUMENTS',
+  'NOTIFICATIONS',
+  'MY_COMPANY',
+  'CONFIGURATION',
+] as const;
+
 export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Ventas
   { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
@@ -24,14 +51,14 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'SALES_RETURNS', label: 'Notas de crédito', parent: 'SALES' },
   { id: 'SALES_CREDIT_NOTES', label: 'Créditos', parent: 'SALES' },
   { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', parent: 'SALES' },
-  { id: 'RETAIL_CASH_CONTROL', label: 'Control de Caja', parent: 'SALES' },
   { id: 'RETAIL_POS', label: 'Facturación por caja', parent: 'SALES' },
+  { id: 'RETAIL_CASH_CONTROL', label: 'Control de Caja', parent: 'SALES' },
 
   // Restaurante POS
   { id: 'RESTAURANT_SALON', label: 'Salón y mesas', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_ORDERS', label: 'Comandas', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_KITCHEN', label: 'Cocina', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_MENU', label: 'Carta', parent: 'RESTAURANT' },
-  { id: 'RESTAURANT_KITCHEN', label: 'Comandas y cocina', parent: 'RESTAURANT' },
   { id: 'RESTAURANT_REPORTS', label: 'Reportes restaurante', parent: 'RESTAURANT' },
 
   // Compras
@@ -63,9 +90,9 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
   { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', parent: 'INVENTORY' },
   { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', parent: 'INVENTORY' },
-  { id: 'INVENTORY_MOVEMENTS', label: 'Movimientos', parent: 'INVENTORY' },
   { id: 'INVENTORY_AUDITS', label: 'Auditorías', parent: 'INVENTORY' },
   { id: 'INVENTORY_LOSSES', label: 'Pérdidas', parent: 'INVENTORY' },
+  { id: 'INVENTORY_MOVEMENTS', label: 'Movimientos', parent: 'INVENTORY' },
   { id: 'INVENTORY_ASSETS', label: 'Mobiliario y equipos', parent: 'INVENTORY' },
   { id: 'INVENTORY_CONFIG', label: 'Configuración de inventario', parent: 'INVENTORY' },
 
@@ -77,16 +104,16 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'FINANCIAL_INCOMES', label: 'Ingresos', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_EXPENSES', label: 'Gastos', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_EXPENSES_REC', label: 'Movimientos recurrentes', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_CALENDAR', label: 'Calendario Financiero', parent: 'FINANCIAL', subscription: false },
-  { id: 'FINANCIAL_ANALYSIS', label: 'Análisis de ingresos y gastos', parent: 'FINANCIAL', subscription: false },
-  { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_LOSSES', label: 'Pérdidas', parent: 'FINANCIAL', subscription: false },
   { id: 'FINANCIAL_INCOMES_REC', label: 'Ingresos recurrentes', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_ACCOUNTS', label: 'Cuentas financieras', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_JOURNAL', label: 'Diario financiero', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_LEDGER', label: 'Libro mayor financiero', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_BUDGET', label: 'Presupuestos financieros', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_REPORTS', label: 'Reportes financieros', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_CALENDAR', label: 'Calendario Financiero', parent: 'FINANCIAL', subscription: false },
+  { id: 'FINANCIAL_ANALYSIS', label: 'Análisis de ingresos y gastos', parent: 'FINANCIAL', subscription: false },
+  { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_LOSSES', label: 'Pérdidas', parent: 'FINANCIAL', subscription: false },
 
   // Recursos Humanos
   { id: 'HR_DASHBOARD', label: 'Dashboard', parent: 'HR' },
@@ -131,10 +158,9 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'NOTIFICATIONS_PUSH', label: 'Push', parent: 'NOTIFICATIONS' },
 
   // Tickets y soporte
-  { id: 'TICKETS_VIEW', label: 'Tickets', parent: 'TICKETS' },
+  { id: 'TICKETS_LIST', label: 'Tickets', parent: 'TICKETS' },
   { id: 'TICKETS_KNOWLEDGE_BASE', label: 'Base de Conocimiento', parent: 'TICKETS' },
   { id: 'TICKETS_AGENTS', label: 'Agentes', parent: 'TICKETS' },
-  { id: 'TICKETS_LIST', label: 'Tickets', parent: 'TICKETS' },
 
   // Asesoría legal
   { id: 'LEGAL_CASES', label: 'Casos', parent: 'LEGAL' },
@@ -157,7 +183,6 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Contabilidad: únicamente las entradas presentes en el sidebar.
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_HR_PAYMENT_REQUESTS', label: 'Solicitudes de pago RR. HH.', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_LEDGER', label: 'Libro Mayor', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de comprobación', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', parent: 'ACCOUNTING' },
@@ -172,6 +197,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'ACCOUNTING_INVOICE_AUDIT', label: 'Auditoría de Facturas', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_BUDGET', label: 'Presupuestos', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_EXPENSE_CATEGORIES', label: 'Categorías Gastos', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_HR_PAYMENT_REQUESTS', label: 'Solicitudes de pago RR. HH.', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_CONFIG', label: 'Configuración', parent: 'ACCOUNTING' },
 ];
 
@@ -297,7 +323,8 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'proyectos-tiempo': ['PROJECTS_TIME'],
 
   tickets: ['TICKETS_LIST'],
-  faqs: ['TICKETS_KNOWLEDGE_BASE'],
+  // TICKETS_FAQS es el identificador histórico de esta misma vista.
+  faqs: ['TICKETS_KNOWLEDGE_BASE', 'TICKETS_FAQS'],
   agents: ['TICKETS_AGENTS'],
 
   cases: ['LEGAL_CASES'],
@@ -316,7 +343,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'calculadora-financiamiento': ['FINANCING_CALCULATOR'],
 
   'plan-cuentas': ['ACCOUNTING_CHART'],
-  'solicitudes-pago': ['ACCOUNTING_HR_PAYMENT_REQUESTS', 'ACCOUNTING_JOURNAL'],
+  'solicitudes-pago': ['ACCOUNTING_HR_PAYMENT_REQUESTS'],
   diario: ['ACCOUNTING_JOURNAL'],
   'libro-mayor': ['ACCOUNTING_LEDGER'],
   'balance-comprobacion': ['ACCOUNTING_TRIAL_BALANCE'],
@@ -434,7 +461,9 @@ export const LEGACY_VIEW_PERMISSION_ALIASES: Record<string, string[]> = {
   RETAIL_CASH_CONTROL: ['RETAIL_POS'],
   RESTAURANT_SALON: ['RESTAURANT_TABLES'],
   RESTAURANT_ORDERS: ['RESTAURANT_TABLES'],
-  TICKETS_LIST: ['TICKETS'],
+  TICKETS_LIST: ['TICKETS_VIEW', 'TICKETS'],
+  TICKETS_VIEW: ['TICKETS_LIST', 'TICKETS'],
+  TICKETS_KNOWLEDGE_BASE: ['TICKETS_FAQS'],
   DOCUMENTS_STORAGE_PLANS: ['DOCUMENTS'],
   DOCUMENTS_FOLDERS: ['DOCUMENTS_FILES'],
   HR_DEPARTMENTS: ['HR_EMPLOYEES'],

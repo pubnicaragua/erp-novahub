@@ -51,6 +51,6 @@ export const knowledgeBaseService = {
 };
 
 export const supportAgentsService = {
-  getAll: async (filters?: ApiFilters, signal?: AbortSignal) => normalizeList<User>(await api.get<any>('/users', { params: filters as any, signal })),
+  getAll: async (filters?: ApiFilters, signal?: AbortSignal) => normalizeList<User>(await api.get<any>('/users/support-agents', { params: filters as any, signal })),
   update: (id: string, data: Partial<User>) => api.patch<User>(`/users/${id}`, data),
 };

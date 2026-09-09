@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './button';
+import { Table, TableHeader, TableHead, TableRow } from './table';
 import { cn } from './utils';
 
 interface HorizontalTableScrollerProps {
@@ -19,6 +20,39 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
   const pointerInside = useRef(false);
   const scrollStateFrameRef = useRef<number | null>(null);
   const [scrollState, setScrollState] = useState({ left: false, right: false });
+  const [horizontalScrollLeft, setHorizontalScrollLeft] = useState(0);
+
+  const splitTable = useMemo(() => {
+    const onlyChild = Children.toArray(children);
+    if (onlyChild.length !== 1 || !isValidElement(onlyChild[0]) || onlyChild[0].type !== Table) return null;
+
+    const table = onlyChild[0] as ReactElement<ComponentProps<typeof Table>>;
+    if (table.props.responsiveCards !== false) return null;
+
+    const tableChildren = Children.toArray(table.props.children);
+    const headerIndex = tableChildren.findIndex((child) => isValidElement(child) && child.type === TableHeader);
+    if (headerIndex < 0) return null;
+
+    const header = tableChildren[headerIndex] as ReactElement<ComponentProps<typeof TableHeader>>;
+    const headerRow = Children.toArray(header.props.children).find((child) => isValidElement(child) && child.type === TableRow);
+    const headerCells = headerRow && isValidElement(headerRow)
+      ? Children.toArray(headerRow.props.children).filter((child) => isValidElement(child) && child.type === TableHead)
+      : [];
+    const columnGroup = (
+      <colgroup aria-hidden="true">
+        {headerCells.map((cell, index) => {
+          const style = (cell.props as ComponentProps<typeof TableHead>).style;
+          return <col key={index} style={{ width: style?.width, minWidth: style?.minWidth }} />;
+        })}
+      </colgroup>
+    );
+    const bodyChildren = tableChildren.filter((_, index) => index !== headerIndex);
+
+    return {
+      headerTable: cloneElement(table, { 'data-sticky-table': 'false', children: [columnGroup, header] }),
+      bodyTable: cloneElement(table, { 'data-sticky-table': 'false', children: [columnGroup, ...bodyChildren] }),
+    };
+  }, [children]);
 
   const updateScrollState = useCallback(() => {
     if (scrollStateFrameRef.current !== null) return;
@@ -31,6 +65,7 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
         right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
       };
       setScrollState((current) => current.left === nextState.left && current.right === nextState.right ? current : nextState);
+      setHorizontalScrollLeft((current) => current === element.scrollLeft ? current : element.scrollLeft);
     });
   }, [scrollRef]);
 
@@ -88,7 +123,7 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
   };
 
   return (
-    <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm', className)} onMouseEnter={() => { pointerInside.current = true; }} onMouseLeave={() => { pointerInside.current = false; }}>
+    <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-2xl border bg-card shadow-sm', className)} onMouseEnter={() => { pointerInside.current = true; }} onMouseLeave={() => { pointerInside.current = false; }}>
       <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-muted/10 px-3 py-2">
         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{label}</span>
         <div className="flex items-center gap-1">
@@ -96,8 +131,19 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
           <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollByColumn('right')} disabled={!scrollState.right} aria-label="Desplazar una columna a la derecha"><ChevronRight className="size-4" /></Button>
         </div>
       </div>
+      {splitTable && (
+        <div
+          className="sticky z-20 min-w-0 overflow-hidden border-b border-border/50 bg-card"
+          style={{ top: 'var(--table-sticky-top, 0px)' }}
+          data-sticky-table-header="true"
+        >
+          <div className="w-max min-w-full" style={{ transform: `translate3d(-${horizontalScrollLeft}px, 0, 0)` }}>
+            {splitTable.headerTable}
+          </div>
+        </div>
+      )}
       <div ref={scrollRef} data-import-preview-horizontal-scroller="true" tabIndex={0} onKeyDownCapture={handleTableKeyDown} onMouseDown={() => scrollRef.current?.focus({ preventScroll: true })} aria-label={`${label}. Usa las flechas izquierda y derecha para moverte por columna.`} className={cn('min-h-0 min-w-0 w-full flex-1 overflow-x-auto overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-primary/40 scrollbar-overlay [&_[data-slot="table-container"]]:!w-max [&_[data-slot="table-container"]]:!min-w-full [&_[data-slot="table-container"]]:!max-w-none [&_[data-slot="table-container"]]:!overflow-visible', tableClassName)} style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
-        {children}
+        {splitTable ? splitTable.bodyTable : children}
       </div>
     </div>
   );

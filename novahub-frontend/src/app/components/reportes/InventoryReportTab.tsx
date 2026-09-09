@@ -177,7 +177,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const { displayCurrency, displayMode, baseCurrency, valuationModeLabel, formatConvertedAmount: formatAmountBySource, formatExplicitAmount } = useCurrency();
   const { themeConfig } = useTheme();
   const { canPerform } = useAuth();
-  const canViewInventory = canPerform('INVENTORY', 'view');
+  const canViewInventory = canPerform('REPORTS_INVENTORY', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);

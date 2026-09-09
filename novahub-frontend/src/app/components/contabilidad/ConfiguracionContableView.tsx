@@ -665,9 +665,9 @@ type ConnectionModule = {
 
 export function ConfiguracionContableView() {
   const { canPerform } = useAuth()
-  const canEditAccounting = canPerform('ACCOUNTING', 'edit')
-  const canImportAccounting = canPerform('ACCOUNTING', 'import')
-  const canExportAccounting = canPerform('ACCOUNTING', 'export')
+  const canEditAccounting = canPerform('ACCOUNTING_CONFIG', 'edit')
+  const canImportAccounting = canPerform('ACCOUNTING_CONFIG', 'import')
+  const canExportAccounting = canPerform('ACCOUNTING_CONFIG', 'export')
   const [saving, setSaving] = useState(false)
   const [seeding, setSeeding] = useState(false)
 
