@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, Pencil
+  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, Pencil, X
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -108,6 +108,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const [parsedImportRows, setParsedImportRows] = useState<Record<string, string>[]>([]);
   const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
@@ -425,6 +426,15 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     setImportResult(null);
     setImportFile(null);
     setImportFileStats(null);
+  };
+
+  const clearExpenseImportFile = () => {
+    if (readingFile || importing) return;
+    setImportFile(null);
+    setParsedImportRows([]);
+    setImportFileStats(null);
+    setImportResult(null);
+    if (importFileInputRef.current) importFileInputRef.current.value = '';
   };
 
   const columns: ColumnDef<Expense>[] = [
@@ -1114,7 +1124,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           </DialogContent>
         </Dialog>
 
-        <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
+        <Dialog open={importOpen && !importing} onOpenChange={(open) => { if (!open) clearExpenseImportFile(); setImportOpen(open); }}>
           <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,680px)] overflow-y-auto rounded-3xl">
             <DialogHeader data-tour="purchases-expense-modal-title">
               <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar gastos</DialogTitle>
@@ -1145,8 +1155,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV</label>
-                    <Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(e) => { void handleExpenseFileChange(e.target.files?.[0]); e.target.value = ''; }} />
-                    {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
+                    <Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(e) => { void handleExpenseFileChange(e.target.files?.[0]); e.target.value = ''; }} />
+                    {importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p><Button type="button" variant="ghost" size="sm" className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearExpenseImportFile} disabled={readingFile || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}
                     {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-emerald-600">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-rose-600' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
                     {importFileStats && <ImportReviewSummary total={importFileStats.total} valid={importFileStats.valid} skipped={importFileStats.skipped} entityLabel="gastos" />}
                   </div>

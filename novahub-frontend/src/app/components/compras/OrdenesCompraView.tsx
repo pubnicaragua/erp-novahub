@@ -922,6 +922,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const [previewProgress, setPreviewProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const purchaseImportFileInputRef = useRef<HTMLInputElement>(null);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [importConfirmText, setImportConfirmText] = useState('');
   const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[] } | null>(null);
@@ -1224,6 +1225,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             const catalog = parseVariantImportWorkbook(
               sheets,
               purchasePriceLists.length > 0 ? purchasePriceLists : FALLBACK_PURCHASE_PRICE_LISTS,
+              { purchaseOrder: true },
             );
             const advancedRows = buildPurchaseImportRowsFromAdvancedCatalog(catalog);
             if (!advancedRows.length) throw new Error('La plantilla avanzada no contiene productos o variantes utilizables');
@@ -1303,6 +1305,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       setPreviewProgress(0);
     }
   }, [importCurrency, purchasePriceLists, resolveImportProducts, taxOptions, validateImportRows, withholdingOptions]);
+
+  const handleClearPurchaseImportFile = useCallback(() => {
+    if (importProcessing || importing || previewLoading) return;
+    setImportPreviewOpen(false);
+    setImportData([]);
+    setAdvancedImportCatalog(null);
+    setImportFileName('');
+    setImportProgress(0);
+    setSimilarPurchaseGroups([]);
+    setSimilarPurchaseResolvingKey(null);
+    setSimilarPurchaseAlertOpen(false);
+    if (purchaseImportFileInputRef.current) purchaseImportFileInputRef.current.value = '';
+  }, [importProcessing, importing, previewLoading]);
 
   const checkPurchaseImportSimilarity = useCallback(async (rows: PurchaseImportRow[]) => {
     const rowsToReview = rows.filter((row) => !row._hasError && row.similarityResolution !== 'USE_EXISTING' && row.similarityResolution !== 'CREATE_NEW');
@@ -1524,7 +1539,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       : row), [...products.filter((product: any) => String(product.id) !== String(match.id)), selectedCatalogProduct]));
     setSimilarPurchaseGroups((current) => current.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== groupKey));
     setSimilarPurchaseResolvingKey(null);
-    toast.success(`Se seleccionó ${selectedVariant ? `la variante ${selectedVariant.sku}` : `el producto ${match.name || match.code}`}.`);
+    toast.success(`Se seleccionó ${selectedVariant ? `la variante ${selectedVariant.sku}` : `el producto ${match.name || match.code}`}. La orden no modifica stock ni costo; al recibir, el stock se sumará y el costo se calculará ponderado.`);
   }, [importData, products, validateImportRows]);
 
   const createPurchaseSimilarityAsNew = useCallback((group: SimilarProductGroup) => {
@@ -2320,6 +2335,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           groups={similarPurchaseGroups}
           title="Alerta: posible producto existente en la orden"
           description="Se encontraron coincidencias por nombre, marca, SKU o atributos. Revisa los datos mostrados y selecciona el producto o la variante existente cuando corresponda. Un SKU exacto no puede duplicarse; si la coincidencia no es exacta, puedes crear un producto nuevo al recepcionar."
+          selectionHint="En esta pantalla solo se vincula la línea al producto o variante. Al recibir en la bodega seleccionada, el stock se sumará y el costo se calculará ponderando (existencias actuales × costo actual) + (entrada × costo de entrada), dividido entre las existencias totales."
           resolvingKey={similarPurchaseResolvingKey}
           onOpenChange={(value) => { setSimilarPurchaseAlertOpen(value); if (!value) setSimilarPurchaseResolvingKey(null); }}
           onSelectExisting={(group, match, variant) => resolvePurchaseSimilarity(group, match, variant)}
@@ -2885,8 +2901,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <p className="font-black uppercase tracking-widest text-primary">Guía rápida</p>
                 <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-muted-foreground">
                   <li>Descarga la plantilla con sus hojas de ítems y guía de llenado.</li>
-                  <li>Completa un producto por fila con SKU, cantidad y precio; si cargas la plantilla avanzada de Inventario, se generará una fila por SKU variante.</li>
-                  <li>Revisa la previsualización: los SKU existentes se vinculan automáticamente y todos los productos respetan la Bodega destino de esta orden.</li>
+                  <li>Completa un producto por fila con SKU, cantidad y costo de entrada; si cargas la plantilla avanzada, se generará una fila por SKU variante.</li>
+                  <li>No distribuyas por bodega: esta orden ya tiene una única Bodega destino y todos sus productos la respetarán.</li>
+                  <li>Revisa la previsualización: se validan SKU, duplicados, categoría, cantidad, costo, impuestos, retenciones y nota comercial antes de confirmar.</li>
                   <li>Confirma para agregar los ítems a esta orden; todavía deberás guardar la orden.</li>
                 </ol>
               </div>
@@ -2934,14 +2951,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 </div>
               </div>
               <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground">
-                <p className="font-black uppercase tracking-widest text-foreground">Validación de SKU</p>
-                <p className="mt-2">Un SKU encontrado en Inventario se vinculará al producto y mostrará su existencia. Un SKU desconocido se agregará como producto nuevo al recepcionar y se marcará como advertencia.</p>
+                <p className="font-black uppercase tracking-widest text-foreground">Validaciones de la importación</p>
+                <p className="mt-2">Se aplican las mismas validaciones de carga: SKU requerido y sin duplicados, categoría, cantidad mayor que cero, costo/precio unitario válido, IVA, retención y nota comercial de hasta 100 caracteres. Un SKU encontrado en Inventario se vinculará; uno desconocido quedará pendiente para crearse al recepcionar.</p>
+                <p className="mt-2 font-semibold text-primary">La bodega no se toma del archivo: se usa únicamente la Bodega destino seleccionada en esta orden.</p>
                 <Button variant="outline" size="sm" className="mt-3 gap-2" onClick={handleDownloadPurchaseTemplate}><Download className="size-4" /> Descargar plantilla y guía</Button>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-muted-foreground">Archivo Excel de productos</label>
-                <Input type="file" accept=".xlsx,.xls,.csv" disabled={importProcessing} onChange={(event) => { const file = event.target.files?.[0]; if (file) handlePurchaseImportFile(file); }} />
-                {importFileName && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importData.length} producto(s) detectados</p>}
+                <Input type="file" accept=".xlsx,.xls,.csv" disabled={importProcessing} onChange={(event) => { const file = event.target.files?.[0]; if (file) handlePurchaseImportFile(file); event.currentTarget.value = ''; }} />
+                {importFileName && <div className="flex flex-wrap items-center justify-between gap-2"><p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importData.length} producto(s) detectados</p><Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-destructive hover:text-destructive" onClick={handleClearPurchaseImportFile} disabled={importProcessing || importing || previewLoading}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}
               </div>
             </div>
             <DialogFooter className="flex-wrap" data-tour="purchases-order-import-actions">
@@ -3186,8 +3204,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-muted-foreground">Archivo Excel de órdenes</label>
-                <Input type="file" accept=".xlsx,.xls,.csv" disabled={importProcessing} onChange={(event) => { const file = event.target.files?.[0]; if (file) handlePurchaseImportFile(file); }} />
-                {importFileName && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importData.length} artículo(s) detectados</p>}
+                <Input ref={purchaseImportFileInputRef} type="file" accept=".xlsx,.xls,.csv" disabled={importProcessing} onChange={(event) => { const file = event.target.files?.[0]; if (file) handlePurchaseImportFile(file); event.currentTarget.value = ''; }} />
+                {importFileName && <div className="flex flex-wrap items-center justify-between gap-2"><p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importData.length} artículo(s) detectados</p><Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-destructive hover:text-destructive" onClick={handleClearPurchaseImportFile} disabled={importProcessing || importing || previewLoading}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}
               </div>
             </div>
             <DialogFooter className="flex-wrap">

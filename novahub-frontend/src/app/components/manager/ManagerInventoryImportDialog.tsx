@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, Download, FileSpreadsheet, ImageIcon, Info, Loader2, PackagePlus, Plus, RefreshCw, Upload, Warehouse } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, Download, FileSpreadsheet, ImageIcon, Info, Loader2, PackagePlus, Plus, RefreshCw, Upload, Warehouse, X } from 'lucide-react';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import {
   enterpriseGroupsService,
@@ -243,6 +243,8 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
   const [importProgress, setImportProgress] = useState(0);
   const [readingFile, setReadingFile] = useState(false);
   const [readingProgress, setReadingProgress] = useState(0);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const imageArchiveInputRef = useRef<HTMLInputElement>(null);
 
   const optionsQuery = useTenantQuery(
     ['manager-inventory-import-options', groupId, importBusinessUnitId || ''],
@@ -388,6 +390,27 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
     },
     onError: (error: Error) => { setImportProgress(0); toast.error(`Importación detenida; no se aplicaron cambios. ${error.message}`); },
   });
+
+  const clearImportFile = () => {
+    if (readingFile || previewMutation.isPending || importMutation.isPending) return;
+    setRows([]);
+    setFileName('');
+    setSheetSummary(null);
+    setCanonicalCatalog(null);
+    setPreview(null);
+    setPreviewDirty(false);
+    setPreparedCategoryNames([]);
+    if (importFileInputRef.current) importFileInputRef.current.value = '';
+  };
+
+  const clearImageArchive = () => {
+    if (imageArchiveProcessing || importMutation.isPending) return;
+    setImageArchiveFileName('');
+    setImageArchiveEntries(new Map());
+    setPreview(null);
+    setPreviewDirty(false);
+    if (imageArchiveInputRef.current) imageArchiveInputRef.current.value = '';
+  };
 
   const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -582,8 +605,8 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
 
         <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
           <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><FileSpreadsheet className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">1. Plantilla activa</p><p className="text-[11px] text-muted-foreground">Productos + Variantes + Inventario</p></div></div><Button type="button" variant="outline" size="sm" className="w-full rounded-xl" onClick={downloadTemplate} disabled={optionsQuery.isLoading || !options?.locations.length}><Download className="mr-2 size-4" />Descargar Excel</Button></CardContent></Card>
-          <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Upload className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">2. Archivo</p><p className="truncate text-[11px] text-muted-foreground">{fileName || 'XLSX/XLS · plantilla canónica'}</p></div></div><label className="flex h-9 cursor-pointer items-center justify-center rounded-xl border border-dashed border-primary/40 bg-background px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/5"><input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="sr-only" />{fileName ? 'Reemplazar archivo' : 'Seleccionar archivo'}</label></CardContent></Card>
-          <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><ImageIcon className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">3. Imágenes</p><p className="truncate text-[11px] text-muted-foreground">{imageArchiveFileName ? `${imageArchiveFileName} · ${imageArchiveEntries.size} SKU indexado(s)` : 'Opcional · ZIP/RAR'}</p></div></div><label className="flex h-9 cursor-pointer items-center justify-center rounded-xl border border-dashed border-primary/40 bg-background px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/5"><input type="file" accept=".zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed" onChange={onImageArchive} className="sr-only" disabled={imageArchiveProcessing} />{imageArchiveProcessing ? 'Leyendo imágenes…' : imageArchiveFileName ? 'Reemplazar ZIP/RAR' : 'Seleccionar ZIP/RAR'}</label></CardContent></Card>
+          <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Upload className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">2. Archivo</p><p className="truncate text-[11px] text-muted-foreground">{fileName || 'XLSX/XLS · plantilla canónica'}</p></div></div><div className="flex min-w-0 gap-2"><label className="flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xl border border-dashed border-primary/40 bg-background px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/5"><input ref={importFileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="sr-only" />{fileName ? 'Reemplazar archivo' : 'Seleccionar archivo'}</label>{fileName && <Button type="button" variant="ghost" size="sm" className="h-9 shrink-0 rounded-xl px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearImportFile} disabled={readingFile || previewMutation.isPending || importMutation.isPending} aria-label="Quitar archivo de inventario"><X className="mr-1 size-3.5" />Quitar</Button>}</div></CardContent></Card>
+          <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.04] shadow-none"><CardContent className="space-y-2.5 p-3.5"><div className="flex items-center gap-2.5"><div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><ImageIcon className="size-4.5" /></div><div className="min-w-0"><p className="text-sm font-black">3. Imágenes</p><p className="truncate text-[11px] text-muted-foreground">{imageArchiveFileName ? `${imageArchiveFileName} · ${imageArchiveEntries.size} SKU indexado(s)` : 'Opcional · ZIP/RAR'}</p></div></div><div className="flex min-w-0 gap-2"><label className="flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xl border border-dashed border-primary/40 bg-background px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/5"><input ref={imageArchiveInputRef} type="file" accept=".zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed" onChange={onImageArchive} className="sr-only" disabled={imageArchiveProcessing} />{imageArchiveProcessing ? 'Leyendo imágenes…' : imageArchiveFileName ? 'Reemplazar ZIP/RAR' : 'Seleccionar ZIP/RAR'}</label>{imageArchiveFileName && <Button type="button" variant="ghost" size="sm" className="h-9 shrink-0 rounded-xl px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearImageArchive} disabled={imageArchiveProcessing || importMutation.isPending} aria-label="Quitar archivo de imágenes"><X className="mr-1 size-3.5" />Quitar</Button>}</div></CardContent></Card>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2.5 text-xs"><div className="flex min-w-0 items-center gap-2"><Info className="size-4 shrink-0 text-sky-600" /><span className="truncate text-muted-foreground">Rubro: <span className="font-bold text-foreground">{selectedBusinessUnitName}</span></span></div><div className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-muted-foreground"><Badge variant="outline" className="rounded-full">{options?.branches.length || 0} sucursales</Badge><Badge variant="outline" className="rounded-full">{activeLocationSummary.bodegaCount} bodegas</Badge><Badge variant="outline" className="rounded-full">{activeLocationSummary.warehouseCount} almacenes</Badge><Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-7 rounded-full text-sky-700 dark:text-sky-300" aria-label="Ver instrucciones del archivo"><Info className="size-3.5" /></Button></PopoverTrigger><PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] rounded-2xl p-4 text-xs leading-5"><p className="font-black text-foreground">Cómo llenar el Excel</p><p className="mt-2 text-muted-foreground">En <span className="font-semibold text-foreground">Productos</span> escribe cada producto padre una sola vez; sus variantes y precios se relacionan por código y SKU. En <span className="font-semibold text-foreground">Inventario</span> repite cada SKU para repartir stock entre bodegas de distintas sucursales y/o almacenes corporativos. Selecciona el nombre visible de la ubicación; no uses IDs. El costo de entrada debe ser igual para todas las filas del mismo SKU variante. Stock 0 crea el registro sin movimiento.</p><p className="mt-2 text-muted-foreground">Las bodegas muestran su sucursal. Los almacenes corporativos aparecen una sola vez y conservan stock independiente; sus autorizaciones solo indican a qué sucursales pueden transferir.</p></PopoverContent></Popover></div></div>

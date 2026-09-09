@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, Upload, Download, Ban, Pencil } from 'lucide-react';
+import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, Upload, Download, Ban, Pencil, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -77,6 +77,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<SupplierImportResult | null>(null);
   const importValidationTimerRef = useRef<number | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -208,6 +209,15 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     if (!importFile || !importRows.length || previewLoading) return;
     setImportOpen(false);
     setImportPreviewOpen(true);
+  };
+
+  const clearSupplierImportFile = () => {
+    if (previewLoading || importing) return;
+    setImportPreviewOpen(false);
+    setImportResult(null);
+    setImportRows([]);
+    setImportFile(null);
+    if (importFileInputRef.current) importFileInputRef.current.value = '';
   };
 
   const updateImportRow = (index: number, field: keyof SupplierImportRow, value: string) => {
@@ -616,7 +626,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           <DialogHeader data-tour="supplier-import-modal-title"><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar proveedores</DialogTitle><DialogDescription>Carga una plantilla Excel o CSV. Luego abre la previsualización completa para corregir los datos antes de crear los proveedores.</DialogDescription><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo importar proveedores" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import-modal" /></DialogHeader>
           <div className="space-y-4" data-tour="supplier-import-modal-data">
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El código se genera automáticamente con el consecutivo de la sucursal. Si el archivo trae un código, se ignorará; los correos e identificaciones repetidas se marcarán como errores. Podrás editar los demás datos antes de confirmar.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
-            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV de proveedores</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
+            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV de proveedores</label><Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); event.currentTarget.value = ''; }} />{importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p><Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearSupplierImportFile} disabled={previewLoading || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del proveedor.</li><li>Carga el archivo; el sistema lo valida sin guardar todavía.</li><li>Presiona “Previsualizar proveedores” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; solo se guardarán las filas válidas.</li></ol></div>
           </div>
           <DialogFooter className="flex-wrap" data-tour="supplier-import-modal-actions"><Button variant="outline" onClick={() => setImportOpen(false)} disabled={previewLoading}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar proveedores</Button>}</DialogFooter>

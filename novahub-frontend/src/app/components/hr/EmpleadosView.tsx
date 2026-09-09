@@ -74,6 +74,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<EmployeeImportResult | null>(null);
   const importValidationTimerRef = useRef<number | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   const [pendingImportDepartmentRow, setPendingImportDepartmentRow] = useState<number | null>(null);
   const [pendingImportPositionRow, setPendingImportPositionRow] = useState<number | null>(null);
 
@@ -587,6 +588,15 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     if (!importRows.length || previewLoading) return;
     setImportOpen(false);
     setImportPreviewOpen(true);
+  };
+
+  const clearEmployeeImportFile = () => {
+    if (previewLoading || importing) return;
+    setImportPreviewOpen(false);
+    setImportResult(null);
+    setImportRows([]);
+    setImportFileName('');
+    if (importFileInputRef.current) importFileInputRef.current.value = '';
   };
 
   const updateEmployeeImportRow = (index: number, field: string, value: string | number) => {
@@ -1312,7 +1322,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
           <DialogHeader data-tour="hr-employee-import-title"><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar empleados</DialogTitle><DialogDescription>Carga una plantilla Excel, revisa la previsualización y confirma solo las filas válidas. Este proceso puede repetirse cuantas veces sea necesario.</DialogDescription><HRViewTutorial label="Cómo importar empleados" targetPrefix="hr-employee-import" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Descarga la plantilla, carga el archivo y revisa las filas detectadas.' }, actions: { description: 'Abre la previsualización para corregir incidencias y confirmar las filas válidas.' } }} /></DialogHeader>
           <div className="space-y-4" data-tour="hr-employee-import-data">
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">Usa nombres o códigos existentes para departamentos y puestos. Los campos Tipo de contrato, Frecuencia de pago y Estado laboral deben escribirse en español como se indica en la guía. Si falta algún catálogo, podrás crearlo desde la previsualización. No se importa un vendedor individual: la condición de vendedor proviene del departamento.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadEmployeeTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
-            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de empleados</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readEmployeeImportFile(file); }} />{importFileName && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importRows.length} filas detectadas</p>}</div>
+            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de empleados</label><Input ref={importFileInputRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readEmployeeImportFile(file); event.currentTarget.value = ''; }} />{importFileName && <div className="flex flex-wrap items-center justify-between gap-2"><p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importRows.length} filas detectadas</p><Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearEmployeeImportFile} disabled={previewLoading || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos laborales.</li><li>Carga el archivo y abre la previsualización.</li><li>Corrige los errores; crea departamentos o puestos faltantes desde la misma fila.</li><li>Confirma escribiendo IMPORTAR. Las filas válidas se guardan aunque otras tengan incidencias.</li></ol></div>
           </div>
           <DialogFooter className="flex-wrap" data-tour="hr-employee-import-actions"><Button variant="outline" onClick={() => setImportOpen(false)} disabled={previewLoading}>Cerrar</Button>{importRows.length > 0 && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar empleados</Button>}</DialogFooter>

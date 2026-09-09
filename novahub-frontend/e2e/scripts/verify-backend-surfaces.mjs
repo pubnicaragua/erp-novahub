@@ -17,7 +17,7 @@ const SURFACE_CLASSIFICATION = {
   'src/activities/activities.controller.ts': { category: 'ui', uiModule: 'actividades' },
   'src/ai/ai.controller.ts': { category: 'backend-only', reason: 'servicio auxiliar de IA' },
   'src/app.controller.ts': { category: 'infrastructure', reason: 'raíz de la aplicación' },
-  'src/audit/audit.controller.ts': { category: 'backend-only', reason: 'auditoría consultable por dominio' },
+  'src/audit/audit.controller.ts': { category: 'ui', uiModule: 'auditoria' },
   'src/auth/auth.controller.ts': { category: 'infrastructure', reason: 'autenticación y sesión' },
   'src/branding/branding.controller.ts': { category: 'ui', uiModule: 'configuracion' },
   'src/caja/caja.controller.ts': { category: 'ui', uiModule: 'ventas' },

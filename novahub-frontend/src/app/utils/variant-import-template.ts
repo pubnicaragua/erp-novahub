@@ -10,7 +10,7 @@ export const getCanonicalProductImportHeaders = (
   priceLists: CanonicalImportPriceList[],
   canViewInventoryCost: boolean,
 ) => [
-  'Código',
+  'Código/Sku',
   'Nombre',
   'Descripción',
   'Nota comercial',
@@ -83,13 +83,16 @@ export const createCanonicalVariantImportWorkbook = (
     ...(canViewInventoryCost ? ['Costo variante'] : []),
   ];
   const managerLocations = (options.locations || []).filter((location) => String(location.label || '').trim());
+  const inventoryHeaders = mode === 'PURCHASE_ORDER'
+    ? ['Código producto', 'SKU variante', 'Stock inicial', 'Stock mínimo', 'Stock máximo', 'Costo entrada', 'Moneda costo', 'Tasa costo']
+    : ['Código producto', 'SKU variante', 'Bodega', 'Stock inicial', 'Stock mínimo', 'Stock máximo', 'Costo entrada', 'Moneda costo', 'Tasa costo'];
 
   const workbook = XLSX.utils.book_new();
   appendSheet(workbook, 'Productos', [productHeaders]);
   appendSheet(workbook, 'Variantes', [variantHeaders]);
   appendSheet(workbook, 'Atributos', [['SKU variante', 'Atributo', 'Valor']]);
   appendSheet(workbook, 'Precios', [['Alcance', 'Código producto', 'SKU variante', 'Lista', 'Precio']]);
-  appendSheet(workbook, 'Inventario', [['Código producto', 'SKU variante', 'Bodega', 'Stock inicial', 'Stock mínimo', 'Stock máximo', 'Costo entrada', 'Moneda costo', 'Tasa costo']]);
+  appendSheet(workbook, 'Inventario', [inventoryHeaders]);
 
   if (mode === 'MANAGER') {
     appendSheet(workbook, 'Ubicaciones activas', [
@@ -108,7 +111,7 @@ export const createCanonicalVariantImportWorkbook = (
     [mode === 'PURCHASE_ORDER' ? 'GUÍA · PLANTILLA CANÓNICA PARA ORDEN DE COMPRA' : 'GUÍA · PLANTILLA CANÓNICA DE PRODUCTOS CON VARIANTES'],
     ['Plantilla vacía', 'Las hojas de carga contienen únicamente encabezados. Registra tus propios productos, variantes, atributos, precios y destinos antes de importar.'],
     ['Contrato NOVAHUB_VARIANTS_V1. Las hojas Productos, Variantes, Atributos, Precios e Inventario se leen como una sola carga relacionada por código de producto y SKU de variante.'],
-    ['Productos', 'Una fila por producto padre. Usa los mismos datos de la creación: código, nombre, descripción, nota comercial, categoría, unidad, marca, indicador de variable, moneda, tres precios de venta, costo y serie/IMEI.'],
+    ['Productos', 'Una fila por producto padre. Usa los mismos datos de la creación: código/Sku, nombre, descripción, nota comercial, categoría, unidad, marca, indicador de variable, moneda, tres precios de venta, costo y serie/IMEI.'],
     ['Variantes', 'Una fila por presentación vendible. El SKU variante debe ser único; el costo variante vacío hereda el costo del padre y un costo informado es propio de esa variante.'],
     ['Atributos', mode === 'PURCHASE_ORDER'
       ? 'Una fila por SKU variante + atributo + valor. Los atributos faltantes quedan pendientes y se crean al recepcionar la compra.'
@@ -117,9 +120,13 @@ export const createCanonicalVariantImportWorkbook = (
       ? 'Es opcional y corresponde al precio de venta por lista. Puede quedar vacío: no determina el costo de la orden de compra.'
       : 'PRODUCTO define el precio base heredable. VARIANTE sobrescribe una lista únicamente para el SKU indicado.'],
     ['Inventario', mode === 'PURCHASE_ORDER'
-      ? 'Una fila por SKU variante + bodega. Stock inicial es la cantidad solicitada y Costo entrada es el precio unitario de compra que aparecerá en la orden. La bodega del archivo no cambia la bodega destino de la orden.'
-      : 'Una fila por SKU variante + bodega. La bodega debe existir, estar activa y pertenecer al alcance permitido. El producto padre no recibe stock propio cuando tiene variantes.'],
-    ['Bodegas inválidas', 'La fila se rechaza hasta seleccionar una bodega activa existente en la previsualización. La importación no crea bodegas automáticamente.'],
+      ? 'Una fila por SKU variante. Stock inicial es la cantidad solicitada y Costo entrada es el precio unitario de compra que aparecerá en la orden. No se distribuye por bodegas: la única bodega destino es la seleccionada en la orden.'
+      : mode === 'MANAGER'
+        ? 'Una fila por SKU variante y ubicación destino. La ubicación debe existir, estar activa y pertenecer al alcance permitido. El producto padre no recibe stock propio cuando tiene variantes.'
+        : 'Una fila por SKU variante + bodega. La bodega debe existir, estar activa y pertenecer al alcance permitido. El producto padre no recibe stock propio cuando tiene variantes.'],
+    ...(mode === 'PURCHASE_ORDER'
+      ? [['Bodega en la orden', 'No agregues una columna Bodega ni valores de bodega en este archivo. Si el archivo intenta distribuir por bodega, se rechazará; se respetará únicamente la bodega destino del formulario de la orden.']]
+      : [['Bodegas inválidas', 'La fila se rechaza hasta seleccionar una bodega activa existente en la previsualización. La importación no crea bodegas automáticamente.']]),
     ['Reimportación', 'MERGE conserva IDs, movimientos y existencias existentes; actualiza datos maestros y agrega variantes nuevas sin duplicar productos o SKUs.'],
     ['Valores numéricos', `Usa números sin símbolo de moneda. La moneda del archivo es ${currency}; la tasa aplicada es ${exchangeRate}.`],
     ['Variable y moneda', 'Variable indica si el producto tendrá filas en Variantes. La moneda se aplica a toda la importación y debe coincidir con la moneda seleccionada en la pantalla de carga.'],

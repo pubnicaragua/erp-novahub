@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { DateField } from '../ui/DateField';
-import { FileSpreadsheet, Upload, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
+import { FileSpreadsheet, Upload, CheckCircle2, AlertTriangle, Download, X } from 'lucide-react';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { toast } from 'sonner';
@@ -81,6 +81,15 @@ export function ActivosFijosImportTab() {
   const [readingFile, setReadingFile] = useState(false);
   const [readingProgress, setReadingProgress] = useState(0);
   const [result, setResult] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const clearFile = () => {
+    if (readingFile || validating || importing) return;
+    setFileName('');
+    setRows([]);
+    setResult(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const fmt = (value: number) => formatConvertedAmount(value, baseCurrency);
 
@@ -242,8 +251,9 @@ export function ActivosFijosImportTab() {
           </div>
 
           <div className="rounded-xl border border-dashed border-border/40 p-6 text-center">
-            <input
-              type="file"
+              <input
+                ref={fileInputRef}
+                type="file"
               accept=".xlsx,.xls"
               id="fixed-asset-import-file"
               className="hidden"
@@ -254,6 +264,7 @@ export function ActivosFijosImportTab() {
               <span className="text-sm font-medium">{fileName ? fileName : 'Haz clic para seleccionar un archivo Excel'}</span>
               <span className="text-xs">{rows.length > 0 ? `${rows.length} filas listas para validar` : 'Se cargarán los activos del archivo'}</span>
             </label>
+            {fileName && <Button type="button" variant="ghost" size="sm" className="mt-3 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearFile} disabled={readingFile || validating || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button>}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

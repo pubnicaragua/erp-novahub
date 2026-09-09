@@ -1,6 +1,6 @@
 ﻿import { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Download, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -46,6 +46,16 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
   const [summary, setSummary] = useState<{ total: number; valid: number; warnings: number; errors: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+
+  const clearFile = () => {
+    if (busy) return;
+    setFileName('');
+    setRows([]);
+    setPreview(null);
+    setSummary(null);
+    setResult(null);
+    if (fileRef.current) fileRef.current.value = '';
+  };
 
   const handleFile = async (file: File) => {
     setFileName(file.name);
@@ -134,8 +144,9 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
         <Button variant="outline" className="rounded-xl" onClick={() => fileRef.current?.click()}>
           <FileSpreadsheet className="size-4" /> Seleccionar archivo
         </Button>
-        <Input ref={fileRef as any} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+        <Input ref={fileRef as any} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void handleFile(file); e.currentTarget.value = ''; }} />
         {fileName && <span className="text-xs text-muted-foreground">{fileName}</span>}
+        {fileName && <Button type="button" variant="ghost" className="rounded-xl px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearFile} disabled={busy} aria-label="Quitar archivo de paquetes"><X className="size-4" /> Quitar archivo</Button>}
         {rows.length > 0 && !result && (
           <Button variant="outline" className="rounded-xl" onClick={validate} disabled={busy}>
             <Upload className="size-4" /> Validar

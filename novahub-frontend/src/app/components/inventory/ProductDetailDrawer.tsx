@@ -526,7 +526,8 @@ export function ProductDetailDrawer({
    */
   const productSeries = useMemo(() => {
     if (!product) return [];
-    return series.filter(
+    const sourceSeries = Array.isArray(product.series) && product.series.length > 0 ? product.series : series;
+    return sourceSeries.filter(
       (item: any) =>
         item.productId === product.id || item.product?.id === product.id,
     );

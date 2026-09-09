@@ -208,11 +208,22 @@ export function ClientesPage() {
       </div>
 
       <Card>
-          <CardHeader><CardTitle>Directorio de clientes</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Directorio de clientes</CardTitle></CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader><TableRow><TableHead>Cliente</TableHead><TableHead>Contacto</TableHead><TableHead>Rendimiento</TableHead><TableHead>Línea de Crédito</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader>
+          <Table
+            containerClassName="max-h-[min(62vh,42rem)] overflow-auto rounded-xl border border-border/50 scrollbar-overlay"
+            data-testid="customers-table"
+          >
+              <TableHeader className="sticky top-0 z-20 bg-card shadow-sm" style={{ backgroundColor: 'var(--card)' }}>
+                <TableRow>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Contacto</TableHead>
+                  <TableHead>Rendimiento</TableHead>
+                  <TableHead>Línea de Crédito</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {filtered.map(c => {
                   const limite = c.creditLimit || 0;
@@ -264,8 +275,7 @@ export function ClientesPage() {
                   );
                 })}
               </TableBody>
-            </Table>
-          </div>
+          </Table>
         </CardContent>
       </Card>
     </div>

@@ -247,6 +247,15 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
 
+  const clearImportFile = () => {
+    if (previewLoading || importing) return;
+    setImportFile(null);
+    setImportFileName('');
+    setImportPreviewRows([]);
+    setImportPreviewErrors([]);
+    setImportPreviewOpen(false);
+  };
+
   const accounts = useMemo(() => {
       const raw = accountsQuery.data || [];
       const tree = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
@@ -1422,8 +1431,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                 id="import-file"
                 type="file"
                 accept=".xlsx,.xls"
-                onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); e.currentTarget.value = ''; }}
               />
+              {importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b></p><Button type="button" variant="ghost" size="sm" className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearImportFile} disabled={previewLoading || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}
             </div>
 
             <label className="flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors">

@@ -497,6 +497,14 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     }
   };
 
+  const clearMobiliarioImportFile = () => {
+    if (readingFile || importing) return;
+    setImportOpen(false);
+    setImportRowsData([]);
+    setImportFileName('');
+    setImportResult(null);
+  };
+
   const confirmImport = async () => {
     if (!canImportAssets) {
       toast.error('No tienes permiso para importar activos');
@@ -982,8 +990,9 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
         <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,760px)] max-h-[min(88vh,calc(100dvh-3rem))] overflow-y-auto">
           <DialogHeader data-tour="mobiliario-import-title">
             <DialogTitle>Importar Mobiliario y Equipos</DialogTitle>
-            <DialogDescription>
-              {importFileName} · {importRowsData.length} filas detectadas. Los códigos vacíos se asignan automáticamente; cada activo con costo mayor que 0 también se registra en Activos Fijos.
+            <DialogDescription className="flex flex-wrap items-center justify-between gap-2">
+              <span>{importFileName} · {importRowsData.length} filas detectadas. Los códigos vacíos se asignan automáticamente; cada activo con costo mayor que 0 también se registra en Activos Fijos.</span>
+              <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearMobiliarioImportFile} disabled={readingFile || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button>
             </DialogDescription>
             <InventoryViewTutorial label="Cómo importar mobiliario" targetPrefix="mobiliario-import" copy={{ data: { description: 'Revisa el archivo, las filas detectadas y los errores antes de registrar los activos.' }, actions: { description: 'Confirma la importación para crear los activos válidos.' } }} />
           </DialogHeader>

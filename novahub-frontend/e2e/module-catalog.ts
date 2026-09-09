@@ -32,6 +32,7 @@ export const E2E_MODULE_CATALOG: readonly E2eModuleDefinition[] = [
   { id: 'transferencias', label: 'Transferencias' },
   { id: 'reportes', label: 'Reportes', subModule: 'reportes-ventas' },
   { id: 'configuracion', label: 'Configuración', subModule: 'branding' },
+  { id: 'auditoria', label: 'Logs y auditoría' },
   { id: 'suscripciones', label: 'Mi Sucursal', subModule: 'mi-sucursal' },
   { id: 'tenant-admin', label: 'Administración de tenants', requiresPlatformRole: true },
   { id: 'schema', label: 'Esquema Prisma', requiresPlatformRole: true },

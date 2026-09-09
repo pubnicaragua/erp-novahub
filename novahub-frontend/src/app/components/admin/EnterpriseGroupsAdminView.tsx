@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { Building2, CalendarClock, Clock3, FileText, GitBranch, HardDrive, Link2, Loader2, Plus, Search, UserRound, Users, Warehouse } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { keepPreviousData } from '@tanstack/react-query';
+import { Building2, CalendarClock, ChevronLeft, ChevronRight, Clock3, FileText, GitBranch, HardDrive, Link2, Loader2, Plus, Search, UserRound, Users, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -29,24 +30,33 @@ function formatStorage(value: unknown) {
 export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boolean }) {
   const [workspace, setWorkspace] = useState<{ mode: 'create' | 'edit'; groupId?: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [groupsPage, setGroupsPage] = useState(1);
   const [activeTab, setActiveTab] = useState<'groups' | 'legacy' | 'requests' | 'quotes'>('groups');
-  const query = useTenantQuery(['platform-enterprise-groups'], (signal) => enterpriseGroupsService.getPlatformGroups(signal));
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim());
+      setGroupsPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+  const includeGroupOptions = activeTab === 'quotes';
+  const query = useTenantQuery(
+    ['platform-enterprise-groups', debouncedSearchTerm, groupsPage, includeGroupOptions],
+    (signal) => enterpriseGroupsService.getPlatformGroups({ search: debouncedSearchTerm || undefined, page: groupsPage, pageSize: 12, includeOptions: includeGroupOptions, includeMetrics: false }, signal),
+    { placeholderData: keepPreviousData },
+  );
   const legacyQuery = useTenantQuery(['platform-enterprise-groups-legacy-users'], (signal) => enterpriseGroupsService.getPlatformLegacyUsers(signal), { enabled: activeTab === 'legacy' });
   const data = query.data;
+  const summaryQuery = useTenantQuery(
+    ['platform-enterprise-groups-summary'],
+    (signal) => enterpriseGroupsService.getPlatformSummary(signal),
+    { enabled: Boolean(data) },
+  );
   const totalGroupUsers = (data?.groups || []).reduce((total: number, group: any) => total + Number(group.userCount || 0), 0);
   const filteredGroups = useMemo(() => {
-    const term = normalizeSearchValue(searchTerm);
-    if (!term) return data?.groups || [];
-    return (data?.groups || []).filter((group: any) => {
-      const haystack = [
-        group?.name,
-        group?.description,
-        ...(Array.isArray(group?.businessUnits) ? group.businessUnits : []).map((unit: any) => unit?.name),
-        ...(Array.isArray(group?.branches) ? group.branches : []).map((branch: any) => branch?.name),
-      ].map((value) => String(value ?? '')).join(' ').toLocaleLowerCase();
-      return haystack.includes(term);
-    });
-  }, [data?.groups, searchTerm]);
+    return data?.groups || [];
+  }, [data?.groups]);
   const extendLegacyTrial = async (tenantId: string) => {
     try {
       await enterpriseGroupsService.extendPlatformLegacyTrial(tenantId, 7);
@@ -65,13 +75,13 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
       <div className="flex min-w-0 justify-end">
         <div className="flex flex-wrap gap-2 md:justify-end">
           <Badge variant="outline" className="rounded-md px-3 py-1 text-xs">
-            {data?.groups?.length || 0} grupos · {data?.unassignedBranches?.length || 0} pendientes
+            {data?.pagination?.total || 0} grupos · {data?.unassignedBranches?.length || 0} pendientes
           </Badge>
           <Badge variant="outline" className="rounded-md px-3 py-1 text-xs">
             Métrica global en Master Console
           </Badge>
-          <Badge variant="outline" className="gap-1.5 rounded-md px-3 py-1 text-xs"><Users className="size-3.5 text-primary" /> {totalGroupUsers} usuarios</Badge>
-          <Badge variant="outline" className="gap-1.5 rounded-md px-3 py-1 text-xs"><HardDrive className="size-3.5 text-primary" /> {formatStorage(data?.storageBytes)} · {data?.storageObjects || 0} archivos</Badge>
+          <Badge variant="outline" className="gap-1.5 rounded-md px-3 py-1 text-xs"><Users className="size-3.5 text-primary" /> {summaryQuery.data?.totalGroupUsers ?? data?.totalGroupUsers ?? totalGroupUsers} usuarios</Badge>
+          <Badge variant="outline" className="gap-1.5 rounded-md px-3 py-1 text-xs"><HardDrive className="size-3.5 text-primary" /> {formatStorage(summaryQuery.data?.storageBytes ?? data?.storageBytes)} · {summaryQuery.data?.storageObjects ?? data?.storageObjects ?? 0} archivos</Badge>
         </div>
       </div>
 
@@ -120,17 +130,38 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
         />
       </div>
 
-      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
-        {filteredGroups.map((group: any) => (
-          <GroupCard
-            key={group.id}
-            group={group}
-            onOpenWorkspace={() => setWorkspace({ mode: 'edit', groupId: group.id })}
-            onChanged={() => query.refetch()}
-          />
-        ))}
-        {!filteredGroups.length && <div className="rounded-3xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground xl:col-span-2">No se encontraron grupos con ese criterio.</div>}
-      </div>
+      {query.isPending && !data ? (
+        <div className="flex min-h-48 items-center justify-center rounded-3xl border border-border/60 bg-card/60 text-sm text-muted-foreground"><Loader2 className="mr-2 size-5 animate-spin text-primary" /> Cargando grupos empresariales…</div>
+      ) : query.isError ? (
+        <div className="rounded-3xl border border-destructive/30 bg-destructive/5 p-10 text-center text-sm text-destructive">No se pudieron cargar los grupos empresariales. {query.error?.message || 'Intenta nuevamente.'}</div>
+      ) : (
+        <>
+          <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
+            {filteredGroups.map((group: any) => (
+              <GroupCard
+                key={group.id}
+                group={group}
+                onOpenWorkspace={() => setWorkspace({ mode: 'edit', groupId: group.id })}
+                onChanged={() => query.refetch()}
+              />
+            ))}
+            {!filteredGroups.length && <div className="rounded-3xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground xl:col-span-2">No se encontraron grupos con ese criterio.</div>}
+          </div>
+          {(data?.pagination?.totalPages || 1) > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/60 p-3 text-xs text-muted-foreground">
+              <span>Página {data?.pagination?.page || groupsPage} de {data?.pagination?.totalPages || 1} · {data?.pagination?.total || 0} grupos</span>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" className="rounded-lg" disabled={groupsPage <= 1 || query.isFetching} onClick={() => setGroupsPage((current) => Math.max(1, current - 1))}>
+                  <ChevronLeft className="mr-1 size-4" /> Anterior
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="rounded-lg" disabled={groupsPage >= (data?.pagination?.totalPages || 1) || query.isFetching} onClick={() => setGroupsPage((current) => current + 1)}>
+                  Siguiente <ChevronRight className="ml-1 size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {!!data?.unassignedBranches?.length && (
         <Card className="rounded-3xl border-dashed border-amber-500/40 shadow-sm">
@@ -154,7 +185,7 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
       ) : activeTab === 'requests' ? (
         <TrialExtensionRequestsPanel />
       ) : (
-        <PlatformQuotesPanel groups={data?.groups || []} />
+        <PlatformQuotesPanel groups={data?.groupOptions?.length ? data.groupOptions : data?.groups || []} />
       )}
     </section>
   );

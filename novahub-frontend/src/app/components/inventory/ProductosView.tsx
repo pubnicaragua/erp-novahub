@@ -664,7 +664,7 @@ function ImportPreviewPage({
     return (
       <ImportPreviewMobileCard index={index} title={row.name || row.code} error={row._hasError ? row._errorMessage || 'Fila con errores' : undefined} warning={row._hasWarning ? row._warningMessage || 'Revisar fila' : undefined}>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <ImportPreviewField label="Código *"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`${importPreviewFieldClass} font-mono ${!row.code ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label={`${isService ? 'Código' : 'Código/Sku'} *`}><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`${importPreviewFieldClass} font-mono ${!row.code ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Unidad"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
           {isService && <ImportPreviewField label="Duración (min)"><Input type="number" min={0} step="1" value={row.estimatedDuration ?? ''} onChange={(event) => onRowUpdate(index, 'estimatedDuration', event.target.value === '' ? undefined : Number(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>}
           <ImportPreviewField label="Nombre *" className="sm:col-span-2"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`${importPreviewFieldClass} ${!row.name ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
@@ -741,7 +741,7 @@ function ImportPreviewPage({
         <div className="mt-3 space-y-2 text-xs">
           <div><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Atributos</p><div className="mt-1 flex flex-wrap gap-1">{variant.attributes.length ? variant.attributes.map((attribute) => <Badge key={`${attribute.attributeName}-${attribute.value}`} variant="secondary" className="text-[9px]">{attribute.attributeName}: {attribute.value}</Badge>) : <span className="text-muted-foreground">Sin atributos</span>}</div></div>
           <div><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Precios efectivos</p><div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px]">{summaryPriceLists.length ? summaryPriceLists.map((list) => { const ownPrice = variantPrices[String(list.code).toUpperCase()]; const effectivePrice = ownPrice ?? parentPrices[String(list.code).toUpperCase()]; return <span key={list.code}><b>{list.name}:</b> {effectivePrice === undefined ? '—' : `${currencySymbol} ${formatImportAmount(effectivePrice)} · ${ownPrice === undefined ? 'hereda' : 'propio'}`}</span>; }) : <span className="text-muted-foreground">Sin listas de precios</span>}</div></div>
-          <div><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Costo y distribución</p><p className="mt-1 font-bold tabular-nums">{effectiveCost === undefined ? 'Costo no indicado' : `${currencySymbol} ${formatImportAmount(effectiveCost)}`} · {warehouseNames.length ? warehouseNames.join(' · ') : 'Sin bodega'}</p></div>
+          <div><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Costo y bodega</p><p className="mt-1 font-bold tabular-nums">{effectiveCost === undefined ? 'Costo no indicado' : `${currencySymbol} ${formatImportAmount(effectiveCost)}`} · {warehouseNames.length ? warehouseNames.join(' · ') : 'Sin bodega'}</p></div>
         </div>
       </article>
     );
@@ -837,7 +837,7 @@ function ImportPreviewPage({
           {advancedCatalog.stock.length > 0 && <div className="space-y-2 rounded-xl border border-border/50 bg-background/70 p-3" aria-label="Distribución de existencias por variante">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Distribución por variante y bodega</p>
-              <p className="text-[11px] text-muted-foreground">Bodegas de la sucursal activa: {warehouseOptions.length > 0 ? warehouseOptions.map((option: any) => option.name).join(' · ') : 'no hay bodegas activas'}.</p>
+              <p className="text-[11px] text-muted-foreground">Cada fila del Excel puede usar una bodega distinta; el stock queda separado por variante y bodega.</p>
             </div>
             <div className="max-h-64 overflow-auto rounded-lg border border-border/40">
               <div className="grid min-w-[720px] grid-cols-[minmax(130px,1fr)_minmax(170px,1.2fr)_80px_minmax(220px,1fr)_100px] items-center gap-2 border-b border-border/40 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
@@ -884,7 +884,7 @@ function ImportPreviewPage({
             <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
               <TableRow className="[&>th]:flex [&>th]:items-center" style={{ display: 'grid', gridTemplateColumns: gridTemplate, columnGap: '8px' }}>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
-                <TableHead className="w-32 text-[10px] uppercase">Código</TableHead>
+                <TableHead className="w-32 text-[10px] uppercase">{isService ? 'Código' : 'Código/Sku'}</TableHead>
                 <TableHead className="min-w-[220px] text-[10px] uppercase">{isService ? 'Nombre / descripción' : 'Nombre'}</TableHead>
                 <TableHead className="w-36 text-[10px] uppercase">Marca</TableHead>
                 <TableHead className="w-44 text-[10px] uppercase">Nota comercial</TableHead>
@@ -998,9 +998,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       console.error('Error al cargar stock de productos:', e);
     }
   }, []);
-  useEffect(() => {
-    void refreshStockMap();
-  }, [products, refreshStockMap]);
   const entityLabel = isServiceView ? 'servicio' : 'producto';
   const entityLabelCap = isServiceView ? 'Servicio' : 'Producto';
   const getServicePricePresentation = (product: any) => {
@@ -1080,6 +1077,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [importData, setImportData] = useState<any[]>([]);
   const [advancedImportCatalog, setAdvancedImportCatalog] = useState<VariantImportCatalog | null>(null);
   const [importFileName, setImportFileName] = useState('');
+  const [importBatchId, setImportBatchId] = useState<string | null>(null);
   const [imageArchiveFileName, setImageArchiveFileName] = useState('');
   const [imageArchiveEntries, setImageArchiveEntries] = useState<Map<string, File>>(new Map());
   const [importProcessing, setImportProcessing] = useState(false);
@@ -1186,6 +1184,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [solicitudOnlySelected, setSolicitudOnlySelected] = useState(false);
   const [solicitudPage, setSolicitudPage] = useState(1);
   const solicitudPreparationTimerRef = useRef<number | null>(null);
+
+  // El listado ya trae los niveles necesarios para la tabla. El mapa global
+  // solo se necesita para los detalles agregados o para la solicitud de compra;
+  // cargarlo al entrar hacía una petición adicional y se repetía por página.
+  useEffect(() => {
+    if (!warehouseDetail && !branchDetail && !solicitudOpen) return;
+    void refreshStockMap();
+  }, [warehouseDetail, branchDetail, solicitudOpen, refreshStockMap]);
 
   const clearSolicitudPreparation = () => {
     if (solicitudPreparationTimerRef.current !== null) {
@@ -2033,22 +2039,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: nextAllocations })));
   };
 
-  const addInitialAllocation = (productId: string) => {
-    const product = editingRows.get(productId);
-    if (!product) return;
-    const next = [
-      ...(product.initialAllocations || []),
-      {
-        id: `alloc-${Date.now()}-${(product.initialAllocations || []).length}`,
-        warehouseId: '',
-        quantity: 0,
-        minStock: Number(product.minStock || 0),
-        maxStock: Number(product.maxStock || 0),
-      },
-    ];
-    setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: next })));
-  };
-
   const handleSaveRow = async (id: string) => {
     const product = editingRows.get(id);
     if (!product) return;
@@ -2069,19 +2059,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
 
     const validAllocations = product.isNew
-      ? (product.initialAllocations || []).filter((item) =>
+      ? (product.initialAllocations || []).slice(0, 1).filter((item) =>
           item.warehouseId
           && (Number(item.quantity || 0) > 0 || Number(item.minStock || 0) > 0 || Number(item.maxStock || 0) > 0),
         )
       : [];
-    const uniqueWarehouses = new Set(validAllocations.map((item) => item.warehouseId));
 
     if (validAllocations.length > 0 && warehouses.length === 0) {
       toast.error('No hay bodegas registradas para asignar stock inicial');
-      return;
-    }
-    if (validAllocations.length > 0 && uniqueWarehouses.size !== validAllocations.length) {
-      toast.error('No repitas la misma bodega en la distribución inicial');
       return;
     }
     const invalidMax = (product.initialAllocations || []).some((item) =>
@@ -2513,7 +2498,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         </TableCell>}
         {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>
           {(() => {
-            const allocations = product.initialAllocations || [];
+            const allocations = (product.initialAllocations || []).slice(0, 1);
             return (
               <div className="space-y-1.5 min-w-0">
                 {allocations.map((alloc) => (
@@ -2533,40 +2518,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       </SelectContent>
                     </Select>
                   </div>
-                ))}
-                <div className="flex min-h-8 min-w-0 flex-wrap items-center gap-1 rounded-lg bg-muted/30 px-2 py-1">
-                  {allocations
-                    .map((alloc) => warehouses.find((warehouse: any) => warehouse.id === alloc.warehouseId)?.name)
-                    .filter(Boolean)
-                    .map((warehouseName, index) => (
-                      <Badge key={`${warehouseName}-${index}`} variant="secondary" className="max-w-full truncate text-[9px] bg-muted/50 font-medium">
-                        {warehouseName}
-                      </Badge>
-                    ))}
-                  {!allocations.some((alloc) => warehouses.some((warehouse: any) => warehouse.id === alloc.warehouseId)) && (
-                    <span className="text-[10px] text-muted-foreground">-</span>
-                  )}
-                </div>
-                <div className="pt-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-[9px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2"
-                    onClick={() => addInitialAllocation(product.id)}
-                    disabled={isSaving}
-                  >
-                    <Plus className="size-3 mr-1" />
-                    Bodega
-                  </Button>
-                </div>
+                        ))}
               </div>
             );
           })()}
         </TableCell>}
         {!isServiceView && <TableCell className="align-top pt-3 text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}>
           {(() => {
-            const allocations = product.initialAllocations || [];
+            const allocations = (product.initialAllocations || []).slice(0, 1);
             const totalAllocated = allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
             return (
               <div className="space-y-1.5 min-w-0">
@@ -2842,7 +2801,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const guide = XLSX.utils.aoa_to_sheet([
         ['GUÍA · PRODUCTOS REGISTRADOS PARA IMPORTACIÓN'],
         ['Productos exportados', `Incluye ${catalogProducts.length} producto(s) ya registrados, con sus datos actuales, variantes, atributos, precios y existencias disponibles en el alcance seleccionado.`],
-        ['Productos', 'Usa los campos de la creación actual: código, nombre, descripción, nota comercial, categoría, unidad, marca, variable, moneda, precios minorista/mayorista/distribuidor, costo, serie/IMEI e imagen URL opcional.'],
+        ['Productos', 'Usa los campos de la creación actual: código/Sku, nombre, descripción, nota comercial, categoría, unidad, marca, variable, moneda, precios minorista/mayorista/distribuidor, costo y serie/IMEI. Las imágenes se cargan mediante ZIP/RAR.'],
         ['Listas de precios', importPriceLists.map((list) => list.name).join(' · ') || 'Sin listas configuradas'],
         ['Variantes', 'Registra una fila por SKU en Variantes y sus atributos en Atributos. Los productos simples usan su SKU padre.'],
         ['Stock', 'Registra una fila por SKU y bodega en Inventario. En productos con variantes, el padre no lleva stock propio.'],
@@ -2905,7 +2864,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const handleDownloadImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
-      Código: row.code || '', Nombre: row.name || '', ...(isServiceView ? {
+      [isServiceView ? 'Código' : 'Código/Sku']: row.code || '', Nombre: row.name || '', ...(isServiceView ? {
         Descripción: row.description || '',
         'Nota comercial': row.commercialNote || '',
         Categoría: row.category || '',
@@ -3041,6 +3000,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       return;
     }
     setImportProcessing(true);
+    const nextImportBatchId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `catalog-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setImportBatchId(nextImportBatchId);
     setPreviewLoading(true);
     setPreviewProgress(3);
     setSimilarImportGroups([]);
@@ -3146,6 +3109,24 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setPreviewProgress(0);
     }
   }, [validateImportRows, catalogItemType, isServiceView, importPriceLists, importPriceListsForView]);
+
+  const handleClearImportFile = useCallback(() => {
+    if (importing || importProcessing || previewLoading || previewMounting) return;
+    setImportPreviewOpen(false);
+    setImportFileName('');
+    setImportBatchId(null);
+    setImportData([]);
+    setAdvancedImportCatalog(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [importing, importProcessing, previewLoading, previewMounting]);
+
+  const handleClearImageArchive = useCallback(() => {
+    if (importing || importProcessing) return;
+    setImageArchiveFileName('');
+    setImageArchiveEntries(new Map());
+    setImportData((current) => current.map((row) => ({ ...row, _imageStatus: 'none' })));
+    if (imageArchiveInputRef.current) imageArchiveInputRef.current.value = '';
+  }, [importing, importProcessing]);
 
   const handleImageArchiveSelected = useCallback(async (file: File) => {
     if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
@@ -3503,8 +3484,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
        const results = isServiceView
          ? await inventoryService.importServices({ items, currency: importCurrency, exchangeRate: importExchangeRate, reimportMode: initialImportReimportMode, confirmText: 'IMPORTAR' })
          : advancedCatalogPayload
-           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: effectiveImportCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: initialImportReimportMode, similarityResolutions: effectiveSimilarityResolutions, confirmText: 'IMPORTAR' })
-           : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', reimportMode: initialImportReimportMode, similarityResolutions: effectiveSimilarityResolutions, confirmText: 'IMPORTAR' });
+           ? await inventoryService.importInitialCatalog({ catalog: advancedCatalogPayload, currency: effectiveImportCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', createMissingAttributes: true, reimportMode: initialImportReimportMode, similarityResolutions: effectiveSimilarityResolutions, importBatchId: importBatchId || undefined, confirmText: 'IMPORTAR' })
+           : await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', reimportMode: initialImportReimportMode, similarityResolutions: effectiveSimilarityResolutions, importBatchId: importBatchId || undefined, confirmText: 'IMPORTAR' });
       setImportProgress(55);
       await uploadInitialImportImages(valid, setImportProgress);
       setImportProgress(100);
@@ -3522,6 +3503,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
        setImportData([]);
       setAdvancedImportCatalog(null);
       setImportFileName('');
+      setImportBatchId(null);
       setInitialImportCompleted(true);
       onRefresh();
       window.setTimeout(() => setImportResults(null), 2600);
@@ -3540,9 +3522,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setImporting(false);
       setImportProgress(0);
     }
-  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView, similarImportResolutions, catalogPermissionModule, canPerform, checkImportSimilarity]);
+  }, [importData, advancedImportCatalog, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, initialImportReimportMode, importBatchId, onRefresh, canViewInventoryCost, uploadInitialImportImages, isServiceView, similarImportResolutions, catalogPermissionModule, canPerform, checkImportSimilarity]);
 
-  const resolveImportSimilarity = useCallback(async (group: SimilarProductGroup, action: SimilarityResolution['action'], match?: SimilarProductMatch) => {
+  const resolveImportSimilarity = useCallback(async (group: SimilarProductGroup, action: SimilarityResolution['action'], match?: SimilarProductMatch, variant?: NonNullable<SimilarProductMatch['variants']>[number]) => {
     const inputKey = normalizeSimilarityInputKey(group.inputKey);
     if (!inputKey) return;
     if (action === 'CREATE_NEW') {
@@ -3560,7 +3542,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setSimilarImportResolvingKey(`${group.inputKey}:${action === 'USE_EXISTING' ? match?.id : 'CREATE_NEW'}`);
     const nextResolutions: Record<string, SimilarityResolution> = {
       ...similarImportResolutions,
-      [inputKey]: { inputKey: group.inputKey, action, ...(match?.id ? { productId: match.id } : {}) },
+      [inputKey]: { inputKey: group.inputKey, action, ...(match?.id ? { productId: match.id } : {}), ...(variant?.id ? { variantId: variant.id } : {}) },
     };
     const remainingGroups = similarImportGroups.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== inputKey);
     setSimilarImportResolutions(nextResolutions);
@@ -3627,6 +3609,17 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setBulkImageProcessing(false);
     }
   }, []);
+
+  const handleClearBulkImageArchive = useCallback(() => {
+    if (bulkImageProcessing || bulkImageUploading) return;
+    setBulkImageFileName('');
+    setBulkImageEntries(new Map());
+    setBulkImageProducts([]);
+    setBulkImageMissingSkus([]);
+    setBulkImageResults(null);
+    setBulkImageProgress(0);
+    if (bulkImageInputRef.current) bulkImageInputRef.current.value = '';
+  }, [bulkImageProcessing, bulkImageUploading]);
 
   const handleBulkImageUpload = useCallback(async () => {
     if (bulkImageUploading || bulkImageProducts.length === 0) return;
@@ -4180,7 +4173,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                   }
                 </button>
               </TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">Código<ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>
+               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Código' : 'Código/Sku'}<ColumnFilterMenu label={isServiceView ? 'Código' : 'Código/Sku'} sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}><span className="inline-flex items-center gap-1">Marca<ColumnFilterMenu label="Marca" options={brandOptions} selected={colFilters.state.brand?.values || []} onSelect={(values) => colFilters.setValues('brand', values)} sort={colFilters.state.brand?.sort || null} onSort={(sort) => colFilters.setSort('brand', sort)} /></span></TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>Nota comercial</TableHead>
@@ -4589,9 +4582,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         groups={similarImportGroups}
         title="Alerta: posible producto existente"
         description={`Se encontraron coincidencias por nombre, marca, SKU o atributos. Revisa los datos mostrados y selecciona el producto o variante existente cuando corresponda. Un SKU exacto no puede duplicarse; si la coincidencia no es exacta, puedes crear un registro nuevo.`}
+        selectionHint="Al elegir un producto o variante existente, el stock se sumará en la bodega indicada. El costo se recalculará como promedio ponderado: (existencias actuales × costo actual + entrada × costo de entrada) ÷ existencias totales. Una reimportación exacta en modo MERGE conserva stock y costo."
         onOpenChange={(value) => { setSimilarImportAlertOpen(value); if (!value) setSimilarImportResolvingKey(null); }}
         resolvingKey={similarImportResolvingKey}
-        onSelectExisting={(group, match) => { void resolveImportSimilarity(group, 'USE_EXISTING', match); }}
+        onSelectExisting={(group, match, variant) => { void resolveImportSimilarity(group, 'USE_EXISTING', match, variant); }}
         onCreateNew={(group) => { void resolveImportSimilarity(group, 'CREATE_NEW'); }}
       />
       <AddProductsModal
@@ -4645,9 +4639,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 <p className="text-xs text-muted-foreground">ZIP o RAR · JPG, JPEG y PNG · asociación por SKU</p>
                 {bulkImageFileName && <p className="mt-1 truncate text-xs font-medium text-emerald-600" title={bulkImageFileName}>{bulkImageFileName}</p>}
               </div>
-              <Button type="button" variant="outline" className="shrink-0" onClick={() => bulkImageInputRef.current?.click()} disabled={bulkImageProcessing || bulkImageUploading}>
-                <Upload className="mr-2 size-4" /> {bulkImageFileName ? 'Cambiar archivo' : 'Seleccionar ZIP/RAR'}
-              </Button>
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                <Button type="button" variant="outline" className="shrink-0" onClick={() => bulkImageInputRef.current?.click()} disabled={bulkImageProcessing || bulkImageUploading}>
+                  <Upload className="mr-2 size-4" /> {bulkImageFileName ? 'Cambiar archivo' : 'Seleccionar ZIP/RAR'}
+                </Button>
+                {bulkImageFileName && <Button type="button" variant="ghost" size="sm" className="shrink-0 text-destructive hover:text-destructive" onClick={handleClearBulkImageArchive} disabled={bulkImageProcessing || bulkImageUploading}>
+                  <X className="mr-1.5 size-3.5" /> Quitar archivo
+                </Button>}
+              </div>
               <input ref={bulkImageInputRef} type="file" className="hidden" accept=".zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed" disabled={bulkImageProcessing || bulkImageUploading} onChange={(event) => { if (event.target.files?.[0]) handleBulkImageArchiveSelected(event.target.files[0]); event.currentTarget.value = ''; }} />
             </div>
             {bulkImageProcessing && <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">Leyendo el archivo y buscando productos por SKU…</div>}
@@ -4698,7 +4697,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       <Dialog open={importModalOpen} onOpenChange={(open) => {
         if (!importing && !previewLoading && !previewMounting) {
           setImportModalOpen(open);
-          if (!open) { setImportPreviewOpen(false); setImportData([]); setAdvancedImportCatalog(null); setImportFileName(''); setImageArchiveFileName(''); setImageArchiveEntries(new Map()); setImportProgress(0); }
+          if (!open) { setImportPreviewOpen(false); setImportData([]); setAdvancedImportCatalog(null); setImportFileName(''); setImportBatchId(null); setImageArchiveFileName(''); setImageArchiveEntries(new Map()); setImportProgress(0); }
         }
       }}>
         <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(94vw,1000px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col">
@@ -4721,9 +4720,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <p className="whitespace-normal text-[11px] text-muted-foreground">ZIP o RAR con archivos JPG, JPEG o PNG nombrados exactamente como el SKU. Se permiten subcarpetas y la asociación no distingue mayúsculas.</p>
               {imageArchiveFileName && <p className="mt-1 text-[11px] text-emerald-600">{imageArchiveFileName} · {imageArchiveEntries.size} imagen(es) reconocida(s)</p>}
             </div>
-            <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => imageArchiveInputRef.current?.click()} disabled={importing || importProcessing}>
-              <Upload className="size-3 mr-2" />{imageArchiveFileName ? 'Cambiar ZIP/RAR' : 'Cargar ZIP/RAR'}
-            </Button>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => imageArchiveInputRef.current?.click()} disabled={importing || importProcessing}>
+                <Upload className="size-3 mr-2" />{imageArchiveFileName ? 'Cambiar ZIP/RAR' : 'Cargar ZIP/RAR'}
+              </Button>
+              {imageArchiveFileName && <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-destructive hover:text-destructive" onClick={handleClearImageArchive} disabled={importing || importProcessing}>
+                <X className="mr-1.5 size-3.5" /> Quitar
+              </Button>}
+            </div>
             <input type="file" className="hidden" accept=".zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed" ref={imageArchiveInputRef} onChange={(e) => { if (e.target.files?.[0]) handleImageArchiveSelected(e.target.files[0]); e.currentTarget.value = ''; }} />
           </div>
           
@@ -4748,18 +4752,22 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                   </div>
                   <input type="file" className="hidden" accept=".xlsx,.xls,.csv" ref={fileInputRef} disabled={importProcessing || importing} onChange={(e) => {
                     if (e.target.files?.[0]) handleFileSelected(e.target.files[0]);
+                    e.currentTarget.value = '';
                   }} />
                 </div>
               </div>
             ) : !importPreviewOpen ? (
-              <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-muted/20 p-6 text-center">
-                <FileSpreadsheet className="size-10 text-primary" />
-                <div>
-                  <p className="font-semibold">Archivo cargado correctamente</p>
-                  <p className="mt-1 text-xs text-muted-foreground">La previsualización permanece oculta hasta que presiones el botón.</p>
-                  <p className="mt-2 text-xs font-medium">{importFileName} · {importData.length} registro(s){imageArchiveFileName ? ` · ${imageArchiveFileName}` : ''}</p>
-                </div>
-                {importProcessing && <p className="text-xs text-primary">Procesando archivo, espera un momento...</p>}
+                <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-muted/20 p-6 text-center">
+                  <FileSpreadsheet className="size-10 text-primary" />
+                  <div>
+                    <p className="font-semibold">Archivo cargado correctamente</p>
+                    <p className="mt-1 text-xs text-muted-foreground">La previsualización permanece oculta hasta que presiones el botón.</p>
+                    <p className="mt-2 text-xs font-medium">{importFileName} · {importData.length} registro(s){imageArchiveFileName ? ` · ${imageArchiveFileName}` : ''}</p>
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleClearImportFile} disabled={importing || importProcessing || previewLoading || previewMounting}>
+                    <X className="mr-1.5 size-3.5" /> Quitar archivo
+                  </Button>
+                  {importProcessing && <p className="text-xs text-primary">Procesando archivo, espera un momento...</p>}
               </div>
             ) : (
               <div className="space-y-4 flex flex-col h-full">
@@ -4768,7 +4776,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     Archivo: <span className="font-semibold">{importFileName}</span> 
                     <span className="text-muted-foreground ml-2">({importData.length} filas válidas)</span>
                   </p>
-                  <div className="flex gap-1"><Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleDownloadImportErrors} disabled={!importData.some((row) => row._hasError || row._hasWarning)}>Descargar incidencias</Button><Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setImportFileName(''); setImportData([]); setAdvancedImportCatalog(null); }} disabled={importing}>Cambiar archivo</Button></div>
+                  <div className="flex flex-wrap justify-end gap-1"><Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleDownloadImportErrors} disabled={!importData.some((row) => row._hasError || row._hasWarning)}>Descargar incidencias</Button><Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={handleClearImportFile} disabled={importing || previewLoading || previewMounting}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>
                 </div>
 
                 <div className="border rounded-md flex-1 overflow-auto">
@@ -4777,7 +4785,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                         <TableRow>
                           <TableHead className="text-[10px] uppercase w-8"></TableHead>
-                          <TableHead className="text-[10px] uppercase w-32">Código</TableHead>
+                          <TableHead className="text-[10px] uppercase w-32">{isServiceView ? 'Código' : 'Código/Sku'}</TableHead>
                           <TableHead className="text-[10px] uppercase">Nombre</TableHead>
                           <TableHead className="text-[10px] uppercase w-36">Marca</TableHead>
                           {isServiceView && <TableHead className="text-[10px] uppercase w-52">Descripción</TableHead>}
@@ -4980,7 +4988,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </select>
               <p className="mt-2 text-xs text-muted-foreground">
                 {initialImportReimportMode === 'MERGE'
-                  ? 'Se conserva el ID, historial y stock; se actualizan los datos maestros permitidos y se agregan variantes nuevas.'
+                  ? 'Se conserva el ID, historial, costo y stock del SKU exacto; se actualizan los datos maestros permitidos y se agregan variantes nuevas. Si eliges un existente desde la alerta con stock, se registra una entrada y se calcula el ponderado.'
                   : 'No se modificará el producto existente. La fila quedará reportada para revisión.'}
               </p>
             </div>

@@ -60,8 +60,6 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   variantMinStocks: {} as Record<string, number | string>,
   variantMaxStocks: {} as Record<string, number | string>,
   initialWarehouseId: '',
-  warehouseIds: [] as string[],
-  variantWarehouses: {} as Record<string, string>,
   imageUrl: '',
   imageFile: null as File | null,
   imagePreviewUrl: '',
@@ -294,15 +292,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     }));
   };
 
-  const updateVariantWarehouse = (combination: VariantCombination, warehouseId: string) => {
-    const key = variantCombinationKey(combination);
-    setDraftProduct((prev: any) => ({
-      ...prev,
-      variantWarehouses: { ...(prev.variantWarehouses || {}), [key]: warehouseId },
-      warehouseIds: Array.from(new Set([...(prev.warehouseIds || []), warehouseId].filter(Boolean))),
-    }));
-  };
-
   const updatePrice = (code: string, value: string) => {
     setDraftProduct((prev: any) => ({
       ...prev,
@@ -444,11 +433,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   };
 
   const handleInitialWarehouseChange = (warehouseId: string) => {
-    setDraftProduct((prev: any) => ({
-      ...prev,
-      initialWarehouseId: warehouseId,
-      warehouseIds: Array.from(new Set([...(prev.warehouseIds || []), warehouseId].filter(Boolean))),
-    }));
+    setDraftProduct((prev: any) => ({ ...prev, initialWarehouseId: warehouseId }));
   };
 
   const validateStockCosts = (product: any) => {
@@ -499,15 +484,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     });
     if (stockProducts.length === 0) return true;
 
-    const warehouseIds = [...new Set(stockProducts.flatMap((product) => {
-      const primaryWarehouse = String(product.initialWarehouseId || '').trim();
-      const variantWarehouses = product.isVariable
-        ? buildVariantCombinations(product.linkedAttributes)
-          .filter((combination) => Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0) > 0)
-          .map((combination) => String(product.variantWarehouses?.[variantCombinationKey(combination)] || primaryWarehouse).trim())
-        : [];
-      return [primaryWarehouse, ...variantWarehouses].filter(Boolean);
-    }))];
+    const warehouseIds = [...new Set(stockProducts
+      .map((product) => String(product.initialWarehouseId || '').trim())
+      .filter(Boolean))];
     if (stockProducts.some((product) => !String(product.initialWarehouseId || '').trim())) {
       toast.error('Cada producto con stock inicial debe tener una bodega destino seleccionada.');
       return false;
@@ -611,7 +590,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           name: product.name,
           categoryId: product.categoryId,
           type: product.itemType || 'PRODUCT',
-           ...(product.itemType === 'PRODUCT' ? { warehouseId: product.initialWarehouseId || undefined, warehouseIds: Array.from(new Set([...(product.warehouseIds || []), product.initialWarehouseId].filter(Boolean))) } : {}),
+          ...(product.itemType === 'PRODUCT' ? { warehouseId: product.initialWarehouseId || undefined } : {}),
           trackInventory: product.itemType === 'PRODUCT',
           trackSeries: Boolean(product.trackSerialNumbers),
           trackBatch: Boolean(product.trackBatch),
@@ -636,7 +615,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
             ? buildVariantCombinations(product.linkedAttributes).map((combination) => ({
               attributes: combination,
               quantity: Number(product.variantInitialStocks?.[variantCombinationKey(combination)] || 0),
-               warehouseId: product.variantWarehouses?.[variantCombinationKey(combination)] || product.initialWarehouseId || undefined,
               minStock: Number(product.variantMinStocks?.[variantCombinationKey(combination)] || 0),
               maxStock: product.variantMaxStocks?.[variantCombinationKey(combination)] === undefined || product.variantMaxStocks?.[variantCombinationKey(combination)] === ''
                 ? undefined
@@ -797,6 +775,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       groups={similarGroups}
       title="Observación: posible producto existente"
       description="No se creó el producto. Revisa el registro encontrado y sus nombres, SKU, marca, descripción y atributos antes de continuar para evitar duplicados."
+      selectionHint="Esta selección solo reutiliza el registro existente para continuar; desde este formulario no se modifica su costo ni su stock."
       onOpenChange={(value) => { if (!value) setSimilarGroups([]); }}
       onSelectExisting={(group, match) => { void resolveSimilarGroup(group, { action: 'USE_EXISTING', match }); }}
       onCreateNew={(group) => { void resolveSimilarGroup(group, { action: 'CREATE_NEW' }); }}
@@ -850,7 +829,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               />
             </div>
               <div className={isPagePresentation ? 'col-span-1 md:col-start-2 md:row-start-1 md:col-span-2' : 'col-span-1 md:col-start-2 md:row-start-1'}>
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">{draftProduct.itemType === 'SERVICE' ? 'Código' : 'Código/Sku'} *</label>
                 <div className="flex flex-col gap-1 mt-1 w-full">
                   <Input
                     data-testid="inventory-product-code"
@@ -1108,24 +1087,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                       {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                     </SelectContent>
                     </Select>
-                    {effectiveWarehouses.length > 1 && (
-                      <div className="mt-2 rounded-lg border border-border/60 bg-background/60 p-2">
-                        <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Distribuir catálogo en otras bodegas</p>
-                        <div className="mt-1 grid gap-1 sm:grid-cols-2">
-                          {effectiveWarehouses.map((warehouse: any) => (
-                            <label key={warehouse.id} className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
-                              <input
-                                type="checkbox"
-                                checked={(draftProduct.warehouseIds || []).includes(warehouse.id)}
-                                onChange={(event) => setDraftProduct((prev: any) => ({ ...prev, warehouseIds: event.target.checked ? Array.from(new Set([...(prev.warehouseIds || []), warehouse.id])) : (prev.warehouseIds || []).filter((id: string) => id !== warehouse.id || id === prev.initialWarehouseId) }))}
-                                className="accent-primary"
-                              />
-                              <span className="min-w-0 truncate">{warehouse.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                   </div>
                   <div className={isPagePresentation ? 'col-span-1 md:row-start-5 md:col-span-2' : 'col-span-1'}>
@@ -1158,12 +1119,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                       {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                     </SelectContent>
                     </Select>
-                    {effectiveWarehouses.length > 1 && (
-                      <div className="mt-2 rounded-lg border border-border/60 bg-background/60 p-2">
-                        <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Distribuir stock por variante</p>
-                        <p className="mt-1 text-[9px] text-muted-foreground">Cada variante puede usar una bodega distinta.</p>
-                      </div>
-                    )}
                   </div>
                   <div className={isPagePresentation ? 'col-span-1 sm:col-span-2 md:row-start-5 md:col-span-8' : 'col-span-1 sm:col-span-2 md:col-span-2'}>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock total de variantes</label>
@@ -1378,7 +1333,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">3</span>
                       <span className="min-w-0">
                         <span className="block truncate text-[10px] font-black uppercase tracking-wider text-foreground">Revisa las variantes generadas</span>
-                        <span className="mt-0.5 block text-[10px] text-muted-foreground">Aquí puedes distribuir stock, costos y precios por variante.</span>
+                        <span className="mt-0.5 block text-[10px] text-muted-foreground">Aquí puedes definir stock, costos y precios por variante. Todas usarán la bodega del producto.</span>
                       </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2">
@@ -1412,15 +1367,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                                 <div className="min-w-0">
                                   <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Stock</span>
                                   <Input type="number" min={0} step="1" value={draftProduct.variantInitialStocks?.[key] || ''} onChange={(e) => updateVariantInitialStock(combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" aria-label={`Stock inicial para ${combinationLabel}`} />
-                                </div>
-                                <div className="col-span-2 min-w-0 sm:col-span-2 xl:col-span-1">
-                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Bodega</span>
-                                  <Select value={draftProduct.variantWarehouses?.[key] || draftProduct.initialWarehouseId || ''} onValueChange={(value) => updateVariantWarehouse(combination, value)}>
-                                    <SelectTrigger className="h-8 w-full !rounded-none text-[10px]"><SelectValue placeholder="Bodega" /></SelectTrigger>
-                                    <SelectContent className="!rounded-none">
-                                      {effectiveWarehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
                                 </div>
                                 <div className="min-w-0">
                                   <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Mín.</span>
@@ -1457,7 +1403,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                  <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                  <TableRow>
                    <TableHead className="text-[10px] uppercase w-8"></TableHead>
-                   <TableHead className="text-[10px] uppercase">Código</TableHead>
+                          <TableHead className="text-[10px] uppercase">Código/Sku</TableHead>
                    <TableHead className="text-[10px] uppercase">Nombre</TableHead>
                    <TableHead className="text-[10px] uppercase">Categoría</TableHead>
                    <TableHead className="text-[10px] uppercase text-right">Stock Inicial</TableHead>

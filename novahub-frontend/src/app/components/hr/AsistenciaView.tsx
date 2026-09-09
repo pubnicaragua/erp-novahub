@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Upload, FileDown, Info, UserCheck, UserX, CheckCircle2, XCircle } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Upload, FileDown, Info, UserCheck, UserX, CheckCircle2, XCircle, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -70,7 +70,17 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const [parsedImportRows, setParsedImportRows] = useState<Record<string, any>[]>([]);
   const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   const [quickFilter, setQuickFilter] = useState<{ status?: string; today?: boolean } | null>(null);
+
+  const clearAttendanceImportFile = () => {
+    if (readingFile || importing) return;
+    setImportFile(null);
+    setParsedImportRows([]);
+    setImportFileStats(null);
+    setImportResult(null);
+    if (importFileInputRef.current) importFileInputRef.current.value = '';
+  };
 
   const handleAttendanceFileChange = async (file: File | undefined) => {
     setImportFile(file || null);
@@ -583,8 +593,8 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-muted-foreground">Archivo Excel</label>
-              <Input type="file" accept=".xlsx,.xls" onChange={(e) => { void handleAttendanceFileChange(e.target.files?.[0]); e.target.value = ''; }} />
-              {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
+              <Input ref={importFileInputRef} type="file" accept=".xlsx,.xls" onChange={(e) => { void handleAttendanceFileChange(e.target.files?.[0]); e.target.value = ''; }} />
+              {importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p><Button type="button" variant="ghost" size="sm" className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearAttendanceImportFile} disabled={readingFile || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}
               {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-emerald-600">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-rose-600' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
               {importFileStats && <ImportReviewSummary total={importFileStats.total} valid={importFileStats.valid} skipped={importFileStats.skipped} entityLabel="registros de asistencia" />}
             </div>

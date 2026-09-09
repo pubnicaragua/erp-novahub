@@ -83,6 +83,7 @@ export type Module =
   | 'reportes'
   | 'roles'
   | 'configuracion'
+  | 'auditoria'
   | 'suscripciones'
   | 'tenant-admin'
   | 'schema'
@@ -213,7 +214,7 @@ const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
   'CONFIGURATION', 'MY_COMPANY', 'SUBSCRIPTIONS',
   'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_SECURITY',
   'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
-  'CONFIG_DEPARTMENTS',
+  'CONFIG_DEPARTMENTS', 'AUDIT_LOGS',
 ]);
 
 const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
@@ -307,6 +308,7 @@ const ALL_MODULES: Module[] = [
   'clientes', 'proveedores', 'actividades', 'proyectos', 'tickets',
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
+  'auditoria',
   'financiamiento-pyme', 'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
   'contabilidad', 'novachat', 'qa-console', 'fuerza-comercial',
 ];
@@ -458,6 +460,7 @@ const createUserObject = (apiPayload: any): User => {
     'LEGAL': 'asesoria-legal',
     'HR_TRAINING': 'centro-capacitacion',
     'SUPPORT_TECH': 'soporte-tecnico'
+    , 'AUDIT_LOGS': 'auditoria'
   };
 
   const defaultPermissions = getPermissionsByRole(role);
@@ -759,11 +762,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'dashboard', 'suscripciones', 'tenant-admin', 'configuracion', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
         'qa-console', 'fuerza-comercial',
+        'auditoria',
       ];
       const platformConfigurationModules = [
         'CONFIGURATION', 'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF',
         'CONFIG_SECURITY', 'CONFIG_ROLES', 'CONFIG_USERS', 'CONFIG_CURRENCY',
-        'CONFIG_DOMAINS', 'CONFIG_DEPARTMENTS',
+        'CONFIG_DOMAINS', 'CONFIG_DEPARTMENTS', 'AUDIT_LOGS',
       ];
       if (module === 'qa-console') return user.role === 'superadmin';
       if (platformConfigurationModules.includes(String(module).toUpperCase())) return true;
@@ -778,6 +782,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Algunos módulos de sistema siempre están activos
     const coreModules = [
       'configuracion', 'dashboard', 'suscripciones', 'notificaciones',
+      'auditoria',
     ];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
@@ -807,6 +812,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'usuarios': 'CONFIG_USERS',
       'configuracion': 'CONFIGURATION',
       'suscripciones': 'MY_COMPANY',
+      'auditoria': 'AUDIT_LOGS',
     };
     const moduleGroupMap: Record<string, string[]> = {
       ventas: [
@@ -997,7 +1003,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'centro-capacitacion': 'HR_TRAINING',
         'soporte-tecnico': 'SUPPORT_TECH',
         'novachat': 'NOVACHAT',
-        'fuerza-comercial': 'FORCE_SALES',
+      'fuerza-comercial': 'FORCE_SALES',
+        'auditoria': 'AUDIT_LOGS',
       };
       const mappedModule = Object.entries(moduleEnumMap).find(([, v]) => v === normalizedModule)?.[0];
       if (mappedModule) permission = findPermission(mappedModule);
@@ -1066,6 +1073,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchBranches]);
 
   const logout = useCallback(() => {
+    // El endpoint es best-effort: cerrar la sesión local nunca debe depender
+    // de la disponibilidad del backend, pero cuando responde deja trazabilidad.
+    void api.post('/auth/logout').catch(() => undefined);
     clearClientSessionState();
     resetNavigationState();
     setUser(null);

@@ -93,9 +93,24 @@ export interface ManagerUserActivityItem {
   entity: string;
   entityId: string;
   action: string;
+  submodule?: string | null;
+  view?: string | null;
+  actionType?: string | null;
+  entityLabel?: string | null;
+  description?: string | null;
+  result?: string | null;
+  source?: string | null;
+  beforeData?: unknown;
+  afterData?: unknown;
+  changedFields?: unknown;
+  metadata?: unknown;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  endpoint?: string | null;
+  correlationId?: string | null;
   details?: string | null;
   createdAt: string;
-  user?: { id: string; name?: string | null; email?: string | null } | null;
+  user?: { id: string; name?: string | null; email?: string | null; role?: string | null } | null;
   clientTenant?: { id: string; name: string } | null;
 }
 
@@ -452,13 +467,25 @@ export interface PlatformQuote {
 }
 
 export const enterpriseGroupsService = {
-  getPlatformGroups: (signal?: AbortSignal) =>
+  getPlatformGroups: (
+    params?: { search?: string; page?: number; pageSize?: number; includeOptions?: boolean; includeMetrics?: boolean },
+    signal?: AbortSignal,
+  ) =>
     api.get<{
       groups: any[];
       unassignedBranches: any[];
+      groupOptions: Array<{ id: string; name: string; slug: string }>;
+      totalGroupUsers: number;
       storageBytes: number;
       storageObjects: number;
-    }>("/enterprise-groups/platform", { signal }),
+      pagination: { page: number; pageSize: number; total: number; totalPages: number };
+    }>("/enterprise-groups/platform", { params, signal }),
+  getPlatformSummary: (signal?: AbortSignal) =>
+    api.get<{
+      totalGroupUsers: number;
+      storageBytes: number;
+      storageObjects: number;
+    }>("/enterprise-groups/platform/summary", { signal }),
   getPlatformLegacyUsers: (signal?: AbortSignal) =>
     api.get<{
       cutoff: string;

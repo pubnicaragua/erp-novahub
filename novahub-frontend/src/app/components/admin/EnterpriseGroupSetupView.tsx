@@ -225,6 +225,14 @@ export function EnterpriseGroupSetupView({
 
   useEffect(() => {
     if (!initialGroup?.id) return;
+    // El listado de Superadmin ya entrega las colecciones necesarias para
+    // editar el grupo. Evita repetir GET /platform/:id al abrir cada tarjeta;
+    // el fallback conserva compatibilidad si llega un resumen incompleto.
+    if (Array.isArray(initialGroup.businessUnits) && Array.isArray(initialGroup.branches) && Array.isArray(initialGroup.warehouses)) {
+      setGroup(initialGroup);
+      setLoadingGroup(false);
+      return;
+    }
     setLoadingGroup(true);
     enterpriseGroupsService
       .getPlatformGroup(initialGroup.id)

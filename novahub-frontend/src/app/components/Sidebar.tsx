@@ -399,6 +399,12 @@ const menuItems: MenuItem[] = [
       { id: 'currency', label: 'Moneda y cambio', icon: <Coins className="size-4" /> },
     ],
   },
+  {
+    id: 'auditoria',
+    label: 'Logs y auditoría',
+    icon: <History className="size-5" />,
+    section: 'Sistema',
+  },
 ];
 
 /** Orden canónico de módulos: debe coincidir con el orden visual del sidebar. */
@@ -441,6 +447,12 @@ const platformMenuItems: MenuItem[] = [
       { id: 'seguridad', label: 'Seguridad', icon: <ShieldCheck className="size-4" /> },
       { id: 'currency', label: 'Moneda y cambio', icon: <Coins className="size-4" /> },
     ],
+  },
+  {
+    id: 'auditoria',
+    label: 'Logs y auditoría',
+    icon: <History className="size-5" />,
+    section: 'Seguridad',
   },
   {
     id: 'centro-capacitacion',
@@ -583,6 +595,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     restaurante: 'RESTAURANT',
     tracking: 'TRACKING',
     configuracion: 'CONFIGURATION',
+    auditoria: 'AUDIT_LOGS',
   };
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {

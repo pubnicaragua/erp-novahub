@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, Check, Loader2, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, Info, Loader2, Plus } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -12,6 +12,7 @@ interface ProductSimilarityAlertProps {
   title?: string;
   description?: string;
   continueLabel?: string;
+  selectionHint?: string;
   onOpenChange: (open: boolean) => void;
   onContinue?: () => void;
   onSelectExisting?: (group: SimilarProductGroup, match: SimilarProductMatch, variant?: SimilarProductVariant) => void;
@@ -23,8 +24,9 @@ export function ProductSimilarityAlert({
   open,
   groups,
   title = 'Producto similar encontrado',
-  description = 'Revisa los registros existentes antes de continuar. La comparación ignora mayúsculas, minúsculas, acentos y espacios repetidos.',
+  description = 'La alerta se genera por SKU exacto o por nombre igual/similar. Marca, descripción y atributos solo aportan contexto y no generan alertas por sí solos.',
   continueLabel,
+  selectionHint,
   onOpenChange,
   onContinue,
   onSelectExisting,
@@ -93,6 +95,12 @@ export function ProductSimilarityAlert({
                             <Check className="size-4" /> Usar variante {variant.sku}
                           </Button>
                         ))}
+                        {selectionHint && (
+                          <p className="basis-full mt-1 flex items-start gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
+                            <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+                            <span>{selectionHint}</span>
+                          </p>
+                        )}
                       </div>
                     )}
                   </article>

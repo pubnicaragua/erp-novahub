@@ -252,6 +252,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   CONFIG_BRANDING: ['read', 'edit'],
   CONFIG_PDF: ['read', 'create', 'edit', 'delete', 'import'],
   CONFIG_SECURITY: ['read', 'edit'],
+  AUDIT_LOGS: ['read', 'export'],
   CONFIG_CURRENCY: ['read', 'edit'],
   CONFIG_COMPANY: ['read', 'create', 'edit', 'delete'],
   SUBSCRIPTIONS: ['read', 'create', 'edit'],

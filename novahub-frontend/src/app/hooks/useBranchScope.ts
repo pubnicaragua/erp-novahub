@@ -2,26 +2,58 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
+const BRANCH_CACHE_TTL = 30_000;
+let branchCache: { key: string; data: any[]; fetchedAt: number } | null = null;
+let branchRequest: { key: string; promise: Promise<any[]> } | null = null;
+
 export function useBranchScope() {
   const { user } = useAuth();
   const isAdmin = user?.isTenantAdmin || user?.isPlatformAdmin || false;
   const [allBranches, setAllBranches] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchBranches = useCallback(async () => {
+  const fetchBranches = useCallback(async (force = false) => {
+    const cacheKey = String(user?.id || user?.tenantId || 'anonymous');
+    if (!force && branchCache?.key === cacheKey && Date.now() - branchCache.fetchedAt < BRANCH_CACHE_TTL) {
+      setAllBranches(branchCache.data);
+      setIsLoading(false);
+      return branchCache.data;
+    }
+
+    if (force && branchCache?.key === cacheKey) branchCache = null;
+    setIsLoading(true);
     try {
-      const res = await api.get<any[]>('/sucursales');
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
+      if (!branchRequest || branchRequest.key !== cacheKey) {
+        branchRequest = {
+          key: cacheKey,
+          promise: api.get<any[]>('/sucursales').then((res) => {
+            const list = Array.isArray(res) ? res : (res as any)?.data || [];
+            const normalized = Array.isArray(list) ? list : [];
+            branchCache = { key: cacheKey, data: normalized, fetchedAt: Date.now() };
+            return normalized;
+          }),
+        };
+      }
+      const list = await branchRequest.promise;
       setAllBranches(list);
+      return list;
     } catch {
       // Mantiene la última lista cargada si el refresco falla.
+      return [];
+    } finally {
+      if (branchRequest?.key === cacheKey) branchRequest = null;
+      setIsLoading(false);
     }
-  }, []);
+  }, [user?.id, user?.tenantId]);
 
   useEffect(() => {
-    void fetchBranches();
-    const handleBranchesChanged = () => void fetchBranches();
+    const initialLoadTimer = window.setTimeout(() => void fetchBranches(), 0);
+    const handleBranchesChanged = () => void fetchBranches(true);
     window.addEventListener('sucursales-changed', handleBranchesChanged);
-    return () => window.removeEventListener('sucursales-changed', handleBranchesChanged);
+    return () => {
+      window.clearTimeout(initialLoadTimer);
+      window.removeEventListener('sucursales-changed', handleBranchesChanged);
+    };
   }, [fetchBranches]);
 
   // Un usuario con branchIds explícitos solo puede seleccionar esas sucursales.
@@ -85,7 +117,8 @@ export function useBranchScope() {
     setSelectedBranchId,
     filterByBranch,
     branchWarehouseIds,
-    refreshBranches: fetchBranches,
+    isLoading,
+    refreshBranches: useCallback(() => fetchBranches(true), [fetchBranches]),
     hasBranchAccess,
     isRestricted,
   };

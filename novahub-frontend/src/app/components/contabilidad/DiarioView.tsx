@@ -1019,6 +1019,7 @@ export function DiarioView() {
                   <span className="text-sm font-medium">{importFileName ? importFileName : 'Haz clic para seleccionar un archivo Excel'}</span>
                   <span className="text-xs">{rawImportRows.length > 0 ? `${importRows.length} filas leídas` : 'Se cargarán los asientos del archivo'}</span>
                 </label>
+                {importFileName && <Button type="button" variant="ghost" size="sm" className="mt-3 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => { if (readingFile || importing) return; setRawImportRows([]); setImportFileName(''); }} disabled={readingFile || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button>}
               </div>
 
               {importRows.length > 0 && (

@@ -786,6 +786,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [auditSearch, setAuditSearch] = useState('');
   const [auditRefreshKey, setAuditRefreshKey] = useState(0);
   const canViewSecuritySettings = canPerform('CONFIG_SECURITY', 'view');
+  const canViewAuditLogs = canPerform('AUDIT_LOGS', 'view');
 
   useEffect(() => {
     if (!canViewSecuritySettings) return;
@@ -802,7 +803,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   }, [canViewSecuritySettings]);
 
   useEffect(() => {
-    if (activeTab !== 'seguridad') return;
+    if (activeTab !== 'seguridad' || !canViewAuditLogs) {
+      setAuditLogs([]);
+      setAuditTotal(0);
+      return;
+    }
     let active = true;
     setAuditLoading(true);
     api.get<any>('/audit/logs', { params: { page: auditPage, pageSize: 12, search: auditSearch || undefined } })
@@ -815,7 +820,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       .catch(() => { if (active) setAuditLogs([]); })
       .finally(() => { if (active) setAuditLoading(false); });
     return () => { active = false; };
-  }, [activeTab, auditPage, auditSearch, auditRefreshKey]);
+  }, [activeTab, auditPage, auditSearch, auditRefreshKey, canViewAuditLogs]);
 
   const handleToggleSingleSession = (value: boolean) => {
     setSingleSession(value);

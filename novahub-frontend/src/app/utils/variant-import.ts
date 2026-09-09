@@ -68,6 +68,15 @@ export type VariantImportCatalog = {
   stock: VariantImportStock[];
 };
 
+export type VariantImportParseOptions = {
+  /**
+   * Purchase-order imports use the warehouse selected on the order. A
+   * warehouse column is rejected instead of being silently interpreted as a
+   * distribution rule.
+   */
+  purchaseOrder?: boolean;
+};
+
 const normalize = (value: unknown) => String(value ?? '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -172,7 +181,11 @@ const mapByKey = (rows: any[][], key: string) => {
   return result;
 };
 
-export function parseVariantImportWorkbook(sheets: Record<string, any[][]>, priceLists: VariantImportPriceList[] = []): VariantImportCatalog {
+export function parseVariantImportWorkbook(
+  sheets: Record<string, any[][]>,
+  priceLists: VariantImportPriceList[] = [],
+  options: VariantImportParseOptions = {},
+): VariantImportCatalog {
   const productRows = objectRows(getSheet(sheets, ['Productos', 'Products']) || []);
   if (!productRows.length) throw new Error('La plantilla avanzada necesita una hoja Productos con al menos una fila.');
 
@@ -285,7 +298,7 @@ export function parseVariantImportWorkbook(sheets: Record<string, any[][]>, pric
         priceListCode: list.code,
         price: Number(entry[1]),
       };
-    }).filter((price): price is VariantImportPrice => Boolean(price));
+    }).filter((price): price is { scope: 'PRODUCT'; productCode: string; priceListCode: string; price: number } => price !== null);
   });
   const existingProductPriceKeys = new Set(
     prices
@@ -311,6 +324,21 @@ export function parseVariantImportWorkbook(sheets: Record<string, any[][]>, pric
     currency: textValue(row, 'costCurrency').toUpperCase() || undefined,
     exchangeRate: numberValue(row, 'costExchangeRate'),
   })).filter((row) => row.variantSku || row.productCode || row.warehouse);
+
+  if (options.purchaseOrder && stock.some((row) => String(row.warehouse || '').trim())) {
+    throw new Error('La importación de una orden de compra no permite distribuir por bodega. Usa la bodega destino seleccionada en la orden y deja esa columna vacía o elimínala.');
+  }
+  if (options.purchaseOrder) {
+    const stockSkuCounts = new Map<string, number>();
+    for (const row of stock) {
+      const sku = String(row.variantSku || row.productCode || '').trim().toLowerCase();
+      if (sku) stockSkuCounts.set(sku, (stockSkuCounts.get(sku) || 0) + 1);
+    }
+    const duplicatedSku = [...stockSkuCounts.entries()].find(([, count]) => count > 1)?.[0];
+    if (duplicatedSku) {
+      throw new Error(`La importación de una orden de compra solo permite una fila de Inventario por SKU (${duplicatedSku}). No dupliques cantidades para distribuirlas por bodega.`);
+    }
+  }
 
   return { format: 'NOVAHUB_VARIANTS_V1', products, variants, attributes, prices, stock };
 }

@@ -423,6 +423,7 @@ export const INTERNAL_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION', subscription: false },
   { id: 'CONFIG_PDF', label: 'Documentos PDF', parent: 'CONFIGURATION', subscription: false },
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION', subscription: false },
+  { id: 'AUDIT_LOGS', label: 'Logs y auditoría', parent: 'CONFIGURATION', subscription: false },
   { id: 'CONFIG_CURRENCY', label: 'Moneda y Cambio', parent: 'CONFIGURATION', subscription: false },
 
   // Mi Empresa

@@ -78,7 +78,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const canExportInventory = canPerform('INVENTORY_PRODUCTS', 'export');
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const queryClient = useQueryClient();
-  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches, accessibleBranches, refreshBranches } = useBranchScope();
+  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches, accessibleBranches, refreshBranches, isLoading: branchScopeLoading } = useBranchScope();
   const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
   const [createProductViewOpen, setCreateProductViewOpen] = useState(false);
   const tenantKey = user?.tenantId || 'anonymous';
@@ -105,31 +105,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       ...((branch?.warehouses || []) as any[]).map((warehouse: any) => warehouse?.id),
     ].filter(Boolean)),
   )], [allBranches]);
-  const linkedInventoryQuery = useQuery({
-    queryKey: ['inventory', 'linked-inventory', tenantKey, selectedBranchId],
-    queryFn: ({ signal }) => api.get<{ levels?: any[] }>('/inventory/warehouse-supply-requests/inventory', {
-      params: selectedBranchId ? { branchId: selectedBranchId } : undefined,
-      signal,
-    }),
-    enabled: Boolean(user) && (canViewInventorySection('productos') || canViewInventorySection('servicios')) && ['productos', 'servicios'].includes(activeTab),
-    staleTime: 30_000,
-    retry: 1,
-  });
-  const sharedInventoryLevelsByCode = useMemo(() => {
-    const response: any = linkedInventoryQuery.data;
-    const levels = response?.levels || response?.data?.levels || [];
-    const byCode = new Map<string, any[]>();
-    if (!Array.isArray(levels)) return byCode;
-    for (const level of levels) {
-      if (level?.warehouse?.scopeType !== 'BUSINESS_UNIT') continue;
-      const code = String(level?.product?.code || '').trim().toUpperCase();
-      if (!code) continue;
-      const current = byCode.get(code) || [];
-      current.push(level);
-      byCode.set(code, current);
-    }
-    return byCode;
-  }, [linkedInventoryQuery.data]);
   const productScopeWarehouseIds = useMemo(() => [...new Set([
     ...(branchScopeEnabled ? branchWarehouseIds : allBranchWarehouseIds),
     ...linkedWarehouseOptions.map((warehouse: any) => warehouse.id),
@@ -148,6 +123,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const [productScope, setProductScope] = useState<'branch' | 'linkedWarehouses'>('branch');
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
   const [productTarget, setProductTarget] = useState<{ id?: string; code?: string; stockFilter?: 'all' | 'available' | 'low' | 'out' } | null>(null);
+  const productListIsActive = ['productos', 'servicios'].includes(activeTab);
+  const [summaryLoadAllowed, setSummaryLoadAllowed] = useState(false);
 
   const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
   const updatePage = (section: string, page: number) => setPaginationState((current) => ({ ...current, [section]: { ...pageFor(section), page: Math.max(1, page) } }));
@@ -256,23 +233,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     retry: 1,
     placeholderData: keepPreviousData,
   } as const;
-  const withSharedWarehouseLevels = useCallback((product: any) => {
-    const code = String(product?.code || '').trim().toUpperCase();
-    const sharedLevels = sharedInventoryLevelsByCode.get(code) || [];
-    if (!sharedLevels.length) return product;
-    const currentLevels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
-    const currentWarehouseIds = new Set(currentLevels.map((level: any) => String(level?.warehouseId || level?.warehouse?.id || '')));
-    const extraLevels = sharedLevels.filter((level: any) => {
-      const warehouseId = String(level?.warehouseId || level?.warehouse?.id || '');
-      return warehouseId && !currentWarehouseIds.has(warehouseId);
-    }).map((level: any) => ({
-      ...level,
-      __sharedWarehouseLevel: true,
-    }));
-    return extraLevels.length > 0
-      ? { ...product, __sharedWarehouseLevelsMerged: true, stockLevels: [...currentLevels, ...extraLevels] }
-      : product;
-  }, [sharedInventoryLevelsByCode]);
   const productsQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productBrandFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], selectedBranchId, productScopeWarehouseIds.join(',')],
@@ -296,10 +256,18 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : []),
           ])]
           : []);
-      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
+      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
     },
-    enabled: Boolean(user) && canViewInventorySection(activeTab) && ['productos', 'servicios'].includes(activeTab),
+    // Espera a que el alcance de sucursal y sus bodegas vinculadas estén
+    // resueltos. Así evita pintar una página sin alcance y volver a pedirla
+    // cuando llegan /sucursales o /warehouse-supply-requests/options.
+    enabled: Boolean(user) && !branchScopeLoading && !linkedWarehousesQuery.isPending && canViewInventorySection(activeTab) && productListIsActive,
   });
+  useEffect(() => {
+    if (!productListIsActive || !productsQuery.data || summaryLoadAllowed) return;
+    const timer = window.setTimeout(() => setSummaryLoadAllowed(true), 450);
+    return () => window.clearTimeout(timer);
+  }, [productListIsActive, productsQuery.data, summaryLoadAllowed]);
   const productCatalogQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'products-catalog', tenantKey, selectedBranchId],
@@ -311,8 +279,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const productsSummaryQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId, productScopeWarehouseIds.join(',')],
-    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: productScopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
-    enabled: Boolean(user) && canViewInventorySection(activeTab) && ['productos', 'servicios'].includes(activeTab),
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, report: true, page: 1, pageSize: 5000, warehouseId: productScopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
+    // El resumen puede ser grande; primero se pinta la página visible y luego
+    // se resuelven KPIs, marcas y exportación sin bloquear la primera vista.
+    enabled: Boolean(user) && Boolean(productsQuery.data) && summaryLoadAllowed && canViewInventorySection(activeTab) && productListIsActive,
   });
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
@@ -357,7 +327,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     ...commonQueryOptions,
     queryKey: ['inventory', 'series', tenantKey, activeTab],
     queryFn: ({ signal }) => inventoryService.getSeries({ report: true, page: 1, pageSize: 5000 }, signal),
-    enabled: Boolean(user) && canViewInventorySection(activeTab) && ['productos', 'servicios', 'transferencias', 'ajustes'].includes(activeTab),
+    // El detalle del producto ya trae sus series; la consulta masiva solo es
+    // necesaria en vistas que realmente listan series.
+    enabled: Boolean(user) && canViewInventorySection(activeTab) && ['transferencias', 'ajustes'].includes(activeTab),
   });
   const movementsQuery = useQuery({
     ...commonQueryOptions,
@@ -381,7 +353,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     products: toList(productsQuery.data || productCatalogQuery.data).map((product: any) => ({
       ...product,
       itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
-    })).map(withSharedWarehouseLevels).filter((product: any) => isProductInScope(product)),
+    })).filter((product: any) => isProductInScope(product)),
     warehouses: toList(warehousesQuery.data),
     categories: categories.filter((category: any) => category.type === 'PRODUCT'),
     serviceCategories: categories.filter((category: any) => category.type === 'SERVICE'),
@@ -403,7 +375,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const activeQueries = [
     ...(productsQuery.isEnabled ? [productsQuery] : []),
     ...(linkedWarehousesQuery.isEnabled ? [linkedWarehousesQuery] : []),
-    ...(linkedInventoryQuery.isEnabled ? [linkedInventoryQuery] : []),
     ...(productCatalogQuery.isEnabled ? [productCatalogQuery] : []),
     ...(warehousesQuery.isEnabled ? [warehousesQuery] : []),
     ...(categoriesQuery.isEnabled ? [categoriesQuery] : []),
@@ -432,7 +403,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const adjustmentsPagination = makePagination('ajustes', adjustmentsQuery);
   const auditsPagination = makePagination('auditorias', auditsQuery);
   const movementsPagination = makePagination('movimientos', movementsQuery);
-  const loading = activeQueries.some((query) => query.isPending && !query.data);
+  const loadingQueries = productListIsActive ? [productsQuery] : activeQueries;
+  const loading = loadingQueries.some((query) => query.isPending && !query.data);
   const refreshing = activeQueries.some((query) => query.isFetching) && !loading;
   const firstError = activeQueries.find((query) => query.error)?.error;
   const loadError = firstError ? (firstError as Error).message : '';
@@ -466,7 +438,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const summaryProducts = toList(productsSummaryQuery.data).map((product: any) => ({
     ...product,
     itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
-  })).map(withSharedWarehouseLevels).filter((product: any) => isProductInScope(product));
+  })).filter((product: any) => isProductInScope(product));
   const availableProductBrands = useMemo(() => {
     const uniqueBrands = new Map<string, string>();
     summaryProducts.forEach((product: any) => {

@@ -33,6 +33,7 @@ export interface SimilarityResolution {
   inputKey: string;
   action: SimilarityResolutionAction;
   productId?: string;
+  variantId?: string;
 }
 
 export const inventoryService = {
@@ -48,7 +49,7 @@ export const inventoryService = {
   createProduct: (data: Partial<Product> & {
     initialStock?: number;
     allowSimilarProductCreate?: boolean;
-    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; warehouseId?: string; prices?: Record<string, number | string> }>;
+    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; prices?: Record<string, number | string> }>;
   }) => api.post<Product>('/inventory/products', data),
   previewProductStockAccounting: (warehouseIds: string[]) =>
     api.post<{ ready: boolean; errors: string[]; warnings?: string[]; autoGenerationEnabled: boolean; warehouses: any[] }>('/inventory/products/accounting-preflight', { warehouseIds }),
@@ -161,7 +162,7 @@ export const inventoryService = {
     return results;
   },
   getInitialImportStatus: (signal?: AbortSignal) => api.get<{ completed: boolean; importedAt?: string | null; productCount?: number; priceListCode?: string | null; currency?: string | null; exchangeRate?: number | null; blockedByExistingProducts?: boolean }>('/inventory/initial-import/status', { signal }),
-  importInitialCatalog: (data: { items?: any[]; catalog?: any; currency: string; exchangeRate?: number; priceListCode?: string; createMissingAttributes?: boolean; allowExistingParentVariantExtension?: boolean; reimportMode?: 'MERGE' | 'REJECT'; catalogPurpose?: 'INVENTORY' | 'PURCHASE_ORDER' | 'MANAGER'; similarityResolutions?: SimilarityResolution[]; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
+  importInitialCatalog: (data: { items?: any[]; catalog?: any; currency: string; exchangeRate?: number; priceListCode?: string; createMissingAttributes?: boolean; allowExistingParentVariantExtension?: boolean; reimportMode?: 'MERGE' | 'REJECT'; catalogPurpose?: 'INVENTORY' | 'PURCHASE_ORDER' | 'MANAGER'; similarityResolutions?: SimilarityResolution[]; importBatchId?: string; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
   importServices: (data: { items: any[]; currency: string; exchangeRate?: number; reimportMode?: 'MERGE' | 'REJECT'; confirmText: string }) => api.post<any>('/inventory/services/import', data),
   updateProductImages: (items: Array<{ code: string; imageUrl: string }>) => api.patch<{ updated: number }>('/inventory/products/images/batch', { items }),
   deactivateProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),

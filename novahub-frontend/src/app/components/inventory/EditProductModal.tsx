@@ -242,7 +242,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
             </div>
             <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
               <div className="col-span-1">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">{isService ? 'Código' : 'Código/Sku'} *</label>
                 <Input
                   value={draft.code}
                   onChange={e => handleUpdate('code', e.target.value)}

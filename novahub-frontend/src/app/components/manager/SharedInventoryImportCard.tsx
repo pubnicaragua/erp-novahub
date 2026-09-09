@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Boxes, CheckCircle2, Download, FileUp, UploadCloud } from 'lucide-react';
+import { AlertTriangle, Boxes, CheckCircle2, Download, FileUp, UploadCloud, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -113,12 +113,22 @@ export function SharedInventoryImportCard({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [readingFile, setReadingFile] = useState(false);
   const [readingProgress, setReadingProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const source = branches.find((branch) => branch.id === sourceBranchId);
   const targetBranches = useMemo(
     () => branches.filter((branch) => Boolean(source?.businessUnitId) && branch.businessUnitId === source?.businessUnitId),
     [branches, source?.businessUnitId],
   );
   const selectedBranches = targetBranches.filter((branch) => branchIds.includes(branch.id));
+
+  const clearFile = () => {
+    if (readingFile || importing) return;
+    setRows([]);
+    setFileName('');
+    setValidationErrors([]);
+    setPricesByBranch({});
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const downloadTemplate = () => {
     const workbook = XLSX.utils.book_new();
@@ -198,11 +208,14 @@ export function SharedInventoryImportCard({
               <option value="BY_BRANCH">Definir precio por sucursal</option>
             </select>
           </label>
-          <label className="flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] px-3 text-center text-sm font-bold transition-colors hover:bg-primary/[0.09]">
+          <div className="flex min-w-0 gap-2">
+          <label className="flex min-h-10 min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] px-3 text-center text-sm font-bold transition-colors hover:bg-primary/[0.09]">
             <FileUp className="size-4 text-primary" />
             <span className="min-w-0 truncate">{fileName || 'Seleccionar plantilla Excel'}</span>
-            <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="sr-only" />
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="sr-only" />
           </label>
+          {fileName && <Button type="button" variant="ghost" size="sm" className="min-h-10 shrink-0 rounded-xl px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearFile} disabled={readingFile || importing} aria-label="Quitar plantilla de inventario"><X className="mr-1 size-3.5" />Quitar</Button>}
+          </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
