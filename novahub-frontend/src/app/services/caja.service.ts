@@ -480,6 +480,10 @@ export interface DashboardKPIs {
   expenseOriginalCurrencyBreakdown?: { currency: 'NIO' | 'USD'; amount: number; count: number }[];
   ordersCount: number;
   pendingOrders: number;
+  paidInvoicesCount?: number;
+  averagePaidInvoice?: number;
+  productsWithSalesCount?: number;
+  noSaleProductsCount?: number;
   netMargin: number;
 }
 
@@ -507,6 +511,7 @@ export interface RegisterSales {
 }
 
 export interface InventoryAlert {
+  warehouseId?: string;
   productId: string;
   code: string;
   name: string;
@@ -535,12 +540,15 @@ export interface DashboardData {
   baseCurrency?: 'NIO' | 'USD';
   productPerformance: {
     topSelling: ProductPerformanceItem[];
+    leastSelling?: ProductPerformanceItem[];
     topMargin: ProductPerformanceItem[];
     noSaleProducts: { id: string; name: string; code: string; salePrice: number; stock?: number }[];
   };
   salesByRegister: RegisterSales[];
   inventoryAlerts: InventoryAlert[];
   recentTransactions: RecentTransaction[];
+  dailyTrend?: { date: string; revenue: number; expenses: number }[];
+  generatedAt?: string;
   period: string;
 }
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageCircle, X, Send, ArrowRight } from 'lucide-react';
+import { getApiUrl } from '../services/api';
 
 interface Message {
   id: string;
@@ -29,7 +30,9 @@ function playNotificationSound() {
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
-  } catch {}
+  } catch {
+    // El navegador puede bloquear el audio hasta que exista interacción.
+  }
 }
 
 export function LandingChatModal() {
@@ -41,6 +44,7 @@ export function LandingChatModal() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', company: '', message: '' });
+  const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -58,22 +62,28 @@ export function LandingChatModal() {
   }, []);
 
   const handleSubmitForm = async () => {
-    if (!formData.name.trim()) return;
+    if (!formData.name.trim()) {
+      setError('Escribe tu nombre para que podamos atenderte.');
+      return;
+    }
     setLoading(true);
+    setError('');
     try {
-      const res = await fetch('/api/leads', {
+      const res = await fetch(getApiUrl('/leads'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setLead(data);
-        setMessages(data.messages || []);
-        setStep('chat');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.message || 'No se pudo iniciar la conversación.');
       }
-    } catch (error) {
-      console.error('Error creating lead:', error);
+      setLead(data);
+      setMessages(data?.messages || []);
+      setStep('chat');
+    } catch (requestError) {
+      console.error('Error creating lead:', requestError);
+      setError('No pudimos conectar con el asesor. Intenta de nuevo o escríbenos directo por WhatsApp.');
     } finally {
       setLoading(false);
     }
@@ -90,24 +100,34 @@ export function LandingChatModal() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
+    setError('');
     try {
-      const res = await fetch(`/api/leads/${lead.id}/messages`, {
+      const res = await fetch(getApiUrl(`/leads/${lead.id}/messages`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: input }),
       });
-      if (res.ok) {
-        setTimeout(async () => {
-          const leadRes = await fetch(`/api/leads/${lead.id}`);
-          if (leadRes.ok) {
-            const data = await leadRes.json();
-            setMessages(data.messages || []);
-          }
-          setLoading(false);
-        }, 2500);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.message || 'No se pudo enviar el mensaje.');
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
+      window.setTimeout(async () => {
+        try {
+          const messagesRes = await fetch(getApiUrl(`/leads/${lead.id}/messages`));
+          const messagesData = await messagesRes.json().catch(() => null);
+          if (!messagesRes.ok) throw new Error(messagesData?.message || 'No se pudieron actualizar los mensajes.');
+          setMessages(messagesData || []);
+        } catch (requestError) {
+          console.error('Error loading lead messages:', requestError);
+          setError('El mensaje se envió, pero la respuesta está tardando. Puedes continuar por WhatsApp.');
+        } finally {
+          setLoading(false);
+        }
+      }, 1800);
+    } catch (requestError) {
+      console.error('Error sending message:', requestError);
+      setMessages(prev => prev.filter(message => message.id !== userMessage.id));
+      setError('No pudimos enviar el mensaje. Revisa tu conexión o escríbenos por WhatsApp.');
       setLoading(false);
     }
   };
@@ -132,7 +152,7 @@ export function LandingChatModal() {
             className="fixed bottom-24 right-4 z-50 lg:bottom-28 lg:right-8"
           >
             <div className="relative max-w-[200px] rounded-2xl border border-[#d1fae5] bg-white px-4 py-3 shadow-lg">
-              <button onClick={() => setShowTooltip(false)} className="absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-[#5d7884] text-white hover:bg-[#174a3a]">
+              <button type="button" aria-label="Cerrar mensaje" onClick={() => setShowTooltip(false)} className="absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-[#5d7884] text-white hover:bg-[#174a3a]">
                 <X className="size-3" />
               </button>
               <p className="text-sm font-bold text-[#174a3a]">¡Hola! 👋</p>
@@ -148,7 +168,8 @@ export function LandingChatModal() {
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ delay: 1, type: 'spring', stiffness: 200 }}
-        onClick={() => { setIsOpen(true); setShowTooltip(false); }}
+        onClick={() => { setIsOpen(true); setShowTooltip(false); setError(''); }}
+        aria-label="Abrir chat de NovaHub ERP"
         className="fixed bottom-6 right-6 z-50 flex size-16 items-center justify-center rounded-full bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-white shadow-[0_8px_30px_-8px_rgba(34,197,94,.6)] transition-transform hover:scale-110 lg:bottom-8 lg:right-8"
       >
         <motion.div
@@ -185,7 +206,7 @@ export function LandingChatModal() {
                   <p className="text-xs text-white/80">En línea · Respondo en segundos</p>
                 </div>
               </div>
-              <button onClick={() => setIsOpen(false)} className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white">
+              <button type="button" aria-label="Cerrar chat" onClick={() => setIsOpen(false)} className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white">
                 <X className="size-5" />
               </button>
             </div>
@@ -198,12 +219,13 @@ export function LandingChatModal() {
                   <p className="mt-1 text-xs text-[#5d7884]">Te ayudamos a organizar ventas, inventario y contabilidad en un solo sistema.</p>
                 </div>
                 <div className="space-y-3">
-                  <input type="text" placeholder="Tu nombre *" value={formData.name} onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                  <input type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                  <input type="tel" placeholder="Teléfono / WhatsApp" value={formData.phone} onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                  <input type="text" placeholder="Empresa" value={formData.company} onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                  <textarea placeholder="¿Qué necesitas ordenar en tu negocio?" value={formData.message} onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))} rows={2} className="w-full resize-none rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  <input aria-label="Tu nombre" type="text" placeholder="Tu nombre *" value={formData.name} onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  <input aria-label="Email" type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  <input aria-label="Teléfono o WhatsApp" type="tel" placeholder="Teléfono / WhatsApp" value={formData.phone} onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  <input aria-label="Empresa" type="text" placeholder="Empresa" value={formData.company} onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  <textarea aria-label="Necesidad de tu negocio" placeholder="¿Qué necesitas ordenar en tu negocio?" value={formData.message} onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))} rows={2} className="w-full resize-none rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
                 </div>
+                {error && <p role="alert" className="mt-3 rounded-xl border border-[#ffd8cf] bg-[#fff5f2] px-3 py-2.5 text-xs leading-5 text-[#a84f3b]">{error}</p>}
                 <button onClick={handleSubmitForm} disabled={!formData.name.trim() || loading} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#22c55e] to-[#16a34a] px-4 py-3.5 text-sm font-bold text-white shadow-[0_8px_20px_-8px_rgba(34,197,94,.5)] transition-all hover:shadow-[0_12px_25px_-8px_rgba(34,197,94,.6)] disabled:opacity-50">
                   {loading ? 'Conectando...' : 'Hablar con un asesor'} <ArrowRight className="size-4" />
                 </button>
@@ -236,12 +258,13 @@ export function LandingChatModal() {
                 </div>
                 <div className="border-t border-[#d1fae5] p-3">
                   <div className="flex gap-2">
-                    <input type="text" placeholder="Escribe tu mensaje..." value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={handleKeyPress} className="flex-1 rounded-xl border border-[#d1fae5] px-4 py-2.5 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary" />
-                    <button onClick={handleSendMessage} disabled={!input.trim() || loading} className="flex size-10 items-center justify-center rounded-xl bg-[#22c55e] text-white transition-colors hover:bg-[#1aad50] disabled:opacity-50">
+                    <input aria-label="Escribe tu mensaje" type="text" placeholder="Escribe tu mensaje..." value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={handleKeyPress} className="flex-1 rounded-xl border border-[#d1fae5] px-4 py-2.5 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary" />
+                    <button type="button" aria-label="Enviar mensaje" onClick={handleSendMessage} disabled={!input.trim() || loading} className="flex size-10 items-center justify-center rounded-xl bg-[#22c55e] text-white transition-colors hover:bg-[#1aad50] disabled:opacity-50">
                       <Send className="size-4" />
                     </button>
-                  </div>
                 </div>
+                {error && <p role="alert" className="mt-2 text-center text-[11px] leading-4 text-[#a84f3b]">{error}</p>}
+              </div>
               </>
             )}
           </motion.div>

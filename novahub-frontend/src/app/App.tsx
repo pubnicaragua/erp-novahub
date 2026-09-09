@@ -584,7 +584,7 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', readPersistedDarkMode());
   }, []);
 
-  if (location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;
+  if (location.pathname === '/public/tracking' || location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
   if (location.pathname.startsWith('/restaurant/menu/')) {

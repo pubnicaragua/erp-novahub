@@ -355,7 +355,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
             </p>
           )}
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Consulta automática a AWBOX y CargoTrack. El resultado se guarda en el historial; la recepción física se confirma más adelante.
+            Consulta automática a API. El resultado se guarda en el historial; la recepción física se confirma más adelante.
           </p>
         </Card>
 
@@ -574,7 +574,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
                 </Card>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => { const url = `${window.location.origin}/public/tracking`; navigator.clipboard.writeText(url); toast.success('Enlace público copiado: ' + url); }}>
+                  <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => { const url = `${window.location.origin}/public/tracking/${encodeURIComponent(selected.trackingCode)}`; navigator.clipboard.writeText(url); toast.success('Enlace público copiado: ' + url); }}>
                     <Truck className="size-4" /> Copiar enlace público
                   </Button>
                   {canEditTransit && <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={handleSync} disabled={syncing}>

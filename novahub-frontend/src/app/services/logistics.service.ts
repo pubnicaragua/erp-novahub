@@ -698,9 +698,10 @@ export interface ReceptionBatch {
 
 export interface BatchPackageRow {
   line?: number;
-  warehouseId?: string;
+  warehouseId?: string | null;
   trackingCode?: string;
   shipmentModeCode?: string;
+  productDescription?: string;
   item?: string;
   quantity?: number;
   unitPrice?: number;
