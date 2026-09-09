@@ -217,7 +217,8 @@ function buildCommonCss(isRoll: boolean): string {
       font-weight: 800;
       font-size: ${isRoll ? '9pt' : '10pt'};
       border-top: 1px solid #000;
-      padding-top: 3px;
+      padding-top: 2px;
+      margin-top: 1px;
     }
 
     /* Notas */

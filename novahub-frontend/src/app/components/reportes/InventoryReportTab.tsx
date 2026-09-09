@@ -18,7 +18,7 @@ import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Warehouse, T
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
@@ -670,7 +670,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || 'Mi Empresa');
-        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.inventory');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -837,6 +837,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportExcel: async () => {
       toast.info("Generando Excel (Inventario)...");
       try {
+        const pdfSettings = await getPdfDesignSettings('reportes.inventory');
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Inventario');
         const companyName = themeConfig.tenantName || 'Mi Empresa';
@@ -850,8 +851,9 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         let currentRow = 1;
 
-        if (themeConfig.logo) {
-          const base64Logo = await getBase64Image(themeConfig.logo);
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.inventory');
+        if (logoUrl) {
+          const base64Logo = await getBase64Image(logoUrl);
           if (base64Logo) {
             const logoId = wb.addImage({ base64: base64Logo, extension: 'png' });
             ws.addImage(logoId, { tl: { col: 1.5, row: 0 }, ext: { width: 100, height: 100 } });

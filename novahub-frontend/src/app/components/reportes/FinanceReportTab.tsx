@@ -29,7 +29,7 @@ import {
 } from './financialAnalytics';
 import type { FinancialData, BreakEvenConfig, BreakEvenResult, CostBehavior } from './financialAnalytics';
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -505,7 +505,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || user?.tenantName || 'Mi Empresa');
-        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.finance');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') 
@@ -658,9 +658,10 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     exportExcel: async () => {
       try {
         toast.info("Generando Excel financiero...");
+        const pdfSettings = await getPdfDesignSettings('reportes.finance');
         const wb = new ExcelJS.Workbook();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
-        const logoUrl = themeConfig.logo || '';
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.finance');
         const primaryColor = themeConfig.colors.primary || '#3b82f6';
         const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '3b82f6';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#3b82f6';

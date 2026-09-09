@@ -16,7 +16,7 @@ import { CreditCard, Wallet, Activity, Truck, TrendingUp, Package, PieChart as P
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { cn } from '../ui/utils';
-import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -936,7 +936,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || user?.tenantName || 'Mi Empresa');
-        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.purchases');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const rgbPrimary = primaryColor.startsWith('#')
           ? [parseInt(primaryColor.slice(1, 3), 16), parseInt(primaryColor.slice(3, 5), 16), parseInt(primaryColor.slice(5, 7), 16)]
@@ -1101,11 +1101,12 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportExcel: async () => {
       try {
         toast.info('Generando Excel (Compras)...');
+        const pdfSettings = await getPdfDesignSettings('reportes.purchases');
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Compras');
 
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
-        const logoUrl = themeConfig.logo || '';
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.purchases');
         const primaryColor = themeConfig.colors.primary || '#f97316';
         const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : 'f97316';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#f97316';

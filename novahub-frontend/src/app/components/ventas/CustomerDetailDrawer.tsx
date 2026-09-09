@@ -495,7 +495,7 @@ export function CustomerDetailDrawer({
       <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="customer-detail-panel erp-detail-panel w-full overflow-hidden p-0 flex flex-col gap-0 border-l border-border/50 bg-background"
+        className="customer-detail-panel erp-detail-panel erp-detail-panel--wide w-full overflow-hidden p-0 flex flex-col gap-0 border-l border-border/50 bg-background"
       >
         <Tabs
           value={activeTab}
@@ -575,7 +575,7 @@ export function CustomerDetailDrawer({
           </SheetHeader>
 
           <ScrollArea className="customer-detail-scroll min-h-0 flex-1 overflow-hidden">
-            <div className="p-6 space-y-6">
+            <div className="min-w-0 space-y-6 p-6">
               {error && (
                 <Card className="p-4 bg-destructive/10 border-destructive/20 text-destructive flex items-center gap-3">
                   <AlertCircle className="size-5 shrink-0" />
@@ -707,7 +707,7 @@ export function CustomerDetailDrawer({
               </TabsContent>
 
               {/* Tab Movimientos */}
-              <TabsContent value="movimientos" className="mt-0 space-y-4 outline-none">
+              <TabsContent value="movimientos" className="mt-0 min-w-0 space-y-4 outline-none">
                 <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -738,15 +738,15 @@ export function CustomerDetailDrawer({
                   ) : visibleMovements.length === 0 ? (
                     <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">No hay movimientos para este filtro.</p>
                   ) : (
-                    <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">
+                    <div className="mt-4 min-w-0 divide-y divide-border/40 rounded-xl border border-border/50">
                       {visibleMovements.slice(0, 100).map((transaction) => (
                         <Fragment key={`${transaction.kind}-${transaction.id}`}>
-                          <button type="button" aria-expanded={selectedInvoice?.id === transaction.id || selectedMovement?.id === transaction.id} className="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50" onClick={() => openMovementDetail(transaction)}>
-                            <div className="flex min-w-0 items-center gap-3">
+                          <button type="button" aria-expanded={selectedInvoice?.id === transaction.id || selectedMovement?.id === transaction.id} className="flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left transition-colors hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50" onClick={() => openMovementDetail(transaction)}>
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
                               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div>
-                              <div className="min-w-0"><p className="truncate text-xs font-bold text-foreground">{transaction.kind}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{transaction.number || 'Sin número'}{transaction.description ? ` · ${transaction.description}` : ''}</p></div>
+                              <div className="min-w-0 flex-1"><p className="break-words text-xs font-bold text-foreground">{transaction.kind}</p><p className="whitespace-normal break-words font-mono text-[10px] leading-relaxed text-muted-foreground">{transaction.number || 'Sin número'}{transaction.description ? ` · ${transaction.description}` : ''}</p></div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-3 text-right"><div><p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className={`size-4 text-primary transition-transform ${selectedInvoice?.id === transaction.id || selectedMovement?.id === transaction.id ? 'rotate-90' : ''}`} /></div>
+                            <div className="flex shrink-0 items-start gap-2 pl-2 text-right"><div className="whitespace-nowrap"><p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className={`mt-0.5 size-4 text-primary transition-transform ${selectedInvoice?.id === transaction.id || selectedMovement?.id === transaction.id ? 'rotate-90' : ''}`} /></div>
                           </button>
                           {selectedInvoice?.id === transaction.id && transaction.kind === 'Factura' && <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />}
                           {selectedMovement?.id === transaction.id && <MovementInlineDetail transaction={selectedMovement} onClose={() => setSelectedMovement(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />}
@@ -978,7 +978,7 @@ function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName, ten
   };
 
   return (
-    <Card className="rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
+    <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1002,27 +1002,27 @@ function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName, ten
         <InfoField label="Líneas" value={String(estimate.items?.length || 0)} icon={FileText} />
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-xl border border-border/50 bg-background/40">
-        <Table>
+      <div className="mt-5 min-w-0 overflow-x-auto rounded-xl border border-border/50 bg-background/40">
+        <Table className="w-full table-fixed">
           <TableHeader className="bg-muted/30">
             <TableRow>
-              <TableHead className="text-[10px] font-black uppercase tracking-widest">Concepto</TableHead>
-              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Cantidad</TableHead>
-              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Precio</TableHead>
-              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead>
+              <TableHead className="w-[52%] text-[10px] font-black uppercase tracking-widest">Concepto</TableHead>
+              <TableHead className="w-[16%] text-right text-[10px] font-black uppercase tracking-widest">Cantidad</TableHead>
+              <TableHead className="w-[16%] text-right text-[10px] font-black uppercase tracking-widest">Precio</TableHead>
+              <TableHead className="w-[16%] text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {(estimate.items || []).map((item) => (
               <TableRow key={item.id}>
-                <TableCell className="max-w-[16rem] text-xs font-bold">
-                  <span className="block">{item.description || 'Producto o servicio'}</span>
+                <TableCell className="w-[52%] max-w-none whitespace-normal break-words align-top text-xs font-bold leading-relaxed">
+                  <span className="block break-words">{item.description || 'Producto o servicio'}</span>
                   {item.productCode && <span className="mt-1 block font-mono text-[10px] font-semibold text-primary">Código: {item.productCode}</span>}
                   {item.variantSku && <span className="mt-1 block font-mono text-[10px] font-normal text-muted-foreground">SKU variante: {item.variantSku}</span>}
                 </TableCell>
-                <TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell>
-                <TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate)}</TableCell>
-                <TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate)}</TableCell>
+                <TableCell className="w-[16%] whitespace-normal break-words text-right align-top text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell>
+                <TableCell className="w-[16%] whitespace-normal break-words text-right align-top text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate)}</TableCell>
+                <TableCell className="w-[16%] whitespace-normal break-words text-right align-top text-xs font-black">{formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -1067,9 +1067,9 @@ function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, 
     }
   };
   return (
-    <Card className="rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
+    <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-4">
-        <div><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-black uppercase tracking-tight">Detalle de {transaction.kind.toLowerCase()}</h3><Badge variant="outline" className={`border-none text-[9px] font-black ${getSalesStatusColor(transaction.status)}`}>{getTransactionStatus(transaction.status)}</Badge></div><p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{transaction.number || 'Sin número'}</p></div>
+        <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-sm font-black uppercase tracking-tight">Detalle de {transaction.kind.toLowerCase()}</h3><Badge variant="outline" className={`border-none text-[9px] font-black ${getSalesStatusColor(transaction.status)}`}>{getTransactionStatus(transaction.status)}</Badge></div><p className="mt-1 break-words font-mono text-xs font-bold text-muted-foreground">{transaction.number || 'Sin número'}</p></div>
         <div className="flex shrink-0 items-center gap-1">{documentType && <PdfDownloadButton onDownload={handleDownloadPdf} size="sm" className="h-8 px-2 text-[10px]" />}<Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}><X className="size-4" /></Button></div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -1179,8 +1179,8 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName, tenan
         </div>
       )}
 
-      <div className="mt-5 overflow-hidden rounded-xl border border-border/50 bg-background/40">
-        <Table>
+      <div className="mt-5 min-w-0 overflow-x-auto rounded-xl border border-border/50 bg-background/40">
+        <Table className="w-full table-fixed">
           <TableHeader className="bg-muted/30">
             <TableRow>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Concepto</TableHead>

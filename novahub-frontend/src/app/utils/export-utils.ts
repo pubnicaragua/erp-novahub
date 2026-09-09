@@ -1,4 +1,32 @@
 import { getReadableForeground } from './color-contrast';
+import { storageService } from '../services/storage.service';
+
+async function imageBlobAsPng(blob: Blob) {
+  if (blob.type && !/^image\//i.test(blob.type)) return '';
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+  if (blob.type === 'image/png') return dataUrl;
+  return new Promise<string>((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        canvas.getContext('2d')?.drawImage(image, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+}
 
 type PaginatedExportResponse<T> = {
   data?: T[];
@@ -45,15 +73,13 @@ export async function fetchAllPaginatedRows<T>(
 }
 
 export const getBase64Image = async (url: string): Promise<string | null> => {
+  if (!url?.trim()) return null;
   try {
-    const resp = await fetch(url);
+    const resolvedUrl = await storageService.resolveUrl(url);
+    const resp = await fetch(resolvedUrl);
+    if (!resp.ok) return null;
     const blob = await resp.blob();
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    return await imageBlobAsPng(blob);
   } catch (e: any) {
     return null;
   }

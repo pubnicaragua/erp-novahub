@@ -1,13 +1,14 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getPdfDesign, getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { getGlobalReportSettings, getPdfDesign, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
-import { getPdfTemplatePartyConfig } from '../services/pdf-document-catalog';
-import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
+import { getPdfTemplatePartyConfig, getPdfTemplateTarget } from '../services/pdf-document-catalog';
+import { createDefaultTemplateDefinition, sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildPdfFileName } from './exportFileNames';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription } from './pdf-line-details';
+import { getBase64Image } from './reportExportUtils';
 
 type PdfRgb = [number, number, number];
 
@@ -94,6 +95,23 @@ const purchaseListColumnWidths = (columns: PurchasePdfListColumn[]) => {
   return weights.map((weight) => (weight / total) * 100);
 };
 
+const isVirtualPdfDesign = (design: any) => Boolean(
+  !design
+  || design.isSystemDefault
+  || String(design.id || '').startsWith('system-default:')
+  || !design.layoutZones?.definition,
+);
+
+async function resolveGlobalPurchaseDesign(targetKey: string) {
+  const requestedKey = getPdfTemplateTarget(targetKey).key;
+  const requestedDesign = await getPdfDesign(requestedKey);
+  if (!isVirtualPdfDesign(requestedDesign)) {
+    return { targetKey: requestedKey, design: requestedDesign };
+  }
+  if (requestedKey === 'compras.list') return { targetKey: requestedKey, design: requestedDesign };
+  return { targetKey: 'compras.list', design: await getPdfDesign('compras.list') };
+}
+
 const countLines = (doc: jsPDF, value: unknown, size: number, width: number) => {
   doc.setFontSize(size);
   return Math.max(1, doc.splitTextToSize(valueText(value), width).length);
@@ -171,8 +189,8 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
   const configuredDesign = designOverride || await getPdfDesign(targetKey);
   const overrideSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object' ? configuredDesign.settings : null;
   const settings = overrideSettings || await getPdfDesignSettings(targetKey);
-  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : undefined;
-  const resolvedLogo = configuredLogo || tenantLogo || (typeof document.supplierData?.logo === 'string' ? document.supplierData.logo : undefined);
+  const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
+  const resolvedLogo = configuredLogo || (typeof document.supplierData?.logo === 'string' ? document.supplierData.logo : undefined);
   if (!isRoll(format) && configuredDesign?.layoutZones?.definition) {
     const paperSettings = withPaperFormat(settings, format);
     const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...paperSettings };
@@ -249,19 +267,26 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
 
 export async function generatePurchaseListPDF({ title, rows, columns, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.list', summary }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; summary?: { label: string; value: unknown; columnIndex?: number } }) {
   if (isRoll(format)) throw new Error('Los reportes generales solo están disponibles en tamaños de página PDF.');
-  // Una exportación global no tiene una entidad única. Siempre usa la
-  // plantilla de listado para no reservar el bloque de datos personales que
-  // corresponde únicamente a comprobantes individuales.
-  const listTargetKey = 'compras.list';
-  void targetKey;
-  const configuredDesign = await getPdfDesign(listTargetKey);
-  // getPdfDesign ya trae los ajustes activos; evitar una segunda consulta al
-  // mismo endpoint hace perceptible la mejora en listados de proveedores.
-  const settings = configuredDesign?.settings && typeof configuredDesign.settings === 'object'
+  // La plantilla se resuelve por la salida real. Si esa salida aún no tiene
+  // diseño propio, se usa la plantilla global de listados como respaldo para
+  // conservar la estructura de reporte y no reservar datos individuales.
+  const resolvedDesign = await resolveGlobalPurchaseDesign(targetKey);
+  const sourceTargetKey = resolvedDesign.targetKey;
+  const configuredDesign = resolvedDesign.design;
+  const sourceSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object'
     ? configuredDesign.settings as Record<string, any>
-    : await getPdfDesignSettings(listTargetKey);
-  const configuredLogo = typeof settings.logoUrl === 'string' ? settings.logoUrl : undefined;
-  const resolvedLogo = configuredLogo || tenantLogo;
+    : await getPdfDesignSettings(sourceTargetKey);
+  const listTargetKey = 'compras.list';
+  const requestedTargetKey = getPdfTemplateTarget(targetKey).key;
+  const settings = getGlobalReportSettings(
+    // Si se usa compras.list como respaldo, su logo personalizado pertenece
+    // solo a esa plantilla y no debe propagarse a los demás listados.
+    sourceTargetKey === requestedTargetKey ? sourceSettings : { ...sourceSettings, templateLogoUrl: undefined, templateLogoUri: undefined, templateLogoTarget: undefined },
+    tenantName,
+    tenantLogo,
+    sourceTargetKey,
+  );
+  const resolvedLogo = getPdfTemplateLogo(settings, tenantLogo, sourceTargetKey) || undefined;
   const paperSettings = withPaperFormat(settings, format === 'configured' ? 'configured' : format);
   const summaryColumnIndex = summary
     ? Math.min(Math.max(summary.columnIndex ?? columns.length - 1, 0), Math.max(columns.length - 1, 0))
@@ -275,7 +300,7 @@ export async function generatePurchaseListPDF({ title, rows, columns, tenantName
       return mapped;
     });
     const data: PdfTemplateData = { logo: resolvedLogo, company: { name: tenantName, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, slogan: settings.slogan, website: settings.website, logo: resolvedLogo }, document: { title, number: `${rows.length} registro(s)` }, rows: mappedRows, items: mappedRows, renderScale: rows.length > 10 ? 1.5 : undefined, tableSummary: summary ? { label: summary.label, 'column-0': summary.label, [`column-${summaryColumnIndex}`]: valueText(summary.value) } : undefined, tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.label, token: `column-${index}`, width: columnWidths[index], align: column.align || 'left' })) };
-    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, listTargetKey, renderSettings), settings: renderSettings, targetKey: listTargetKey, data, fileName: buildPdfFileName([title], format), save: true });
+    const rendered = await renderPdfTemplateToPdf({ definition: createDefaultTemplateDefinition(listTargetKey, renderSettings), settings: renderSettings, targetKey: listTargetKey, data, fileName: buildPdfFileName([title], format), save: true });
     return rendered.doc;
   }
   const doc = new jsPDF(pdfDesignPaper(paperSettings));
@@ -283,6 +308,10 @@ export async function generatePurchaseListPDF({ title, rows, columns, tenantName
   const text = pdfDesignColor(paperSettings.textColor, [51, 65, 85]);
   const margin = Math.max(10, Math.min(18, Number(paperSettings.margins) || 14));
   const tableWidth = doc.internal.pageSize.getWidth() - margin * 2;
+  const logoBase64 = resolvedLogo ? await getBase64Image(resolvedLogo) : null;
+  if (logoBase64) {
+    try { doc.addImage(logoBase64, 'PNG', doc.internal.pageSize.getWidth() - margin - 20, 6, 20, 12, undefined, 'FAST'); } catch { /* el reporte continúa aunque el logo no sea compatible */ }
+  }
   doc.setTextColor(...primary); doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(tenantName || 'Nova Hub', margin, 20);
   doc.setTextColor(...text); doc.setFontSize(12); doc.text(title, margin, 28);
   autoTable(doc, { startY: 38, head: [columns.map((column) => column.label)], body: rows.length ? rows.map((row) => columns.map((column) => purchaseListValue(column, row))) : [columns.map(() => '—')], foot: summary ? [columns.map((column, index) => index === 0 ? summary.label : index === summaryColumnIndex ? valueText(summary.value) : '')] : undefined, theme: 'grid', tableWidth, headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, footStyles: { textColor: text, fontStyle: 'bold', lineColor: primary, lineWidth: 0.5 }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: Object.fromEntries(columns.map((column, index) => [index, { halign: column.align || 'left', cellWidth: tableWidth * columnWidths[index] / 100 }])), styles: { cellPadding: 3, overflow: 'linebreak' } });

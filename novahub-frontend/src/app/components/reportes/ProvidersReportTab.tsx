@@ -13,7 +13,7 @@ import { Users, TrendingUp, Package, Activity, CreditCard, DollarSign } from 'lu
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
+import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -183,7 +183,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = pdfSettings.showCompanyName === false ? '' : String(pdfSettings.companyName || themeConfig.tenantName || user?.tenantName || 'Mi Empresa');
-        const logoUrl = String(pdfSettings.logoUrl || themeConfig.logo || '');
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.providers');
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -291,11 +291,12 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportExcel: async () => {
       try {
         toast.info('Generando Excel (Proveedores)...');
+        const pdfSettings = await getPdfDesignSettings('reportes.providers');
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Proveedores');
 
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
-        const logoUrl = themeConfig.logo || '';
+        const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.providers');
         const primaryColor = themeConfig.colors.primary || '#10b981';
         const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';

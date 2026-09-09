@@ -33,7 +33,7 @@ type PdfSettings = {
   headerLayout: 'classic' | 'split' | 'banner' | 'compact' | 'ribbon' | 'topline' | 'sidebar' | 'centered' | 'boxed' | 'corner' | 'editorial' | 'double-band' | 'fluid' | 'aurora' | 'diagonal' | 'portal' | 'steps' | 'ink' | 'grid' | 'ticket';
   footerLayout: 'line' | 'minimal' | 'band' | 'wave' | 'boxed' | 'split' | 'layers' | 'notch' | 'dots';
   tableLayout: 'standard' | 'striped' | 'boxed' | 'minimal' | 'compact' | 'accent' | 'ledger' | 'cards';
-  logoPosition: 'left' | 'center' | 'right'; logoSize: number; logoUrl?: string; showCompanyName: boolean; companyName: string;
+  logoPosition: 'left' | 'center' | 'right'; logoSize: number; logoUrl?: string; templateLogoUrl?: string; templateLogoUri?: string; templateLogoTarget?: string; showCompanyName: boolean; companyName: string;
   slogan: string; fiscalInfo: string; address: string; phone: string; email: string; website: string; bankInfo: string;
   showQr: boolean; showBarcode: boolean; watermark: string; watermarkOpacity: number; footerText: string;
   showPageNumber: boolean; pageNumberFormat: 'page-of' | 'number-only' | 'custom'; pageNumberCustom: string;
@@ -92,6 +92,15 @@ function ensureLogoNode(definition: PdfTemplateDefinition) {
   if (hasLogoNode) return { ...definition, nodes: definition.nodes.map(node => node.id === 'company-logo' ? { ...node, enabled: true } : node) };
   const logoNode: PdfTemplateNode = { id: 'company-logo', type: 'image', label: 'Logotipo', x: 8, y: 7, width: 16, height: 8, enabled: true, borderStyle: 'none', backgroundColor: 'transparent' };
   return { ...definition, nodes: [logoNode, ...definition.nodes] };
+}
+
+function createEditorDefaultDefinition(targetKey: PdfDocumentType, settings: Record<string, unknown>, corporateLogo?: string | null) {
+  return createDefaultTemplateDefinition(targetKey, {
+    ...settings,
+    // El logo corporativo es el fallback visual. El override persistido vive
+    // en templateLogoUrl y pertenece únicamente a esta plantilla.
+    logoUrl: settings.templateLogoUrl || corporateLogo || undefined,
+  });
 }
 
 const TEMPLATE_LIBRARY = [
@@ -575,7 +584,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [activeId, setActiveId] = useState('draft');
   const [documentType, setDocumentType] = useState<PdfDocumentType>('ventas.estimate');
   const [selectedModule, setSelectedModule] = useState(PDF_TEMPLATE_MODULES[0]?.id || 'ventas');
-  const [settings, setSettings] = useState<PdfSettings>({ ...DEFAULT_SETTINGS, companyName, primaryColor: corporateColor, logoUrl: logo || undefined });
+  const [settings, setSettings] = useState<PdfSettings>({ ...DEFAULT_SETTINGS, companyName, primaryColor: corporateColor });
   const [name, setName] = useState('Clásico · Cotizaciones');
   const [description, setDescription] = useState('Diseño base de la biblioteca para comenzar a personalizar esta sucursal');
   const [assignedDocuments, setAssignedDocuments] = useState<PdfDocumentType[]>(['ventas.estimate']);
@@ -601,12 +610,23 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const [isDeleting, setIsDeleting] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
-  const [templateDefinition, setTemplateDefinition] = useState<PdfTemplateDefinition>(() => createDefaultTemplateDefinition('ventas.estimate', { ...DEFAULT_SETTINGS, companyName, logoUrl: logo || undefined }));
+  const [templateDefinition, setTemplateDefinition] = useState<PdfTemplateDefinition>(() => createEditorDefaultDefinition('ventas.estimate', { ...DEFAULT_SETTINGS, companyName }, logo));
+  const [resolvedTemplateLogo, setResolvedTemplateLogo] = useState<{ source: string; url: string }>({ source: '', url: '' });
   const [templateImportError, setTemplateImportError] = useState<string | null>(null);
   const [templateImportWarnings, setTemplateImportWarnings] = useState<string[]>([]);
   const [htmlSource, setHtmlSource] = useState('');
   const [sourceMetadata, setSourceMetadata] = useState<{ sourceType: string; sourceFileUrl?: string; sourceFileName?: string; analysisStatus?: string; layoutZones?: Record<string, any> } | null>(null);
   const isUploadedSource = sourceMetadata?.sourceType === 'UPLOADED_PDF' || sourceMetadata?.sourceType === 'UPLOADED_HTML';
+
+  useEffect(() => {
+    const source = String(settings.templateLogoUri || settings.templateLogoUrl || '').trim();
+    if (!source) return;
+    let cancelled = false;
+    void storageService.resolveUrl(source)
+      .then(url => { if (!cancelled) setResolvedTemplateLogo({ source, url: url || (source.startsWith('storage://') ? '' : source) }); })
+      .catch(() => { if (!cancelled) setResolvedTemplateLogo({ source, url: source.startsWith('storage://') ? '' : source }); });
+    return () => { cancelled = true; };
+  }, [settings.templateLogoUri, settings.templateLogoUrl]);
 
   const hasActiveBranchScope = Boolean(String(tenantId || '').trim());
   const activeBranchLabel = branchName || companyName || 'Sucursal actual';
@@ -614,7 +634,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const resetDraftForScope = useCallback(() => {
     const target = getPdfTemplateTarget('ventas.estimate');
     const defaultTemplate = getDefaultLibraryTemplate();
-    const nextSettings = { ...DEFAULT_SETTINGS, companyName, logoUrl: logo || undefined, ...defaultTemplate.settings, footerLayout: footerLayoutForTemplate(defaultTemplate.key) };
+    const nextSettings = { ...DEFAULT_SETTINGS, companyName, ...defaultTemplate.settings, footerLayout: footerLayoutForTemplate(defaultTemplate.key) };
     setActiveId('draft');
     setSelectedFolderId(null);
     setSelectedTemplateKey(defaultTemplate.key);
@@ -625,7 +645,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     setSelectedModule(target.module);
     setSettings(nextSettings);
     setTemplateFields(createTemplateFields(companyName));
-    setTemplateDefinition({ ...createDefaultTemplateDefinition(target.key, nextSettings), metadata: { preset: defaultTemplate.key } });
+    setTemplateDefinition({ ...createEditorDefaultDefinition(target.key, nextSettings, logo), metadata: { preset: defaultTemplate.key } });
     setSelectedTemplateFieldId('company');
     setSourceMetadata(null);
   }, [companyName, corporateColor, logo]);
@@ -634,7 +654,29 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     const storedFields = (record.layoutZones as any)?.fields;
     const assignedDocument = normalizePdfTemplateKey(record.documentTypes?.[0] || 'ventas.estimate');
     const target = getPdfTemplateTarget(assignedDocument);
-    const mergedSettings = { ...DEFAULT_SETTINGS, companyName, primaryColor: corporateColor, logoUrl: logo || undefined, ...(TEMPLATE_LIBRARY.find(template => template.key === record.templateKey)?.settings || {}), ...(record.settings as Partial<PdfSettings>) };
+    const storedSettings = (record.settings || {}) as Partial<PdfSettings>;
+    const storedLogoTarget = String(storedSettings.templateLogoTarget || '').trim();
+    const templateLogoTarget = storedLogoTarget ? normalizePdfTemplateKey(storedLogoTarget) : undefined;
+    const templateLogoOverride = templateLogoTarget === assignedDocument
+      ? String(storedSettings.templateLogoUrl || '').trim() || undefined
+      : undefined;
+    const templateLogoUri = templateLogoTarget === assignedDocument
+      ? String(storedSettings.templateLogoUri || '').trim() || undefined
+      : undefined;
+    const mergedSettings = {
+      ...DEFAULT_SETTINGS,
+      companyName,
+      primaryColor: corporateColor,
+      ...(TEMPLATE_LIBRARY.find(template => template.key === record.templateKey)?.settings || {}),
+      ...storedSettings,
+      // logoUrl fue usado por versiones anteriores para mezclar el logo
+      // corporativo con el diseño. Se ignora para que esas plantillas vuelvan
+      // al logo corporativo; los nuevos overrides quedan aislados por diseño.
+      logoUrl: undefined,
+      templateLogoUrl: templateLogoOverride,
+      templateLogoUri,
+      templateLogoTarget: templateLogoOverride || templateLogoUri ? templateLogoTarget : undefined,
+    };
     setActiveId(record.id); setSelectedFolderId(record.folderId || null); setSelectedTemplateKey(TEMPLATE_LIBRARY.find(template => template.key === record.templateKey)?.key || '');
     setName(record.name); setDescription(record.description || ''); setAssignedDocuments([assignedDocument]); setDocumentType(assignedDocument); setSelectedModule(target.module); setSettings(mergedSettings);
     setTemplateFields(normalizeTemplateFields(storedFields, companyName));
@@ -645,9 +687,9 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     // si ya existe un preset, se conserva el canvas personalizado del usuario.
     const libraryPreset = TEMPLATE_LIBRARY.find(template => template.key === record.templateKey);
     const definition = libraryPreset && !storedPreset
-      ? { ...createDefaultTemplateDefinition(assignedDocument, mergedSettings), metadata: { preset: libraryPreset.key } }
+      ? { ...createEditorDefaultDefinition(assignedDocument, mergedSettings, logo), metadata: { preset: libraryPreset.key } }
       : sanitizeTemplateDefinition(storedDefinition, assignedDocument, mergedSettings);
-    setTemplateDefinition(mergedSettings.logoUrl ? ensureLogoNode(definition) : definition);
+    setTemplateDefinition(mergedSettings.templateLogoUrl || logo ? ensureLogoNode(definition) : definition);
     setSourceMetadata({ sourceType: record.sourceType, sourceFileUrl: record.sourceFileUrl || undefined, sourceFileName: record.sourceFileName || undefined, analysisStatus: record.analysisStatus, layoutZones: record.layoutZones || undefined });
     if (canEdit && record.sourceType === 'UPLOADED_PDF' && !['HTML_CONVERTED', 'PDF_VIEWER_FALLBACK'].includes(record.analysisStatus)) {
       void pdfDocumentDesignService.convertToHtml(record.id).then(converted => {
@@ -694,6 +736,12 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     const timer = setTimeout(() => { setSettings(prev => ({ ...prev, primaryColor: corporateColor })); }, 0);
     return () => clearTimeout(timer);
   }, [corporateColor, activeId, settings.paletteMode]);
+  useEffect(() => {
+    const corporateLogo = String(logo || '').trim();
+    if (activeId !== 'draft' || !corporateLogo) return;
+    const timer = setTimeout(() => setTemplateDefinition(previous => ensureLogoNode(previous)), 0);
+    return () => clearTimeout(timer);
+  }, [activeId, logo]);
   const canModifyActive = hasActiveBranchScope && (activeId === 'draft' ? canCreate : canEdit);
   const update = <K extends keyof PdfSettings>(key: K, value: PdfSettings[K]) => { if (canModifyActive) setSettings(prev => ({ ...prev, [key]: value })); };
   const reservedDocumentDesign = (id: PdfDocumentType, excludeId = activeId) => designs.find(record => record.isActive && record.id !== excludeId && normalizePdfTemplateKey(record.documentTypes?.[0]) === normalizePdfTemplateKey(id));
@@ -710,12 +758,64 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     setIsSaving(true);
     try {
       const sourceType: PdfDocumentDesignRecord['sourceType'] = sourceMetadata?.sourceType === 'UPLOADED_PDF' || sourceMetadata?.sourceType === 'UPLOADED_HTML' || sourceMetadata?.sourceType === 'AI_ANALYZED' ? sourceMetadata.sourceType : 'SYSTEM';
-      const payload = { name: name.trim(), description, documentTypes: assignedDocuments, folderId: selectedFolderId, settings, templateKey: selectedTemplateKey || 'custom', sourceType, sourceFileUrl: sourceMetadata?.sourceFileUrl, sourceFileName: sourceMetadata?.sourceFileName, analysisStatus: sourceMetadata?.analysisStatus || 'NOT_APPLICABLE', layoutZones: { ...(sourceMetadata?.layoutZones || {}), definition: templateDefinition, fields: templateFields }, engine: 'HTML_TEMPLATE', isActive: true };
+      const savedDocumentType = normalizePdfTemplateKey(assignedDocuments[0] || previewDocument);
+      const persistedSettings = { ...settings } as Record<string, unknown>;
+      delete persistedSettings.logoUrl;
+      if ((typeof persistedSettings.templateLogoUri === 'string' && persistedSettings.templateLogoUri.trim())
+        || (typeof persistedSettings.templateLogoUrl === 'string' && persistedSettings.templateLogoUrl.trim())) {
+        persistedSettings.templateLogoTarget = savedDocumentType;
+      } else {
+        delete persistedSettings.templateLogoUrl;
+        delete persistedSettings.templateLogoUri;
+        delete persistedSettings.templateLogoTarget;
+      }
+      const payload = { name: name.trim(), description, documentTypes: [savedDocumentType], folderId: selectedFolderId, settings: persistedSettings, templateKey: selectedTemplateKey || 'custom', sourceType, sourceFileUrl: sourceMetadata?.sourceFileUrl, sourceFileName: sourceMetadata?.sourceFileName, analysisStatus: sourceMetadata?.analysisStatus || 'NOT_APPLICABLE', layoutZones: { ...(sourceMetadata?.layoutZones || {}), definition: templateDefinition, fields: templateFields }, engine: 'HTML_TEMPLATE', isActive: true };
       const saved = activeId === 'draft' ? await pdfDocumentDesignService.create(payload) : await pdfDocumentDesignService.update(activeId, payload);
-      setDesigns(prev => activeId === 'draft' ? [saved, ...prev] : prev.map(item => item.id === saved.id ? saved : item)); setActiveId(saved.id); setName(saved.name); toast.success(saved.name !== name.trim() ? `Diseño guardado como «${saved.name}»` : 'Diseño PDF guardado');
+      const savedForState = { ...saved, documentTypes: [savedDocumentType], settings: { ...(saved.settings || {}), ...persistedSettings } };
+      let nextDesigns = activeId === 'draft' ? [savedForState, ...designs] : designs.map(item => item.id === saved.id ? savedForState : item);
+      // Versiones anteriores podían haber guardado la misma URL en varios
+      // diseños o sin indicar a qué vista pertenecía. Conservamos el logo del
+      // diseño actual, limpiamos las copias ambiguas y dejamos intactos los
+      // logos nuevos que sí tienen un destino explícito.
+      const logoGroups = new Map<string, PdfDocumentDesignRecord[]>();
+      nextDesigns.forEach(item => {
+        const logoValue = String(item.settings?.templateLogoUri || item.settings?.templateLogoUrl || '').trim();
+        if (!logoValue) return;
+        logoGroups.set(logoValue, [...(logoGroups.get(logoValue) || []), item]);
+      });
+      const duplicatedLogoUrls = new Set([...logoGroups.entries()]
+        .filter(([, items]) => items.length > 1)
+        .map(([logoValue]) => logoValue));
+      const sharedLogoDesigns = nextDesigns.filter(item => {
+        if (item.id === saved.id) return false;
+        const logoValue = String(item.settings?.templateLogoUri || item.settings?.templateLogoUrl || '').trim();
+        if (!logoValue) return false;
+        const designTarget = normalizePdfTemplateKey(item.documentTypes?.[0] || '');
+        const logoTarget = String(item.settings?.templateLogoTarget || '').trim();
+        const hasExplicitOwner = Boolean(logoTarget) && normalizePdfTemplateKey(logoTarget) === designTarget;
+        return duplicatedLogoUrls.has(logoValue) || !hasExplicitOwner;
+      });
+      if (sharedLogoDesigns.length) {
+        const cleanedDesigns = await Promise.all(sharedLogoDesigns.map(async item => {
+          const cleanedSettings = { ...(item.settings || {}) } as Record<string, unknown>;
+          delete cleanedSettings.logoUrl;
+          delete cleanedSettings.templateLogoUrl;
+          delete cleanedSettings.templateLogoUri;
+          delete cleanedSettings.templateLogoTarget;
+          try {
+            const cleaned = await pdfDocumentDesignService.update(item.id, { settings: cleanedSettings });
+            return cleaned;
+          } catch {
+            return { ...item, settings: cleanedSettings };
+          }
+        }));
+        const cleanedById = new Map(cleanedDesigns.map(item => [item.id, item]));
+        nextDesigns = nextDesigns.map(item => cleanedById.get(item.id) || item);
+      }
+      setDesigns(nextDesigns); setActiveId(saved.id); setName(saved.name); toast.success(saved.name !== name.trim() ? `Diseño guardado como «${saved.name}»` : 'Diseño PDF guardado');
     } catch (error: any) { toast.error(error?.message || 'No se pudo guardar el diseño'); } finally { setIsSaving(false); }
   };
-  const createDesign = () => { if (!hasActiveBranchScope || !canCreate) return; const nextDocumentType = firstAvailableDocumentType(documentType, 'draft'); const target = getPdfTemplateTarget(nextDocumentType); const defaultTemplate = getDefaultLibraryTemplate(); const nextSettings = { ...DEFAULT_SETTINGS, companyName, logoUrl: logo || undefined, ...defaultTemplate.settings, footerLayout: footerLayoutForTemplate(defaultTemplate.key) }; setActiveId('draft'); setSelectedTemplateKey(defaultTemplate.key); setName(`${defaultTemplate.name} · ${target.label}`); setDescription(`Diseño iniciado desde ${defaultTemplate.name} para ${target.label}; editable para esta sucursal.`); setAssignedDocuments([nextDocumentType]); setDocumentType(nextDocumentType); setSelectedModule(target.module); setSourceMetadata(null); setTemplateFields(createTemplateFields(companyName)); setTemplateDefinition({ ...createDefaultTemplateDefinition(nextDocumentType, nextSettings), metadata: { preset: defaultTemplate.key } }); setSelectedTemplateFieldId('company'); setSettings(nextSettings); };
+  const createDesign = () => { if (!hasActiveBranchScope || !canCreate) return; const nextDocumentType = firstAvailableDocumentType(documentType, 'draft'); const target = getPdfTemplateTarget(nextDocumentType); const defaultTemplate = getDefaultLibraryTemplate(); const nextSettings = { ...DEFAULT_SETTINGS, companyName, ...defaultTemplate.settings, footerLayout: footerLayoutForTemplate(defaultTemplate.key) }; setActiveId('draft'); setSelectedTemplateKey(defaultTemplate.key); setName(`${defaultTemplate.name} · ${target.label}`); setDescription(`Diseño iniciado desde ${defaultTemplate.name} para ${target.label}; editable para esta sucursal.`); setAssignedDocuments([nextDocumentType]); setDocumentType(nextDocumentType); setSelectedModule(target.module); setSourceMetadata(null); setTemplateFields(createTemplateFields(companyName)); setTemplateDefinition({ ...createEditorDefaultDefinition(nextDocumentType, nextSettings, logo), metadata: { preset: defaultTemplate.key } }); setSelectedTemplateFieldId('company'); setSettings(nextSettings); };
   const deleteDesignRecord = (record: PdfDocumentDesignRecord) => { if (canDelete) setDeleteTarget({ kind: 'design', record }); };
   const deleteDesign = async () => { if (!canDelete || activeId === 'draft') return; const record = designs.find(item => item.id === activeId); if (record) deleteDesignRecord(record); };
   const applyTemplate = (template: typeof TEMPLATE_LIBRARY[number]) => {
@@ -723,7 +823,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     const nextSettings = { ...settings, ...template.settings, footerLayout: footerLayoutForTemplate(template.key) };
     setSelectedTemplateKey(template.key);
     setSettings(nextSettings);
-    setTemplateDefinition({ ...createDefaultTemplateDefinition(previewDocument, nextSettings), metadata: { preset: template.key } });
+    setTemplateDefinition({ ...createEditorDefaultDefinition(previewDocument, nextSettings, logo), metadata: { preset: template.key } });
     toast.success(`Patrón ${template.name} aplicado al canvas`);
   };
   const updateTemplateField = (id: string, changes: Partial<PdfTemplateField>) => { if (canModifyActive) setTemplateFields(fields => fields.map(field => field.id === id ? { ...field, ...changes } : field)); };
@@ -735,7 +835,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
     const structuralChange = ['headerLayout', 'footerLayout', 'tableLayout'].some(key => key in changes);
     if (structuralChange) {
       setSelectedTemplateKey('');
-      setTemplateDefinition({ ...createDefaultTemplateDefinition(previewDocument, nextSettings), metadata: { preset: `${nextSettings.headerLayout}-${nextSettings.footerLayout}` } });
+      setTemplateDefinition({ ...createEditorDefaultDefinition(previewDocument, nextSettings, logo), metadata: { preset: `${nextSettings.headerLayout}-${nextSettings.footerLayout}` } });
       return;
     }
      if (['primaryColor', 'secondaryColor', 'textColor', 'lineColor', 'backgroundColor', 'paperSize', 'orientation'].some(key => key in changes)) {
@@ -744,7 +844,23 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   };
   const updateLayout = <K extends keyof PdfSettings>(key: K, value: PdfSettings[K]) => handleCanvasSettingsChange({ [key]: value } as Partial<PdfSettings>);
   const moduleTargets = useMemo(() => DOCUMENTS.filter(target => target.module === selectedModule), [selectedModule]);
-  const selectTarget = (targetKey: string) => { const target = getPdfTemplateTarget(targetKey); const defaultTemplate = getDefaultLibraryTemplate(); const nextSettings = { ...settings, ...defaultTemplate.settings, footerLayout: footerLayoutForTemplate(defaultTemplate.key) }; setSelectedModule(target.module); setDocumentType(target.key); setAssignedDocuments([target.key]); setSettings(nextSettings); setTemplateDefinition({ ...createDefaultTemplateDefinition(target.key, nextSettings), metadata: { preset: defaultTemplate.key } }); setSelectedTemplateKey(defaultTemplate.key); };
+  const selectTarget = (targetKey: string) => {
+    const target = getPdfTemplateTarget(targetKey);
+    const defaultTemplate = getDefaultLibraryTemplate();
+    const isSameTarget = normalizePdfTemplateKey(previewDocument) === target.key;
+    const nextSettings = {
+      ...settings,
+      ...defaultTemplate.settings,
+      footerLayout: footerLayoutForTemplate(defaultTemplate.key),
+      ...(isSameTarget ? {} : { logoUrl: undefined, templateLogoUrl: undefined, templateLogoUri: undefined, templateLogoTarget: undefined }),
+    };
+    setSelectedModule(target.module);
+    setDocumentType(target.key);
+    setAssignedDocuments([target.key]);
+    setSettings(nextSettings);
+    setTemplateDefinition({ ...createEditorDefaultDefinition(target.key, nextSettings, logo), metadata: { preset: defaultTemplate.key } });
+    setSelectedTemplateKey(defaultTemplate.key);
+  };
   const selectedTemplateField = templateFields.find(field => field.id === selectedTemplateFieldId) || templateFields[0];
   const selectedTemplateFieldValue = selectedTemplateField ? TEMPLATE_FIELD_SETTINGS[selectedTemplateField.id] : undefined;
   const templateFieldValue = useCallback((field: PdfTemplateField) => {
@@ -790,6 +906,12 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       }
       const importedSettings = {
         ...settings,
+        // Una importación inicia una plantilla independiente. El logo del
+        // diseño actualmente seleccionado no debe copiarse a esta nueva.
+        logoUrl: undefined,
+        templateLogoUrl: undefined,
+        templateLogoUri: undefined,
+        templateLogoTarget: undefined,
         ...(imported.definition.page.paperSize ? { paperSize: imported.definition.page.paperSize as PdfSettings['paperSize'] } : {}),
         ...(imported.definition.page.orientation ? { orientation: imported.definition.page.orientation } : {}),
       };
@@ -831,7 +953,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       toast.error(error?.message || (deleteTarget.kind === 'design' ? 'No se pudo eliminar la plantilla' : 'No se pudo eliminar la carpeta'));
     } finally { setIsDeleting(false); }
   };
-  const uploadLogo = async (file: File) => { if (!canModifyActive) return; if (!file.type.startsWith('image/')) { toast.error('Selecciona una imagen para el logotipo'); return; } try { const uploaded = await storageService.uploadFile('tenant-branding', file, { folder: 'pdf-logos', scopeId: tenantId }); update('logoUrl', uploaded.url); setTemplateDefinition(previous => ensureLogoNode(previous)); toast.success('Logotipo agregado al diseño'); } catch (error: any) { toast.error(error?.message || 'No se pudo cargar el logotipo'); } };
+  const uploadLogo = async (file: File) => { if (!canModifyActive) return; if (!file.type.startsWith('image/')) { toast.error('Selecciona una imagen para el logotipo'); return; } try { const uploaded = await storageService.uploadFile('documents', file, { folder: 'pdf-logos', scopeId: tenantId }); const targetKey = normalizePdfTemplateKey(assignedDocuments[0] || previewDocument); const logoSource = uploaded.uri || uploaded.url; setResolvedTemplateLogo({ source: logoSource, url: uploaded.url }); setSettings(previous => ({ ...previous, templateLogoUrl: uploaded.url, templateLogoUri: uploaded.uri, templateLogoTarget: targetKey, logoUrl: undefined })); setTemplateDefinition(previous => ensureLogoNode(previous)); toast.success('Logotipo agregado al diseño'); } catch (error: any) { toast.error(error?.message || 'No se pudo cargar el logotipo'); } };
   const chooseTemplateFile = (file: File) => {
     const accepted = file.type === 'application/pdf' || file.type === 'text/html' || file.type.includes('wordprocessingml') || /\.(pdf|html?|docx)$/i.test(file.name);
     if (!accepted) { toast.error('Selecciona un archivo PDF, HTML o Word (.docx)'); return; }
@@ -848,6 +970,10 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
   const selectedFolderDesigns = selectedFolderId ? designs.filter(record => record.folderId === selectedFolderId) : [];
   const selectedTarget = getPdfTemplateTarget(previewDocument);
   const selectedFolder = folders.find(folder => folder.id === selectedFolderId);
+  const templateLogoSource = String(settings.templateLogoUri || settings.templateLogoUrl || '').trim();
+  const canvasLogo = templateLogoSource && resolvedTemplateLogo.source === templateLogoSource
+    ? (resolvedTemplateLogo.url || logo)
+    : logo;
 
   return <div className="space-y-6">
     <Card data-tour="pdf-assignment" className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card">
@@ -877,7 +1003,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
         <Card data-tour="pdf-assignment-legacy" aria-hidden="true" className="hidden border-primary/20 bg-primary/[0.03]"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><FileCog className="size-4 text-primary" />Asignación y datos</CardTitle><CardDescription className="text-xs">Define la sucursal y la vista a la que pertenece este diseño.</CardDescription></CardHeader><CardContent className="space-y-3 pt-0"><Field label="Nombre"><Input value={name} onChange={event => setName(event.target.value)} /></Field><Field label="Descripción"><Textarea value={description} onChange={event => setDescription(event.target.value)} /></Field><Field label="Carpeta"><select value={selectedFolderId || ''} onChange={event => setSelectedFolderId(event.target.value || null)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Sin carpeta</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></Field><div className="space-y-2"><Label className="text-xs">Vista del documento</Label><select aria-label="Módulo del documento" value={selectedModule} onChange={event => { const moduleId = event.target.value as typeof selectedModule; setSelectedModule(moduleId); const first = DOCUMENTS.find(target => target.module === moduleId && !reservedDocumentDesign(target.key)); if (first) selectTarget(first.key); }} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm">{PDF_TEMPLATE_MODULES.map(module => <option key={module.id} value={module.id}>{module.label}</option>)}</select><select aria-label="Subvista o tipo de documento" value={previewDocument} onChange={event => selectTarget(event.target.value)} className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm">{moduleTargets.map(item => { const reservedBy = reservedDocumentDesign(item.key); const isSelected = previewDocument === item.key; return <option key={item.key} value={item.key} disabled={Boolean(reservedBy) && !isSelected}>{item.label}{reservedBy && !isSelected ? ` · En uso por ${reservedBy.name}` : ''}</option>; })}</select></div><div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[10px] text-muted-foreground"><span className="font-semibold text-primary">{activeBranchLabel}</span><br />{getPdfTemplateTarget(previewDocument).structure} · {getPdfTemplateTarget(previewDocument).source}</div></CardContent></Card>
        </div>
 
-       <Card data-tour="pdf-preview" className="min-w-0 overflow-hidden bg-muted/10"><CardHeader className="gap-3 border-b border-border/40 pb-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="flex items-center gap-2 text-base"><FileText className="size-4 text-primary" />Canvas y vista previa en vivo</CardTitle><CardDescription>La plantilla se edita por componentes. Los cambios se reflejan al instante y se guardan como definición semántica.</CardDescription></div><Badge variant="outline" className="w-fit gap-1.5"><span className="size-1.5 rounded-full bg-primary" />{sourceMetadata?.analysisStatus === 'HTML_CONVERTED' ? 'HTML / Word importado' : sourceMetadata?.sourceType === 'UPLOADED_PDF' ? 'PDF convertido' : 'Plantilla editable'}</Badge></div><div data-tour="pdf-document-selector" className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Vista asignada</span><span className="text-xs font-bold text-primary">{getPdfTemplateTarget(previewDocument).moduleLabel} · {documentLabel(previewDocument)}</span></div></CardHeader><CardContent className="min-w-0 p-4 md:p-6">{templateImportError && <div className="mb-4 rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-xs text-rose-700 dark:text-rose-300"><p className="font-bold">No se pudo importar completamente</p><p className="mt-1">{templateImportError}</p></div>}{templateImportWarnings.length > 0 && <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-700 dark:text-amber-300"><p className="font-bold">Observaciones de importación</p>{templateImportWarnings.map(warning => <p key={warning} className="mt-1">{warning}</p>)}</div>}<PdfTemplateCanvasEditor definition={templateDefinition} settings={settings} targetKey={previewDocument} logo={settings.logoUrl || logo} data={{ company: { name: settings.companyName || companyName || 'NovaHub', slogan: settings.slogan, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, website: settings.website, logo: settings.logoUrl || logo }, logo: settings.logoUrl || logo }} onSettingsChange={changes => handleCanvasSettingsChange(changes as Partial<PdfSettings>)} onUploadLogo={uploadLogo} onSave={() => void saveDesign()} onChange={next => { if (canModifyActive) setTemplateDefinition(next); }} /></CardContent></Card>
+       <Card data-tour="pdf-preview" className="min-w-0 overflow-hidden bg-muted/10"><CardHeader className="gap-3 border-b border-border/40 pb-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="flex items-center gap-2 text-base"><FileText className="size-4 text-primary" />Canvas y vista previa en vivo</CardTitle><CardDescription>La plantilla se edita por componentes. Los cambios se reflejan al instante y se guardan como definición semántica.</CardDescription></div><Badge variant="outline" className="w-fit gap-1.5"><span className="size-1.5 rounded-full bg-primary" />{sourceMetadata?.analysisStatus === 'HTML_CONVERTED' ? 'HTML / Word importado' : sourceMetadata?.sourceType === 'UPLOADED_PDF' ? 'PDF convertido' : 'Plantilla editable'}</Badge></div><div data-tour="pdf-document-selector" className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Vista asignada</span><span className="text-xs font-bold text-primary">{getPdfTemplateTarget(previewDocument).moduleLabel} · {documentLabel(previewDocument)}</span></div></CardHeader><CardContent className="min-w-0 p-4 md:p-6">{templateImportError && <div className="mb-4 rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-xs text-rose-700 dark:text-rose-300"><p className="font-bold">No se pudo importar completamente</p><p className="mt-1">{templateImportError}</p></div>}{templateImportWarnings.length > 0 && <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-700 dark:text-amber-300"><p className="font-bold">Observaciones de importación</p>{templateImportWarnings.map(warning => <p key={warning} className="mt-1">{warning}</p>)}</div>}<PdfTemplateCanvasEditor definition={templateDefinition} settings={settings} targetKey={previewDocument} logo={canvasLogo} data={{ company: { name: settings.companyName || companyName || 'NovaHub', slogan: settings.slogan, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, website: settings.website, logo: canvasLogo }, logo: canvasLogo }} onSettingsChange={changes => handleCanvasSettingsChange(changes as Partial<PdfSettings>)} onUploadLogo={uploadLogo} onSave={() => void saveDesign()} onChange={next => { if (canModifyActive) setTemplateDefinition(next); }} /></CardContent></Card>
 
       <Card data-tour="pdf-editor" aria-hidden="true" className="hidden flex min-h-0 max-h-[850px] min-w-0 flex-col"><CardHeader className="shrink-0 border-b border-border/40 pb-4"><div className="flex items-start justify-between gap-3"><div><CardTitle className="text-base">Configuración del documento</CardTitle><CardDescription>Asigna la vista y define valores globales. El detalle del componente se edita en el inspector del canvas.</CardDescription></div><Button size="icon" variant="outline" className="size-8 cursor-pointer" onClick={saveDesign} disabled={isSaving}>{isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}</Button></div></CardHeader><CardContent className="min-h-0 flex-1 overflow-y-auto pr-3">
         {isUploadedSource && selectedTemplateField && <div className="mb-3 rounded-xl border border-cyan-400/35 bg-cyan-400/5 p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-cyan-300">Componente seleccionado</p><p className="mt-1 text-sm font-bold">{selectedTemplateField.label}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{selectedTemplateField.token}</p></div><Badge variant="outline" className="shrink-0">{selectedTemplateFieldValue ? 'Editable' : 'Dato dinámico'}</Badge></div>{selectedTemplateFieldValue ? <div className="mt-3 space-y-2"><Label>Valor vinculado</Label>{['legalText', 'terms', 'defaultNotes'].includes(selectedTemplateFieldValue) ? <Textarea value={templateFieldValue(selectedTemplateField)} onChange={event => updateSelectedFieldValue(event.target.value)} /> : <Input value={templateFieldValue(selectedTemplateField)} onChange={event => updateSelectedFieldValue(event.target.value)} />}</div> : <p className="mt-3 text-[11px] text-muted-foreground">Este valor proviene del documento que se esté generando. Aquí puedes ajustar su posición y tamaño; al exportar se sustituirá con los datos reales.</p>}<p className="mt-3 text-[10px] text-muted-foreground">También puedes seleccionar otra zona directamente sobre la hoja.</p></div>}
