@@ -7,7 +7,6 @@ import {
   Eye,
   FileText,
   Filter,
-  Loader2,
   PackageSearch,
   Ship,
   Zap,
@@ -61,8 +60,8 @@ export function ReceivedPackages() {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [sortBy, setSortBy] = useState('receivedAt');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const sortBy = useMemo(() => 'receivedAt', []);
+  const sortOrder = 'desc' as const;
   const [selected, setSelected] = useState<ReceivedPackage | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [view, setView] = useState<View>('list');
@@ -207,7 +206,8 @@ export function ReceivedPackages() {
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Sucursal</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Usuario</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Tipo</TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-widest">SKU</TableHead>
+              <TableHead className="text-[10px] font-black uppercase tracking-widest">Item / producto</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso factura</TableHead>
               <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso físico</TableHead>
               <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso facturable</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Tracking</TableHead>
@@ -219,9 +219,9 @@ export function ReceivedPackages() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={12} className="py-10 text-center text-xs text-muted-foreground">Cargando paquetes…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={13} className="py-10 text-center text-xs text-muted-foreground">Cargando paquetes…</TableCell></TableRow>
             ) : !result || result.items.length === 0 ? (
-              <TableRow><TableCell colSpan={12} className="py-10 text-center">
+              <TableRow><TableCell colSpan={13} className="py-10 text-center">
                 <PackageSearch className="mx-auto size-8 text-muted-foreground/40" />
                 <p className="mt-2 text-sm font-bold">Sin paquetes recibidos</p>
                 <p className="text-xs text-muted-foreground">Registra una recepción o importa un archivo.</p>
@@ -232,7 +232,8 @@ export function ReceivedPackages() {
                 <TableCell className="text-xs">{pkg.branchName || '—'}</TableCell>
                 <TableCell className="text-xs">{pkg.receivedByName || '—'}</TableCell>
                 <TableCell className="text-xs font-semibold">{pkg.shipmentModeName}</TableCell>
-                <TableCell className="text-xs font-mono">{pkg.sku}</TableCell>
+                <TableCell className="text-xs font-mono">{pkg.skuName || pkg.sku || '—'}</TableCell>
+                <TableCell className="text-right text-xs">{formatWeight(pkg.supplierWeight, pkg.weightUnit)}</TableCell>
                 <TableCell className="text-right text-xs">{formatWeight(pkg.physicalWeight, pkg.weightUnit)}</TableCell>
                 <TableCell className="text-right text-xs font-black">{formatWeight(pkg.billableWeight, pkg.weightUnit)}</TableCell>
                 <TableCell className="font-mono text-xs font-bold text-primary">{pkg.trackingCode}</TableCell>
@@ -257,7 +258,7 @@ export function ReceivedPackages() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-mono text-xs font-bold text-primary">{pkg.trackingCode}</p>
-                <p className="text-xs text-muted-foreground">{pkg.sku} · {pkg.shipmentModeName} · {formatWeight(pkg.billableWeight, pkg.weightUnit)}</p>
+                <p className="text-xs text-muted-foreground">{pkg.skuName || pkg.sku || 'Sin item'} · {pkg.shipmentModeName} · {formatWeight(pkg.billableWeight, pkg.weightUnit)}</p>
               </div>
               <Badge variant="outline" className="rounded-lg text-[10px] text-emerald-600">{RECEIVED_PACKAGE_STATUS_LABELS[pkg.status] || pkg.status}</Badge>
             </div>
@@ -330,7 +331,7 @@ function PackageDetail({ pkg }: { pkg: ReceivedPackage }) {
         <DetailSection title="Identificación">
           <DetailRow label="Tracking" value={pkg.trackingCode} />
           <DetailRow label="Warehouse" value={pkg.warehouseValue || pkg.warehouseName} />
-          <DetailRow label="SKU" value={pkg.sku} />
+          <DetailRow label="Item / producto" value={pkg.skuName || pkg.sku} />
           <DetailRow label="Tipo" value={pkg.shipmentModeName} />
           <DetailRow label="Prefijo" value={pkg.prefixCode} />
         </DetailSection>

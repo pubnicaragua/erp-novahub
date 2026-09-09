@@ -1,5 +1,5 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, FileText, FileUp, Loader2, Plus, Save, Trash2, Truck } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, FileText, FileUp, GripVertical, Loader2, Plus, Save, Trash2, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -28,13 +28,14 @@ interface ReceptionRow extends BatchPackageRow {
 
 interface SupplierOption { id: string; name: string; code: string; }
 interface OwnerOption { id: string; name: string; type: 'CUSTOMER' | 'SUBAGENCY'; }
-type ReceptionColumn = 'select' | 'number' | 'type' | 'item' | 'physicalWeight' | 'quantity' | 'unitPrice' | 'discount' | 'subtotal' | 'tracking' | 'warehouse' | 'actions';
+type ReceptionColumn = 'select' | 'number' | 'type' | 'item' | 'supplierWeight' | 'physicalWeight' | 'quantity' | 'unitPrice' | 'discount' | 'subtotal' | 'tracking' | 'warehouse' | 'actions';
 
 const RECEPTION_COLUMN_WIDTHS: Record<ReceptionColumn, number> = {
   select: 42,
   number: 42,
   type: 132,
   item: 260,
+  supplierWeight: 132,
   physicalWeight: 132,
   quantity: 78,
   unitPrice: 96,
@@ -50,6 +51,7 @@ const RECEPTION_COLUMN_MIN_WIDTHS: Record<ReceptionColumn, number> = {
   number: 38,
   type: 108,
   item: 180,
+  supplierWeight: 110,
   physicalWeight: 110,
   quantity: 64,
   unitPrice: 82,
@@ -71,10 +73,23 @@ const emptyRow = (index: number): ReceptionRow => ({
   subtotal: undefined,
   discount: undefined,
   physicalWeight: undefined,
+  supplierWeight: undefined,
   weightUnit: 'lb',
   trackingCode: '',
   warehouseValue: '',
 });
+
+const RECEPTION_COLUMN_ORDER: ReceptionColumn[] = [
+  'select', 'number', 'type', 'item', 'supplierWeight', 'physicalWeight', 'quantity',
+  'unitPrice', 'discount', 'subtotal', 'tracking', 'warehouse', 'actions',
+];
+
+const RECEPTION_COLUMN_LABELS: Record<ReceptionColumn, string> = {
+  select: 'Seleccionar', number: '#', type: 'Tipo', item: 'Cliente / producto',
+  supplierWeight: 'Peso factura', physicalWeight: 'Peso físico real', quantity: 'Cant.',
+  unitPrice: 'P.Unt', discount: 'Desc.', subtotal: 'S.Total', tracking: 'Tracking',
+  warehouse: 'Bodega', actions: 'Acciones',
+};
 
 const inferMode = (format: 'AWBOX' | 'OGLOBAL' | null, item?: string) => {
   if (/MAR[IÍ]TIM|OCE[AÁ]N|SEA/i.test(item || '')) return 'MARITIMO';
@@ -95,9 +110,12 @@ export function Reception() {
   const [reference, setReference] = useState('');
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [bulkWarehouseId, setBulkWarehouseId] = useState('');
+  const [bulkCustomerName, setBulkCustomerName] = useState('');
   const [columnWidths, setColumnWidths] = useState<Record<ReceptionColumn, number>>(RECEPTION_COLUMN_WIDTHS);
+  const [columnOrder, setColumnOrder] = useState<ReceptionColumn[]>(RECEPTION_COLUMN_ORDER);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<{ key: ReceptionColumn; startX: number; startWidth: number } | null>(null);
+  const [draggedColumn, setDraggedColumn] = useState<ReceptionColumn | null>(null);
 
   useEffect(() => {
     const onMove = (event: MouseEvent) => {
@@ -168,6 +186,11 @@ export function Reception() {
 
   const warehouse = useMemo(() => ctx?.warehouses.find((item) => item.id === form.warehouseId), [ctx, form.warehouseId]);
   const customerOptions = useMemo(() => customers.filter((owner) => owner.type === 'CUSTOMER'), [customers]);
+  const itemCustomerOptions = useMemo(() => customerOptions.map((customer) => ({
+    label: customer.name,
+    value: customer.name,
+    description: 'Cliente registrado',
+  })), [customerOptions]);
   const supplierOptions = useMemo(() => [
     { label: 'Sin proveedor', value: '' },
     ...suppliers.map((supplier) => ({
@@ -190,7 +213,7 @@ export function Reception() {
       const selectedWarehouse = ctx?.warehouses.find((item) => item.id === (row.warehouseId === undefined ? form.warehouseId : row.warehouseId));
       const needsWarehouseValue = selectedWarehouse?.strategy === 'MANUAL' || selectedWarehouse?.strategy === 'PROVIDER_ASSIGNED';
       const configuredWarehouseValue = selectedWarehouse?.code?.trim();
-      return row.shipmentModeCode && row.trackingCode?.trim().length >= 4 && Number(row.physicalWeight) > 0 && (!needsWarehouseValue || row.warehouseValue?.trim() || configuredWarehouseValue);
+      return row.shipmentModeCode && (row.trackingCode?.trim().length ?? 0) >= 4 && Number(row.physicalWeight) > 0 && (!needsWarehouseValue || row.warehouseValue?.trim() || configuredWarehouseValue);
     }),
   );
 
@@ -214,6 +237,8 @@ export function Reception() {
         ...row,
         id: `${Date.now()}-${index}-${Math.random()}`,
         shipmentModeCode: row.shipmentModeCode || inferMode(result.format, row.productDescription || row.item),
+        supplierWeight: row.supplierWeight ?? row.physicalWeight,
+        physicalWeight: row.physicalWeight,
         warehouseId: form.warehouseId || undefined,
       })));
       const detectedTickets = [...new Set(results.map((result) => result.ticketNumber).filter(Boolean))];
@@ -259,6 +284,47 @@ export function Reception() {
     toast.success('Bodega aplicada a los paquetes seleccionados');
   }, [bulkWarehouseId, selectedRowIds]);
 
+  const applyBulkCustomer = useCallback(() => {
+    const name = bulkCustomerName.trim();
+    if (!name || selectedRowIds.length === 0) return;
+    const customer = customerOptions.find((item) => item.name.toLowerCase() === name.toLowerCase());
+    setRows((previous) => previous.map((row) => selectedRowIds.includes(row.id)
+      ? { ...row, item: name, customer: { id: customer?.id, name } }
+      : row));
+    setSelectedRowIds([]);
+    setBulkCustomerName('');
+    toast.success('Cliente aplicado a los paquetes seleccionados');
+  }, [bulkCustomerName, customerOptions, selectedRowIds]);
+
+  const moveColumn = useCallback((key: ReceptionColumn, direction: -1 | 1) => {
+    if (key === 'select' || key === 'actions') return;
+    setColumnOrder((current) => {
+      const movable = current.filter((item): item is Exclude<ReceptionColumn, 'select' | 'actions'> => item !== 'select' && item !== 'actions');
+      const index = movable.indexOf(key);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= movable.length) return current;
+      const next = [...movable];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return ['select', ...next, 'actions'];
+    });
+  }, []);
+
+  const reorderColumn = useCallback((target: ReceptionColumn) => {
+    if (!draggedColumn || draggedColumn === target || target === 'select' || target === 'actions') return;
+    if (draggedColumn === 'select' || draggedColumn === 'actions') return;
+    setColumnOrder((current) => {
+      const movable = current.filter((item): item is Exclude<ReceptionColumn, 'select' | 'actions'> => item !== 'select' && item !== 'actions');
+      const from = movable.indexOf(draggedColumn);
+      const to = movable.indexOf(target);
+      if (from < 0 || to < 0) return current;
+      const next = [...movable];
+      next.splice(from, 1);
+      next.splice(to, 0, draggedColumn);
+      return ['select', ...next, 'actions'];
+    });
+    setDraggedColumn(null);
+  }, [draggedColumn]);
+
   const renderHeader = useCallback((key: ReceptionColumn, label: string) => (
     <th style={{ width: columnWidths[key] }} className="relative px-3 py-2 text-[10px] font-black uppercase tracking-widest">
       <div className="flex min-w-0 items-center justify-between gap-1">
@@ -272,6 +338,7 @@ export function Reception() {
     setRows([emptyRow(0)]);
     setSelectedRowIds([]);
     setBulkWarehouseId('');
+    setBulkCustomerName('');
     setReference('');
     setForm({ sourceTicket: '', supplierId: '', supplierName: '', warehouseId: '', agencyId: '', agencyName: '', subagencyId: '', subagencyName: '', customerId: '', customerName: '' });
   }, []);
@@ -297,15 +364,15 @@ export function Reception() {
         subtotal: row.subtotal !== undefined ? Number(row.subtotal) : undefined,
         discount: row.discount !== undefined ? Number(row.discount) : undefined,
         physicalWeight: Number(row.physicalWeight),
+        supplierWeight: row.supplierWeight !== undefined ? Number(row.supplierWeight) : undefined,
         weightUnit: row.weightUnit || 'lb',
         warehouseValue: row.warehouseValue?.trim() || ((ctx.warehouses.find((item) => item.id === (row.warehouseId === undefined ? form.warehouseId : row.warehouseId))?.strategy === 'MANUAL' || ctx.warehouses.find((item) => item.id === (row.warehouseId === undefined ? form.warehouseId : row.warehouseId))?.strategy === 'PROVIDER_ASSIGNED') ? ctx.warehouses.find((item) => item.id === (row.warehouseId === undefined ? form.warehouseId : row.warehouseId))?.code?.trim() || undefined : undefined),
         agency: form.agencyName && !form.subagencyName ? { id: form.agencyId || undefined, name: form.agencyName } : undefined,
         subagency: form.subagencyName ? { id: form.subagencyId || undefined, name: form.subagencyName } : undefined,
         customer: row.customer?.name ? row.customer : (form.customerName ? { id: form.customerId || undefined, name: form.customerName } : undefined),
       })));
-      await logisticsService.confirmBatch(batch.id, { date: new Date().toISOString().slice(0, 10) });
       setReference(batch.number);
-      toast.success(`Recepción ${batch.number} registrada y agrupada correctamente`);
+      toast.success(`Recepción ${batch.number} registrada. Ahora concilia la compra antes de vender.`);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo registrar la recepción'));
     } finally {
@@ -370,10 +437,11 @@ export function Reception() {
         {warehouse && <p className="mt-3 rounded-xl bg-primary/5 px-3 py-2 text-xs text-muted-foreground">Esta bodega se aplica como predeterminada. Cada paquete puede enviarse a otra bodega y el número se completa por fila según su configuración.</p>}
 
         <div className="mt-5 overflow-x-auto rounded-xl border border-border/60">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 bg-muted/20 px-3 py-2"><div><p className="text-xs font-black uppercase tracking-widest">Paquetes de esta referencia</p><p className="text-[11px] text-muted-foreground">Puedes mezclar aéreo y marítimo y enviar cada fila a una bodega distinta.</p></div><Button type="button" variant="outline" className="rounded-xl text-xs" onClick={addRow}><Plus className="size-4" /> Agregar paquete</Button></div>
-          {selectedRowIds.length > 0 && <div className="flex flex-wrap items-center gap-2 border-b border-border/50 bg-primary/5 px-3 py-2"><span className="text-xs font-bold text-primary">{selectedRowIds.length} paquete(s) seleccionado(s)</span><select value={bulkWarehouseId} onChange={(event) => setBulkWarehouseId(event.target.value)} className="h-8 rounded-lg border border-input bg-background px-2 text-xs"><option value="">Asignar bodega…</option><option value="__default__">Usar bodega predeterminada</option><option value="__none__">Sin bodega</option>{ctx.warehouses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.country}{item.code ? ` · ${item.code}` : ''}</option>)}</select><Button type="button" size="sm" className="h-8 rounded-lg text-xs" onClick={applyBulkWarehouse} disabled={!bulkWarehouseId}>Aplicar a seleccionados</Button></div>}
-          <table className="w-full min-w-[1460px] table-fixed text-sm"><colgroup>{(Object.keys(RECEPTION_COLUMN_WIDTHS) as ReceptionColumn[]).map((key) => <col key={key} style={{ width: columnWidths[key] }} />)}</colgroup><thead className="bg-muted/40 text-left"><tr>
-            <th style={{ width: columnWidths.select }} className="px-3 py-2 text-center"><input type="checkbox" aria-label="Seleccionar todos los paquetes" checked={allRowsSelected} onChange={toggleAllRows} /></th>{renderHeader('number', '#')}{renderHeader('type', 'Tipo')}{renderHeader('item', 'Cliente / producto')}{renderHeader('physicalWeight', 'Peso físico (lb)')}{renderHeader('quantity', 'Cant.')}{renderHeader('unitPrice', 'P.Unt')}{renderHeader('discount', 'Desc.')}{renderHeader('subtotal', 'S.Total')}{renderHeader('tracking', 'Tracking')}{renderHeader('warehouse', 'Bodega')}{renderHeader('actions', '')}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 bg-muted/20 px-3 py-2"><div><p className="text-xs font-black uppercase tracking-widest">Paquetes de esta referencia</p><p className="text-[11px] text-muted-foreground">Busca clientes, ajusta pesos y mueve las columnas como en Excel.</p></div><Button type="button" variant="outline" className="rounded-xl text-xs" onClick={addRow}><Plus className="size-4" /> Agregar paquete</Button></div>
+          {selectedRowIds.length > 0 && <div className="flex flex-wrap items-center gap-2 border-b border-border/50 bg-primary/5 px-3 py-2"><span className="text-xs font-bold text-primary">{selectedRowIds.length} paquete(s) seleccionado(s)</span><select value={bulkCustomerName} onChange={(event) => setBulkCustomerName(event.target.value)} className="h-8 min-w-48 rounded-lg border border-input bg-background px-2 text-xs"><option value="">Asignar cliente…</option>{customerOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select><Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-xs" onClick={applyBulkCustomer} disabled={!bulkCustomerName}>Aplicar cliente</Button><select value={bulkWarehouseId} onChange={(event) => setBulkWarehouseId(event.target.value)} className="h-8 rounded-lg border border-input bg-background px-2 text-xs"><option value="">Asignar bodega…</option><option value="__default__">Usar bodega predeterminada</option><option value="__none__">Sin bodega</option>{ctx.warehouses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.country}{item.code ? ` · ${item.code}` : ''}</option>)}</select><Button type="button" size="sm" className="h-8 rounded-lg text-xs" onClick={applyBulkWarehouse} disabled={!bulkWarehouseId}>Aplicar bodega</Button></div>}
+          <div className="flex flex-wrap items-center gap-1 border-b border-border/50 bg-background px-3 py-2"><span className="mr-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Orden de columnas</span>{columnOrder.filter((key) => key !== 'select' && key !== 'actions').map((key, index, list) => <div key={key} draggable onDragStart={() => setDraggedColumn(key)} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderColumn(key)} className="flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/30 px-1.5 py-1 text-[10px] font-semibold"><GripVertical className="size-3 text-muted-foreground" />{RECEPTION_COLUMN_LABELS[key]}<button type="button" aria-label={`Mover ${RECEPTION_COLUMN_LABELS[key]} a la izquierda`} onClick={() => moveColumn(key, -1)} disabled={index === 0} className="ml-1 rounded p-0.5 hover:bg-muted disabled:opacity-30"><ChevronLeft className="size-3" /></button><button type="button" aria-label={`Mover ${RECEPTION_COLUMN_LABELS[key]} a la derecha`} onClick={() => moveColumn(key, 1)} disabled={index === list.length - 1} className="rounded p-0.5 hover:bg-muted disabled:opacity-30"><ChevronRight className="size-3" /></button></div>)}</div>
+          <table className="w-full min-w-[1640px] table-fixed text-sm"><colgroup>{columnOrder.map((key) => <col key={key} style={{ width: columnWidths[key] }} />)}</colgroup><thead className="bg-muted/40 text-left"><tr>
+            {columnOrder.map((key) => key === 'select' ? <th key={key} style={{ width: columnWidths.select }} className="px-3 py-2 text-center"><input type="checkbox" aria-label="Seleccionar todos los paquetes" checked={allRowsSelected} onChange={toggleAllRows} /></th> : renderHeader(key, RECEPTION_COLUMN_LABELS[key]))}
           </tr></thead><tbody>
             {rows.map((row, index) => {
               const selectedWarehouseId = row.warehouseId === undefined ? form.warehouseId : row.warehouseId;
@@ -383,24 +451,27 @@ export function Reception() {
                 : '';
               const rowSelected = selectedRowIds.includes(row.id);
               return <tr key={row.id} className="border-t border-border/40 align-middle">
-              <td className="px-3 py-2 text-center"><input type="checkbox" aria-label={`Seleccionar paquete ${index + 1}`} checked={rowSelected} onChange={() => setSelectedRowIds((current) => rowSelected ? current.filter((id) => id !== row.id) : [...current, row.id])} /></td>
-              <td className="px-3 py-2 text-xs font-black text-muted-foreground">{index + 1}</td>
-              <td className="px-3 py-2"><select value={row.shipmentModeCode || ''} onChange={(event) => updateRow(row.id, { shipmentModeCode: event.target.value })} className="h-9 w-full rounded-lg border border-input bg-background px-2 text-xs"><option value="">Selecciona…</option>{ctx.shipmentModes.map((mode) => <option key={mode.id} value={mode.code}>{mode.name}</option>)}</select></td>
-              <td className="px-3 py-2"><Input value={row.item || ''} onChange={(event) => updateRow(row.id, { item: event.target.value })} placeholder="Nombre del cliente / producto" className="h-9 rounded-lg text-xs" />{row.productDescription && <p className="mt-1 truncate text-[10px] text-muted-foreground" title={row.productDescription}>Servicio detectado: {row.productDescription}</p>}</td>
-              <td className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.physicalWeight ?? ''} onChange={(event) => updateRow(row.id, { physicalWeight: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="0.00" className="h-9 rounded-lg text-xs" /></td>
-              <td className="px-3 py-2"><Input type="number" min="1" step="1" value={row.quantity ?? 1} onChange={(event) => updateRow(row.id, { quantity: event.target.value === '' ? 1 : Number(event.target.value) })} className="h-9 rounded-lg text-xs" /></td>
-              <td className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.unitPrice ?? ''} onChange={(event) => updateRow(row.id, { unitPrice: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="0.00" className="h-9 rounded-lg text-xs" /></td>
-              <td className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.discount ?? ''} onChange={(event) => updateRow(row.id, { discount: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="0.00" className="h-9 rounded-lg text-xs" /></td>
-              <td className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.subtotal ?? ''} onChange={(event) => updateRow(row.id, { subtotal: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="0.00" className="h-9 rounded-lg text-xs" /></td>
-              <td className="px-3 py-2"><Input value={row.trackingCode || ''} onChange={(event) => updateRow(row.id, { trackingCode: event.target.value })} placeholder="Tracking" className="h-9 rounded-lg font-mono text-xs" /></td>
-              <td className="px-3 py-2 align-top"><select value={row.warehouseId === undefined ? '__default__' : row.warehouseId} onChange={(event) => updateRow(row.id, { warehouseId: event.target.value === '__default__' ? undefined : event.target.value, warehouseValue: '' })} className="h-9 w-full rounded-lg border border-input bg-background px-2 text-xs"><option value="__default__">Predeterminada</option><option value="">Sin bodega</option>{ctx.warehouses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.country}{item.code ? ` · ${item.code}` : ''}</option>)}</select>{rowWarehouse?.strategy === 'TRACKING_LAST_N' ? <p className="mt-1 text-[10px] font-mono text-muted-foreground">{warehouseNumber || `Últimos ${rowWarehouse.trackingLastN || 6}`}</p> : rowWarehouse?.strategy === 'MANUAL' || rowWarehouse?.strategy === 'PROVIDER_ASSIGNED' ? <Input value={row.warehouseValue || rowWarehouse.code || ''} onChange={(event) => updateRow(row.id, { warehouseValue: event.target.value })} placeholder={rowWarehouse.code ? 'Código configurado' : 'Número de bodega'} className="mt-1 h-8 rounded-lg font-mono text-xs" /> : <p className="mt-1 text-[10px] text-muted-foreground">{rowWarehouse ? 'Se asigna al guardar' : 'Sin bodega'}</p>}</td>
-              <td className="px-3 py-2"><Button variant="ghost" size="sm" className="rounded-lg" disabled={rows.length === 1} onClick={() => { setRows((previous) => previous.filter((item) => item.id !== row.id)); setSelectedRowIds((current) => current.filter((id) => id !== row.id)); }}><Trash2 className="size-4 text-destructive" /></Button></td>
+              {columnOrder.map((column) => {
+                if (column === 'select') return <td key={column} className="px-3 py-2 text-center"><input type="checkbox" aria-label={`Seleccionar paquete ${index + 1}`} checked={rowSelected} onChange={() => setSelectedRowIds((current) => rowSelected ? current.filter((id) => id !== row.id) : [...current, row.id])} /></td>;
+                if (column === 'number') return <td key={column} className="px-3 py-2 text-xs font-black text-muted-foreground">{index + 1}</td>;
+                if (column === 'type') return <td key={column} className="px-3 py-2"><select value={row.shipmentModeCode || ''} onChange={(event) => updateRow(row.id, { shipmentModeCode: event.target.value })} className="h-9 w-full rounded-lg border border-input bg-background px-2 text-xs"><option value="">Selecciona…</option>{ctx.shipmentModes.map((mode) => <option key={mode.id} value={mode.code}>{mode.name}</option>)}</select></td>;
+                if (column === 'item') return <td key={column} className="px-3 py-2"><Combobox value={row.item || ''} onChange={(value) => { const customer = customerOptions.find((item) => item.name.toLowerCase() === value.toLowerCase()); updateRow(row.id, { item: value, customer: value ? { id: customer?.id, name: value } : undefined }); }} options={itemCustomerOptions} placeholder="Buscar cliente / producto" searchPlaceholder="Buscar cliente por nombre…" emptyMessage="No encontrado; puedes escribirlo manualmente." allowCustomValue className="h-9 rounded-lg text-xs" contentClassName="min-w-[300px]" />{row.productDescription && <p className="mt-1 truncate text-[10px] text-muted-foreground" title={row.productDescription}>Servicio detectado: {row.productDescription}</p>}{row.customer?.id && <p className="mt-1 text-[10px] font-semibold text-emerald-600">Cliente confirmado</p>}</td>;
+                if (column === 'supplierWeight') return <td key={column} className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.supplierWeight ?? ''} onChange={(event) => updateRow(row.id, { supplierWeight: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="Factura" className="h-9 rounded-lg text-xs" /></td>;
+                if (column === 'physicalWeight') return <td key={column} className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.physicalWeight ?? ''} onChange={(event) => updateRow(row.id, { physicalWeight: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="Real" className="h-9 rounded-lg text-xs" /></td>;
+                if (column === 'quantity') return <td key={column} className="px-3 py-2"><Input type="number" min="1" step="1" value={row.quantity ?? 1} onChange={(event) => updateRow(row.id, { quantity: event.target.value === '' ? 1 : Number(event.target.value) })} className="h-9 rounded-lg text-xs" /></td>;
+                if (column === 'unitPrice') return <td key={column} className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.unitPrice ?? ''} onChange={(event) => updateRow(row.id, { unitPrice: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="0.00" className="h-9 rounded-lg text-xs" /></td>;
+                if (column === 'discount') return <td key={column} className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.discount ?? ''} onChange={(event) => updateRow(row.id, { discount: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="0.00" className="h-9 rounded-lg text-xs" /></td>;
+                if (column === 'subtotal') return <td key={column} className="px-3 py-2"><Input type="number" min="0" step="0.01" value={row.subtotal ?? ''} onChange={(event) => updateRow(row.id, { subtotal: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="0.00" className="h-9 rounded-lg text-xs" /></td>;
+                if (column === 'tracking') return <td key={column} className="px-3 py-2"><Input value={row.trackingCode || ''} onChange={(event) => updateRow(row.id, { trackingCode: event.target.value })} placeholder="Tracking" className="h-9 rounded-lg font-mono text-xs" /></td>;
+                if (column === 'warehouse') return <td key={column} className="px-3 py-2 align-top"><select value={row.warehouseId === undefined || row.warehouseId === null ? '__default__' : row.warehouseId} onChange={(event) => updateRow(row.id, { warehouseId: event.target.value === '__default__' ? undefined : event.target.value, warehouseValue: '' })} className="h-9 w-full rounded-lg border border-input bg-background px-2 text-xs"><option value="__default__">Predeterminada</option><option value="">Sin bodega</option>{ctx.warehouses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.country}{item.code ? ` · ${item.code}` : ''}</option>)}</select>{rowWarehouse?.strategy === 'TRACKING_LAST_N' ? <p className="mt-1 text-[10px] font-mono text-muted-foreground">{warehouseNumber || `Últimos ${rowWarehouse.trackingLastN || 6}`}</p> : rowWarehouse?.strategy === 'MANUAL' || rowWarehouse?.strategy === 'PROVIDER_ASSIGNED' ? <Input value={row.warehouseValue || rowWarehouse.code || ''} onChange={(event) => updateRow(row.id, { warehouseValue: event.target.value })} placeholder={rowWarehouse.code ? 'Código configurado' : 'Número de bodega'} className="mt-1 h-8 rounded-lg font-mono text-xs" /> : <p className="mt-1 text-[10px] text-muted-foreground">{rowWarehouse ? 'Se asigna al guardar' : 'Sin bodega'}</p>}</td>;
+                return <td key={column} className="px-3 py-2"><Button variant="ghost" size="sm" className="rounded-lg" disabled={rows.length === 1} onClick={() => { setRows((previous) => previous.filter((item) => item.id !== row.id)); setSelectedRowIds((current) => current.filter((id) => id !== row.id)); }}><Trash2 className="size-4 text-destructive" /></Button></td>;
+              })}
               </tr>;
             })}
           </tbody></table>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">{canCreateReception && <Button className="rounded-xl" onClick={saveReception} disabled={saving || !canSave} data-tour="log-reception-save">{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar recepción ({rows.length})</Button>}{reference && <><Badge variant="outline" className="gap-1 rounded-lg text-[11px] text-emerald-600 ring-emerald-300"><CheckCircle2 className="size-3.5" /> {reference}</Badge><Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva recepción</Button></>}</div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">{canCreateReception && <Button className="rounded-xl" onClick={saveReception} disabled={saving || !canSave || Boolean(reference)} data-tour="log-reception-save">{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar recepción ({rows.length})</Button>}{reference && <><Badge variant="outline" className="gap-1 rounded-lg text-[11px] text-emerald-600 ring-emerald-300"><CheckCircle2 className="size-3.5" /> {reference}</Badge><Button variant="outline" className="rounded-xl text-xs" onClick={reset}>Nueva recepción</Button></>}</div>
         </fieldset>
       </Card>
     </div>

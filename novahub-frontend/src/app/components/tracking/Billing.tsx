@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
+import { Combobox } from '../ui/Combobox';
 import {
   Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '../ui/sheet';
@@ -49,7 +50,9 @@ export function Billing() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rates, setRates] = useState<Record<string, number>>({});
   const [defaultRate, setDefaultRate] = useState('0');
+  const [customerId, setCustomerId] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [customers, setCustomers] = useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [date, setDate] = useState(today());
   const [dueDate, setDueDate] = useState('');
   const [preview, setPreview] = useState<BillingPreviewResult | null>(null);
@@ -95,6 +98,16 @@ export function Billing() {
     const timer = setTimeout(load, 250);
     return () => clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    customersService.getAll({ page: 1, pageSize: 200 } as any)
+      .then((response: any) => {
+        const payload = response?.data ?? response;
+        const list = Array.isArray(payload) ? payload : payload?.items || payload?.rows || [];
+        setCustomers(list.filter((customer: any) => customer?.id && customer?.name).map((customer: any) => ({ id: customer.id, name: customer.name, code: customer.code })));
+      })
+      .catch(() => setCustomers([]));
+  }, []);
 
   useEffect(() => {
     if (!canReadBilling || sub !== 'delivery') return;
@@ -146,6 +159,7 @@ export function Billing() {
     setBusy(true);
     try {
       const p = await logisticsService.billingPreview({
+        customerId: customerId || undefined,
         customerName: customerName || undefined,
         date,
         dueDate: dueDate || undefined,
@@ -159,7 +173,7 @@ export function Billing() {
     } finally {
       setBusy(false);
     }
-  }, [canReadBilling, selected, customerName, date, dueDate, rates]);
+  }, [canReadBilling, selected, customerId, customerName, date, dueDate, rates]);
 
   const sendWhatsApp = useCallback(async () => {
     if (!canApproveBilling) return;
@@ -169,7 +183,6 @@ export function Billing() {
         customerId: lastCustomerId,
         documentType: 'invoice',
         documentId: result.invoice.id,
-        allowView: true,
       });
       const url = publicLinkUrl(link.path);
       let phone = '';
@@ -190,6 +203,7 @@ export function Billing() {
     setConfirming(true);
     try {
       const res = await logisticsService.billingConfirm({
+        customerId: preview.customer.id,
         customerName: preview.customer.name,
         date,
         dueDate: dueDate || undefined,
@@ -213,6 +227,7 @@ export function Billing() {
     setPreview(null);
     setSelected(new Set());
     setRates({});
+    setCustomerId('');
     setCustomerName('');
     setDate(today());
     setDueDate('');
@@ -312,6 +327,19 @@ export function Billing() {
   }, [canApproveBilling, reversalPreview, reversalReason]);
 
   const summary = data?.summary;
+  const customerOptions = useMemo(() => customers.map((customer) => ({
+    label: customer.name,
+    value: customer.id,
+    description: customer.code || 'Cliente registrado',
+  })), [customers]);
+  const handleCustomerChange = useCallback((id: string) => {
+    const customer = customers.find((item) => item.id === id);
+    setCustomerId(id);
+    setCustomerName(customer?.name || '');
+    setSearch(customer?.name || '');
+    setPage(1);
+    setSelected(new Set());
+  }, [customers]);
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4 sm:p-6">
@@ -381,17 +409,19 @@ export function Billing() {
                   <TableHead className="w-10"></TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Tracking</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Cliente</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest">SKU</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Item / producto</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
+                  <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso factura</TableHead>
+                  <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso real</TableHead>
                   <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso cobrable</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Tarifa</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={7} className="py-10 text-center text-xs text-muted-foreground">Cargando…</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="py-10 text-center text-xs text-muted-foreground">Cargando…</TableCell></TableRow>
                 ) : (data?.items.length ?? 0) === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="py-10 text-center">
+                  <TableRow><TableCell colSpan={9} className="py-10 text-center">
                     <PackageSearch className="mx-auto size-8 text-muted-foreground/40" />
                     <p className="mt-2 text-sm font-bold">Sin paquetes por facturar</p>
                     <p className="text-xs text-muted-foreground">Los paquetes que pasaron compra y no fueron facturados aparecen aquí.</p>
@@ -403,8 +433,10 @@ export function Billing() {
                     </TableCell>
                     <TableCell className="font-mono text-xs font-bold text-primary">{p.trackingCode}</TableCell>
                     <TableCell className="text-xs font-semibold">{p.customerName || p.subagencyName || '—'}</TableCell>
-                    <TableCell className="text-xs">{p.sku}</TableCell>
+                    <TableCell className="text-xs">{p.skuName || p.sku || '—'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{p.warehouseValue || p.warehouseName || '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{p.supplierWeight ?? '—'} {p.supplierWeight != null ? p.weightUnit : ''}</TableCell>
+                    <TableCell className="text-right text-xs">{p.physicalWeight} {p.weightUnit}</TableCell>
                     <TableCell className="text-right text-xs font-black">{p.billableWeight} {p.weightUnit}</TableCell>
                     <TableCell>
                       <Input
@@ -436,8 +468,13 @@ export function Billing() {
             </h3>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</label>
-                <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Ej. Andrea Rosales" className="rounded-xl text-xs" />
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente / agencia</label>
+                <Combobox value={customerId || customerName} onChange={(value) => {
+                  const customer = customers.find((item) => item.id === value);
+                  if (customer) handleCustomerChange(value);
+                  else { setCustomerId(''); setCustomerName(value); setSearch(value); setPage(1); setSelected(new Set()); }
+                }} options={customerOptions} placeholder="Buscar cliente…" searchPlaceholder="Buscar cliente por nombre o código…" emptyMessage="No se encontró; puedes buscar por tracking." allowCustomValue className="h-10 rounded-xl text-xs" contentClassName="min-w-[320px]" />
+                {customerId && <p className="mt-1 text-[10px] font-semibold text-emerald-600">Paquetes del cliente cargados en la tabla</p>}
               </div>
               <div>
                 <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</label>
@@ -594,7 +631,7 @@ export function Billing() {
                 Facturas facturadas — reversión / nota de crédito
               </p>
               <div className="mt-2 space-y-1.5">
-                {[...new Set(trace.billed.map((p) => p.saleInvoiceId).filter(Boolean))].map((invoiceId) => {
+                {[...new Set(trace.billed.map((p) => p.saleInvoiceId).filter((id): id is string => Boolean(id)))].map((invoiceId) => {
                   const pkgs = trace.billed.filter((p) => p.saleInvoiceId === invoiceId);
                   return (
                     <div key={invoiceId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background/70 px-2 py-1.5 text-[11px]">

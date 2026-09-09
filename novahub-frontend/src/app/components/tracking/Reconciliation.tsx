@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, FileCheck2, FileText, PackageSearch, ReceiptText, Search, X } from 'lucide-react';
+import { CheckCircle2, FileCheck2, FileText, PackageSearch, ReceiptText, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
+import { Combobox } from '../ui/Combobox';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../ui/table';
@@ -26,6 +27,7 @@ interface OrderOption { id: string; number: string; status: string; }
 interface BatchOption { id: string; number: string; provider?: string | null; status: string; }
 
 const formatDate = (value?: string | Date) => (value ? format(new Date(value), 'dd/MM/yyyy', { locale: es }) : '');
+const formatInputDate = (value?: string | Date) => (value ? format(new Date(value), 'yyyy-MM-dd') : '');
 
 export function Reconciliation() {
   const { canPerform } = useAuth();
@@ -45,7 +47,7 @@ export function Reconciliation() {
   const [supplierId, setSupplierId] = useState('');
   const [orderId, setOrderId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [date, setDate] = useState(formatDate(new Date()));
+  const [date, setDate] = useState(formatInputDate(new Date()));
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
   const [preview, setPreview] = useState<ReconciliationPreviewResult | null>(null);
@@ -100,6 +102,11 @@ export function Reconciliation() {
   }, []);
 
   const selectedPackages = useMemo(() => data?.items.filter((p) => selected.has(p.id)) ?? [], [data, selected]);
+  const supplierOptions = useMemo(() => suppliers.map((supplier) => ({
+    label: supplier.name,
+    value: supplier.id,
+    description: supplier.code,
+  })), [suppliers]);
 
   const runPreview = useCallback(async () => {
     if (!canReadReconciliation) return;
@@ -158,7 +165,7 @@ export function Reconciliation() {
     setSelected(new Set());
     setReceptionBatchId('');
     setInvoiceNumber('');
-    setDate(formatDate(new Date()));
+    setDate(formatInputDate(new Date()));
     setDueDate('');
     setNotes('');
     void load();
@@ -214,15 +221,17 @@ export function Reconciliation() {
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Cliente</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">SKU</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso factura</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso real</TableHead>
               <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Peso cobrable</TableHead>
               <TableHead className="text-[10px] font-black uppercase tracking-widest">Recibido</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={7} className="py-10 text-center text-xs text-muted-foreground">Cargando…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="py-10 text-center text-xs text-muted-foreground">Cargando…</TableCell></TableRow>
             ) : (data?.items.length ?? 0) === 0 ? (
-              <TableRow><TableCell colSpan={7} className="py-10 text-center">
+              <TableRow><TableCell colSpan={9} className="py-10 text-center">
                 <PackageSearch className="mx-auto size-8 text-muted-foreground/40" />
                 <p className="mt-2 text-sm font-bold">Sin paquetes por conciliar</p>
                 <p className="text-xs text-muted-foreground">Los paquetes recibidos sin compra aparecen aquí.</p>
@@ -241,8 +250,10 @@ export function Reconciliation() {
                 </TableCell>
                 <TableCell className="py-3 font-mono text-xs font-bold text-primary">{p.trackingCode}</TableCell>
                 <TableCell className="py-3 text-xs font-semibold">{p.customerName || p.subagencyName || '—'}</TableCell>
-                <TableCell className="py-3 text-xs">{p.sku}</TableCell>
+                <TableCell className="py-3 text-xs">{p.skuName || p.sku || '—'}</TableCell>
                 <TableCell className="py-3 text-xs text-muted-foreground">{p.warehouseValue || p.warehouseName || '—'}</TableCell>
+                <TableCell className="py-3 text-right text-xs">{p.supplierWeight ?? '—'} {p.supplierWeight != null ? p.weightUnit : ''}</TableCell>
+                <TableCell className="py-3 text-right text-xs">{p.physicalWeight} {p.weightUnit}</TableCell>
                 <TableCell className="py-3 text-right text-xs font-black">{p.billableWeight} {p.weightUnit}</TableCell>
                 <TableCell className="py-3 text-xs text-muted-foreground">{formatDate(p.receivedAt)}</TableCell>
               </TableRow>
@@ -286,10 +297,7 @@ export function Reconciliation() {
             <>
               <div>
                 <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proveedor *</label>
-                <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-semibold">
-                  <option value="">Selecciona proveedor…</option>
-                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
-                </select>
+                <Combobox value={supplierId} onChange={setSupplierId} options={supplierOptions} placeholder="Selecciona proveedor…" searchPlaceholder="Buscar proveedor por nombre o código…" emptyMessage="No se encontró ese proveedor." className="h-10 rounded-xl text-xs" contentClassName="min-w-[320px]" />
               </div>
               <div>
                 <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Orden de compra aprobada *</label>
