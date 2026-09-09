@@ -94,7 +94,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     const exportToastId = toast.loading('Generando reporte de gastos recurrentes...');
     try {
       const allRows = scope === 'all'
-        ? await fetchAllPaginatedRows<RecurringExpense>((page, pageSize) => recurringExpensesService.getAll({ page, pageSize, search: searchTerm.trim() || undefined }))
+        ? await fetchAllPaginatedRows<RecurringExpense>((page, pageSize) => recurringExpensesService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, report: true, light: true }))
         : data;
       const exportRows = allRows.filter((expense) => {
         const status = String(expense.status || '').toUpperCase();
@@ -140,6 +140,11 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
             { label: 'Inicio', value: expense.startDate ? new Date(expense.startDate).toLocaleDateString('es-NI') : '—' },
             { label: 'Fin', value: expense.endDate ? new Date(expense.endDate).toLocaleDateString('es-NI') : 'Sin fecha de fin' },
             { label: 'Categoría', value: expense.category || '—' },
+          ],
+          totals: [
+            { label: 'Subtotal', value: formatCurrentAmount(Number(expense.amount || 0), expense.currency || displayCurrency) },
+            { label: 'Impuestos', value: formatCurrentAmount(0, expense.currency || displayCurrency) },
+            { label: 'Descuento', value: formatCurrentAmount(0, expense.currency || displayCurrency) },
           ],
           total: formatCurrentAmount(Number(expense.amount || 0), expense.currency || displayCurrency),
           totalLabel: 'Monto periódico',

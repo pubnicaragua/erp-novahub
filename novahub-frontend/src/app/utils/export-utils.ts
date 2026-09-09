@@ -1,5 +1,13 @@
 import { getReadableForeground } from './color-contrast';
 import { storageService } from '../services/storage.service';
+import { runWithReportRequestLimit } from './report-request-limiter';
+
+const imageCache = new Map<string, { promise: Promise<string | null>; expiresAt: number }>();
+const IMAGE_CACHE_TTL_MS = 30_000;
+// Los logos se muestran pequeños en el PDF. Limitar la copia embebida evita
+// convertir imágenes corporativas de varios miles de píxeles y bloquear el
+// hilo principal durante la exportación.
+const MAX_EMBEDDED_IMAGE_EDGE = 1200;
 
 async function imageBlobAsPng(blob: Blob) {
   if (blob.type && !/^image\//i.test(blob.type)) return '';
@@ -9,14 +17,24 @@ async function imageBlobAsPng(blob: Blob) {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
-  if (blob.type === 'image/png') return dataUrl;
   return new Promise<string>((resolve) => {
     const image = new Image();
     image.onload = () => {
       try {
+        const sourceWidth = image.naturalWidth || image.width;
+        const sourceHeight = image.naturalHeight || image.height;
+        if (!sourceWidth || !sourceHeight) {
+          resolve(dataUrl);
+          return;
+        }
+        const scale = Math.min(1, MAX_EMBEDDED_IMAGE_EDGE / Math.max(sourceWidth, sourceHeight));
+        if (blob.type === 'image/png' && scale === 1) {
+          resolve(dataUrl);
+          return;
+        }
         const canvas = document.createElement('canvas');
-        canvas.width = image.naturalWidth || image.width;
-        canvas.height = image.naturalHeight || image.height;
+        canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+        canvas.height = Math.max(1, Math.round(sourceHeight * scale));
         canvas.getContext('2d')?.drawImage(image, 0, 0);
         resolve(canvas.toDataURL('image/png'));
       } catch {
@@ -45,10 +63,12 @@ type PaginatedExportResponse<T> = {
  */
 export async function fetchAllPaginatedRows<T>(
   fetchPage: (page: number, pageSize: number) => Promise<PaginatedExportResponse<T> | T[]>,
-  pageSize = 500,
+  // Los endpoints aceptan hasta 5,000 filas en modo report. Una sola página
+  // reduce el tiempo de red sin cambiar la paginación visible de las tablas.
+  pageSize = 5000,
   initialResponse?: PaginatedExportResponse<T> | T[],
 ): Promise<T[]> {
-  const firstResponse = initialResponse || await fetchPage(1, pageSize);
+  const firstResponse = initialResponse || await runWithReportRequestLimit(() => fetchPage(1, pageSize));
   const firstRows = Array.isArray(firstResponse) ? firstResponse : (firstResponse.data || []);
   const meta = Array.isArray(firstResponse) ? undefined : firstResponse.meta;
   // Algunos endpoints normalizan el pageSize solicitado (por ejemplo, 500)
@@ -63,9 +83,15 @@ export async function fetchAllPaginatedRows<T>(
   const totalPages = Math.max(1, Number(meta?.totalPages || 0), pagesFromTotal);
   if (totalPages === 1) return firstRows;
 
-  const remainingPages = await Promise.all(
-    Array.from({ length: totalPages - 1 }, (_, index) => fetchPage(index + 2, pageSize)),
-  );
+  const remainingPages: Array<PaginatedExportResponse<T> | T[]> = [];
+  for (let offset = 0; offset < totalPages - 1; offset += 4) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(4, totalPages - 1 - offset) }, (_, index) =>
+        runWithReportRequestLimit(() => fetchPage(offset + index + 2, pageSize)),
+      ),
+    );
+    remainingPages.push(...batch);
+  }
   return [
     ...firstRows,
     ...remainingPages.flatMap((response) => Array.isArray(response) ? response : (response.data || [])),
@@ -73,16 +99,26 @@ export async function fetchAllPaginatedRows<T>(
 }
 
 export const getBase64Image = async (url: string): Promise<string | null> => {
-  if (!url?.trim()) return null;
-  try {
-    const resolvedUrl = await storageService.resolveUrl(url);
-    const resp = await fetch(resolvedUrl);
-    if (!resp.ok) return null;
-    const blob = await resp.blob();
-    return await imageBlobAsPng(blob);
-  } catch (e: any) {
-    return null;
-  }
+  const key = url?.trim();
+  if (!key) return null;
+  const cached = imageCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+  imageCache.delete(key);
+  const request = (async () => {
+    try {
+      const resolvedUrl = await storageService.resolveUrl(key);
+      const resp = await fetch(resolvedUrl);
+      if (!resp.ok) return null;
+      const blob = await resp.blob();
+      return await imageBlobAsPng(blob);
+    } catch (e: any) {
+      return null;
+    }
+  })();
+  imageCache.set(key, { promise: request, expiresAt: Date.now() + IMAGE_CACHE_TTL_MS });
+  const result = await request;
+  if (!result && imageCache.get(key)?.promise === request) imageCache.delete(key);
+  return result;
 };
 
 export const sanitizeHtml2CanvasOklch = (elementId: string | string[], clonedDoc: Document, primaryHex: string) => {

@@ -228,17 +228,28 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
-  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'hr'], async (signal) => {
-    const filters = { pageSize: 5000, report: true };
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'hr', dateRange], async (signal) => {
+    const filters: Record<string, any> = { pageSize: 5000, report: true };
+    if (dateRange !== 'todo') {
+      const range = getRangeDates(dateRange);
+      const starts = [range.start, range.prevStart].filter((value): value is Date => value instanceof Date && Number.isFinite(value.getTime()));
+      const windowStart = starts.length ? new Date(Math.min(...starts.map(value => value.getTime()))) : range.start;
+      const windowEnd = range.end || new Date();
+      filters.dateFrom = windowStart.toISOString();
+      filters.dateTo = windowEnd.toISOString();
+      // Attendance and leave endpoints use their domain-specific names.
+      filters.startDate = filters.dateFrom;
+      filters.endDate = filters.dateTo;
+    }
     const [empRes, payRes, toRes, attRes, vacRes, revRes, traRes, benRes, docRes, kpiRes] = await Promise.all([
-      fetchAllReportPages((pageFilters) => employeesService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => payrollService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => timeOffService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => hrService.getAttendanceRecords(pageFilters, signal), filters), hrService.getVacationBalances(undefined, signal),
-      fetchAllReportPages((pageFilters) => hrService.getPerformanceReviews(undefined, signal, pageFilters), filters),
-      fetchAllReportPages((pageFilters) => hrService.getTrainings(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => hrService.getBenefits(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => hrService.getDocuments(undefined, signal, pageFilters), filters), hrService.getKpiResults(undefined, undefined, signal),
+      fetchAllReportPages((pageFilters) => employeesService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => payrollService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => timeOffService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => hrService.getAttendanceRecords(pageFilters, signal), filters, signal), hrService.getVacationBalances(undefined, signal),
+      fetchAllReportPages((pageFilters) => hrService.getPerformanceReviews(undefined, signal, pageFilters), filters, signal),
+      fetchAllReportPages((pageFilters) => hrService.getTrainings(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => hrService.getBenefits(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => hrService.getDocuments(undefined, signal, pageFilters), filters, signal), hrService.getKpiResults(undefined, undefined, signal),
     ]);
     return {
       employees: asList(empRes), payrolls: asList(payRes), leaves: asList(toRes), attendances: asList(attRes),

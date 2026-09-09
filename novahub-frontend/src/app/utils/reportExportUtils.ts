@@ -1,6 +1,10 @@
 import { getReadableForeground } from './color-contrast';
 import { storageService } from '../services/storage.service';
 
+const imageCache = new Map<string, { promise: Promise<string | null>; expiresAt: number }>();
+const IMAGE_CACHE_TTL_MS = 30_000;
+const MAX_EMBEDDED_IMAGE_EDGE = 1200;
+
 async function imageBlobAsPng(blob: Blob) {
   if (blob.type && !/^image\//i.test(blob.type)) return '';
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -9,14 +13,24 @@ async function imageBlobAsPng(blob: Blob) {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
-  if (blob.type === 'image/png') return dataUrl;
   return new Promise<string>((resolve) => {
     const image = new Image();
     image.onload = () => {
       try {
+        const sourceWidth = image.naturalWidth || image.width;
+        const sourceHeight = image.naturalHeight || image.height;
+        if (!sourceWidth || !sourceHeight) {
+          resolve(dataUrl);
+          return;
+        }
+        const scale = Math.min(1, MAX_EMBEDDED_IMAGE_EDGE / Math.max(sourceWidth, sourceHeight));
+        if (blob.type === 'image/png' && scale === 1) {
+          resolve(dataUrl);
+          return;
+        }
         const canvas = document.createElement('canvas');
-        canvas.width = image.naturalWidth || image.width;
-        canvas.height = image.naturalHeight || image.height;
+        canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+        canvas.height = Math.max(1, Math.round(sourceHeight * scale));
         canvas.getContext('2d')?.drawImage(image, 0, 0);
         resolve(canvas.toDataURL('image/png'));
       } catch {
@@ -29,16 +43,26 @@ async function imageBlobAsPng(blob: Blob) {
 }
 
 export async function getBase64Image(url: string) {
-  if (!url?.trim()) return null;
-  try {
-    const resolvedUrl = await storageService.resolveUrl(url);
-    const resp = await fetch(resolvedUrl);
-    if (!resp.ok) return null;
-    const blob = await resp.blob();
-    return await imageBlobAsPng(blob);
-  } catch {
-    return null;
-  }
+  const key = url?.trim();
+  if (!key) return null;
+  const cached = imageCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+  imageCache.delete(key);
+  const promise = (async () => {
+    try {
+      const resolvedUrl = await storageService.resolveUrl(key);
+      const resp = await fetch(resolvedUrl);
+      if (!resp.ok) return null;
+      const blob = await resp.blob();
+      return await imageBlobAsPng(blob);
+    } catch {
+      return null;
+    }
+  })();
+  imageCache.set(key, { promise, expiresAt: Date.now() + IMAGE_CACHE_TTL_MS });
+  const result = await promise;
+  if (!result) imageCache.delete(key);
+  return result;
 }
 
 function hasUnsupportedColor(s: string | null | undefined) {

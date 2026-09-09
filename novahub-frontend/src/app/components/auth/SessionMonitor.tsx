@@ -6,8 +6,10 @@ const GRACE_SECONDS = 20;
 // The backend starts the 20-second grace window when the second login is
 // committed. Poll frequently enough that another machine sees that state
 // almost immediately, while the server remains the source of truth.
-const ACTIVE_CHECK_MS = 1_000;
-const BACKGROUND_CHECK_MS = 15_000;
+// La sesión continúa validándose automáticamente, pero un sondeo cada
+// segundo competía con las consultas de reportes y mantenía ocupado al API.
+const ACTIVE_CHECK_MS = 10_000;
+const BACKGROUND_CHECK_MS = 30_000;
 
 export function SessionMonitor() {
   const [warning, setWarning] = useState(false);

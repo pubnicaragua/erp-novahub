@@ -21,6 +21,7 @@ import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from 
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { buildInventoryReportDateFilters } from '../../utils/report-date-filters';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -182,13 +183,16 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
-  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'inventory'], async (signal) => {
-    const filters = { pageSize: 5000, report: true };
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'inventory', dateRange], async (signal) => {
+    const { start } = getRangeDates(dateRange);
+    const inventoryDateFilters = buildInventoryReportDateFilters(start, new Date());
+    const productFilters = { pageSize: 5000, report: true, light: true };
+    const movementFilters = { ...productFilters, ...inventoryDateFilters };
     const [prodRes, movRes, adjRes, trfRes, replRes] = await Promise.all([
-      fetchAllReportPages((pageFilters) => inventoryService.getProducts(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => inventoryService.getMovements(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => inventoryService.getAdjustments(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => inventoryService.getTransfers(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => inventoryService.getProducts(pageFilters, signal), productFilters, signal),
+      fetchAllReportPages((pageFilters) => inventoryService.getMovements(pageFilters, signal), movementFilters, signal),
+      fetchAllReportPages((pageFilters) => inventoryService.getAdjustments(pageFilters, signal), movementFilters, signal),
+      fetchAllReportPages((pageFilters) => inventoryService.getTransfers(pageFilters, signal), movementFilters, signal),
       inventoryService.getReplenishmentReport('monthly', signal),
     ]);
     return { products: prodRes, movements: movRes, adjustments: adjRes, transfers: trfRes, replenishment: replRes };

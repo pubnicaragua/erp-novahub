@@ -25,6 +25,7 @@ import { getPdfTemplateTarget, normalizePdfTemplateKey, PDF_TEMPLATE_MODULES, PD
 import { createDefaultTemplateDefinition, createSystemDefaultPdfSettings, definitionFromExtractedPdf, sanitizeTemplateDefinition, type PdfTemplateDefinition, type PdfTemplateNode } from '../../services/pdf-template-definition';
 import { importDocxTemplate, importHtmlTemplate } from '../../services/pdf-template-importer';
 import { PdfTemplateCanvasEditor } from './PdfTemplateCanvasEditor';
+import { clearPdfDesignCache } from '../../utils/pdfGenerator';
 
 const DOCUMENTS = PDF_TEMPLATE_TARGETS;
 
@@ -771,6 +772,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       }
       const payload = { name: name.trim(), description, documentTypes: [savedDocumentType], folderId: selectedFolderId, settings: persistedSettings, templateKey: selectedTemplateKey || 'custom', sourceType, sourceFileUrl: sourceMetadata?.sourceFileUrl, sourceFileName: sourceMetadata?.sourceFileName, analysisStatus: sourceMetadata?.analysisStatus || 'NOT_APPLICABLE', layoutZones: { ...(sourceMetadata?.layoutZones || {}), definition: templateDefinition, fields: templateFields }, engine: 'HTML_TEMPLATE', isActive: true };
       const saved = activeId === 'draft' ? await pdfDocumentDesignService.create(payload) : await pdfDocumentDesignService.update(activeId, payload);
+      clearPdfDesignCache();
       const savedForState = { ...saved, documentTypes: [savedDocumentType], settings: { ...(saved.settings || {}), ...persistedSettings } };
       let nextDesigns = activeId === 'draft' ? [savedForState, ...designs] : designs.map(item => item.id === saved.id ? savedForState : item);
       // Versiones anteriores podían haber guardado la misma URL en varios
@@ -922,6 +924,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       const isPdf = imported.kind === 'pdf';
       const payload = { name: templateName.trim(), description: `Plantilla editable importada desde: ${pendingTemplateFile.name}`, documentTypes: [uploadDocumentType], folderId: selectedFolderId, settings: importedSettings, templateKey: 'custom', sourceType: isPdf ? 'UPLOADED_PDF' as const : 'UPLOADED_HTML' as const, sourceFileUrl: uploaded.uri, sourceFileName: pendingTemplateFile.name, analysisStatus: isPdf ? 'LAYOUT_EXTRACTED' : 'HTML_CONVERTED', layoutZones: { status: isPdf ? 'extracted' : 'semantic-import', expectedZones: ['header', 'body', 'table', 'footer'], definition: imported.definition, ...(imported.sanitizedHtml ? { htmlTemplate: { version: 3, kind: imported.kind, uri: uploaded.uri, provider: 'semantic-import' } } : {}), fields: templateFields }, engine: 'HTML_TEMPLATE', isActive: true };
       const created = await pdfDocumentDesignService.create(payload);
+      clearPdfDesignCache(uploadDocumentType);
       setDesigns(prev => [created, ...prev]); setActiveId(created.id); setAssignedDocuments([uploadDocumentType]); setDocumentType(uploadDocumentType); setPendingTemplateDocumentType(null); setName(created.name); setDescription(created.description || ''); setSourceMetadata({ sourceType: created.sourceType, sourceFileUrl: created.sourceFileUrl || undefined, sourceFileName: created.sourceFileName || undefined, analysisStatus: created.analysisStatus, layoutZones: created.layoutZones || undefined }); setTemplateModalOpen(false);
       toast.success(`${isPdf ? 'PDF' : isDocx ? 'Word' : 'HTML'} importado como plantilla editable`);
     } catch (error: any) { setTemplateImportError(error?.message || 'No se pudo analizar o cargar la plantilla'); toast.error(error?.message || 'No se pudo analizar o cargar la plantilla'); } finally { setIsUploadingTemplate(false); }
@@ -937,6 +940,7 @@ export function PdfDocumentCustomizer({ tenantId, branchName = '', companyName =
       if (deleteTarget.kind === 'design') {
         const record = deleteTarget.record;
         await pdfDocumentDesignService.remove(record.id);
+        clearPdfDesignCache();
         setDesigns(prev => prev.filter(item => item.id !== record.id));
         if (activeId === record.id) createDesign();
         toast.success('Plantilla eliminada');

@@ -19,6 +19,7 @@ import { cn } from '../ui/utils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { buildReportDateFilters } from '../../utils/report-date-filters';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86400000;
@@ -194,14 +195,20 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
+  const [comparison, setComparison] = useState<'anterior' | 'anio-anterior'>('anterior');
 
-  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'sales'], async (signal) => {
-    const filters = { pageSize: 5000, report: true };
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'sales', dateRange, comparison], async (signal) => {
+    const { start, prevStart } = getRangeDates(dateRange);
+    const now = new Date();
+    const comparisonStart = comparison === 'anio-anterior' && prevStart
+      ? startOfDay(shiftYearClamped(prevStart, 1))
+      : prevStart;
+    const filters = { pageSize: 5000, report: true, ...buildReportDateFilters(start, now, comparisonStart) };
     const [invRes, payRes, retRes, cnRes] = await Promise.all([
-      fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => salesReturnsService.getAll(pageFilters, signal), filters),
-      fetchAllReportPages((pageFilters) => creditNotesService.getAll(pageFilters, signal), filters),
+      fetchAllReportPages((pageFilters) => invoicesService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => paymentsService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => salesReturnsService.getAll(pageFilters, signal), filters, signal),
+      fetchAllReportPages((pageFilters) => creditNotesService.getAll(pageFilters, signal), filters, signal),
     ]);
     return { invoices: invRes, payments: payRes, returns: retRes, creditNotes: cnRes };
   }, { enabled: canViewSales, onError: (e) => toast.error(e.message || 'Error cargando ventas') });
@@ -213,7 +220,6 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const [evolutionTab, setEvolutionTab] = useState<'acumulada' | 'aging'>('acumulada');
   const [productMetric, setProductMetric] = useState<'revenue' | 'qty' | 'profit'>('revenue');
   const [cobroMode, setCobroMode] = useState<'todos' | 'periodo'>('todos');
-  const [comparison, setComparison] = useState<'anterior' | 'anio-anterior'>('anterior');
 
   const fmtShort = (v: number) => {
     const num = Number(v);

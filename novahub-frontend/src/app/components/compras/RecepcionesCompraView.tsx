@@ -530,7 +530,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
 
 export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId, onOpenCredits }: Props) {
   const { canPerform, user } = useAuth();
-  const { formatConvertedAmount } = useCurrency();
+  const { baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-receipts-layout', 'table', 24 * 365);
@@ -624,6 +624,22 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     activeReceiptInvoices(receipt).reduce((sum, invoice: any) => sum + Number(invoice.amountPaid || 0), 0);
   const receiptExpectedCurrency = (receipt: PurchaseReceipt) => receipt.purchaseOrder?.currency || receipt.currency;
   const receiptPaidCurrency = (receipt: PurchaseReceipt) => activeReceiptInvoices(receipt)[0]?.currency || receipt.currency;
+  const receiptTotalDetails = (receipt: PurchaseReceipt) => {
+    const receiptStatus = getReceiptDisplayStatus(receipt);
+    const hasReceivedQuantity = (receipt.items || []).some((item) => Number(item.quantityReceived || 0) > 0);
+    const hasFinalAmount = ['RECEIVED', 'WITH_INCIDENTS', 'PAID'].includes(receiptStatus) || hasReceivedQuantity;
+    const linkedOrder = receipt.purchaseOrder;
+    const expectedTotal = Number(linkedOrder?.total || 0);
+    const finalTotal = Number(receipt.total || 0);
+    const amount = hasFinalAmount
+      ? (finalTotal > 0 ? finalTotal : expectedTotal)
+      : (expectedTotal > 0 ? expectedTotal : finalTotal);
+    return {
+      amount,
+      currency: hasFinalAmount ? (receipt.currency || linkedOrder?.currency) : (linkedOrder?.currency || receipt.currency),
+      exchangeRate: hasFinalAmount ? (receipt.exchangeRate || linkedOrder?.exchangeRate) : (linkedOrder?.exchangeRate || receipt.exchangeRate),
+    };
+  };
   const buildReceiptPanel = (receipt: PurchaseReceipt): SalesDocumentPanelData => ({
     id: receipt.id,
     number: receipt.number,
@@ -674,37 +690,47 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
-  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
+  const handleExportListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page', exportFilter?: string) => {
     const exportToastId = toast.loading('Generando reporte de recepciones...');
     try {
       const allRows = scope === 'all'
         ? await fetchAllPaginatedRows<PurchaseReceipt>((page, pageSize) => purchaseReceiptsService.getAll({
           page,
           pageSize,
+          report: true,
+          light: true,
           search: searchTerm.trim() || undefined,
           branchId: selectedBranchId || undefined,
         }))
         : data;
       const exportFiltered = allRows.filter((receipt) => {
+        if (exportFilter === 'paid' && getReceiptDisplayStatus(receipt) !== 'PAID') return false;
         if (statusFilter !== 'ALL' && getReceiptDisplayStatus(receipt) !== statusFilter) return false;
         const search = searchTerm.toLowerCase();
         return (receipt.number || '').toLowerCase().includes(search)
           || (receipt.supplier?.name || '').toLowerCase().includes(search);
       });
+      const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      const totalBase = exportRows.reduce((sum, receipt) => {
+        const details = receiptTotalDetails(receipt);
+        return sum + toBaseAmount(details.amount, details.currency, details.exchangeRate);
+      }, 0);
       await generatePurchaseListPDF({
         title: 'Recepciones de compra',
-        rows: colFilters.applyTo(exportFiltered, filterGetters),
+        rows: exportRows,
+        summary: { label: 'Total general', value: formatConvertedAmount(totalBase, baseCurrency, 1), columnIndex: 4 },
+        summaryPlacement: 'footer',
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
         targetKey: 'compras.purchase-receipt',
         columns: [
-          { label: 'N° Recepción', value: (row) => row.number },
-          { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
-          { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
-          { label: 'Comprometido', align: 'right', value: (row) => formatConvertedAmount(expectedReceiptPayment(row), receiptExpectedCurrency(row), row.purchaseOrder?.exchangeRate || row.exchangeRate) },
-          { label: 'Pagado', align: 'right', value: (row) => formatConvertedAmount(paidReceiptAmount(row), receiptPaidCurrency(row), activeReceiptInvoices(row)[0]?.exchangeRate || row.exchangeRate) },
-          { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === getReceiptDisplayStatus(row))?.label || row.status || '—' },
+          { label: 'N° Recepción', width: 16, value: (row) => row.number },
+          { label: 'Proveedor', width: 22, value: (row) => row.supplier?.name || 'Sin proveedor' },
+          { label: 'Fecha', width: 12, value: (row) => row.date ? formatDateEs(row.date) : '—' },
+          { label: 'Comprometido', width: 17, align: 'right', value: (row) => formatConvertedAmount(expectedReceiptPayment(row), receiptExpectedCurrency(row), row.purchaseOrder?.exchangeRate || row.exchangeRate) },
+          { label: 'Pagado', width: 17, align: 'right', value: (row) => formatConvertedAmount(paidReceiptAmount(row), receiptPaidCurrency(row), activeReceiptInvoices(row)[0]?.exchangeRate || row.exchangeRate) },
+          { label: 'Estado', width: 16, align: 'center', value: (row) => statusOpts.find((option) => option.value === getReceiptDisplayStatus(row))?.label || row.status || '—' },
         ],
       });
       toast.success('Reporte PDF descargado', { id: exportToastId });
@@ -716,6 +742,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const handleDownloadReceiptPdf = async (receipt: PurchaseReceipt, format: PdfDownloadFormat) => {
     const exportToastId = toast.loading('Generando PDF de la recepción...');
     try {
+      const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
       await generatePurchaseRecordPDF({
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
@@ -747,6 +774,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             total: formatReceiptAmount(Number(item.quantityReceived || 0) * Number(item.unitPrice || 0), receipt.currency),
             secondary: `Ordenada: ${Number(item.quantityOrdered || 0)} · Rechazada: ${Number(item.quantityRejected || 0)}${item.commercialNoteSnapshot ? ` · Nota: ${item.commercialNoteSnapshot}` : ''}`,
           })),
+          totals: [
+            { label: 'Subtotal', value: formatReceiptAmount(Number(receipt.subtotal ?? receiptTotals.subtotal), receipt.currency) },
+            { label: 'Impuestos', value: formatReceiptAmount(Number(receipt.taxAmount ?? receiptTotals.taxAmount), receipt.currency) },
+            { label: 'Descuento', value: formatReceiptAmount(Number(receipt.withholdingTotal ?? receiptTotals.withholdingTotal), receipt.currency) },
+          ],
           total: formatReceiptAmount(Number(receipt.total || 0), receipt.currency),
           totalLabel: 'Total recibido',
           notes: receipt.notes,
@@ -1786,7 +1818,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
-            {canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
+            {canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} filterSelector={{ label: 'Estado de recepciones', defaultValue: 'all', options: [{ value: 'all', label: 'Todas las recepciones', description: 'Incluye todos los estados' }, { value: 'paid', label: 'Solo pagadas', description: 'Incluye únicamente estado Pagada' }] }} onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, type QueryKey, type UseQueryOptions } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
+import { runWithReportRequestLimit } from '../utils/report-request-limiter';
 
 /** Shared tenant-scoped query policy for support and activities modules. */
 export function useTenantQuery<TData>(
@@ -41,8 +42,9 @@ export const asList = (response: any): any[] =>
 export async function fetchAllReportPages<T = any>(
   fetchPage: (filters: Record<string, any>) => Promise<any>,
   filters: Record<string, any> = {},
+  signal?: AbortSignal,
 ): Promise<T[]> {
-  const firstResponse = await fetchPage({ ...filters, page: 1 });
+  const firstResponse = await runWithReportRequestLimit(() => fetchPage({ ...filters, page: 1 }), signal);
   const firstRows = asList(firstResponse);
   const meta = firstResponse?.meta || firstResponse?.data?.meta || firstResponse?.data?.data?.meta || {};
   const pageSize = Math.max(1, Number(meta.pageSize || filters.pageSize || firstRows.length || 1));
@@ -53,7 +55,7 @@ export async function fetchAllReportPages<T = any>(
 
   const remaining = await Promise.all(
     Array.from({ length: totalPages - 1 }, (_, index) =>
-      fetchPage({ ...filters, page: index + 2 }),
+      runWithReportRequestLimit(() => fetchPage({ ...filters, page: index + 2 }), signal),
     ),
   );
   return firstRows.concat(remaining.flatMap(asList)) as T[];
