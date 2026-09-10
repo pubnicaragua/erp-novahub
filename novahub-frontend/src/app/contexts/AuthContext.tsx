@@ -1041,9 +1041,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (salesPermission?.canView === true) permission = salesPermission;
     }
     if (!permission) return false;
-    // Administrar caja es una capacidad independiente de Editar. No debe
-    // caer al caso genérico de acciones desconocidas, que históricamente
-    // devolvía `canEdit` y hacía visible el botón aunque manage estuviera off.
     if (action === 'manage') return permission.canManage === true;
     if (permission.canManage === true) return true;
     const legacyActionAllowed = (permission as any)[`can${action.charAt(0).toUpperCase()}${action.slice(1)}`] === true;
