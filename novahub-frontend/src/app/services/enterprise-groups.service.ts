@@ -29,6 +29,7 @@ export interface ManagerGroup {
     isOwner: boolean;
     canManageManagers: boolean;
     canEdit: boolean;
+    businessUnitIds: string[];
     branchIds: string[];
     warehouseIds: string[];
     permissions: unknown;
@@ -927,9 +928,12 @@ export const enterpriseGroupsService = {
       `/enterprise-groups/manager/${groupId}/accounting/import`,
       body,
     ),
-  getUsers: (groupId: string, branchId?: string, signal?: AbortSignal) =>
+  getUsers: (groupId: string, branchId?: string, businessUnitId?: string, signal?: AbortSignal) =>
     api.get<any[]>(`/enterprise-groups/manager/${groupId}/users`, {
-      params: branchId ? { branchId } : undefined,
+      params: {
+        ...(branchId ? { branchId } : {}),
+        ...(businessUnitId ? { businessUnitId } : {}),
+      },
       signal,
     }),
   getUserActivity: (groupId: string, query: ManagerUserActivityQuery = {}, signal?: AbortSignal) =>

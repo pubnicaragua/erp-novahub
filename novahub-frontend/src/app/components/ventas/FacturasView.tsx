@@ -2234,7 +2234,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     ? 'Enviar saldo a crédito'
                     : 'Crédito no disponible: el límite o saldo disponible no cubre esta factura';
                   return (
-                    <span title={creditTitle} className="inline-flex">
+                    <span
+                      title={creditTitle}
+                      data-row-click-exempt="true"
+                      className="inline-flex"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (!creditFits) toast.error(creditTitle);
+                      }}
+                    >
                       <Button
                         type="button"
                         aria-label={`${creditTitle} de ${row.number}`}
@@ -2242,7 +2251,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         size="icon"
                         disabled={!creditFits}
                         className={cn('size-8 shrink-0 rounded-lg text-primary transition-colors hover:bg-primary/10', !creditFits && 'cursor-not-allowed text-muted-foreground opacity-60 hover:bg-transparent')}
-                        onClick={() => openInvoiceCredit(row)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          openInvoiceCredit(row);
+                        }}
                       >
                         <span className="relative inline-flex size-4 items-center justify-center">
                           <Send className="size-4" />

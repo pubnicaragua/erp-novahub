@@ -739,7 +739,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <SalesKpiCard title="Total Clientes" value={data.length} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
         <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
         <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
-        {dueKpis.map((kpi) => <SalesKpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={CreditCard} color="text-rose-500" bg="bg-rose-500/10" />)}
+        {dueKpis.map((kpi) => <SalesKpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={CreditCard} color="text-primary" bg="bg-primary/10" />)}
       </div>
 
       {/* Main Content */}

@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { getNotificationNavigation, navigateToNotification } from '../utils/notificationNavigation';
 
 /**
- * Detecta notificaciones entrantes nuevas (polling cada 5s) y:
+ * Detecta notificaciones entrantes entregadas por el stream SSE global y:
  * - Reproduce un sonido corto.
  * - Si la pestaña está en segundo plano, dispara una Notification del navegador.
  * Montar una sola vez (p.ej. en DashboardLayout).

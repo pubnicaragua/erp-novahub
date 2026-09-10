@@ -972,9 +972,9 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
 
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-tour="price-lists-kpis">
       <SalesKpiCard title="Productos" value={catalogProducts.length} icon={Package} color="text-primary" bg="bg-primary/10" kind="indicator" />
-      <SalesKpiCard title="Listas visibles" value={visibleLists.length} icon={ListChecks} color="text-sky-500" bg="bg-sky-500/10" kind="indicator" />
-      <SalesKpiCard title="Precios cargados" value={Math.max(0, catalogProducts.length * visibleLists.length - missingPriceCount)} icon={CircleDollarSign} color="text-emerald-500" bg="bg-emerald-500/10" kind="indicator" />
-      <SalesKpiCard title="Productos con precios faltantes" value={missingProducts.length} icon={AlertTriangle} color="text-amber-600" bg="bg-amber-500/10" kind="filter" active={missingOpen} onClick={() => setMissingOpen(true)} />
+      <SalesKpiCard title="Listas visibles" value={visibleLists.length} icon={ListChecks} color="text-primary" bg="bg-primary/10" kind="indicator" />
+      <SalesKpiCard title="Precios cargados" value={Math.max(0, catalogProducts.length * visibleLists.length - missingPriceCount)} icon={CircleDollarSign} color="text-primary" bg="bg-primary/10" kind="indicator" />
+      <SalesKpiCard title="Productos con precios faltantes" value={missingProducts.length} icon={AlertTriangle} color="text-primary" bg="bg-primary/10" kind="filter" active={missingOpen} onClick={() => setMissingOpen(true)} />
     </div>
 
     <div className="flex min-w-0 flex-col gap-3" data-tour="price-lists-filters">

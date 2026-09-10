@@ -852,9 +852,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         {recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`mrr-${kpi.currency}`} title={`MRR Activo (${kpi.currency})`} value={kpi.mrr} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />)}
-        <SalesKpiCard title="Próximas 7 días" value={upcomingIn7Days} icon={Calendar} color="text-blue-500" bg="bg-blue-500/10" />
+        <SalesKpiCard title="Próximas 7 días" value={upcomingIn7Days} icon={Calendar} color="text-primary" bg="bg-primary/10" />
         <SalesKpiCard title="Activas" value={data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />
-        {recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`arr-${kpi.currency}`} title={`ARR (${kpi.currency})`} value={kpi.arr} icon={TrendingUp} color="text-rose-500" bg="bg-primary/10" />)}
+        {recurringMoneyKpis.map((kpi) => <SalesKpiCard key={`arr-${kpi.currency}`} title={`ARR (${kpi.currency})`} value={kpi.arr} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

@@ -127,6 +127,7 @@ export function ManagerPage() {
   const [managerName, setManagerName] = useState('');
   const [managerEmail, setManagerEmail] = useState('');
   const [managerPassword, setManagerPassword] = useState('');
+  const [managerBusinessUnitIds, setManagerBusinessUnitIds] = useState<string[]>([]);
   const [managerBranchIds, setManagerBranchIds] = useState<string[]>([]);
   const [managerCanManageManagers, setManagerCanManageManagers] = useState(false);
   const [managerCanEdit, setManagerCanEdit] = useState(false);
@@ -158,6 +159,10 @@ export function ManagerPage() {
   const branchOptions = useMemo(
     () => (group?.branches || []).filter((branch) => branch.isActive !== false && (!selectedBusinessUnitId || branch.businessUnitId === selectedBusinessUnitId)),
     [group?.branches, selectedBusinessUnitId],
+  );
+  const managerAssignableBranches = useMemo(
+    () => (group?.branches || []).filter((branch) => branch.isActive !== false),
+    [group?.branches],
   );
   const allowedSections = useMemo(() => getAllowedManagerSections(managerAccess), [managerAccess]);
   const canEnterBranch = useMemo(() => Boolean(group?.managerAccess?.canEdit) || managerAccessAllows(group?.managerAccess, 'BRANCH_OPERATIONS') || managerAccessAllows(group?.managerAccess, 'MANAGER_SALES'), [group?.managerAccess]);
@@ -214,8 +219,8 @@ export function ManagerPage() {
     { enabled: false },
   );
   const usersQuery = useTenantQuery(
-    ['manager-users', groupId, effectiveSelectedBranchId || 'all'],
-    (signal) => enterpriseGroupsService.getUsers(groupId, effectiveSelectedBranchId || undefined, signal),
+    ['manager-users', groupId, selectedBusinessUnitId || 'all', effectiveSelectedBranchId || 'all'],
+    (signal) => enterpriseGroupsService.getUsers(groupId, effectiveSelectedBranchId || undefined, selectedBusinessUnitId || undefined, signal),
     { enabled: Boolean(groupId) && (section === 'users' || (section === 'settings' && settingsView === 'audit')) },
   );
   const usersActivityQuery = useTenantQuery(
@@ -228,7 +233,7 @@ export function ManagerPage() {
       search: usersActivitySearch || undefined,
       module: usersActivityModule || undefined,
     }, signal),
-    { enabled: Boolean(groupId) && (section === 'users' || (section === 'settings' && settingsView === 'audit')) },
+    { enabled: Boolean(groupId) && section === 'settings' && settingsView === 'audit' },
   );
   const managersQuery = useTenantQuery(
     ['manager-assignments', groupId],
@@ -256,8 +261,8 @@ export function ManagerPage() {
     onSuccess: (result: any) => { void overviewQuery.refetch(); void inventoryWarehousesQuery.refetch(); toast.success(`Catálogo preparado: ${result.productsLinked || 0} producto(s), ${result.stockLevelsCreated || 0} registro(s) en cero`); },
     onError: (error: Error) => toast.error(error.message),
   });
-  const managerPayload = () => ({ name: managerName.trim(), email: managerEmail.trim(), ...(managerPassword ? { password: managerPassword } : {}), branchIds: managerBranchIds, permissions: managerStateToPermissions(managerPermissionState), canEdit: managerCanEdit, canManageManagers: managerCanManageManagers });
-  const resetManagerForm = () => { setEditingManagerId(''); setManagerName(''); setManagerEmail(''); setManagerPassword(''); setManagerBranchIds([]); setManagerCanManageManagers(false); setManagerCanEdit(false); setManagerPermissionState(defaultManagerPermissionState()); };
+  const managerPayload = () => ({ name: managerName.trim(), email: managerEmail.trim(), ...(managerPassword ? { password: managerPassword } : {}), businessUnitIds: managerBusinessUnitIds, branchIds: managerBranchIds, permissions: managerStateToPermissions(managerPermissionState), canEdit: managerCanEdit, canManageManagers: managerCanManageManagers });
+  const resetManagerForm = () => { setEditingManagerId(''); setManagerName(''); setManagerEmail(''); setManagerPassword(''); setManagerBusinessUnitIds([]); setManagerBranchIds([]); setManagerCanManageManagers(false); setManagerCanEdit(false); setManagerPermissionState(defaultManagerPermissionState()); };
   const managerMutation = useMutation({
     mutationFn: () => editingManagerId
       ? enterpriseGroupsService.updateManager(groupId, editingManagerId, managerPayload())
@@ -415,12 +420,12 @@ export function ManagerPage() {
         {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={reportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportReports} />}
         {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={hrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportHr} />}
         {activeOperationModule && allowedSections.includes(section) && <ManagerOperationsView key={activeOperationModule} module={activeOperationModule} view={activeOperationView} onViewChange={(view) => setOperationViews((current) => ({ ...current, [activeOperationModule]: view }))} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={managerAccessAllowsAction(group?.managerAccess, MANAGER_OPERATION_PERMISSION[activeOperationModule], 'export')} />}
-        {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={usersActivityQuery.data} activityLoading={usersActivityQuery.isLoading} activityError={usersActivityQuery.error} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={(value) => { setUsersActivitySearch(value); setUsersActivityPage(1); }} setActivityModule={(value) => { setUsersActivityModule(value); setUsersActivityPage(1); }} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={(value) => { setSelectedBusinessUnitId(value); setSelectedBranchId(''); setUsersActivityPage(1); }} setActivityBranchId={(value) => { setSelectedBranchId(value); setUsersActivityPage(1); }} onActivityPageChange={setUsersActivityPage} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
-        {section === 'settings' && settingsView === 'audit' && canViewManagerAudit && <UsersContent auditOnly data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={usersActivityQuery.data} activityLoading={usersActivityQuery.isLoading} activityError={usersActivityQuery.error} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={(value) => { setUsersActivitySearch(value); setUsersActivityPage(1); }} setActivityModule={(value) => { setUsersActivityModule(value); setUsersActivityPage(1); }} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={(value) => { setSelectedBusinessUnitId(value); setSelectedBranchId(''); setUsersActivityPage(1); }} setActivityBranchId={(value) => { setSelectedBranchId(value); setUsersActivityPage(1); }} onActivityPageChange={setUsersActivityPage} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={() => undefined} togglingUserId="" onCreateManager={() => undefined} />}
+        {section === 'users' && <UsersContent showActivity={false} data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={undefined} activityLoading={false} activityError={null} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={() => undefined} setActivityModule={() => undefined} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={() => undefined} setActivityBranchId={() => undefined} onActivityPageChange={() => undefined} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
+        {section === 'settings' && settingsView === 'audit' && canViewManagerAudit && <UsersContent showActivity auditOnly data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={usersActivityQuery.data} activityLoading={usersActivityQuery.isLoading} activityError={usersActivityQuery.error} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={(value) => { setUsersActivitySearch(value); setUsersActivityPage(1); }} setActivityModule={(value) => { setUsersActivityModule(value); setUsersActivityPage(1); }} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={(value) => { setSelectedBusinessUnitId(value); setSelectedBranchId(''); setUsersActivityPage(1); }} setActivityBranchId={(value) => { setSelectedBranchId(value); setUsersActivityPage(1); }} onActivityPageChange={setUsersActivityPage} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={() => undefined} togglingUserId="" onCreateManager={() => undefined} />}
         {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
         {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
         {section === 'transfers' && <TransfersContent data={transfersQuery.data || []} loading={transfersQuery.isLoading} canApprove={canApproveManagerTransfers} approvingId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApprove={setTransferToApprove} />}
-        {section === 'managers' && <ManagersContent data={managersQuery.data || []} branches={branchOptions} canEditOwner={Boolean(!group?.managerAccess || group.managerAccess.isOwner)} editingManagerId={editingManagerId} name={managerName} email={managerEmail} password={managerPassword} branchIds={managerBranchIds} canManageManagers={managerCanManageManagers} canEdit={managerCanEdit} permissionState={managerPermissionState} setEditingManagerId={setEditingManagerId} setName={setManagerName} setEmail={setManagerEmail} setPassword={setManagerPassword} setBranchIds={setManagerBranchIds} setCanManageManagers={setManagerCanManageManagers} setCanEdit={setManagerCanEdit} setPermissionState={setManagerPermissionState} onReset={resetManagerForm} onSave={() => managerMutation.mutate()} saving={managerMutation.isPending} onPassword={(userId, password) => managerPasswordMutation.mutate({ userId, password })} resettingPassword={managerPasswordMutation.isPending} onRevoke={(userId) => revokeManagerMutation.mutate(userId)} revoking={revokeManagerMutation.isPending} />}
+        {section === 'managers' && <ManagersContent data={managersQuery.data || []} businessUnits={businessUnits} businessUnitIds={managerBusinessUnitIds} branches={managerAssignableBranches} canEditOwner={Boolean(!group?.managerAccess || group.managerAccess.isOwner)} editingManagerId={editingManagerId} name={managerName} email={managerEmail} password={managerPassword} branchIds={managerBranchIds} canManageManagers={managerCanManageManagers} canEdit={managerCanEdit} permissionState={managerPermissionState} setEditingManagerId={setEditingManagerId} setName={setManagerName} setEmail={setManagerEmail} setPassword={setManagerPassword} setBusinessUnitIds={setManagerBusinessUnitIds} setBranchIds={setManagerBranchIds} setCanManageManagers={setManagerCanManageManagers} setCanEdit={setManagerCanEdit} setPermissionState={setManagerPermissionState} onReset={resetManagerForm} onSave={() => managerMutation.mutate()} saving={managerMutation.isPending} onPassword={(userId, password) => managerPasswordMutation.mutate({ userId, password })} resettingPassword={managerPasswordMutation.isPending} onRevoke={(userId) => revokeManagerMutation.mutate(userId)} revoking={revokeManagerMutation.isPending} />}
       </div>
       <ManagerUserEditorDialog user={editingBranchUser} open={Boolean(editingBranchUser)} saving={branchUserMutation.isPending} onOpenChange={(open) => { if (!open) setEditingBranchUser(null); }} onSave={(payload) => { if (editingBranchUser?.id) branchUserMutation.mutate({ userId: editingBranchUser.id, payload }); }} />
       <ConfirmDialog
@@ -673,8 +678,9 @@ function auditTone(action: unknown) {
   return 'border-primary/20 bg-primary/10 text-primary';
 }
 
-function UsersContent({ auditOnly = false, data, loading, error, activity, activityLoading, activityError, activitySearch, activityModule, activityPage, setActivitySearch, setActivityModule, activityBusinessUnitId, activityBranchId, activityBusinessUnits, activityBranches, setActivityBusinessUnitId, setActivityBranchId, onActivityPageChange, canEditUsers, canManageManagers, onEditUser, onToggleUser, togglingUserId, onCreateManager }: {
+function UsersContent({ auditOnly = false, showActivity = auditOnly, data, loading, error, activity, activityLoading, activityError, activitySearch, activityModule, activityPage, setActivitySearch, setActivityModule, activityBusinessUnitId, activityBranchId, activityBusinessUnits, activityBranches, setActivityBusinessUnitId, setActivityBranchId, onActivityPageChange, canEditUsers, canManageManagers, onEditUser, onToggleUser, togglingUserId, onCreateManager }: {
   auditOnly?: boolean;
+  showActivity?: boolean;
   data: any[];
   loading: boolean;
   error?: Error | null;
@@ -738,7 +744,7 @@ function UsersContent({ auditOnly = false, data, loading, error, activity, activ
       </CardContent>
     </Card>}
 
-    <Card className="rounded-3xl border-border/60 bg-card">
+    {showActivity && <Card className="rounded-3xl border-border/60 bg-card">
       <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Activity className="size-5 text-primary" /> Auditoría consolidada</CardTitle>
@@ -788,7 +794,7 @@ function UsersContent({ auditOnly = false, data, loading, error, activity, activ
           <div className="flex items-center gap-2"><Button type="button" variant="outline" size="sm" className="rounded-xl" disabled={activityPage <= 1 || activityLoading} onClick={() => onActivityPageChange(Math.max(1, activityPage - 1))}><ChevronLeft className="size-4" /><span className="hidden sm:inline">Anterior</span></Button><Button type="button" variant="outline" size="sm" className="rounded-xl" disabled={activityPage >= (activity?.totalPages || 1) || activityLoading} onClick={() => onActivityPageChange(activityPage + 1)}><span className="hidden sm:inline">Siguiente</span><ChevronRight className="size-4" /></Button></div>
         </div>}
       </CardContent>
-    </Card>
+    </Card>}
   </div>;
 }
 
@@ -924,7 +930,9 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
 
 type ManagersContentProps = {
   data: any[];
-  branches: Array<{ id: string; name: string }>;
+  businessUnits: Array<{ id: string; name: string; isActive?: boolean }>;
+  businessUnitIds: string[];
+  branches: Array<{ id: string; name: string; businessUnitId?: string | null }>;
   canEditOwner: boolean;
   editingManagerId: string;
   name: string;
@@ -938,6 +946,7 @@ type ManagersContentProps = {
   setName: (value: string) => void;
   setEmail: (value: string) => void;
   setPassword: (value: string) => void;
+  setBusinessUnitIds: (value: string[]) => void;
   setBranchIds: (value: string[]) => void;
   setCanManageManagers: (value: boolean) => void;
   setCanEdit: (value: boolean) => void;
@@ -953,6 +962,8 @@ type ManagersContentProps = {
 
 function ManagersContent({
   data,
+  businessUnits,
+  businessUnitIds,
   branches,
   canEditOwner,
   editingManagerId,
@@ -967,6 +978,7 @@ function ManagersContent({
   setName,
   setEmail,
   setPassword,
+  setBusinessUnitIds,
   setBranchIds,
   setCanManageManagers,
   setCanEdit,
@@ -982,13 +994,30 @@ function ManagersContent({
   const [passwordTargetId, setPasswordTargetId] = useState('');
   const [passwordDraft, setPasswordDraft] = useState('');
   const isEditing = Boolean(editingManagerId);
+  const selectedBusinessUnits = useMemo(
+    () => new Set(businessUnitIds),
+    [businessUnitIds],
+  );
+  const visibleBranches = useMemo(
+    () => businessUnitIds.length ? branches.filter((branch) => selectedBusinessUnits.has(branch.businessUnitId || '')) : branches,
+    [branches, businessUnitIds, selectedBusinessUnits],
+  );
   const toggleBranch = (id: string) => setBranchIds(branchIds.includes(id) ? branchIds.filter((value) => value !== id) : [...branchIds, id]);
+  const toggleBusinessUnit = (id: string) => {
+    const nextIds = businessUnitIds.includes(id) ? businessUnitIds.filter((value) => value !== id) : [...businessUnitIds, id];
+    setBusinessUnitIds(nextIds);
+    if (nextIds.length) {
+      const nextUnits = new Set(nextIds);
+      setBranchIds(branchIds.filter((branchId) => branches.some((branch) => branch.id === branchId && nextUnits.has(branch.businessUnitId || ''))));
+    }
+  };
   const updatePermission = (module: string, level: ManagerPermissionLevel) => setPermissionState({ ...permissionState, [module]: level });
   const startEditing = (assignment: any) => {
     setEditingManagerId(assignment.user?.id || '');
     setName(assignment.user?.name || '');
     setEmail(assignment.user?.email || '');
     setPassword('');
+    setBusinessUnitIds(assignment.businessUnitIds || []);
     setBranchIds(assignment.branchIds || []);
     setCanManageManagers(Boolean(assignment.canManageManagers));
     setCanEdit(Boolean(assignment.canEdit));
@@ -1022,8 +1051,13 @@ function ManagersContent({
         </div>
 
         <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales con acceso</p><span className="text-xs text-muted-foreground">{branchIds.length} seleccionada(s)</span></div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{branches.map((branch) => <label key={branch.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-background p-3 text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span></label>)}{!branches.length && <p className="text-sm text-muted-foreground">Este grupo todavía no tiene sucursales.</p>}</div>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Rubros con acceso</p><p className="mt-1 text-xs text-muted-foreground">Limita el Manager a unidades de negocio concretas. Sin selección conserva el alcance permitido por quien lo administra.</p></div><span className="text-xs text-muted-foreground">{businessUnitIds.length ? `${businessUnitIds.length} seleccionado(s)` : 'Todos los rubros permitidos'}</span></div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{businessUnits.filter((unit) => unit.isActive !== false).map((unit) => <label key={unit.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-background p-3 text-sm"><input type="checkbox" checked={selectedBusinessUnits.has(unit.id)} onChange={() => toggleBusinessUnit(unit.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{unit.name}</span></label>)}{!businessUnits.length && <p className="text-sm text-muted-foreground">Este grupo todavía no tiene rubros configurados.</p>}</div>
+        </div>
+
+        <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales con acceso</p><p className="mt-1 text-xs text-muted-foreground">La selección se evalúa dentro de los rubros seleccionados.</p></div><span className="text-xs text-muted-foreground">{branchIds.length ? `${branchIds.length} seleccionada(s)` : 'Todas las sucursales permitidas'}</span></div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{visibleBranches.map((branch) => <label key={branch.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-background p-3 text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span></label>)}{!visibleBranches.length && <p className="text-sm text-muted-foreground">No hay sucursales dentro del alcance seleccionado.</p>}</div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

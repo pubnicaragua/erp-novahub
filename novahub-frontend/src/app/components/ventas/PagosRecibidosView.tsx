@@ -837,11 +837,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         {displayMode === 'ORIGINAL'
-          ? originalCollectedAmounts.map((summary) => <SalesKpiCard key={`collected-${summary.currency}`} title={`Total Recaudado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />)
-          : <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />}
-        <SalesKpiCard title="Pagos" value={groupedPayments.length} icon={CheckCircle2} color="text-blue-500" bg="bg-blue-500/10" />
-        <SalesKpiCard title="Con documento" value={groupedPayments.filter(p => p.invoice?.number || p.creditNote?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
-        <SalesKpiCard title="Método Principal" value={mainMethod} icon={Wallet} color="text-purple-500" bg="bg-purple-500/10" />
+          ? originalCollectedAmounts.map((summary) => <SalesKpiCard key={`collected-${summary.currency}`} title={`Total Recaudado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
+          : <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
+        <SalesKpiCard title="Pagos" value={groupedPayments.length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Con documento" value={groupedPayments.filter(p => p.invoice?.number || p.creditNote?.number).length} icon={Clock} color="text-primary" bg="bg-primary/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
+        <SalesKpiCard title="Método Principal" value={mainMethod} icon={Wallet} color="text-primary" bg="bg-primary/10" />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

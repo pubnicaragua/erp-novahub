@@ -1,5 +1,152 @@
-import { api } from './api';
+import { api, getApiUrl, getAuthHeaders } from './api';
 import type { Notification } from '../types';
+
+export interface NotificationStreamEvent {
+  type: 'notifications-invalidated';
+  eventId: string;
+  reason?: 'created' | 'updated' | 'deleted';
+  occurredAt?: string;
+}
+
+export class NotificationStreamError extends Error {
+  constructor(public readonly status: number) {
+    super(`No se pudo abrir el stream de notificaciones (${status})`);
+    this.name = 'NotificationStreamError';
+  }
+}
+
+/** Consume SSE con fetch para conservar Authorization: Bearer. */
+export async function consumeNotificationEvents(
+  signal: AbortSignal,
+  onEvent: (event: NotificationStreamEvent) => void,
+  onOpen?: () => void,
+): Promise<void> {
+  const response = await fetch(getApiUrl('/notifications/events'), {
+    headers: { Accept: 'text/event-stream', ...getAuthHeaders() },
+    cache: 'no-store',
+    signal,
+  });
+
+  if (!response.ok) throw new NotificationStreamError(response.status);
+  if (!response.body) throw new Error('El navegador no expuso el cuerpo del stream de notificaciones');
+
+  onOpen?.();
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const consumeFrame = (frame: string) => {
+    const data = frame
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n');
+    if (!data) return;
+
+    try {
+      const parsed = JSON.parse(data) as Partial<NotificationStreamEvent>;
+      if (parsed.type === 'notifications-invalidated' && parsed.eventId) {
+        onEvent(parsed as NotificationStreamEvent);
+      }
+    } catch {
+      // Un frame inválido no debe cerrar la conexión ni bloquear el inbox.
+    }
+  };
+
+  while (!signal.aborted) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split(/\r?\n\r?\n/);
+    buffer = frames.pop() || '';
+    frames.forEach(consumeFrame);
+  }
+
+  if (buffer.trim()) consumeFrame(buffer);
+}
+
+type NotificationStreamListener = (event: NotificationStreamEvent) => void;
+const notificationStreamListeners = new Set<NotificationStreamListener>();
+let notificationStreamController: AbortController | null = null;
+let notificationStreamReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let notificationStreamIdentity = '';
+let notificationStreamReconnectAttempt = 0;
+let notificationStreamHadConnection = false;
+
+/**
+ * Comparte una sola conexión SSE por sesión del navegador aunque Topbar,
+ * Alertas y el detector global usen useNotifications simultáneamente.
+ */
+export function subscribeToNotificationEvents(
+  identity: string,
+  listener: NotificationStreamListener,
+): () => void {
+  if (!identity) return () => undefined;
+  if (notificationStreamIdentity && notificationStreamIdentity !== identity) {
+    stopNotificationEventStream();
+    notificationStreamListeners.clear();
+  }
+
+  notificationStreamIdentity = identity;
+  notificationStreamListeners.add(listener);
+  ensureNotificationEventStream(identity);
+
+  return () => {
+    notificationStreamListeners.delete(listener);
+    if (notificationStreamListeners.size === 0) stopNotificationEventStream();
+  };
+}
+
+function ensureNotificationEventStream(identity: string): void {
+  if (notificationStreamController || notificationStreamIdentity !== identity) return;
+
+  const controller = new AbortController();
+  notificationStreamController = controller;
+  void consumeNotificationEvents(
+    controller.signal,
+    (event) => notificationStreamListeners.forEach((listener) => listener(event)),
+    () => {
+      notificationStreamReconnectAttempt = 0;
+      // Una reconexión también sirve como catch-up: si el proceso reinició o
+      // el cliente perdió un evento, el inbox persistido se vuelve a leer una
+      // sola vez al recuperar el canal.
+      if (notificationStreamHadConnection) {
+        const recoveryEvent: NotificationStreamEvent = {
+          type: 'notifications-invalidated',
+          eventId: `reconnected:${Date.now()}`,
+          reason: 'updated',
+        };
+        notificationStreamListeners.forEach((listener) => listener(recoveryEvent));
+      }
+      notificationStreamHadConnection = true;
+    },
+  ).catch(() => undefined).finally(() => {
+    if (notificationStreamController !== controller || controller.signal.aborted) return;
+    notificationStreamController = null;
+    scheduleNotificationEventReconnect(identity);
+  });
+}
+
+function scheduleNotificationEventReconnect(identity: string): void {
+  if (notificationStreamListeners.size === 0 || notificationStreamIdentity !== identity) return;
+  const delay = Math.min(30_000, 1_000 * (2 ** notificationStreamReconnectAttempt));
+  notificationStreamReconnectAttempt = Math.min(notificationStreamReconnectAttempt + 1, 5);
+  if (notificationStreamReconnectTimer) clearTimeout(notificationStreamReconnectTimer);
+  notificationStreamReconnectTimer = setTimeout(() => {
+    notificationStreamReconnectTimer = null;
+    ensureNotificationEventStream(identity);
+  }, delay);
+}
+
+function stopNotificationEventStream(): void {
+  if (notificationStreamReconnectTimer) clearTimeout(notificationStreamReconnectTimer);
+  notificationStreamReconnectTimer = null;
+  notificationStreamController?.abort();
+  notificationStreamController = null;
+  notificationStreamIdentity = '';
+  notificationStreamReconnectAttempt = 0;
+  notificationStreamHadConnection = false;
+}
 
 interface InboxNotificationDto {
   id: string;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt, Send, Pencil } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt, Send, Pencil, CalendarDays } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -23,12 +23,59 @@ import { HRViewTutorial } from './HRViewTutorial';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 
+type PayrollFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+
+const PAYROLL_FREQUENCY_OPTIONS: Array<{ value: PayrollFrequency; label: string }> = [
+  { value: 'WEEKLY', label: 'Semanal' },
+  { value: 'BIWEEKLY', label: 'Quincenal' },
+  { value: 'MONTHLY', label: 'Mensual' },
+];
+
+const payrollFrequencyLabel = (frequency?: string) => ({
+  WEEKLY: 'Semanal',
+  BIWEEKLY: 'Quincenal',
+  MONTHLY: 'Mensual',
+  HOURLY: 'Por hora',
+} as Record<string, string>)[String(frequency || '').toUpperCase()] || 'No especificada';
+
+const startOfLocalDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+const endOfLocalDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+
+const getCurrentPayrollPeriod = (frequency: PayrollFrequency, referenceDate = new Date()) => {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth();
+  const day = referenceDate.getDate();
+
+  if (frequency === 'WEEKLY') {
+    const daysFromMonday = (referenceDate.getDay() + 6) % 7;
+    const start = new Date(year, month, day - daysFromMonday);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    return { start: startOfLocalDay(start), end: endOfLocalDay(end) };
+  }
+
+  if (frequency === 'BIWEEKLY') {
+    const start = new Date(year, month, day <= 15 ? 1 : 16);
+    const end = day <= 15
+      ? new Date(year, month, 15)
+      : new Date(year, month + 1, 0);
+    return { start: startOfLocalDay(start), end: endOfLocalDay(end) };
+  }
+
+  return {
+    start: new Date(year, month, 1, 0, 0, 0, 0),
+    end: new Date(year, month + 1, 0, 23, 59, 59, 999),
+  };
+};
+
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { displayCurrency, displayMode, valuationMode, valuationModeLabel, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [includeCommissions, setIncludeCommissions] = useState(true);
+  const [processFrequency, setProcessFrequency] = useState<PayrollFrequency>('MONTHLY');
+  const [processDialogOpen, setProcessDialogOpen] = useState(false);
+  const [processLoading, setProcessLoading] = useState(false);
   const employeeOptions = [
     { label: 'Todos los empleados', value: 'all' },
     ...employees.map((emp: any) => ({
@@ -136,16 +183,36 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     }
   };
 
-  const handleProcessPayroll = async () => {
+  const handleOpenProcessPayroll = () => {
     if (!canPerform('HR_PAYROLL', 'approve')) return;
-    try {
-      const today = new Date();
-      const periodStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    if (filterEmployee !== 'all') {
+      const selectedEmployee = employees.find((employee: any) => employee.id === filterEmployee);
+      const selectedFrequency = String(selectedEmployee?.payFrequency || '').toUpperCase();
+      if (PAYROLL_FREQUENCY_OPTIONS.some(option => option.value === selectedFrequency)) {
+        setProcessFrequency(selectedFrequency as PayrollFrequency);
+      }
+    }
+    setProcessDialogOpen(true);
+  };
 
+  const selectedProcessEmployee = filterEmployee !== 'all'
+    ? employees.find((employee: any) => employee.id === filterEmployee)
+    : null;
+  const selectedEmployeeFrequency = String(selectedProcessEmployee?.payFrequency || '').toUpperCase();
+  const hasProcessFrequencyMismatch = Boolean(
+    selectedProcessEmployee
+      && selectedEmployeeFrequency !== processFrequency
+  );
+  const processPeriod = getCurrentPayrollPeriod(processFrequency);
+
+  const handleProcessPayroll = async () => {
+    if (!canPerform('HR_PAYROLL', 'approve') || hasProcessFrequencyMismatch) return;
+    setProcessLoading(true);
+    try {
       const payload: any = {
-        periodStart: periodStart.toISOString(),
-        periodEnd: periodEnd.toISOString(),
+        periodStart: processPeriod.start.toISOString(),
+        periodEnd: processPeriod.end.toISOString(),
+        payFrequency: processFrequency,
         includeCommissions,
       };
       if (filterEmployee !== 'all') {
@@ -162,6 +229,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       } else {
         toast.success(`Nómina procesada: ${createdCount} registros creados`);
       }
+      setProcessDialogOpen(false);
       onRefresh();
     } catch (error: any) {
       const msg = error?.response?.data?.message || error?.message || 'Error al procesar nómina';
@@ -171,6 +239,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       } else {
         toast.error(message);
       }
+    } finally {
+      setProcessLoading(false);
     }
   };
 
@@ -218,7 +288,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const handleExportPDF = async () => {
     if (!canPerform('HR_PAYROLL', 'export')) return;
     try {
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: filteredPayrolls, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => pdfStatusLabel(row.status) }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: filteredPayrolls, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => pdfStatusLabel(row.status) }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
       if (configured) { toast.success('Reporte PDF descargado'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings)) as any;
@@ -230,6 +300,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         return [
           `${p.employee?.firstName} ${p.employee?.lastName}`,
           `${new Date(p.periodStart).toLocaleDateString()} - ${new Date(p.periodEnd).toLocaleDateString()}`,
+          payrollFrequencyLabel(p.frequency || p.employee?.payFrequency),
           payrollDisplay(p, 'grossPay', 'grossPayBase'),
           payrollDisplay(p, 'netPay', 'netPayBase'),
           payrollDisplay(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'),
@@ -239,7 +310,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
       doc.autoTable({
         startY: 28,
-        head: [['Empleado', 'Periodo', 'Bruto', 'Neto a Pagar', 'Costo Empresa', 'Estado']],
+        head: [['Empleado', 'Periodo', 'Periodicidad', 'Bruto', 'Neto a Pagar', 'Costo Empresa', 'Estado']],
         body: tableData,
       });
 
@@ -353,7 +424,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             </label>
           </div>
           {canPerform('HR_PAYROLL', 'approve') && (
-            <Button size="sm" onClick={handleProcessPayroll} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
+            <Button size="sm" onClick={handleOpenProcessPayroll} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
               <Calculator className="size-4 mr-2" />
               Procesar Nómina
             </Button>
@@ -370,6 +441,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Empleado<ColumnFilterMenu label="Empleado" options={employeeNameOptions} selected={colFilters.state.employee?.values || []} onSelect={(values) => colFilters.setValues('employee', values)} sort={colFilters.state.employee?.sort || null} onSort={(sort) => colFilters.setSort('employee', sort)} /></span></th>
                 <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Período<ColumnFilterMenu label="Período" sort={colFilters.state.periodStart?.sort || null} onSort={(sort) => colFilters.setSort('periodStart', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguos' }]} /></span></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold">Periodicidad</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold"><span className="inline-flex items-center gap-1 justify-end">Salario Bruto<ColumnFilterMenu label="Salario Bruto" sort={colFilters.state.gross?.sort || null} onSort={(sort) => colFilters.setSort('gross', sort)} /></span></th>
                 <th className="px-4 py-3 text-right text-xs font-semibold"><span className="inline-flex items-center gap-1 justify-end">Neto a Pagar<ColumnFilterMenu label="Neto a Pagar" sort={colFilters.state.net?.sort || null} onSort={(sort) => colFilters.setSort('net', sort)} /></span></th>
                 <th className="px-4 py-3 text-right text-xs font-semibold"><span className="inline-flex items-center gap-1 justify-end">Costo Total Empresa<ColumnFilterMenu label="Costo Total Empresa" sort={colFilters.state.cost?.sort || null} onSort={(sort) => colFilters.setSort('cost', sort)} /></span></th>
@@ -399,6 +471,11 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {formatDateEs(payroll.periodStart)} - {formatDateEs(payroll.periodEnd)}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className="inline-flex rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-primary">
+                        {payrollFrequencyLabel(payroll.frequency || payroll.employee?.payFrequency)}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold">
                       {payrollDisplay(payroll, 'grossPay', 'grossPayBase')}
@@ -470,7 +547,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                   {/* Expanded row with desglose */}
                   {expandedRow === payroll.id && (
                     <tr className="bg-muted/30">
-                      <td colSpan={7} className="px-4 py-4">
+                      <td colSpan={8} className="px-4 py-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                           <div className="space-y-2">
                             <p className="font-black uppercase tracking-widest text-destructive text-[10px]">Deducciones Empleado</p>
@@ -545,6 +622,10 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Período</span>
                     <span className="font-semibold text-right">{formatDateEs(payroll.periodStart)} - {formatDateEs(payroll.periodEnd)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Periodicidad</span>
+                    <span className="font-semibold text-right text-primary">{payrollFrequencyLabel(payroll.frequency || payroll.employee?.payFrequency)}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Salario Bruto</span>
@@ -656,6 +737,53 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <p className="text-muted-foreground">No se encontraron registros de nómina</p>
         </div>
       )}
+
+      <Dialog open={processDialogOpen} onOpenChange={(open) => { if (!open && !processLoading) setProcessDialogOpen(false); }}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><CalendarDays className="size-5 text-primary" /> Procesar nómina</DialogTitle>
+            <DialogDescription>
+              Selecciona la periodicidad. Se procesarán los empleados activos que tengan esa frecuencia configurada en su expediente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="payroll-process-frequency" className="text-sm font-medium">Periodicidad de pago</label>
+              <select
+                id="payroll-process-frequency"
+                value={processFrequency}
+                onChange={(event) => setProcessFrequency(event.target.value as PayrollFrequency)}
+                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-medium"
+                disabled={processLoading}
+              >
+                {PAYROLL_FREQUENCY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Período sugerido</p>
+              <p className="mt-1 text-sm font-bold text-foreground">{formatDateEs(processPeriod.start)} – {formatDateEs(processPeriod.end)}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                El salario mensual se prorratea automáticamente a {payrollFrequencyLabel(processFrequency).toLowerCase()} y la periodicidad queda guardada en el registro.
+              </p>
+            </div>
+            {hasProcessFrequencyMismatch && (
+              <Alert variant="destructive">
+                <AlertTriangle className="size-4" />
+                <AlertTitle>Frecuencia incompatible</AlertTitle>
+                <AlertDescription>
+                  El empleado seleccionado tiene periodicidad {payrollFrequencyLabel(selectedEmployeeFrequency).toLowerCase()}. Cambia la opción o selecciona “Todos los empleados”.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProcessDialogOpen(false)} disabled={processLoading}>Cancelar</Button>
+            <Button onClick={handleProcessPayroll} disabled={processLoading || hasProcessFrequencyMismatch}>
+              {processLoading ? 'Procesando…' : 'Confirmar y procesar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editingPayroll !== null} onOpenChange={(open) => { if (!open && !payrollSaveLoading) setEditingPayroll(null); }}>
         <DialogContent className="sm:max-w-[520px]">

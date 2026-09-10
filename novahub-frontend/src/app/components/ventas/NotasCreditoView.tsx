@@ -931,8 +931,8 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
           ? originalIssuedAmounts.map((summary) => <SalesKpiCard key={`issued-${summary.currency}`} title={`Crédito emitido (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Crédito emitido (${displayCurrency})`} value={formatConvertedAmount(totalIssued, baseCurrency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" />}
         {displayMode === 'ORIGINAL'
-          ? originalOpenAmounts.map((summary) => <SalesKpiCard key={`open-${summary.currency}`} title={`Saldo abierto (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-amber-500" bg="bg-amber-500/10" />)
-          : <SalesKpiCard title={`Saldo abierto (${displayCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-amber-500" bg="bg-amber-500/10" />}
+          ? originalOpenAmounts.map((summary) => <SalesKpiCard key={`open-${summary.currency}`} title={`Saldo abierto (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
+          : <SalesKpiCard title={`Saldo abierto (${displayCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
         <SalesKpiCard title="Activos" value={data.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
         <SalesKpiCard title="Por vencer / vencidos" value={overdueCount} icon={Clock} color="text-primary" bg="bg-primary/10" />
       </div>
