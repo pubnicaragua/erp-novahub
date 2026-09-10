@@ -38,7 +38,7 @@ export function ProductSimilarityAlert({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-2rem)] max-w-3xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-amber-600">
+          <DialogTitle className="flex items-center gap-2 text-warning">
             <AlertTriangle className="size-5 shrink-0" /> {title}
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -47,26 +47,26 @@ export function ProductSimilarityAlert({
           {groups.map((group) => {
             const groupHasExactSkuMatch = group.matches.some((match) => (match.reasons || []).includes('SKU'));
             return (
-            <section key={group.inputKey} className="space-y-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.03] p-3 sm:p-4" aria-label={`Coincidencias para ${group.inputKey}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 pb-3">
+            <section key={group.inputKey} className="space-y-3 rounded-2xl border border-warning/30 bg-warning/[0.03] p-3 sm:p-4" aria-label={`Coincidencias para ${group.inputKey}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-warning/20 pb-3">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Registro de la plantilla</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-warning dark:text-warning">Registro de la plantilla</p>
                   <p className="mt-1 break-words font-mono text-xs font-bold text-foreground">{group.inputKey || 'Sin identificador'}</p>
                 </div>
-                <Badge variant="outline" className="border-amber-500/50 text-[10px]">{group.matches.length} posible{group.matches.length === 1 ? '' : 's'} coincidencia{group.matches.length === 1 ? '' : 's'}</Badge>
+                <Badge variant="outline" className="border-warning/50 text-[10px]">{group.matches.length} posible{group.matches.length === 1 ? '' : 's'} coincidencia{group.matches.length === 1 ? '' : 's'}</Badge>
               </div>
               {group.matches.map((match) => {
                 const matchKey = `${group.inputKey}:${match.id}`;
                 const isResolving = resolvingKey === matchKey;
                 return (
-                  <article key={matchKey} className="rounded-xl border border-amber-500/40 bg-background p-4 shadow-sm">
+                  <article key={matchKey} className="rounded-xl border border-warning/40 bg-background p-4 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="break-words font-black">{match.name || 'Sin nombre'}</p>
                         <p className="mt-1 break-all font-mono text-xs text-muted-foreground">SKU: {match.sku || match.code || 'Sin SKU'}</p>
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        {(match.reasons || []).map((reason) => <Badge key={reason} variant="outline" className="border-amber-500/50 text-[10px]">Coincide por {reason}</Badge>)}
+                        {(match.reasons || []).map((reason) => <Badge key={reason} variant="outline" className="border-warning/50 text-[10px]">Coincide por {reason}</Badge>)}
                       </div>
                     </div>
                     <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
@@ -108,8 +108,8 @@ export function ProductSimilarityAlert({
               })}
               {hasDynamicResolution && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                  {groupHasExactSkuMatch && <span className="text-right text-[11px] font-semibold text-amber-800 dark:text-amber-200">SKU exacto: selecciona el registro existente</span>}
-                  <Button type="button" size="sm" variant="outline" className="gap-2 border-amber-500/50 text-amber-800 hover:bg-amber-500/10 dark:text-amber-200" disabled={resolvingKey === `${group.inputKey}:CREATE_NEW` || groupHasExactSkuMatch} onClick={() => onCreateNew?.(group)}>
+                  {groupHasExactSkuMatch && <span className="text-right text-[11px] font-semibold text-warning dark:text-warning">SKU exacto: selecciona el registro existente</span>}
+                  <Button type="button" size="sm" variant="outline" className="gap-2 border-warning/50 text-warning hover:bg-warning hover:text-warning-foreground dark:text-warning" disabled={resolvingKey === `${group.inputKey}:CREATE_NEW` || groupHasExactSkuMatch} onClick={() => onCreateNew?.(group)}>
                     {resolvingKey === `${group.inputKey}:CREATE_NEW` ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                     {groupHasExactSkuMatch ? 'No se puede duplicar el SKU' : 'Crear como nuevo'}
                   </Button>

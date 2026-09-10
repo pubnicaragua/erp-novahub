@@ -38,14 +38,14 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
   const draftAdjustments = adjustments.filter((a: any) => String(a.status || '').toUpperCase() === 'DRAFT').length;
   
   const stats = [
-    { label: 'Total Productos', value: products.length, icon: Package, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { label: 'Valor Total', value: totalValue, icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10', isCurrency: true },
-    { label: 'Almacenes', value: warehouses.length, icon: Warehouse, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-    { label: 'Stock Bajo', value: lowStockCount + outOfStockCount, icon: AlertTriangle, color: lowStockCount + outOfStockCount > 0 ? 'text-orange-500' : 'text-green-500', bg: lowStockCount + outOfStockCount > 0 ? 'bg-orange-500/10' : 'bg-green-500/10' },
-    { label: 'Unidades en Stock', value: totalStockUnits, icon: Package, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-    { label: 'Valor Promedio/Producto', value: averageTicketValue, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', isCurrency: true },
-    { label: 'Transferencias Pendientes', value: pendingTransfers, icon: Clock, color: pendingTransfers > 0 ? 'text-amber-500' : 'text-green-500', bg: pendingTransfers > 0 ? 'bg-amber-500/10' : 'bg-green-500/10' },
-    { label: 'Ajustes por Aprobar', value: draftAdjustments, icon: AlertTriangle, color: draftAdjustments > 0 ? 'text-rose-500' : 'text-green-500', bg: draftAdjustments > 0 ? 'bg-rose-500/10' : 'bg-green-500/10' },
+    { label: 'Total Productos', value: products.length, icon: Package, color: 'text-info', bg: 'bg-info/10' },
+    { label: 'Valor Total', value: totalValue, icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', isCurrency: true },
+    { label: 'Almacenes', value: warehouses.length, icon: Warehouse, color: 'text-info', bg: 'bg-info/10' },
+    { label: 'Stock Bajo', value: lowStockCount + outOfStockCount, icon: AlertTriangle, color: lowStockCount + outOfStockCount > 0 ? 'text-warning' : 'text-success', bg: lowStockCount + outOfStockCount > 0 ? 'bg-warning/10' : 'bg-success/10' },
+    { label: 'Unidades en Stock', value: totalStockUnits, icon: Package, color: 'text-info', bg: 'bg-info/10' },
+    { label: 'Valor Promedio/Producto', value: averageTicketValue, icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', isCurrency: true },
+    { label: 'Transferencias Pendientes', value: pendingTransfers, icon: Clock, color: pendingTransfers > 0 ? 'text-warning' : 'text-success', bg: pendingTransfers > 0 ? 'bg-warning/10' : 'bg-success/10' },
+    { label: 'Ajustes por Aprobar', value: draftAdjustments, icon: AlertTriangle, color: draftAdjustments > 0 ? 'text-destructive' : 'text-success', bg: draftAdjustments > 0 ? 'bg-destructive/10' : 'bg-success/10' },
   ].filter((stat) => canViewInventoryCost || !stat.isCurrency);
 
   const recentActivity = [
@@ -98,8 +98,8 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
         <Card className="border">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-              <AlertTriangle className="size-4 text-orange-500" />
-              Stock <span className="text-orange-500">Bajo</span>
+              <AlertTriangle className="size-4 text-warning" />
+              Stock <span className="text-warning">Bajo</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -111,7 +111,7 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
                       <p className="text-sm font-bold italic truncate">{p.name}</p>
                       <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest truncate">{p.code}</p>
                     </div>
-                    <span className={`text-sm font-bold shrink-0 ${stockInfo(p).outOfStock ? 'text-red-600' : 'text-orange-600'}`}>
+                    <span className={`text-sm font-bold shrink-0 ${stockInfo(p).outOfStock ? 'text-destructive' : 'text-warning'}`}>
                       {stockInfo(p).stock} uds
                     </span>
                   </div>
@@ -135,7 +135,7 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
               <div className="space-y-2">
                 {recentActivity.map((act: any, i: number) => (
                   <div key={i} className="flex items-start gap-2 py-2 border-b last:border-0 overflow-hidden">
-                    <div className={`mt-1.5 size-2 rounded-full shrink-0 ${act.alert ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]' : 'bg-primary shadow-[0_0_8px_rgba(6,114,49,0.5)]'}`} />
+                    <div className={`mt-1.5 size-2 shrink-0 rounded-full ${act.alert ? 'bg-warning inventory-status-glow-warning' : 'bg-primary inventory-status-glow-primary'}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{act.desc}</p>
                       <p className="text-xs text-muted-foreground truncate">{act.type} · {act.date.toLocaleDateString()}</p>

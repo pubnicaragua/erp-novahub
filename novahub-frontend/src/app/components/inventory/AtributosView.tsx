@@ -54,7 +54,7 @@ export function AtributosView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-gradient-to-r from-primary/10 via-background to-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-gradient-to-r from-primary/10 via-background to-warning/5 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-primary/15 p-2.5">
             <Tags className="size-5 text-primary" />
@@ -309,7 +309,7 @@ function AtributosTab() {
                       {canDeleteAttribute && <Button
                         variant="ghost"
                         size="icon"
-                        className="size-7 text-red-500 hover:text-white hover:bg-red-500"
+                        className="size-7 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                         aria-label={`Eliminar atributo ${attr.name}`}
                         title="Eliminar atributo"
                         onClick={() => setDeleteId(attr.id)}
@@ -616,7 +616,7 @@ function CategoriasTab() {
                       {canDeleteCategory && <Button
                         variant="ghost"
                         size="icon"
-                        className="size-7 text-red-500 hover:text-white hover:bg-red-500"
+                        className="size-7 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                         aria-label={`Eliminar categoría ${cat.name}`}
                         title="Eliminar categoría"
                         onClick={() => setDeleteId(cat.id)}

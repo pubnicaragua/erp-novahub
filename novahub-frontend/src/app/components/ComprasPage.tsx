@@ -18,7 +18,7 @@ import {
   suppliersService, expensesService, recurringExpensesService,
   purchaseOrdersService, purchaseReceiptsService,
   supplierInvoicesService, recurringSupplierInvoicesService,
-  paymentsMadeService, supplierCreditsService,
+  paymentsMadeService,
   purchaseRequestsService,
 } from '../services/compras.service';
 import { contabilidadService } from '../services/contabilidad.service';
@@ -26,7 +26,7 @@ import { inventoryService } from '../services/inventario.service';
 import type {
   Supplier, Expense, RecurringExpense, PurchaseOrder,
   PurchaseReceipt, SupplierInvoice, RecurringSupplierInvoice,
-  PaymentMade, SupplierCredit, PurchaseRequest,
+  PaymentMade, PurchaseRequest,
 } from '../types';
 import type { SalesPageSize, SalesPaginationControls } from '../types';
 
@@ -36,8 +36,8 @@ import { GastosRecurrentesView }   from './compras/GastosRecurrentesView';
 import { OrdenesCompraView }       from './compras/OrdenesCompraView';
 import { RecepcionesCompraView }   from './compras/RecepcionesCompraView';
 import { FacturasProveedorRecView } from './compras/FacturasProveedorRecView';
+import { FacturasProveedorView }   from './compras/FacturasProveedorView';
 import { PagosRealizadosView }     from './compras/PagosRealizadosView';
-import { CreditosProveedorView }   from './compras/CreditosProveedorView';
 import { SolicitudCompraView }     from './compras/SolicitudCompraView';
 import type { PurchaseAlertDetail, PurchaseAlertItem } from './compras/PurchaseAlertsButton';
 import { normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES } from '../utils/purchaseOrderStatus';
@@ -51,7 +51,7 @@ const COMPRAS_SECTIONS = [
   { id: 'recepciones',   label: 'Recepciones',          icon: PackageCheck,   description: 'Entrada de mercancía', requiredModules: ['PURCHASES_RECEIPTS', 'PURCHASES'] },
   { id: 'facturas-rec',  label: 'Compras Recurrentes',  icon: RotateCcw,      description: 'Compras de productos periódicas', requiredModules: ['PURCHASES_INVOICES_REC', 'PURCHASES'] },
   { id: 'pagos',         label: 'Pagos Realizados',    icon: Banknote,       description: 'Histórico de pagos', requiredModules: ['PURCHASES_PAYMENTS', 'PURCHASES'] },
-  { id: 'creditos',      label: 'Créditos Proveedor',  icon: BadgeDollarSign, description: 'Créditos que el proveedor otorga a favor de la empresa', requiredModules: ['PURCHASES_RETURNS', 'PURCHASES'] },
+  { id: 'creditos',      label: 'Créditos del proveedor', icon: BadgeDollarSign, description: 'Compras recibidas a crédito y cuentas por pagar', requiredModules: ['PURCHASES_RECEIPTS', 'PURCHASES'] },
 ];
 
 interface ComprasPageProps {
@@ -68,7 +68,7 @@ type ComprasData = {
   recepciones:   PurchaseReceipt[];
   facturasRec:   RecurringSupplierInvoice[];
   pagos:         PaymentMade[];
-  creditos:      SupplierCredit[];
+  creditos:      SupplierInvoice[];
   solicitudes:   PurchaseRequest[];
 };
 
@@ -85,8 +85,8 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
       'gastos-recurrentes': 'gastos-rec',
        'ordenes-compra': 'ordenes',
        'recepciones-compra': 'recepciones',
-       'facturas-prov': 'recepciones',
-       'facturas-proveedor': 'recepciones',
+       'facturas-prov': 'creditos',
+       'facturas-proveedor': 'creditos',
       'facturas-proveedor-rec': 'facturas-rec',
       'pagos-realizados': 'pagos',
       'creditos-proveedor': 'creditos',
@@ -149,9 +149,12 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
     onSubModuleChange?.('recepciones');
   };
 
-  const handleReceiptCreditCreated = () => {
-    setActiveSection('creditos');
-    onSubModuleChange?.('creditos');
+  const [draftPaymentFromInvoice, setDraftPaymentFromInvoice] = useState<Partial<PaymentMade> | null>(null);
+  const handleRegisterPaymentFromInvoice = (draft: Partial<PaymentMade>) => {
+    setDraftPaymentFromInvoice(draft);
+    setActiveSection('pagos');
+    lastSyncedSubModuleRef.current = 'pagos';
+    onSubModuleChange?.('pagos');
   };
 
   useEffect(() => {
@@ -314,7 +317,7 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
   const invoicesCatalogQuery = useQuery({
     queryKey: ['purchases', 'invoices-catalog', tenantKey, 1, 200, selectedBranchId],
     queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200, branchId: selectedBranchId || undefined }, signal),
-    enabled: canPerform('PURCHASES_RECEIPTS', 'view') && ['pagos', 'creditos'].includes(activeSection),
+    enabled: canPerform('PURCHASES_RECEIPTS', 'view') && activeSection === 'pagos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -336,9 +339,15 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
     staleTime: purchasesStaleTime,
   });
   const creditsPage = pageFor('creditos');
-  const creditsQuery = useQuery({
-    queryKey: ['purchases', 'credits', tenantKey, creditsPage.page, creditsPage.pageSize, searchFor('creditos'), selectedBranchId],
-    queryFn: ({ signal }) => supplierCreditsService.getAll({ page: creditsPage.page, pageSize: creditsPage.pageSize, search: searchFor('creditos'), branchId: selectedBranchId || undefined }, signal),
+  const creditInvoicesQuery = useQuery({
+    queryKey: ['purchases', 'credit-invoices', tenantKey, creditsPage.page, creditsPage.pageSize, searchFor('creditos'), statusFor('creditos'), selectedBranchId],
+    queryFn: ({ signal }) => supplierInvoicesService.getAll({
+      page: creditsPage.page,
+      pageSize: creditsPage.pageSize,
+      search: searchFor('creditos'),
+      status: statusFor('creditos') === 'PENDING' ? 'OPEN' : statusFor('creditos'),
+      branchId: selectedBranchId || undefined,
+    }, signal),
     enabled: canViewPurchasesSection('creditos') && activeSection === 'creditos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
@@ -360,7 +369,7 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
     recepciones: toArr(receiptsQuery.data) as PurchaseReceipt[],
     facturasRec: toArr(recurringInvoicesQuery.data) as RecurringSupplierInvoice[],
     pagos: toArr(paymentsQuery.data) as PaymentMade[],
-    creditos: toArr(creditsQuery.data) as SupplierCredit[],
+    creditos: toArr(creditInvoicesQuery.data) as SupplierInvoice[],
     solicitudes: toArr(requestsQuery.data) as PurchaseRequest[],
   };
   const activeQuery = activeSection === 'gastos' ? expensesQuery
@@ -369,7 +378,7 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
     : activeSection === 'recepciones' ? receiptsQuery
     : activeSection === 'facturas-rec' ? recurringInvoicesQuery
     : activeSection === 'pagos' ? paymentsQuery
-    : activeSection === 'creditos' ? creditsQuery
+    : activeSection === 'creditos' ? creditInvoicesQuery
     : activeSection === 'solicitudes' ? requestsQuery
     : suppliersQuery;
   const needsCatalog = activeSection === 'pagos';
@@ -397,7 +406,7 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
     recepciones: makePagination('recepciones', receiptsQuery),
     facturasRec: makePagination('facturas-rec', recurringInvoicesQuery),
     pagos: makePagination('pagos', paymentsQuery),
-    creditos: makePagination('creditos', creditsQuery),
+    creditos: makePagination('creditos', creditInvoicesQuery),
     solicitudes: makePagination('solicitudes', requestsQuery),
   };
 
@@ -505,7 +514,7 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
                     {section.id === 'gastos'        && <GastosView         {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'gastos' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
                      {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} warehouseCatalog={warehouseCatalog} selectedBranchId={selectedBranchId} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
-                    {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} onOpenCredits={handleReceiptCreditCreated} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog.filter((warehouse: any) => !selectedBranchId || warehouse?.clientTenantId === selectedBranchId)} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} selectedBranchId={selectedBranchId || ''} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
+                    {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog.filter((warehouse: any) => !selectedBranchId || warehouse?.clientTenantId === selectedBranchId)} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} selectedBranchId={selectedBranchId || ''} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} warehouseCatalog={warehouseCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}
                    {section.id === 'pagos'         && (
                     <PagosRealizadosView
@@ -518,9 +527,11 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
                       selectedBranchId={selectedBranchId || ''}
                       pagination={pagination.pagos}
                       onSearchChange={(value) => updateSearch('pagos', value)}
+                      draftPaymentFromInvoice={draftPaymentFromInvoice}
+                      onDraftConsumed={() => setDraftPaymentFromInvoice(null)}
                     />
                   )}
-                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} supplierCatalog={supplierCatalog} supplierInvoices={invoiceCatalog} productCatalog={productCatalog} selectedBranchId={selectedBranchId || ''} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} />}
+                   {section.id === 'creditos'      && <FacturasProveedorView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} onStatusChange={(value) => updateStatus('creditos', value)} onRegisterPaymentFromInvoice={handleRegisterPaymentFromInvoice} />}
                  </motion.div>
                );
             })}

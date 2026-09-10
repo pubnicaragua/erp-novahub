@@ -228,17 +228,17 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                         <TableCell className="text-right">
                           <div className="flex flex-col items-end gap-0.5">
                             {Number(variant.priceModifier) !== 0 && (
-                              <Badge variant="outline" className="text-[8px] text-emerald-600">
+                              <Badge variant="outline" className="text-[8px] text-success">
                                 +{variant.priceModifier}
                               </Badge>
                             )}
                             {canViewInventoryCost && Number(variant.costModifier) !== 0 && (
-                              <Badge variant="outline" className="text-[8px] text-amber-600">
+                              <Badge variant="outline" className="text-[8px] text-warning">
                                 costo {variant.costModifier}
                               </Badge>
                             )}
                             {canViewInventoryCost && variant.costPrice !== null && variant.costPrice !== undefined && (
-                              <Badge variant="outline" className="text-[8px] text-amber-600">
+                              <Badge variant="outline" className="text-[8px] text-warning">
                                 costo propio {variant.costPrice}
                               </Badge>
                             )}

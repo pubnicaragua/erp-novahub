@@ -92,8 +92,8 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-tour="inventory-losses-title">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10">
-            <TrendingDown className="size-5 text-red-500" />
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10">
+            <TrendingDown className="size-5 text-destructive" />
           </div>
           <div>
             <h3 className="text-sm font-black uppercase tracking-widest">Pérdidas de Inventario</h3>
@@ -110,7 +110,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
       </div>
 
       {lossesQuery.isError && (
-        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-700 sm:flex-row sm:items-center sm:justify-between dark:text-red-300">
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive sm:flex-row sm:items-center sm:justify-between dark:text-destructive">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>{loadErrorMessage}</span>
@@ -125,7 +125,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
         <Card className="rounded-2xl border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              <PackageX className="size-3.5 text-red-500" /> Pérdidas registradas
+              <PackageX className="size-3.5 text-destructive" /> Pérdidas registradas
             </div>
             <p className="mt-1 text-2xl font-black tabular-nums">{meta.total}</p>
           </CardContent>
@@ -133,7 +133,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
         {canViewInventoryCost && <Card className="rounded-2xl border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              <TrendingDown className="size-3.5 text-red-500" /> Valor total (página)
+              <TrendingDown className="size-3.5 text-destructive" /> Valor total (página)
             </div>
             <div className="mt-1 space-y-0.5">
               {displayMode === 'ORIGINAL'
@@ -145,7 +145,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
         <Card className="rounded-2xl border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              <BookOpenCheck className="size-3.5 text-red-500" /> Cuenta contable vinculada
+              <BookOpenCheck className="size-3.5 text-destructive" /> Cuenta contable vinculada
             </div>
             <p className="mt-1 text-sm font-bold font-mono">
               {accountSummary ? `${accountSummary.code} · ${accountSummary.name}` : '—'}
@@ -174,7 +174,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
                       <p className="truncate font-mono text-xs font-bold">{row.number}</p>
                       <p className="mt-1 text-[10px] text-muted-foreground">{row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A'}</p>
                     </div>
-                    <Badge variant="outline" className="shrink-0 border-red-500/20 bg-red-500/5 text-[9px] font-bold uppercase tracking-wider text-red-500">
+                    <Badge variant="outline" className="shrink-0 border-destructive/20 bg-destructive/5 text-[9px] font-bold uppercase tracking-wider text-destructive">
                       {reasonLabel(row.reason)}
                     </Badge>
                   </div>
@@ -185,7 +185,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
                     </div>
                     <div className="text-right">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad perdida</p>
-                      <p className="mt-1 font-mono font-bold text-red-600">-{fmtQty(totalQty)}</p>
+                      <p className="mt-1 font-mono font-bold text-destructive">-{fmtQty(totalQty)}</p>
                     </div>
                   </div>
                   <div className="mt-3 space-y-2 border-t border-border/40 pt-3">
@@ -197,7 +197,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
                           <p className="mt-0.5 break-words font-mono text-[9px] text-muted-foreground">{item.code || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="font-mono font-bold text-red-600">-{fmtQty(item.lossQuantity)}</p>
+                          <p className="font-mono font-bold text-destructive">-{fmtQty(item.lossQuantity)}</p>
                           <p className="mt-0.5 text-[9px] font-semibold text-muted-foreground">{reasonLabel(item.reason || row.reason)}</p>
                         </div>
                       </div>
@@ -221,7 +221,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Valor</p>
-                      <p className="mt-1 font-mono text-xs font-bold text-red-600">{displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
+                      <p className="mt-1 font-mono text-xs font-bold text-destructive">{displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
                         ? row.originalCurrencyBreakdown.map((item: any) => <span key={item.currency} className="ml-2 inline-block">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency || baseCurrency))}</span>)
                         : renderLossAmount(Number(row.totalLoss || 0), row.currency)}</p>
                     </div>
@@ -267,7 +267,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
                     {row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A'}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider bg-red-500/5 text-red-500 border-red-500/20">
+                    <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider bg-destructive/5 text-destructive border-destructive/20">
                       {reasonLabel(row.reason)}
                     </Badge>
                   </TableCell>
@@ -281,15 +281,15 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
                           <p className="mt-0.5 break-words font-mono text-[10px] text-muted-foreground">{item.code || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="font-mono text-[10px] font-bold text-red-600">-{fmtQty(item.lossQuantity)}</p>
+                          <p className="font-mono text-[10px] font-bold text-destructive">-{fmtQty(item.lossQuantity)}</p>
                           <p className="mt-0.5 text-[9px] font-semibold text-muted-foreground">{reasonLabel(item.reason || row.reason)}</p>
                         </div>
                       </div>
                     ))}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold text-red-600">-{fmtQty(totalQty)}</TableCell>
-                   {canViewInventoryCost && <TableCell className="text-right font-mono text-xs font-bold text-red-600">{displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
+                  <TableCell className="text-right font-mono text-xs font-bold text-destructive">-{fmtQty(totalQty)}</TableCell>
+                   {canViewInventoryCost && <TableCell className="text-right font-mono text-xs font-bold text-destructive">{displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
                      ? row.originalCurrencyBreakdown.map((item: any) => <span key={item.currency} className="ml-2 inline-block">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency || baseCurrency))}</span>)
                      : renderLossAmount(Number(row.totalLoss || 0), row.currency)}</TableCell>}
                   <TableCell>

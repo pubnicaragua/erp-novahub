@@ -10,10 +10,14 @@ export interface UserThemeSettings {
 export interface Branding {
   logo: string | null;
   primaryColor: string;
+  primaryForeground?: string | null;
   sidebarColor: string;
+  sidebarForeground?: string | null;
   accentColor: string;
+  accentForeground?: string | null;
   portalPrimaryColor: string;
   portalAccentColor: string;
+  portalTextColor?: string | null;
   whiteLabel: boolean;
   companyName: string;
   industry?: string;

@@ -7,14 +7,14 @@ import { HRViewTutorial } from './HRViewTutorial';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const DEPT_COLORS = [
-  'from-indigo-500 to-purple-600',
-  'from-blue-500 to-cyan-500',
-  'from-emerald-500 to-teal-500',
-  'from-orange-500 to-amber-500',
-  'from-rose-500 to-pink-500',
-  'from-violet-500 to-fuchsia-500',
-  'from-teal-500 to-green-500',
-  'from-sky-500 to-blue-600',
+  'from-primary to-accent',
+  'from-primary to-accent',
+  'from-primary to-accent',
+  'from-warning to-warning',
+  'from-destructive to-accent',
+  'from-primary to-accent',
+  'from-primary to-accent',
+  'from-primary to-accent',
 ];
 
 export function DashboardHRView({ stats, employees, departments, leaveRequests, reviews }: any) {
@@ -39,13 +39,13 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
     .filter((employee: any) => normalizeCurrency(employee.currency || 'USD') === currency)
     .reduce((sum: number, employee: any) => sum + (Number(employee.salary ?? employee.salaryBase ?? 0) || 0), 0);
   const payrollCards = displayMode === 'ORIGINAL'
-    ? payrollCurrencies.map((currency) => ({ label: `Salarios activos (${currency})`, value: formatExplicitAmount(originalPayroll(currency), currency), sub: 'Suma de salarios registrados', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }))
-    : [{ label: `Salarios activos${valuationModeSuffix}`, value: formattedPayroll, sub: 'Suma de salarios registrados', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }];
+    ? payrollCurrencies.map((currency) => ({ label: `Salarios activos (${currency})`, value: formatExplicitAmount(originalPayroll(currency), currency), sub: 'Suma de salarios registrados', icon: DollarSign, color: 'text-success', bg: 'bg-success/10', border: 'border-success/20' }))
+    : [{ label: `Salarios activos${valuationModeSuffix}`, value: formattedPayroll, sub: 'Suma de salarios registrados', icon: DollarSign, color: 'text-success', bg: 'bg-success/10', border: 'border-success/20' }];
 
   const statCards = [
     { label: 'Total Empleados', value: totalEmployees, sub: `${activeEmployees} activos · ${inactiveEmployees} inactivos`, icon: Users, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
     ...payrollCards,
-    { label: 'Ausencias Pendientes', value: pendingLeaves, sub: 'Por aprobar', icon: Clock, color: pendingLeaves > 0 ? 'text-orange-500' : 'text-emerald-500', bg: pendingLeaves > 0 ? 'bg-orange-500/10' : 'bg-emerald-500/10', border: pendingLeaves > 0 ? 'border-orange-500/20' : 'border-emerald-500/20' },
+    { label: 'Ausencias Pendientes', value: pendingLeaves, sub: 'Por aprobar', icon: Clock, color: pendingLeaves > 0 ? 'text-warning' : 'text-success', bg: pendingLeaves > 0 ? 'bg-warning/10' : 'bg-success/10', border: pendingLeaves > 0 ? 'border-warning/20' : 'border-success/20' },
     { label: 'Departamentos', value: departmentCount, sub: 'Áreas activas', icon: Briefcase, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
   ];
 
@@ -112,7 +112,7 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
         <Card className="border-border/50 lg:col-span-2">
           <CardHeader className="border-b border-border/30 bg-muted/10 pb-4">
             <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-widest">
-              <Briefcase className="size-4 text-purple-500" />
+              <Briefcase className="size-4 text-info" />
               Distribución por Departamento
             </CardTitle>
           </CardHeader>
@@ -149,7 +149,7 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
         <Card className="border-border/50">
           <CardHeader className="border-b border-border/30 bg-muted/10 pb-4">
             <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-widest">
-              <Clock className="size-4 text-orange-500" />
+              <Clock className="size-4 text-warning" />
               Ausencias Pendientes
             </CardTitle>
           </CardHeader>
@@ -159,7 +159,7 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
                 {leaveRequests.filter((l: any) => l.status === 'PENDING').slice(0, 6).map((leave: any, i: number) => (
                   <div key={i} className="flex items-center justify-between p-2 rounded-xl hover:bg-muted/20 transition-colors">
                     <div className="flex items-center gap-2">
-                      <div className="size-7 rounded-full bg-orange-500/10 flex items-center justify-center text-[10px] font-black text-orange-500">
+                      <div className="size-7 rounded-full bg-warning/10 flex items-center justify-center text-[10px] font-black text-warning">
                         {leave.employee?.firstName?.[0]}{leave.employee?.lastName?.[0]}
                       </div>
                       <div>
@@ -167,7 +167,7 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
                         <p className="text-[10px] text-muted-foreground">{leave.leaveType} · {leave.totalDays ?? leave.days ?? '?'} días</p>
                       </div>
                     </div>
-                    <span className="text-[9px] font-black bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-full uppercase">Pendiente</span>
+                    <span className="text-[9px] font-black bg-warning/10 text-warning px-2 py-0.5 rounded-full uppercase">Pendiente</span>
                   </div>
                 ))}
               </div>
@@ -187,9 +187,9 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
         <Card className="border-border/50">
           <CardHeader className="border-b border-border/30 bg-muted/10 pb-4">
             <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-widest">
-              <UserCheck className="size-4 text-emerald-500" />
+              <UserCheck className="size-4 text-success" />
               Contrataciones Recientes
-              <Badge className="ml-auto bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black">Últimos 30 días</Badge>
+              <Badge className="ml-auto bg-success/10 text-success border-success/20 text-[9px] font-black">Últimos 30 días</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
@@ -230,10 +230,10 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
               <div className="space-y-2">
                 {topPerformers.map((emp: any, i: number) => (
                   <div key={i} className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/20 transition-colors">
-                    <div className={`size-6 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-yellow-700' : i === 1 ? 'bg-slate-500' : i === 2 ? 'bg-orange-700' : 'bg-muted-foreground/30'}`}>
+                    <div className={`size-6 rounded-full flex items-center justify-center text-primary-foreground text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-warning' : i === 1 ? 'bg-muted' : i === 2 ? 'bg-warning' : 'bg-muted-foreground/30'}`}>
                       {i + 1}
                     </div>
-                    <div className="size-9 rounded-full bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-white text-xs font-black flex-shrink-0">
+                    <div className="size-9 rounded-full bg-gradient-to-br from-warning to-warning flex items-center justify-center text-primary-foreground text-xs font-black flex-shrink-0">
                       {emp.firstName?.[0]}{emp.lastName?.[0]}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -241,8 +241,8 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
                       <p className="text-[10px] text-muted-foreground truncate">{emp.department?.name}</p>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <Award className="size-3 text-yellow-500" />
-                      <span className="text-sm font-black text-yellow-500">{emp.avgRating.toFixed(1)}</span>
+                      <Award className="size-3 text-warning" />
+                      <span className="text-sm font-black text-warning">{emp.avgRating.toFixed(1)}</span>
                     </div>
                   </div>
                 ))}

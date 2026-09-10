@@ -7,6 +7,7 @@ import { cn } from '../ui/utils';
 import { Banknote, Building2, CalendarDays, CheckCircle2, Clock3, Download, FileText, History, List, MapPin, MessageCircle, Package, Receipt, UserRound, WalletCards } from 'lucide-react';
 import { formatCurrencyDescriptor } from '../../utils/currency';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
+import { managerStatusLabel } from '../../utils/managerLabels';
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
@@ -17,7 +18,7 @@ const formatDate = (value: unknown, includeTime = false) => {
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString('es-NI', includeTime ? { dateStyle: 'short', timeStyle: 'short' } : { dateStyle: 'short' });
 };
-const statusText = (value: unknown) => ({ PENDING: 'Pendiente', DELIVERED: 'Entregada', READY: 'Lista para entregar', CANCELLED: 'Cancelada', PAID: 'Pagada', NO_PAYMENT: 'Sin cobro', OPEN: 'Abierta', COUNTING: 'En conteo', CLOSED: 'Cerrada', ACTIVE: 'Activa', INACTIVE: 'Inactiva' } as Record<string, string>)[String(value || '').toUpperCase()] || String(value || '—').replaceAll('_', ' ');
+const statusText = (value: unknown) => ({ PENDING: 'Pendiente', DELIVERED: 'Entregada', READY: 'Lista para entregar', CANCELLED: 'Cancelada', PAID: 'Pagada', NO_PAYMENT: 'Sin cobro', OPEN: 'Abierta', COUNTING: 'En conteo', CLOSED: 'Cerrada', ACTIVE: 'Activa', INACTIVE: 'Inactiva' } as Record<string, string>)[String(value || '').toUpperCase()] || managerStatusLabel(value);
 const statusClass = (value: unknown) => {
   const normalized = String(value || '').toUpperCase();
   if (['DELIVERED', 'PAID', 'ACTIVE'].includes(normalized)) return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';

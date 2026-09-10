@@ -31,7 +31,6 @@ import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
-import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
 import { hasPaymentReferenceField, requiresPaymentReference } from '../../utils/paymentMethods';
 import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
@@ -678,7 +677,6 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           </div>
         </div>
 
-        <ExpenseAccountingNotice />
 
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1" data-tour="purchases-form-data">

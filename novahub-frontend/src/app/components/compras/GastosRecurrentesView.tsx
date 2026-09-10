@@ -20,7 +20,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
-import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
@@ -270,7 +269,6 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           </div>
         </div>
 
-        <ExpenseAccountingNotice />
 
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">

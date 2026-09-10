@@ -9,6 +9,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getSalesStatusColor } from '../../utils/salesStatus';
 import { CurrencyRateDetails } from '../ui/CurrencyValuation';
+import { managerStatusLabel } from '../../utils/managerLabels';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -127,7 +128,7 @@ export function SalesDocumentDetailSheet({
   const status = String(document.status || '').toUpperCase();
   const statusLabel = status === 'PAID' && entity === 'CREDIT_NOTE'
     ? 'Cancelado'
-    : statusLabels[status] || document.status || 'Sin estado';
+    : statusLabels[status] || managerStatusLabel(document.status);
   const statusColor = status === 'PAID' && entity === 'CREDIT_NOTE' ? 'CANCELLED' : status;
 
   return (

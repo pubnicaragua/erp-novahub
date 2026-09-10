@@ -290,11 +290,11 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
           onClick={() => toggleQuickFilter('PRESENT')}
           className={cn(
             'rounded-2xl border bg-card p-5 shadow-sm text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
-            quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'border-blue-500/50 ring-1 ring-blue-500/20 bg-blue-500/[0.03]' : 'border-border/50',
+            quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'border-info/50 ring-1 ring-info/20 bg-info/[0.03]' : 'border-border/50',
           )}
         >
           <div className="flex items-center gap-4">
-            <div className={cn('p-3 rounded-xl', quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'bg-blue-500/20' : 'bg-blue-500/10')}><UserCheck className={cn('size-5', quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'text-blue-600' : 'text-blue-500')} /></div>
+            <div className={cn('p-3 rounded-xl', quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'bg-info/20' : 'bg-info/10')}><UserCheck className={cn('size-5', quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'text-info' : 'text-info')} /></div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Presentes Hoy</p>
               <p className="text-2xl font-black tabular-nums">{presentToday}</p>
@@ -306,11 +306,11 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
           onClick={() => toggleQuickFilter()}
           className={cn(
             'rounded-2xl border bg-card p-5 shadow-sm text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
-            quickFilter?.today && !quickFilter?.status ? 'border-emerald-500/50 ring-1 ring-emerald-500/20 bg-emerald-500/[0.03]' : 'border-border/50',
+            quickFilter?.today && !quickFilter?.status ? 'border-success/50 ring-1 ring-success/20 bg-success/[0.03]' : 'border-border/50',
           )}
         >
           <div className="flex items-center gap-4">
-            <div className={cn('p-3 rounded-xl', quickFilter?.today && !quickFilter?.status ? 'bg-emerald-500/20' : 'bg-emerald-500/10')}><Calendar className={cn('size-5', quickFilter?.today && !quickFilter?.status ? 'text-emerald-600' : 'text-emerald-500')} /></div>
+            <div className={cn('p-3 rounded-xl', quickFilter?.today && !quickFilter?.status ? 'bg-success/20' : 'bg-success/10')}><Calendar className={cn('size-5', quickFilter?.today && !quickFilter?.status ? 'text-success' : 'text-success')} /></div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Horas Totales Hoy</p>
               <p className="text-2xl font-black tabular-nums">{totalHoursToday.toFixed(1)}</p>
@@ -322,11 +322,11 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
           onClick={() => toggleQuickFilter('ABSENT')}
           className={cn(
             'rounded-2xl border bg-card p-5 shadow-sm text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
-            quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'border-rose-500/50 ring-1 ring-rose-500/20 bg-rose-500/[0.03]' : 'border-border/50',
+            quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'border-destructive/50 ring-1 ring-destructive/20 bg-destructive/[0.03]' : 'border-border/50',
           )}
         >
           <div className="flex items-center gap-4">
-            <div className={cn('p-3 rounded-xl', quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'bg-rose-500/20' : 'bg-rose-500/10')}><UserX className={cn('size-5', quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'text-rose-600' : 'text-rose-500')} /></div>
+            <div className={cn('p-3 rounded-xl', quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'bg-destructive/20' : 'bg-destructive/10')}><UserX className={cn('size-5', quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'text-destructive' : 'text-destructive')} /></div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Ausentes Hoy</p>
               <p className="text-2xl font-black tabular-nums">{absentToday}</p>
@@ -362,7 +362,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
                   Entrada
                 </Button>
                 <Button onClick={handleClockOut} variant="outline" className="flex-1 sm:flex-none border-primary/50 text-foreground hover:bg-primary/10 hover:text-primary">
-                  <LogOut className="size-4 mr-2 text-red-500" />
+                  <LogOut className="size-4 mr-2 text-destructive" />
                   Salida
                 </Button>
               </>
@@ -431,16 +431,16 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
                   <td className="px-4 py-3 text-right text-sm font-medium">
                     {record.hoursWorked ? Number(record.hoursWorked).toFixed(2) : '0.00'}h
                   </td>
-                  <td className="px-4 py-3 text-right text-sm text-orange-600 font-medium">
+                  <td className="px-4 py-3 text-right text-sm text-warning font-medium">
                     {record.overtimeHours ? Number(record.overtimeHours).toFixed(2) : '0.00'}h
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded ${
-                      record.status === 'PRESENT' ? 'bg-green-100 text-green-700' :
-                      record.status === 'ABSENT' ? 'bg-red-100 text-red-700' :
-                      record.status === 'LATE' ? 'bg-orange-100 text-orange-700' :
-                      record.status === 'REMOTE' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-700'
+                      record.status === 'PRESENT' ? 'bg-success/10 text-success' :
+                      record.status === 'ABSENT' ? 'bg-destructive/10 text-destructive' :
+                      record.status === 'LATE' ? 'bg-warning/10 text-warning' :
+                      record.status === 'REMOTE' ? 'bg-info/10 text-info' :
+                      'bg-muted text-muted-foreground'
                     }`}>
                       {record.status === 'PRESENT' ? 'Presente' : record.status === 'ABSENT' ? 'Ausente' : record.status === 'LATE' ? 'Tardanza' : record.status === 'REMOTE' ? 'Remoto' : record.status}
                     </span>
@@ -469,11 +469,11 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
                   </div>
                 </div>
                 <span className={`text-[10px] px-2 py-1 rounded-lg font-bold shadow-sm ${
-                  record.status === 'PRESENT' ? 'bg-green-100 text-green-700 dark:bg-green-900/30' :
-                  record.status === 'ABSENT' ? 'bg-red-100 text-red-700 dark:bg-red-900/30' :
-                  record.status === 'LATE' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30' :
-                  record.status === 'REMOTE' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30' :
-                  'bg-gray-100 text-gray-700 dark:bg-gray-800'
+                  record.status === 'PRESENT' ? 'bg-success/10 text-success dark:bg-success/30' :
+                  record.status === 'ABSENT' ? 'bg-destructive/10 text-destructive dark:bg-destructive/30' :
+                  record.status === 'LATE' ? 'bg-warning/10 text-warning dark:bg-warning/30' :
+                  record.status === 'REMOTE' ? 'bg-info/10 text-info dark:bg-info/30' :
+                  'bg-muted text-muted-foreground dark:bg-muted'
                 }`}>
                   {record.status === 'PRESENT' ? 'PRESENTE' : record.status === 'ABSENT' ? 'AUSENTE' : record.status === 'LATE' ? 'TARDANZA' : record.status === 'REMOTE' ? 'REMOTO' : record.status}
                 </span>
@@ -499,7 +499,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
                   <div className="flex gap-2">
                     <span className="font-bold">{record.hoursWorked ? Number(record.hoursWorked).toFixed(2) : '0.00'}h</span>
                     {Number(record.overtimeHours) > 0 && (
-                      <span className="font-bold text-orange-600">+{Number(record.overtimeHours).toFixed(2)}h Extra</span>
+                      <span className="font-bold text-warning">+{Number(record.overtimeHours).toFixed(2)}h Extra</span>
                     )}
                   </div>
                 </div>
@@ -595,19 +595,19 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
               <label className="text-xs font-bold text-muted-foreground">Archivo Excel</label>
               <Input ref={importFileInputRef} type="file" accept=".xlsx,.xls" onChange={(e) => { void handleAttendanceFileChange(e.target.files?.[0]); e.target.value = ''; }} />
               {importFile && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p><Button type="button" variant="ghost" size="sm" className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearAttendanceImportFile} disabled={readingFile || importing}><X className="mr-1.5 size-3.5" />Quitar archivo</Button></div>}
-              {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-emerald-600">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-rose-600' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
+              {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-success">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-destructive' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
               {importFileStats && <ImportReviewSummary total={importFileStats.total} valid={importFileStats.valid} skipped={importFileStats.skipped} entityLabel="registros de asistencia" />}
             </div>
             {importResult && (
               <div className="rounded-xl border border-border/60 p-4 bg-background">
                 <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
                 <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-4 text-emerald-500" /> Creados: <b className="text-emerald-500">{importResult.created}</b></span>
-                  <span className="inline-flex items-center gap-1.5"><XCircle className="size-4 text-amber-500" /> Omitidos: <b className="text-amber-500">{importResult.skipped}</b></span>
+                  <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-4 text-success" /> Creados: <b className="text-success">{importResult.created}</b></span>
+                  <span className="inline-flex items-center gap-1.5"><XCircle className="size-4 text-warning" /> Omitidos: <b className="text-warning">{importResult.skipped}</b></span>
                   <span>Total: <b>{importResult.total}</b></span>
                 </div>
                 {importResult.errors.length > 0 && (
-                  <div className="mt-2 text-xs text-amber-600 space-y-1">
+                  <div className="mt-2 text-xs text-warning space-y-1">
                     <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
                     {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
                   </div>

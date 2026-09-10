@@ -194,7 +194,7 @@ export function ConfigNominaView() {
         <div className="flex flex-wrap items-center gap-2" data-tour="hr-payroll-config-actions">
           <Badge className={cn(
             "px-3 py-1 text-[10px] font-black uppercase tracking-widest",
-            hasExisting ? "bg-primary/10 text-primary border-primary/20" : "bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
+            hasExisting ? "bg-primary/10 text-primary border-primary/20" : "bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning"
           )}>
             {hasExisting ? '✓ Configuración Activa' : 'Sin configuración'}
           </Badge>
@@ -411,15 +411,15 @@ export function ConfigNominaView() {
 
                 {/* Deducciones Empleado */}
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-red-500">Deducciones del Empleado</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-destructive">Deducciones del Empleado</p>
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">INSS Laboral ({config.inssLaboralPct}%)</span>
-                      <span className="font-bold text-red-600">-{formatC(sim.inssLaboral)}</span>
+                      <span className="font-bold text-destructive">-{formatC(sim.inssLaboral)}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">IR Mensual</span>
-                      <span className="font-bold text-red-600">-{formatC(sim.irMensual)}</span>
+                      <span className="font-bold text-destructive">-{formatC(sim.irMensual)}</span>
                     </div>
                   </div>
                 </div>
@@ -435,7 +435,7 @@ export function ConfigNominaView() {
 
                 {/* Costos Patronales */}
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">Costos Adicionales (Patronal)</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-warning">Costos Adicionales (Patronal)</p>
                   <div className="space-y-1.5">
                     {[
                       { label: `INSS Patronal (${config.inssPatronalPct}%)`, value: sim.inssPatronal },
@@ -446,16 +446,16 @@ export function ConfigNominaView() {
                     ].map(item => (
                       <div key={item.label} className="flex justify-between items-center text-sm">
                         <span className="text-muted-foreground">{item.label}</span>
-                        <span className="font-medium text-orange-600">+{formatC(item.value)}</span>
+                        <span className="font-medium text-warning">+{formatC(item.value)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-gradient-to-r from-orange-500/10 to-red-500/10 border border-orange-500/20">
+                <div className="p-4 rounded-xl bg-gradient-to-r from-warning/10 to-destructive/10 border border-warning/20">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-black text-orange-700 dark:text-orange-400 uppercase tracking-wide">Costo Total Empresa</span>
-                    <span className="text-xl font-black text-orange-700 dark:text-orange-400">{formatC(sim.costoTotal)}</span>
+                    <span className="text-sm font-black text-warning dark:text-warning uppercase tracking-wide">Costo Total Empresa</span>
+                    <span className="text-xl font-black text-warning dark:text-warning">{formatC(sim.costoTotal)}</span>
                   </div>
                 </div>
 

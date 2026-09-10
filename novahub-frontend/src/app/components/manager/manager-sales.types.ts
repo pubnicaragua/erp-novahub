@@ -29,5 +29,6 @@ export const MANAGER_SALES_VIEWS: Array<{ id: ManagerSalesView; label: string }>
   { id: 'pricelists', label: 'Listas de precios' },
 ];
 
-/** La vista queda implementada para una fase posterior, pero no se navega aún. */
-export const VISIBLE_MANAGER_SALES_VIEWS = MANAGER_SALES_VIEWS.filter((view) => view.id !== 'deliveries');
+// Todas las vistas con soporte en el backend y en Manager deben ser navegables.
+// Se conserva el alias para no romper imports existentes del shell.
+export const VISIBLE_MANAGER_SALES_VIEWS = MANAGER_SALES_VIEWS;

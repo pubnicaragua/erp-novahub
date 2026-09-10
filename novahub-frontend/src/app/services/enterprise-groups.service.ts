@@ -649,6 +649,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
     } = {},
     signal?: AbortSignal,
   ) =>
@@ -674,6 +675,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
     },
     signal?: AbortSignal,
   ) =>
@@ -696,6 +698,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
       reportCurrency?: string;
       registerId?: string;
       deliveryBranchId?: string;
@@ -780,6 +783,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
       reportCurrency?: string;
     },
     signal?: AbortSignal,
@@ -802,6 +806,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
     },
     signal?: AbortSignal,
   ) =>
@@ -824,6 +829,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
     },
     signal?: AbortSignal,
   ) =>
@@ -844,6 +850,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
     },
     signal?: AbortSignal,
   ) =>
@@ -864,6 +871,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
     },
     signal?: AbortSignal,
   ) =>
@@ -886,6 +894,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      export?: boolean;
     },
     signal?: AbortSignal,
   ) =>

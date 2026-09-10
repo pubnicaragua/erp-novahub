@@ -54,6 +54,7 @@ import { priceListsService } from '../../services/price-lists.service';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { ProductSimilarityAlert } from '../inventory/ProductSimilarityAlert';
 import type { SimilarProductGroup, SimilarProductMatch } from '../../services/inventario.service';
+import { buildVariantDisplayName } from '../../types/variants';
 
 interface Props {
   data: PurchaseOrder[];
@@ -2248,7 +2249,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const selected = products.find((p: any) => String(p.id) === String(productId));
     if (!selected) return;
 
-    if (selected.variants && selected.variants.length > 1) {
+    if (Array.isArray(selected.variants) && selected.variants.length > 0) {
       setVariantPickerProduct(selected);
       setVariantPickerIdx(idx);
       setVariantPickerOpen(true);
@@ -2313,7 +2314,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       ...variantPickerProduct,
       id: variantPickerProduct.id,
       code: variant.sku || variantPickerProduct.code,
-      name: `${variantPickerProduct.name} - ${(variant.attributes || []).map((a: any) => a.value).join(' / ')}`,
+      name: buildVariantDisplayName(variantPickerProduct.name, variant),
       costPrice: variant.costPrice !== null && variant.costPrice !== undefined && Number.isFinite(Number(variant.costPrice))
         ? Number(variant.costPrice)
         : Math.max(0, Number(variantPickerProduct.costPrice || 0) + Number(variant.costModifier || 0)),
@@ -2722,7 +2723,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                           options={[
                             { label: 'Producto nuevo al recepcionar', value: '__none__', description: 'Se creará desde los datos de esta línea' },
                             ...products.filter(Boolean).map((p: any) => ({
-                              label: p.name || 'Producto',
+                              label: `${p.name || 'Producto'}${Array.isArray(p.variants) && p.variants.length > 0 ? ' · Tiene variantes' : ''}`,
                               value: String(p.id),
                               description: [
                                 `${p.code || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,

@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Activity,
+  Banknote,
   BarChart3,
   BookOpen,
   Boxes,
@@ -41,6 +43,8 @@ import {
   FileText,
   FileCog,
   ClipboardList,
+  Cloud,
+  FolderKanban,
   CalendarDays,
   CircleDollarSign,
   Bell,
@@ -52,13 +56,16 @@ import {
   Scale,
   Wallet,
   ListChecks,
+  MessageCircle,
+  Ticket,
+  Utensils,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCurrency, type CurrencyDisplayMode } from "../contexts/CurrencyContext";
 import { useTheme, type ThemeConfig } from "../contexts/ThemeContext";
 import { brandingService, type ThemePaletteMode } from "../services/branding.service";
-import { type ManagerGroup } from "../services/enterprise-groups.service";
+import { type ManagerGroup, type ManagerOperationsModule } from "../services/enterprise-groups.service";
 import { safeGetItem, safeSetItem } from "../services/safe-storage";
 import { persistThemeMode, readPersistedDarkMode } from "../utils/theme-mode";
 import { Button } from "./ui/button";
@@ -113,6 +120,7 @@ import {
   MANAGER_HR_VIEWS,
   type ManagerHrView,
 } from "./manager/manager-hr.types";
+import { MANAGER_OPERATION_VIEWS } from "./manager/manager-operations.types";
 
 const MANAGER_INVENTORY_VIEW_ICONS: Record<ManagerInventoryView, LucideIcon> = {
   overview: LayoutDashboard,
@@ -159,7 +167,6 @@ const MANAGER_PURCHASES_VIEW_ICONS: Record<ManagerPurchasesView, LucideIcon> = {
   recurringexpenses: Repeat2,
   requests: ClipboardCheck,
   management: FileText,
-  supplierprices: Tags,
 };
 
 const MANAGER_FINANCE_VIEW_ICONS: Record<ManagerFinanceView, LucideIcon> = {
@@ -207,6 +214,7 @@ const MANAGER_REPORTS_VIEW_ICONS: Record<ManagerReportsView, LucideIcon> = {
   customers: UserRound,
   providers: Users,
   hr: UserRound,
+  subscriptions: CreditCard,
 };
 
 const MANAGER_HR_VIEW_ICONS: Record<ManagerHrView, LucideIcon> = {
@@ -223,6 +231,9 @@ const MANAGER_HR_VIEW_ICONS: Record<ManagerHrView, LucideIcon> = {
   benefits: ShieldCheck,
 };
 
+const isManagerOperationSection = (section: ManagerSection): section is ManagerOperationsModule =>
+  Boolean(MANAGER_OPERATION_VIEWS[section as ManagerOperationsModule]);
+
 export type ManagerSection =
   | "overview"
   | "inventory"
@@ -232,7 +243,16 @@ export type ManagerSection =
   | "accounting"
   | "reports"
   | "hr"
-  | "operations"
+  | "activities"
+  | "projects"
+  | "tickets"
+  | "documents"
+  | "restaurant"
+  | "logistics"
+  | "financing"
+  | "legal"
+  | "novachat"
+  | "support"
   | "users"
   | "managers"
   | "settings"
@@ -259,7 +279,16 @@ export const MANAGER_SECTIONS: Array<{
   },
   { id: "reports", label: "Reportes", icon: BarChart3, group: "Consolidado" },
   { id: "hr", label: "Recursos Humanos", icon: Users, group: "Consolidado" },
-  { id: "operations", label: "Operaciones", icon: ListChecks, group: "Consolidado" },
+  { id: "activities", label: "Actividades", icon: Activity, group: "Operaciones" },
+  { id: "projects", label: "Proyectos", icon: FolderKanban, group: "Operaciones" },
+  { id: "tickets", label: "Tickets", icon: Ticket, group: "Operaciones" },
+  { id: "documents", label: "Documentos", icon: Cloud, group: "Operaciones" },
+  { id: "restaurant", label: "Restaurante", icon: Utensils, group: "Operaciones" },
+  { id: "logistics", label: "Logística", icon: Package, group: "Operaciones" },
+  { id: "financing", label: "Financiamiento PYME", icon: Banknote, group: "Operaciones" },
+  { id: "legal", label: "Asesoría legal", icon: Scale, group: "Operaciones" },
+  { id: "novachat", label: "NovaChat", icon: MessageCircle, group: "Operaciones" },
+  { id: "support", label: "Soporte técnico", icon: Wrench, group: "Operaciones" },
   {
     id: "transfers",
     label: "Transferencias",
@@ -324,6 +353,8 @@ type ManagerShellProps = {
   onReportViewChange: (view: ManagerReportsView) => void;
   hrView: ManagerHrView;
   onHrViewChange: (view: ManagerHrView) => void;
+  operationViews: Partial<Record<ManagerOperationsModule, string>>;
+  onOperationViewChange: (module: ManagerOperationsModule, view: string) => void;
   selectedBranchId: string;
   onBranchChange: (branchId: string) => void;
   reportCurrency: string;
@@ -357,6 +388,8 @@ export function ManagerShell({
   onReportViewChange,
   hrView,
   onHrViewChange,
+  operationViews,
+  onOperationViewChange,
   selectedBranchId,
   onBranchChange,
   onReportCurrencyChange,
@@ -370,7 +403,7 @@ export function ManagerShell({
     () => safeGetItem(MANAGER_SIDEBAR_COLLAPSED_KEY) === "true",
   );
   const [expandedSection, setExpandedSection] = useState<ManagerSection | null>(
-    () => (section === "inventory" || section === "sales" || section === "purchases" || section === "finances" || section === "accounting" || section === "reports" || section === "hr" ? section : null),
+    () => (section === "inventory" || section === "sales" || section === "purchases" || section === "finances" || section === "accounting" || section === "reports" || section === "hr" || isManagerOperationSection(section) ? section : null),
   );
   const { user, logout } = useAuth();
   const { currency, displayMode, setDisplayMode, displayModeLabel } = useCurrency();
@@ -534,6 +567,17 @@ export function ManagerShell({
       setExpandedSection((current) => (current === next ? null : next));
       return;
     }
+    if (isManagerOperationSection(next)) {
+      onOperationViewChange(next, MANAGER_OPERATION_VIEWS[next][0]?.id || 'overview');
+      if (sidebarCollapsed) {
+        if (section !== next) updateSection(next);
+        setExpandedSection(next);
+        return;
+      }
+      if (section !== next) updateSection(next);
+      setExpandedSection((current) => (current === next ? null : next));
+      return;
+    }
     setExpandedSection(null);
     updateSection(next);
   };
@@ -601,6 +645,8 @@ export function ManagerShell({
           onReportViewChange={onReportViewChange}
           hrView={hrView}
           onHrViewChange={onHrViewChange}
+          operationViews={operationViews}
+          onOperationViewChange={onOperationViewChange}
         />
         <div
           className={cn(
@@ -900,6 +946,8 @@ function ManagerSidebar({
   onReportViewChange,
   hrView,
   onHrViewChange,
+  operationViews,
+  onOperationViewChange,
 }: {
   collapsed: boolean;
   open: boolean;
@@ -927,6 +975,8 @@ function ManagerSidebar({
   onReportViewChange: (view: ManagerReportsView) => void;
   hrView: ManagerHrView;
   onHrViewChange: (view: ManagerHrView) => void;
+  operationViews: Partial<Record<ManagerOperationsModule, string>>;
+  onOperationViewChange: (module: ManagerOperationsModule, view: string) => void;
 }) {
   const { user } = useAuth();
   const groups = [...new Set(sections.map((item) => item.group))];
@@ -1031,7 +1081,7 @@ function ManagerSidebar({
                         const Icon = item.icon;
                         const active = section === item.id;
                         const hasSubmenu =
-                          item.id === "inventory" || item.id === "sales" || item.id === "purchases" || item.id === "finances" || item.id === "accounting" || item.id === "reports" || item.id === "hr" || item.id === "settings";
+                          item.id === "inventory" || item.id === "sales" || item.id === "purchases" || item.id === "finances" || item.id === "accounting" || item.id === "reports" || item.id === "hr" || isManagerOperationSection(item.id) || item.id === "settings";
                         const isExpanded = expandedSection === item.id;
                         const button = (
                           <button
@@ -1040,12 +1090,12 @@ function ManagerSidebar({
                             className={cn(
                               "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150",
                               active
-                                ? "hover:bg-primary hover:text-primary-foreground"
-                                : "hover:bg-primary/10 hover:text-primary",
+                                ? "hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                                : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                               sidebarCollapsed && "justify-center",
                               active
-                                ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+                                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm font-semibold"
                                 : "text-sidebar-foreground/70",
                             )}
                             aria-current={active ? "page" : undefined}
@@ -1084,8 +1134,8 @@ function ManagerSidebar({
                                       "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
                                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                                       settingsView === "theme"
-                                        ? "bg-primary text-primary-foreground font-medium shadow-sm hover:bg-primary hover:text-primary-foreground"
-                                        : "text-sidebar-foreground/55 hover:bg-primary/10 hover:text-primary",
+                                        ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                                     )}
                                   >
                                     <Tags className="size-4 shrink-0" />
@@ -1100,8 +1150,8 @@ function ManagerSidebar({
                                         "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
                                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                                         settingsView === "audit"
-                                          ? "bg-primary text-primary-foreground font-medium shadow-sm hover:bg-primary hover:text-primary-foreground"
-                                          : "text-sidebar-foreground/55 hover:bg-primary/10 hover:text-primary",
+                                          ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                                       )}
                                     >
                                       <History className="size-4 shrink-0" />
@@ -1109,7 +1159,9 @@ function ManagerSidebar({
                                     </button>
                                   )}
                                 </>
-                              ) : (item.id === "inventory"
+                              ) : (isManagerOperationSection(item.id)
+                                ? MANAGER_OPERATION_VIEWS[item.id]
+                                : item.id === "inventory"
                                 ? MANAGER_INVENTORY_VIEWS
                                 : item.id === "sales"
                                   ? VISIBLE_MANAGER_SALES_VIEWS
@@ -1123,14 +1175,17 @@ function ManagerSidebar({
                                           ? MANAGER_REPORTS_VIEWS
                                           : MANAGER_HR_VIEWS
                               ).map((view) => {
+                                const isOperation = isManagerOperationSection(item.id);
                                 const isInventory = item.id === "inventory";
                                 const isSales = item.id === "sales";
                                 const isPurchases = item.id === "purchases";
                                 const isFinances = item.id === "finances";
                                 const isAccounting = item.id === "accounting";
                                 const isReports = item.id === "reports";
-                                const SubIcon = (isInventory
-                                  ? MANAGER_INVENTORY_VIEW_ICONS[view.id as ManagerInventoryView]
+                                const SubIcon = (isOperation
+                                  ? (view as { icon?: LucideIcon }).icon
+                                  : isInventory
+                                    ? MANAGER_INVENTORY_VIEW_ICONS[view.id as ManagerInventoryView]
                                   : isSales
                                     ? MANAGER_SALES_VIEW_ICONS[view.id as ManagerSalesView]
                                     : isPurchases
@@ -1139,11 +1194,13 @@ function ManagerSidebar({
                                         ? MANAGER_FINANCE_VIEW_ICONS[view.id as ManagerFinanceView]
                                         : isAccounting
                                           ? MANAGER_ACCOUNTING_VIEW_ICONS[view.id as ManagerAccountingView]
-                                          : isReports
+                                  : isReports
                                             ? MANAGER_REPORTS_VIEW_ICONS[view.id as ManagerReportsView]
                                             : MANAGER_HR_VIEW_ICONS[view.id as ManagerHrView]) || FileText;
-                                const subActive = isInventory
-                                  ? inventoryView === view.id
+                                const subActive = isOperation
+                                  ? (operationViews[item.id] || 'overview') === view.id
+                                  : isInventory
+                                    ? inventoryView === view.id
                                   : isSales
                                     ? salesView === view.id
                                     : isPurchases
@@ -1156,7 +1213,8 @@ function ManagerSidebar({
                                             ? reportView === view.id
                                             : hrView === view.id;
                                 const selectView = () => {
-                                  if (isInventory) onInventoryViewChange(view.id as ManagerInventoryView);
+                                  if (isOperation) onOperationViewChange(item.id, view.id);
+                                  else if (isInventory) onInventoryViewChange(view.id as ManagerInventoryView);
                                   else if (isSales) onSalesViewChange(view.id as ManagerSalesView);
                                   else if (isPurchases) onPurchasesViewChange(view.id as ManagerPurchasesView);
                                   else if (isFinances) onFinanceViewChange(view.id as ManagerFinanceView);
@@ -1176,8 +1234,8 @@ function ManagerSidebar({
                                       "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
                                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                                       subActive
-                                        ? "bg-primary text-primary-foreground font-medium shadow-sm hover:bg-primary hover:text-primary-foreground"
-                                        : "text-sidebar-foreground/55 hover:bg-primary/10 hover:text-primary",
+                                        ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                                     )}
                                   >
                                     <SubIcon className="size-4 shrink-0" />

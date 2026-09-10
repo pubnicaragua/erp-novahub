@@ -80,7 +80,7 @@ const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: submodulesFor('SALES') },
   { id: 'INVENTORY', label: 'Inventario', icon: Package, description: 'Stock, Almacenes y SKU', submodules: submodulesFor('INVENTORY') },
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General', submodules: submodulesFor('FINANCIAL') },
-  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra', submodules: submodulesFor('PURCHASES') },
+  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores, órdenes y créditos del proveedor', submodules: submodulesFor('PURCHASES') },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados', submodules: submodulesFor('HR') },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades', submodules: submodulesFor('ACTIVITIES') },
   { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental', submodules: submodulesFor('DOCUMENTS') },

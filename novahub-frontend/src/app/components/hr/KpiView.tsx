@@ -67,10 +67,10 @@ const defaultKpiResult = () => ({
 });
 
 const COMPLIANCE_LABELS: Record<string, { label: string; badge: string; bar: string }> = {
-  OVER: { label: 'Sobre meta', badge: 'bg-green-100 text-green-700', bar: 'bg-emerald-500' },
-  RISK: { label: 'En riesgo', badge: 'bg-amber-100 text-amber-700', bar: 'bg-amber-500' },
-  UNDER: { label: 'Bajo meta', badge: 'bg-red-100 text-red-700', bar: 'bg-red-500' },
-  NO_TARGET: { label: 'Sin meta', badge: 'bg-gray-100 text-gray-600', bar: 'bg-gray-300' },
+  OVER: { label: 'Sobre meta', badge: 'bg-success/10 text-success', bar: 'bg-success' },
+  RISK: { label: 'En riesgo', badge: 'bg-warning/10 text-warning', bar: 'bg-warning' },
+  UNDER: { label: 'Bajo meta', badge: 'bg-destructive/10 text-destructive', bar: 'bg-destructive' },
+  NO_TARGET: { label: 'Sin meta', badge: 'bg-muted text-muted-foreground', bar: 'bg-muted' },
 };
 
 const resultPct = (r: KpiResult) => {
@@ -445,7 +445,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
                               }}
                               className={cn(
                                 "size-9 rounded-xl border flex items-center justify-center transition-all",
-                                d.isActive ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/20" : "bg-muted border-border text-muted-foreground hover:bg-muted/60",
+                                d.isActive ? "bg-success/10 border-success/30 text-success hover:bg-success/20" : "bg-muted border-border text-muted-foreground hover:bg-muted/60",
                               )}
                             >
                               <Check className="size-4" />
@@ -556,7 +556,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
                                   style={{ width: `${Math.min(pct, 100)}%` }}
                                 />
                               </div>
-                              <span className={cn('text-[10px] font-black', pct >= 100 ? 'text-emerald-600' : pct >= 70 ? 'text-amber-600' : 'text-red-600')}>
+                              <span className={cn('text-[10px] font-black', pct >= 100 ? 'text-success' : pct >= 70 ? 'text-warning' : 'text-destructive')}>
                                 {pct}%
                               </span>
                             </div>
@@ -566,7 +566,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
                         <td className="px-4 py-3 text-center">
                           <span className={cn(
                             "text-sm font-bold",
-                            pct === null ? 'text-muted-foreground' : pct >= 100 ? "text-green-600" : pct >= 70 ? "text-amber-600" : "text-red-600"
+                            pct === null ? 'text-muted-foreground' : pct >= 100 ? "text-success" : pct >= 70 ? "text-warning" : "text-destructive"
                           )}>
                             {r.actual}
                           </span>

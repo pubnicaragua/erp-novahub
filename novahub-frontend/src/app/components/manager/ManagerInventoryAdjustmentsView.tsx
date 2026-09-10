@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import type { ManagerInventoryView } from './manager-inventory.types';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
+import { managerStatusLabel } from '../../utils/managerLabels';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type WarehouseOption = { id: string; name: string; scopeType: string; clientTenantId: string | null; businessUnitId?: string | null; authorizedBranchIds?: string[] };
@@ -44,7 +45,7 @@ const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 }
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
 const formatCurrency = (value: unknown, currency = 'NIO') => `${currency} ${numberFormat.format(Number(value || 0))}`;
 const formatDate = (value: unknown) => value ? new Intl.DateTimeFormat('es-NI', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(String(value))) : '—';
-const statusLabel = (value: unknown) => statusLabels[String(value || '').toUpperCase()] || String(value || 'Sin estado');
+const statusLabel = (value: unknown) => statusLabels[String(value || '').toUpperCase()] || managerStatusLabel(value);
 const reasonLabel = (value: unknown) => reasonLabels[String(value || '').toUpperCase()] || String(value || 'Sin motivo');
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -57,23 +58,24 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
 export function ManagerInventorySubnav({ value, onChange }: { value: ManagerInventoryView; onChange: (value: ManagerInventoryView) => void }) {
   return (
     <div className="flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-card p-2 shadow-sm" role="tablist" aria-label="Vistas del inventario Manager">
-      <button type="button" role="tab" aria-selected={value === 'overview'} onClick={() => onChange('overview')} className={`flex-none rounded-xl px-4 py-2.5 text-sm font-bold transition-colors ${value === 'overview' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+      <button type="button" role="tab" aria-selected={value === 'overview'} onClick={() => onChange('overview')} className={`flex-none shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${value === 'overview' ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg' : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'}`}>
         Resumen de inventario
       </button>
-      <button type="button" role="tab" aria-selected={value === 'adjustments'} onClick={() => onChange('adjustments')} className={`flex-none rounded-xl px-4 py-2.5 text-sm font-bold transition-colors ${value === 'adjustments' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+      <button type="button" role="tab" aria-selected={value === 'adjustments'} onClick={() => onChange('adjustments')} className={`flex-none shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${value === 'adjustments' ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg' : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'}`}>
         Ajustes
       </button>
     </div>
   );
 }
 
-export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branchId, warehouses, canViewInventoryCost, onDetail, embedded = false, refreshKey = 0 }: {
+export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branchId, warehouses, canViewInventoryCost, canExport = true, onDetail, embedded = false, refreshKey = 0 }: {
   groupId: string;
   businessUnitId?: string;
   branchId?: string;
   branches: BranchOption[];
   warehouses: WarehouseOption[];
   canViewInventoryCost: boolean;
+  canExport?: boolean;
   onDetail?: (row: ManagerInventoryAdjustmentsResponse['data'][number]) => void;
   embedded?: boolean;
   refreshKey?: number;
@@ -112,14 +114,15 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
   const updateFilter = (setter: (value: string) => void, value: string) => { setter(value); resetPage(); };
 
   const exportReport = async () => {
+    if (!canExport) return;
     setExporting(true);
     try {
-      const report = await enterpriseGroupsService.getAdjustments(groupId, { businessUnitId, branchId, warehouseId, status, reason, search, dateFrom, dateTo, page: 1, pageSize: 5000, report: true });
+      const report = await enterpriseGroupsService.getAdjustments(groupId, { businessUnitId, branchId, warehouseId, status, reason, search, dateFrom, dateTo, page: 1, pageSize: 5000, report: true, export: true });
       const exportRows = report.data.map((row) => ({
+        Sucursal: row.branchName || '—',
         Ajuste: row.number,
         Fecha: formatDate(row.date),
         Rubro: row.businessUnitName || '—',
-        Sucursal: row.branchName || '—',
         Almacén: row.warehouseName || '—',
         Motivo: reasonLabel(row.reason),
         Productos: row.itemCount,
@@ -212,7 +215,7 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
           {query.isLoading && <div className="p-10 text-center text-sm text-muted-foreground">Cargando ajustes consolidados…</div>}
           {query.isError && <div className="p-10 text-center text-sm text-destructive">No se pudieron cargar los ajustes. {query.error.message}</div>}
           {!query.isLoading && !query.isError && !rows.length && <div className="p-10 text-center text-sm text-muted-foreground">No hay ajustes para los filtros seleccionados.</div>}
-          {!query.isLoading && !query.isError && rows.length > 0 && <div className="sales-responsive-table min-w-0"><Table className="w-full xl:min-w-[1200px]"><TableHeader><TableRow><TableHead>Ajuste</TableHead><TableHead>Fecha</TableHead><TableHead>Rubro / sucursal</TableHead><TableHead>Almacén / bodega</TableHead><TableHead>Motivo</TableHead><TableHead>Productos</TableHead><TableHead>Variación</TableHead>{canViewInventoryCost && <TableHead>Impacto</TableHead>}<TableHead className="!min-w-[7rem] !whitespace-nowrap">Estado</TableHead><TableHead data-actions-column="true" className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{rows.map((row) => { const isOpening = String(openingId) === String(row.id); return <TableRow key={row.id} aria-busy={isOpening || undefined} data-detail-opening={isOpening ? 'true' : undefined}><TableCell className="font-bold"><div className="flex flex-col items-start gap-1"><span className="inline-flex items-center gap-2">{row.number}{isOpening && <span role="status" className="inline-flex items-center gap-1 font-sans text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</span>{row.auditGenerated && <Badge variant="outline" className="border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {row.auditNumber || 'vinculada'}</Badge>}</div></TableCell><TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(row.date)}</TableCell><TableCell><div className="min-w-0"><p className="font-semibold">{row.branchName || '—'}</p><p className="text-xs text-muted-foreground">{row.businessUnitName || 'Sin rubro'}</p></div></TableCell><TableCell>{row.warehouseName || '—'}</TableCell><TableCell>{reasonLabel(row.reason)}</TableCell><TableCell>{formatNumber(row.itemCount)}</TableCell><TableCell><span className={row.differenceUnits < 0 ? 'font-bold text-rose-600' : row.differenceUnits > 0 ? 'font-bold text-emerald-600' : 'text-muted-foreground'}>{row.differenceUnits > 0 ? '+' : ''}{formatNumber(row.differenceUnits)}</span></TableCell>{canViewInventoryCost && <TableCell className="whitespace-nowrap">{formatCurrency(row.impactAmount, row.currency || 'NIO')}</TableCell>}<TableCell className="!min-w-[7rem] !whitespace-nowrap"><Badge variant={statusVariant(String(row.status))}>{statusLabel(row.status)}</Badge></TableCell><TableCell data-actions-column="true" className="text-right"><div data-action-group="true" className="flex flex-wrap justify-end gap-2">{row.auditGenerated && String(row.status).toUpperCase() === 'DRAFT' && <Button type="button" size="sm" className="shrink-0 gap-1.5 rounded-lg whitespace-nowrap" onClick={() => setPendingApproval(row)} disabled={Boolean(approvingId)}><CheckCircle2 className="size-4" />Aprobar</Button>}<Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-lg whitespace-nowrap" onClick={() => openDetail(row)} disabled={isOpening}><Eye className="mr-1.5 size-4" />{isOpening ? 'Abriendo…' : 'Ver detalle'}</Button></div></TableCell></TableRow>; })}</TableBody></Table></div>}
+          {!query.isLoading && !query.isError && rows.length > 0 && <div className="sales-responsive-table min-w-0"><Table className="w-full xl:min-w-[1200px]"><TableHeader><TableRow><TableHead>Sucursal</TableHead><TableHead>Ajuste</TableHead><TableHead>Fecha</TableHead><TableHead>Rubro</TableHead><TableHead>Almacén / bodega</TableHead><TableHead>Motivo</TableHead><TableHead>Productos</TableHead><TableHead>Variación</TableHead>{canViewInventoryCost && <TableHead>Impacto</TableHead>}<TableHead className="!min-w-[7rem] !whitespace-nowrap">Estado</TableHead><TableHead data-actions-column="true" className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{rows.map((row) => { const isOpening = String(openingId) === String(row.id); return <TableRow key={row.id} aria-busy={isOpening || undefined} data-detail-opening={isOpening ? 'true' : undefined}><TableCell className="font-semibold text-primary">{row.branchName || '—'}</TableCell><TableCell className="font-bold"><div className="flex flex-col items-start gap-1"><span className="inline-flex items-center gap-2">{row.number}{isOpening && <span role="status" className="inline-flex items-center gap-1 font-sans text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</span>{row.auditGenerated && <Badge variant="outline" className="border-warning bg-warning/10 text-[9px] font-bold text-warning">Auditoría {row.auditNumber || 'vinculada'}</Badge>}</div></TableCell><TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(row.date)}</TableCell><TableCell>{row.businessUnitName || 'Sin rubro'}</TableCell><TableCell>{row.warehouseName || '—'}</TableCell><TableCell>{reasonLabel(row.reason)}</TableCell><TableCell>{formatNumber(row.itemCount)}</TableCell><TableCell><span className={row.differenceUnits < 0 ? 'font-bold text-destructive' : row.differenceUnits > 0 ? 'font-bold text-success' : 'text-muted-foreground'}>{row.differenceUnits > 0 ? '+' : ''}{formatNumber(row.differenceUnits)}</span></TableCell>{canViewInventoryCost && <TableCell className="whitespace-nowrap">{formatCurrency(row.impactAmount, row.currency || 'NIO')}</TableCell>}<TableCell className="!min-w-[7rem] !whitespace-nowrap"><Badge variant={statusVariant(String(row.status))}>{statusLabel(row.status)}</Badge></TableCell><TableCell data-actions-column="true" className="text-right"><div data-action-group="true" className="flex flex-wrap justify-end gap-2">{row.auditGenerated && String(row.status).toUpperCase() === 'DRAFT' && <Button type="button" size="sm" className="shrink-0 gap-1.5 rounded-lg whitespace-nowrap" onClick={() => setPendingApproval(row)} disabled={Boolean(approvingId)}><CheckCircle2 className="size-4" />Aprobar</Button>}<Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-lg whitespace-nowrap" onClick={() => openDetail(row)} disabled={isOpening}><Eye className="mr-1.5 size-4" />{isOpening ? 'Abriendo…' : 'Ver detalle'}</Button></div></TableCell></TableRow>; })}</TableBody></Table></div>}
           {meta && meta.totalPages > 1 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-5 py-4 text-sm"><span className="text-muted-foreground">Página {meta.page} de {meta.totalPages}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" className="rounded-lg" disabled={meta.page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Anterior</Button><Button type="button" variant="outline" size="sm" className="rounded-lg" disabled={meta.page >= meta.totalPages} onClick={() => setPage((current) => Math.min(meta.totalPages, current + 1))}>Siguiente</Button></div></div>}
         </CardContent>
       </Card>
@@ -237,8 +240,8 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl border border-border/50 bg-muted/20 p-2.5 text-center"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos</p><p className="mt-1 text-lg font-black tabular-nums">{pendingApproval.itemCount}</p></div>
-            <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-center"><p className="text-[9px] font-black uppercase tracking-widest text-red-700">Faltantes</p><p className="mt-1 text-lg font-black tabular-nums text-red-700">{formatNumber(pendingApproval.decreasedUnits)}</p></div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-center"><p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Sobrantes</p><p className="mt-1 text-lg font-black tabular-nums text-emerald-700">{formatNumber(pendingApproval.increasedUnits)}</p></div>
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-2.5 text-center"><p className="text-[9px] font-black uppercase tracking-widest text-destructive">Faltantes</p><p className="mt-1 text-lg font-black tabular-nums text-destructive">{formatNumber(pendingApproval.decreasedUnits)}</p></div>
+            <div className="rounded-xl border border-success/20 bg-success/10 p-2.5 text-center"><p className="text-[9px] font-black uppercase tracking-widest text-success">Sobrantes</p><p className="mt-1 text-lg font-black tabular-nums text-success">{formatNumber(pendingApproval.increasedUnits)}</p></div>
           </div>
           {approvingId && <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Aplicando movimientos…</div>}
         </div>}

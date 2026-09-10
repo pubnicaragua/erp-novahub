@@ -101,14 +101,14 @@ const TUTORIALS: Record<PurchaseTutorialView, PurchaseTutorial> = {
     form: { label: 'Cómo registrar recepción', description: 'Registra lo que realmente ingresó a la bodega y deja evidencia de diferencias frente a la orden.', data: 'Selecciona orden, proveedor, fecha y bodega de recepción.', items: 'Captura cantidades recibidas, rechazadas, faltantes, lotes, series y ubicación por artículo.', summary: 'Revisa incidencias, documentos y estado antes de confirmar la recepción.', actions: 'Guarda la recepción o márcala como recibida cuando la mercancía haya sido verificada.', tip: 'La cantidad recibida debe reflejar físicamente lo que entró a inventario.', steps: ['title', 'data', 'items', 'summary', 'actions'] },
   },
   invoices: {
-    title: 'Facturas de Proveedor', listLabel: 'Cómo registrar factura de proveedor',
+    title: 'Créditos del proveedor', listLabel: 'Cómo gestionar créditos del proveedor',
     description: 'Controla las cuentas por pagar, sus vencimientos, saldos y pagos asociados.',
     kpis: 'Pendientes, vencidas y pagadas son filtros rápidos. El saldo total y el monto pagado son indicadores para priorizar cuentas por pagar.',
     filters: 'Busca por factura, proveedor o número de orden y combina el estado con las fechas de vencimiento o emisión.',
     actions: 'Usa los KPI para filtrar pendientes, vencidas o pagadas; también puedes registrar un pago, descargar el PDF y consultar auditoría.',
     pagination: 'Selecciona 50/100/200 filas, consulta el rango y navega por todas las facturas para evitar omitir vencimientos.',
     tip: 'Registrar el pago desde la factura conserva la relación entre el documento, el proveedor y el desembolso.',
-    form: { label: 'Cómo registrar factura de proveedor', description: 'Registra una factura recibida y relaciona sus importes con el proveedor y la orden correspondiente.', data: 'Completa proveedor, número, fechas, orden de compra, moneda y condiciones de pago.', items: 'Agrega los productos o servicios facturados y revisa cantidades, precios, impuestos y descuentos.', summary: 'Confirma total, vencimiento, cuenta por pagar y comprobantes adjuntos.', actions: 'Guarda la factura y registra el pago desde el documento cuando corresponda.', tip: 'Relacionar la factura con su orden evita diferencias entre lo pedido, recibido y facturado.', steps: ['title', 'data', 'items', 'summary', 'actions'] },
+    form: { label: 'Cómo registrar una compra a crédito', description: 'Registra una compra recibida y relaciona sus importes con el proveedor y la orden correspondiente.', data: 'Completa proveedor, número, fechas, orden de compra, moneda y condiciones de pago.', items: 'Agrega los productos o servicios facturados y revisa cantidades, precios, impuestos y descuentos.', summary: 'Confirma total, vencimiento, cuenta por pagar y comprobantes adjuntos.', actions: 'Guarda el crédito del proveedor y registra el pago desde el documento cuando corresponda.', tip: 'Relacionar el crédito con su orden evita diferencias entre lo pedido, recibido y facturado.', steps: ['title', 'data', 'items', 'summary', 'actions'] },
   },
   'recurring-invoices': {
     title: 'Compras Recurrentes', listLabel: 'Cómo programar compras recurrentes',
@@ -131,7 +131,7 @@ const TUTORIALS: Record<PurchaseTutorialView, PurchaseTutorial> = {
     form: { label: 'Cómo registrar pagos', description: 'Registra un desembolso y aplícalo a la factura correcta del proveedor.', data: 'Selecciona proveedor, factura, fecha, método, cuenta de salida y referencia.', summary: 'Confirma monto, moneda y observaciones antes de guardar.', actions: 'Verifica los datos y confirma el pago una sola vez para evitar duplicidades.', tip: 'Un pago relacionado actualiza el saldo de la factura y deja la trazabilidad contable.', steps: ['title', 'data', 'summary', 'actions'] },
   },
   credits: {
-    title: 'Créditos de Proveedor', listLabel: 'Cómo registrar crédito de proveedor',
+    title: 'Créditos del proveedor', listLabel: 'Cómo gestionar créditos del proveedor',
     description: 'Registra y consulta notas de crédito y saldos a favor emitidos por proveedores.',
     kpis: 'Créditos emitidos, aplicados y pendientes son indicadores; los estados disponibles se comportan como filtros rápidos cuando tienen interacción.',
     filters: 'Busca por número, proveedor o documento de origen y filtra por estado o fecha para encontrar el crédito exacto.',

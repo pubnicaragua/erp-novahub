@@ -41,7 +41,7 @@ import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; onOpenCredits?: () => void; }
+interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
 const statusOpts = [
   { label: 'Pendiente', value: 'PENDING', color: 'bg-primary/10 text-primary' },
@@ -248,6 +248,7 @@ interface ReceiptPaymentDraft {
   exchangeRate?: number;
   reference: string;
   notes: string;
+  invoiceOnly?: boolean;
 }
 
 const RECEIPT_PAYMENT_METHODS = [
@@ -332,6 +333,11 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
     try {
       const invoice = await onRegisterInvoice({ draft, number: invoiceNumber.trim(), date: invoiceDate, dueDate: invoiceDueDate, files: invoiceFiles });
       const savedInvoice = invoice?.data ?? invoice;
+      if (draft.invoiceOnly) {
+        toast.success('Compra a crédito registrada correctamente. Quedó como cuenta por pagar del proveedor.', { id: invoiceToastId });
+        onClose();
+        return;
+      }
       setInvoiceId(String(savedInvoice?.id || ''));
       setInvoiceNumber(String(savedInvoice?.number || invoiceNumber.trim()));
       setPaymentLines((current) => current.map((line, index) => index === 0 ? { ...line, amount: Number(savedInvoice?.balance ?? savedInvoice?.total ?? draft.amount) } : line));
@@ -433,11 +439,11 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
       <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] !max-w-3xl flex-col overflow-hidden rounded-3xl border-primary/20 bg-background p-0 shadow-2xl">
         <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12" data-tour="purchases-payment-title">
           <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight">
-            <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"><CircleDollarSign className="size-5" /></span>
-            Registrar pago de la recepción
+            <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">{draft?.invoiceOnly ? <FileText className="size-5" /> : <CircleDollarSign className="size-5" />}</span>
+            {draft?.invoiceOnly ? 'Registrar compra a crédito' : 'Registrar pago de la recepción'}
           </DialogTitle>
-          <DialogDescription>El pago quedará guardado también en Pagos realizados y actualizará el saldo de la cuenta por pagar.</DialogDescription>
-          <PurchaseViewTutorial view="payments" context="form" labelOverride="Cómo registrar pago" targetPrefix="purchases-payment" />
+          <DialogDescription>{draft?.invoiceOnly ? 'El proveedor te entrega la mercancía a crédito: adjunta su factura para crear la cuenta por pagar y liquidarla después.' : 'El pago quedará guardado también en Pagos realizados y actualizará el saldo de la cuenta por pagar.'}</DialogDescription>
+          <PurchaseViewTutorial view="payments" context="form" labelOverride={draft?.invoiceOnly ? 'Cómo registrar compra a crédito' : 'Cómo registrar pago'} targetPrefix="purchases-payment" />
         </DialogHeader>
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
           {draft && (
@@ -455,8 +461,8 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
             {!invoiceId ? (
               <div className="space-y-4 rounded-2xl border border-primary/25 bg-primary/[0.03] p-4">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-foreground">Evidencia de factura y cuenta por pagar</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Registra la factura del proveedor y su evidencia aquí. No volverás al detalle de la recepción.</p>
+                  <p className="text-xs font-black uppercase tracking-widest text-foreground">{draft.invoiceOnly ? 'Factura de compra a crédito' : 'Evidencia de factura y cuenta por pagar'}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{draft.invoiceOnly ? 'Registra el número, las fechas y la evidencia. El saldo quedará pendiente de pago.' : 'Registra la factura del proveedor y su evidencia aquí.'}</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de factura *</p><Input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} disabled={invoiceSaving} placeholder="Ej. A-001-000123" className="h-10 font-mono" /></div>
@@ -465,7 +471,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Total factura · calculado ({getReceiptCurrencyMeta(draft.currency).code})</p><Input value={formatReceiptAmount(draft.amount, draft.currency)} readOnly aria-readonly="true" disabled={invoiceSaving} className="h-10 border-primary/30 bg-primary/5 font-black text-primary" /></div>
                 </div>
                 <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencia de factura *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf" onChange={(event) => setInvoiceFiles(Array.from(event.target.files || []))} disabled={invoiceSaving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen original hasta 10 MB; se optimiza. PDF hasta 10 MB.</p>{invoiceFiles.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{invoiceFiles.map((file) => file.name).join(', ')}</p>}</div>
-                <Button onClick={handleRegisterInvoice} disabled={invoiceSaving || invoiceFiles.length === 0} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando evidencia...' : 'Registrar evidencia y continuar'}</Button>
+                <Button onClick={handleRegisterInvoice} disabled={invoiceSaving || invoiceFiles.length === 0} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando factura...' : (draft.invoiceOnly ? 'Registrar compra a crédito' : 'Registrar evidencia y continuar')}</Button>
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -521,14 +527,14 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
         </div>
         <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4" data-tour="purchases-payment-actions">
           <Button variant="outline" onClick={onClose} disabled={saving || invoiceSaving} className="rounded-xl font-black uppercase tracking-widest">Cancelar</Button>
-          {invoiceId && <Button onClick={handleSubmit} disabled={saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
+          {invoiceId && !draft?.invoiceOnly && <Button onClick={handleSubmit} disabled={saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId, onOpenCredits }: Props) {
+export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], selectedBranchId = '', pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const { baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const queryClient = useQueryClient();
@@ -917,7 +923,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     }
   };
 
-  const openPaymentModal = (receipt: any, invoice?: any) => {
+  const openPaymentModal = (receipt: any, invoice?: any, invoiceOnly = false) => {
     const receiptStatus = getReceiptDisplayStatus(receipt);
     if (!['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus)) {
       toast.error('El pago solo se puede registrar cuando la recepción está recibida o recibida con incidencias.');
@@ -948,17 +954,18 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       exchangeRate: Number(invoice?.exchangeRate || receipt.exchangeRate || 1),
       reference: invoice?.id ? `PAG-${Date.now().toString().slice(-8)}` : '',
       notes: `Pago de la recepción ${receipt.number || ''}`,
+      invoiceOnly,
     });
   };
 
   const openReceiptCredit = (receipt: PurchaseReceipt, invoice: any) => {
     const receiptStatus = getReceiptDisplayStatus(receipt);
     if (!['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus)) {
-      toast.error('La recepción debe estar recibida antes de crear un crédito.');
+      toast.error('La recepción debe estar recibida antes de crear una nota de crédito por devolución.');
       return;
     }
     if (!invoice?.id || String(invoice.status || '').toUpperCase() === 'CANCELLED') {
-      toast.error('La recepción no tiene una factura de proveedor válida para crear el crédito.');
+      toast.error('La recepción no tiene una factura de proveedor válida para crear la nota de crédito.');
       return;
     }
     setCreditDraft({ receipt, invoice });
@@ -969,31 +976,30 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const handleCreateCreditFromReceipt = async () => {
     if (!creditDraft) return;
     const items = Object.entries(creditQuantities)
-      .map(([receiptItemId, quantity]) => ({ receiptItemId, quantity: Number(quantity || 0) }))
-      .filter((item) => item.quantity > 0);
+      .map(([receiptItemId, quantity]) => ({ receiptItemId, quantity: Math.trunc(Number(quantity || 0)) }))
+      .filter((item) => Number.isInteger(item.quantity) && item.quantity > 0);
     if (!creditReason.trim()) {
-      toast.error('Indica el motivo del crédito.');
+      toast.error('Indica el motivo de la devolución o ajuste.');
       return;
     }
     if (items.length === 0) {
-      toast.error('Selecciona al menos un artículo y una cantidad para acreditar.');
+      toast.error('Selecciona al menos un artículo y una cantidad para devolver o ajustar.');
       return;
     }
     setCreditLoading(true);
-    const createToastId = toast.loading('Creando crédito del proveedor...');
+    const createToastId = toast.loading('Creando nota de crédito por devolución...');
     try {
       await purchaseReceiptsService.createCredit(creditDraft.receipt.id, {
         date: new Date().toISOString(),
         reason: creditReason.trim(),
         items,
       });
-      toast.success('Crédito creado como borrador', { id: createToastId });
+      toast.success('Nota de crédito creada como borrador', { id: createToastId });
       setCreditDraft(null);
       setCreditReason('');
       setCreditQuantities({});
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['purchases'] });
-      onOpenCredits?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo crear el crédito', { id: createToastId });
     } finally {
@@ -1096,6 +1102,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       number,
       date: date || undefined,
       dueDate: dueDate || undefined,
+      status: draft.invoiceOnly ? 'CREDIT' : 'PENDING',
       total: calculatedInvoiceTotal,
       currency: receiptCurrency,
       exchangeRate: receiptExchangeRate,
@@ -1206,10 +1213,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-            <Send className="size-5 text-primary" /> Crear crédito del proveedor
+            <Send className="size-5 text-primary" /> Crear nota de crédito por devolución
           </DialogTitle>
           <DialogDescription>
-            Selecciona únicamente los artículos recibidos que serán devueltos o acreditados. El documento se guardará como borrador para revisarlo antes de emitirlo.
+            Esta opción es únicamente para devoluciones o ajustes que reduzcan la cuenta por pagar. No es la compra a crédito que otorga el proveedor.
           </DialogDescription>
         </DialogHeader>
         {creditDraft && (
@@ -1230,7 +1237,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
                 {(creditDraft.receipt.items || []).filter((item: any) => Number(item.quantityReceived || 0) > 0).map((item: any) => {
                   const received = Number(item.quantityReceived || 0);
-                  const quantity = Number(creditQuantities[item.id] || 0);
+                  const maxCreditQuantity = Math.max(0, Math.floor(received));
+                  const quantity = Math.min(maxCreditQuantity, Math.max(0, Math.trunc(Number(creditQuantities[item.id] || 0))));
                   return (
                     <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_7rem_7rem] items-center gap-3 rounded-xl border border-border/50 bg-background/80 px-2 py-2">
                       <div className="min-w-0">
@@ -1241,12 +1249,15 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                       <Input
                         type="number"
                         min="0"
-                        max={received}
-                        step="0.01"
+                        max={maxCreditQuantity}
+                        step="1"
                         value={quantity || ''}
                         aria-label={`Cantidad a acreditar de ${item.description || item.name || 'artículo'}`}
                         onChange={(event) => {
-                          const next = Math.min(received, Math.max(0, Number(event.target.value) || 0));
+                          const parsedValue = Number(event.target.value);
+                          const next = Number.isFinite(parsedValue)
+                            ? Math.min(maxCreditQuantity, Math.max(0, Math.trunc(parsedValue)))
+                            : 0;
                           setCreditQuantities((current) => ({ ...current, [item.id]: next }));
                         }}
                         className="h-9 text-right text-xs font-black tabular-nums"
@@ -1257,7 +1268,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               </div>
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Motivo del crédito *</p>
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Motivo de la devolución o ajuste *</p>
               <Input value={creditReason} onChange={(event) => setCreditReason(event.target.value)} maxLength={500} placeholder="Ej. Devolución por producto dañado o faltante" disabled={creditLoading} />
             </div>
           </div>
@@ -1265,7 +1276,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => { setCreditDraft(null); setCreditReason(''); setCreditQuantities({}); }} disabled={creditLoading}>Cancelar</Button>
           <Button type="button" onClick={() => void handleCreateCreditFromReceipt()} disabled={creditLoading} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
-            {creditLoading ? 'Creando...' : 'Crear borrador'}
+            {creditLoading ? 'Creando...' : 'Crear nota de crédito'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1867,20 +1878,22 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               ? (row.supplierInvoices || []).find((invoice: any) => String(invoice.status || '').toUpperCase() !== 'CANCELLED')
               : undefined;
             const payableInvoice = activeInvoice && Number(activeInvoice.balance || 0) > 0 ? activeInvoice : undefined;
-            const canCreateCredit = Boolean(activeInvoice)
-              && !needsInventorySync
+            const canAccessCreditAction = isPayableReceipt
               && canPerform('PURCHASES_RECEIPTS', 'approve')
               && canPerform('PURCHASES_RETURNS', 'create');
-            const canRegisterPayment = Boolean(payableInvoice)
+            const creditBlockedReason = !activeInvoice
+              ? 'Registra primero la factura del proveedor'
+              : needsInventorySync
+                ? 'Procesa primero la entrada en inventario'
+                : '';
+            const canAccessPaymentAction = Boolean(payableInvoice)
               && canPerform('PURCHASES_PAYMENTS', 'create')
               && canPerform('PURCHASES_PAYMENTS', 'approve');
-            const canRegisterInvoice = isPayableReceipt && !activeInvoice
-              && canPerform('PURCHASES_RECEIPTS', 'edit')
-              && canPerform('PURCHASES_PAYMENTS', 'create')
-              && canPerform('PURCHASES_PAYMENTS', 'approve');
+            const canAccessInvoiceAction = isPayableReceipt && !activeInvoice
+              && canPerform('PURCHASES_RECEIPTS', 'edit');
             return (
               <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                <Button title="Ver detalle completo" aria-label={`Ver detalle completo de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setDetailReceipt(null); setEditingId(String(row.id)); }}>
+                <Button title="Ver detalle completo" aria-label={`Ver detalle completo de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setDetailReceipt(null); setEditingId(String(row.id)); }}>
                   <Eye className="size-4" />
                 </Button>
                 {canReceiveRow && (
@@ -1889,31 +1902,44 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     aria-label={`Recepcionar ${row.number || 'recepción'}`}
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                     onClick={() => setEditingId(row.id)}
                   >
                     <PackageCheck className="size-4" />
                   </Button>
                 )}
-                {isPayableReceipt && (canRegisterPayment || canRegisterInvoice) && (
+                {canAccessInvoiceAction && (
                   <Button
-                    title={canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'}
-                    aria-label={`${canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'} de ${row.number || 'recepción'}`}
+                    title="Registrar compra a crédito"
+                    aria-label={`Registrar compra a crédito de ${row.number || 'recepción'}`}
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => openPaymentModal(row, undefined, true)}
+                  >
+                    <FileText className="size-4" />
+                  </Button>
+                )}
+                {canAccessPaymentAction && (
+                  <Button
+                    title="Registrar pago"
+                    aria-label={`Registrar pago de ${row.number || 'recepción'}`}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                     onClick={() => openPaymentModal(row, payableInvoice)}
                   >
                     <Banknote className="size-4" />
                   </Button>
                 )}
-                {canCreateCredit && (
+                {canAccessCreditAction && (
                   <Button
-                    title="Crear crédito del proveedor"
-                    aria-label={`Crear crédito del proveedor desde ${row.number || 'recepción'}`}
+                    title={creditBlockedReason || 'Crear nota de crédito por devolución'}
+                    aria-label={`${creditBlockedReason || 'Crear nota de crédito por devolución'} desde ${row.number || 'recepción'}`}
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10 hover:text-primary"
+                    disabled={Boolean(creditBlockedReason)}
+                    className={cn('size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground', creditBlockedReason && 'cursor-not-allowed opacity-50')}
                     onClick={() => openReceiptCredit(row, activeInvoice)}
                   >
                     <Send className="size-4" />
@@ -1925,7 +1951,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     aria-label={`Reintentar inventario de ${row.number || 'recepción'}`}
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 rounded-lg text-amber-600 hover:bg-amber-500/10 hover:text-amber-700"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                     onClick={() => void handleRepairInventory(row)}
                   >
                     <RefreshCw className="size-4" />
@@ -1937,7 +1963,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     aria-label={`Cancelar ${row.number || 'recepción'}`}
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                     onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}
                   >
                     <Ban className="size-4" />

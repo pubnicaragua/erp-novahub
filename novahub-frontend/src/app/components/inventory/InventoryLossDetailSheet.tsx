@@ -65,7 +65,7 @@ function DetailField({ label, value }: { label: string; value: ReactNode }) {
 
 function ReasonBadge({ value }: { value: unknown }) {
   return (
-    <Badge variant="outline" className="max-w-full whitespace-normal break-words border-red-500/20 bg-red-500/5 text-center text-[10px] font-bold text-red-600">
+    <Badge variant="outline" className="max-w-full whitespace-normal break-words border-destructive/20 bg-destructive/5 text-center text-[10px] font-bold text-destructive">
       {formatReason(value)}
     </Badge>
   );
@@ -85,8 +85,8 @@ function LossItemCard({ item, canViewInventoryCost, formatCurrentAmount, fallbac
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
         <DetailField label="Existencia actual" value={formatNumber(item.systemStock)} />
         <DetailField label="Existencia real" value={formatNumber(item.countedStock)} />
-        <DetailField label="Diferencia" value={<span className="font-mono text-red-600">{formatNumber(difference)}</span>} />
-        {canViewInventoryCost && <DetailField label="Impacto" value={<span className="font-mono text-red-600">-{formatCurrentAmount(Number(item.lossAmount || 0))}</span>} />}
+        <DetailField label="Diferencia" value={<span className="font-mono text-destructive">{formatNumber(difference)}</span>} />
+        {canViewInventoryCost && <DetailField label="Impacto" value={<span className="font-mono text-destructive">-{formatCurrentAmount(Number(item.lossAmount || 0))}</span>} />}
       </div>
     </div>
   );
@@ -113,7 +113,7 @@ export function InventoryLossDetailSheet({ row, canViewInventoryCost, formatCurr
       <SheetContent side="right" className="erp-detail-panel erp-detail-panel--wide flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
           <div className="flex min-w-0 items-start gap-4">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-600 shadow-inner">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/10 text-destructive shadow-inner">
               <TrendingDown className="size-6" />
             </div>
             <div className="min-w-0 flex-1 space-y-1">
@@ -132,14 +132,14 @@ export function InventoryLossDetailSheet({ row, canViewInventoryCost, formatCurr
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {row && <div className="space-y-5 p-4 sm:p-6">
-            <Card className="rounded-2xl border-red-500/20 bg-red-500/5 p-4 shadow-sm">
+            <Card className="rounded-2xl border-destructive/20 bg-destructive/5 p-4 shadow-sm">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-red-600">Pérdida registrada</p>
-                  <p className="mt-1 text-2xl font-black tabular-nums tracking-tight text-red-600">-{formatNumber(totalUnits)}</p>
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-destructive">Pérdida registrada</p>
+                  <p className="mt-1 text-2xl font-black tabular-nums tracking-tight text-destructive">-{formatNumber(totalUnits)}</p>
                   <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Unidades afectadas</p>
                 </div>
-                <Badge className="shrink-0 bg-emerald-500/10 text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                <Badge className="shrink-0 bg-success/10 text-[10px] font-black uppercase tracking-widest text-success">
                   {status === 'APPROVED' && <Check className="mr-1 size-3" />}
                   {STATUS_LABELS[status] || status}
                 </Badge>
@@ -153,8 +153,8 @@ export function InventoryLossDetailSheet({ row, canViewInventoryCost, formatCurr
               <DetailField label="Estado" value={STATUS_LABELS[status] || status} />
               <DetailField label="Aprobado por" value={formatApprover(row.approvedBy || row.approvedByName)} />
               <DetailField label="Fecha de aprobación" value={formatDate(row.approvedAt)} />
-              <DetailField label="Variación" value={<span className="font-mono text-red-600">-{formatNumber(totalUnits)}</span>} />
-              {canViewInventoryCost && <DetailField label="Impacto" value={<span className="font-mono text-red-600">-{formatCurrentAmount(Number(row.totalLoss || 0))}</span>} />}
+              <DetailField label="Variación" value={<span className="font-mono text-destructive">-{formatNumber(totalUnits)}</span>} />
+              {canViewInventoryCost && <DetailField label="Impacto" value={<span className="font-mono text-destructive">-{formatCurrentAmount(Number(row.totalLoss || 0))}</span>} />}
             </div>
 
             {row.notes && <Card className="rounded-2xl border-border/60 p-5 shadow-sm">
@@ -164,7 +164,7 @@ export function InventoryLossDetailSheet({ row, canViewInventoryCost, formatCurr
 
             <section className="min-w-0">
               <div className="mb-3 flex items-center gap-2">
-                <Package className="size-4 text-red-600" />
+                <Package className="size-4 text-destructive" />
                 <h3 className="truncate text-sm font-black uppercase tracking-tight">Productos afectados</h3>
               </div>
 
@@ -191,9 +191,9 @@ export function InventoryLossDetailSheet({ row, canViewInventoryCost, formatCurr
                       <TableCell className="min-w-0 whitespace-normal break-words px-2 align-top"><p className="font-semibold leading-4">{item.name || 'Producto'}</p><p className="break-words text-[10px] leading-3 text-muted-foreground">{item.code || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p></TableCell>
                       <TableCell className="whitespace-nowrap px-2 text-right align-top tabular-nums">{formatNumber(item.systemStock)}</TableCell>
                       <TableCell className="whitespace-nowrap px-2 text-right align-top tabular-nums">{formatNumber(item.countedStock)}</TableCell>
-                      <TableCell className="whitespace-nowrap px-2 text-right align-top font-mono font-bold text-red-600">-{formatNumber(item.lossQuantity)}</TableCell>
+                      <TableCell className="whitespace-nowrap px-2 text-right align-top font-mono font-bold text-destructive">-{formatNumber(item.lossQuantity)}</TableCell>
                       <TableCell className="min-w-0 whitespace-normal break-words px-2 align-top"><ReasonBadge value={item.reason || reason} /></TableCell>
-                      {canViewInventoryCost && <><TableCell className="whitespace-normal break-words px-2 text-right align-top tabular-nums">{formatCurrentAmount(Number(item.unitCost || 0))}</TableCell><TableCell className="whitespace-normal break-words px-2 text-right align-top font-mono font-bold text-red-600">-{formatCurrentAmount(Number(item.lossAmount || 0))}</TableCell></>}
+                      {canViewInventoryCost && <><TableCell className="whitespace-normal break-words px-2 text-right align-top tabular-nums">{formatCurrentAmount(Number(item.unitCost || 0))}</TableCell><TableCell className="whitespace-normal break-words px-2 text-right align-top font-mono font-bold text-destructive">-{formatCurrentAmount(Number(item.lossAmount || 0))}</TableCell></>}
                     </TableRow>)}
                   </TableBody>
                 </Table>

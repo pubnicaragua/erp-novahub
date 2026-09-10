@@ -26,10 +26,10 @@ const TRAINING_STATUS_LABELS: Record<string, string> = {
 };
 
 const TRAINING_STATUS_STYLES: Record<string, string> = {
-  SCHEDULED: 'bg-blue-100 text-blue-700',
-  IN_PROGRESS: 'bg-orange-100 text-orange-700',
-  COMPLETED: 'bg-green-100 text-green-700',
-  CANCELLED: 'bg-gray-100 text-gray-700',
+  SCHEDULED: 'bg-info/10 text-info',
+  IN_PROGRESS: 'bg-warning/10 text-warning',
+  COMPLETED: 'bg-success/10 text-success',
+  CANCELLED: 'bg-muted text-muted-foreground',
 };
 
 const ENROLLMENT_STATUS_LABELS: Record<string, string> = {
@@ -476,7 +476,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                   <h3 className="font-semibold text-lg mb-1">{training.title}</h3>
                   <p className="text-sm text-muted-foreground line-clamp-2">{training.description}</p>
                 </div>
-                <Badge className={cn('ml-2 text-[10px] font-black uppercase tracking-wider', TRAINING_STATUS_STYLES[training.status] || 'bg-gray-100 text-gray-700')}>
+                <Badge className={cn('ml-2 text-[10px] font-black uppercase tracking-wider', TRAINING_STATUS_STYLES[training.status] || 'bg-muted text-muted-foreground')}>
                   {TRAINING_STATUS_LABELS[training.status] || training.status}
                 </Badge>
               </div>
@@ -516,7 +516,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 {completedCount > 0 && (
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>Completados</span>
-                    <span className="font-bold text-green-600">{completedCount} · {completionRate}%</span>
+                    <span className="font-bold text-success">{completedCount} · {completionRate}%</span>
                   </div>
                 )}
               </div>
@@ -531,12 +531,12 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
               )}
 
               {Number(training.cost || 0) > 0 && training.paymentStatus !== 'PAID' && canPerform('HR_TRAINING', 'approve') && (
-                <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pago: {training.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : training.paymentStatus === 'APPROVED' ? 'Aprobada' : 'Pendiente'}</span>
+                <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-warning/20 bg-warning/5 px-3 py-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-warning">Pago: {training.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : training.paymentStatus === 'APPROVED' ? 'Aprobada' : 'Pendiente'}</span>
                   {(!training.paymentStatus || training.paymentStatus === 'PENDING') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(training)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
                 </div>
               )}
-              {Number(training.cost || 0) > 0 && training.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600"><CheckCircle2 className="size-3.5" /> Pago contabilizado</div>}
+              {Number(training.cost || 0) > 0 && training.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-success"><CheckCircle2 className="size-3.5" /> Pago contabilizado</div>}
 
               {canPerform('HR_TRAINING', 'edit') && training.status !== 'COMPLETED' && training.status !== 'CANCELLED' && (
                 <div className="flex items-center gap-2 pt-3 mt-3 border-t border-border/40">
@@ -550,7 +550,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                       <CheckCircle2 className="size-3 mr-1" /> Completar
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" className="h-8 px-2 text-xs text-red-600 hover:bg-red-50 border-red-200" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'CANCELLED')}>
+                  <Button size="sm" variant="outline" className="h-8 px-2 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'CANCELLED')}>
                     <XCircle className="size-3" />
                   </Button>
                 </div>

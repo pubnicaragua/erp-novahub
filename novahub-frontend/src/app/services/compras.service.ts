@@ -39,7 +39,7 @@ export const purchaseReceiptsService = {
   approve: (id: string, idempotencyKey?: string) => api.idempotentPost<PurchaseReceipt>(`/purchases/receipts/${id}/approve`, {}, idempotencyKey),
   createCredit: (id: string, data: { date?: string; reason: string; items: Array<{ receiptItemId: string; quantity: number }> }) => api.post<SupplierCredit>(`/purchases/receipts/${id}/credit`, data),
   cancel: (id: string, reason?: string) => api.post<PurchaseReceipt>(`/purchases/receipts/${id}/cancel`, { reason }),
-  registerInvoice: (id: string, data: { number: string; date?: string; dueDate?: string; subtotal?: number; taxAmount?: number; withholdingTotal?: number; withholdingBase?: number; total?: number; currency?: string; exchangeRate?: number; notes?: string; attachments: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> }) =>
+  registerInvoice: (id: string, data: { number: string; date?: string; dueDate?: string; subtotal?: number; taxAmount?: number; withholdingTotal?: number; withholdingBase?: number; total?: number; currency?: string; exchangeRate?: number; status?: 'PENDING' | 'CREDIT'; notes?: string; attachments: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> }) =>
     api.post<SupplierInvoice>(`/purchases/receipts/${id}/invoice`, data),
 };
 

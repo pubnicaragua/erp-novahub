@@ -48,9 +48,9 @@ const STATUS_META: Record<string, { label: string; tone: 'success' | 'warn' | 'd
 function StatusBadge({ status }: { status?: string }) {
   const meta = STATUS_META[status || 'PENDIENTE'] || STATUS_META.PENDIENTE
   const toneClass = {
-    success: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-    warn: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-    danger: 'bg-red-500/10 text-red-600 border-red-500/20',
+    success: 'bg-success/10 text-success border-success/20',
+    warn: 'bg-warning/10 text-warning border-warning/20',
+    danger: 'bg-destructive/10 text-destructive border-destructive/20',
     muted: 'bg-muted/50 text-muted-foreground border-border/40',
   }[meta.tone]
   return <Badge variant="outline" title={meta.description} className={cn('gap-1 text-[9px] font-black uppercase tracking-widest', toneClass)}>{meta.label}</Badge>
@@ -491,7 +491,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                   />
                   {controlAccount && (
                     <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <CheckCircle2 className="size-3 text-emerald-500" />
+                      <CheckCircle2 className="size-3 text-success" />
                       {controlAccount.code} - {controlAccount.name} · {controlAccount.isActive === false ? 'cuenta inactiva' : controlAccount.acceptsPostings === false ? 'cuenta agrupadora (consolida)' : 'cuenta de detalle'}
                     </p>
                   )}
@@ -518,7 +518,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                   <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{linkedCount} de {warehouses.length} bodegas vinculadas</span>
                 </div>
                 <div className="mb-4 h-2 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
+                  <div className="h-full rounded-full bg-success transition-all duration-500" style={{ width: `${progressPercent}%` }} />
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-xl border border-border/40 p-3">
@@ -529,13 +529,13 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                     <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Warehouse className="size-3" /> Bodegas</p>
                     <p className="mt-1 text-2xl font-black">{warehouses.length}</p>
                   </div>
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-600"><CheckCircle2 className="size-3" /> Vinculados</p>
-                    <p className="mt-1 text-2xl font-black text-emerald-600">{linkedCount}</p>
+                  <div className="rounded-xl border border-success/20 bg-success/5 p-3">
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-success"><CheckCircle2 className="size-3" /> Vinculados</p>
+                    <p className="mt-1 text-2xl font-black text-success">{linkedCount}</p>
                   </div>
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-amber-600"><AlertTriangle className="size-3" /> Pendientes / errores</p>
-                    <p className="mt-1 text-2xl font-black text-amber-600">{pendingCount + errorCount}</p>
+                  <div className="rounded-xl border border-warning/20 bg-warning/5 p-3">
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-warning"><AlertTriangle className="size-3" /> Pendientes / errores</p>
+                    <p className="mt-1 text-2xl font-black text-warning">{pendingCount + errorCount}</p>
                   </div>
                 </div>
               </Card>
@@ -551,14 +551,14 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                     {hierarchyPreview.map((level, i) => (
                       <div key={i} className="relative flex items-center gap-3">
                         {i < hierarchyPreview.length - 1 && <span className="absolute left-[7px] top-7 h-5 w-px bg-border" />}
-                        <span className={cn('z-10 size-[15px] shrink-0 rounded-full border-2', level.exists ? 'border-emerald-500 bg-emerald-500/20' : 'border-primary bg-primary/20')} />
+                        <span className={cn('z-10 size-[15px] shrink-0 rounded-full border-2', level.exists ? 'border-success bg-success/20' : 'border-primary bg-primary/20')} />
                         <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border border-border/40 bg-muted/30 px-3 py-2">
                           <div className="min-w-0">
                             <p className="truncate font-mono text-[11px] font-bold">{level.code ? `${level.code} · ${level.name}` : level.name}</p>
                             <p className="text-[9px] uppercase tracking-widest text-muted-foreground">{level.note}</p>
                           </div>
                           {level.exists
-                            ? <Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600">Existente</Badge>
+                            ? <Badge variant="outline" className="shrink-0 bg-success/10 text-[9px] font-black uppercase tracking-widest text-success">Existente</Badge>
                             : <Badge variant="outline" className="shrink-0 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">Se creará</Badge>}
                         </div>
                       </div>
@@ -662,7 +662,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                                   <p className="break-words text-sm font-semibold">{wh.name}</p>
                                   <div className="mt-1 flex flex-wrap gap-1">
                                     {isPrimaryInGroup && <Badge variant="outline" className="bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">Principal</Badge>}
-                                    {!isPrimaryInGroup && isShared && <Badge variant="outline" className="bg-amber-500/10 text-[9px] font-black uppercase tracking-widest text-amber-600">Compartido</Badge>}
+                                    {!isPrimaryInGroup && isShared && <Badge variant="outline" className="bg-warning/10 text-[9px] font-black uppercase tracking-widest text-warning">Compartido</Badge>}
                                   </div>
                                 </div>
                                 <StatusBadge status={info.status} />
@@ -686,7 +686,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-9 w-full gap-1 border-red-500/20 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-500/10 hover:text-red-600"
+                                    className="h-9 w-full gap-1 border-destructive/20 text-[10px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10 hover:text-destructive"
                                     onClick={() => setUnlinkTarget({ wh, branch })}
                                   >
                                     <Unlink className="size-3.5" /> Desvincular
@@ -757,7 +757,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                               {isPrimaryInGroup ? (
                               <Badge variant="outline" className="shrink-0 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary" title="Esta bodega es la principal de esta sucursal">Principal</Badge>
                               ) : isShared ? (
-                              <Badge variant="outline" className="shrink-0 bg-amber-500/10 text-[9px] font-black uppercase tracking-widest text-amber-600" title="Esta bodega también pertenece a otra sucursal. Puede tener su propia cuenta en cada sucursal.">Compartido</Badge>
+                              <Badge variant="outline" className="shrink-0 bg-warning/10 text-[9px] font-black uppercase tracking-widest text-warning" title="Esta bodega también pertenece a otra sucursal. Puede tener su propia cuenta en cada sucursal.">Compartido</Badge>
                               ) : null}
                             </span>
                           </TableCell>
@@ -774,7 +774,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-8 gap-1 border-red-500/20 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-500/10 hover:text-red-600"
+                                  className="h-8 gap-1 border-destructive/20 text-[10px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10 hover:text-destructive"
                                   onClick={() => setUnlinkTarget({ wh, branch })}
                                   title={`Desvincular la cuenta contable de la bodega ${wh.name} en ${branch.name}`}
                                 >
@@ -802,9 +802,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Sucursales</p><p className="text-2xl font-black">{branches.length}</p></Card>
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Bodegas</p><p className="text-2xl font-black">{warehouses.length}</p></Card>
-            <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Vinculados</p><p className="text-2xl font-black text-emerald-600">{statusCounts.VINCULADO || 0}</p></Card>
-            <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendientes</p><p className="text-2xl font-black text-amber-600">{statusCounts.PENDIENTE || 0}</p></Card>
-            <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Con errores</p><p className="text-2xl font-black text-red-600">{(statusCounts.CUENTA_INACTIVA || 0) + (statusCounts.CUENTA_NO_POSTEABLE || 0)}</p></Card>
+            <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Vinculados</p><p className="text-2xl font-black text-success">{statusCounts.VINCULADO || 0}</p></Card>
+            <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendientes</p><p className="text-2xl font-black text-warning">{statusCounts.PENDIENTE || 0}</p></Card>
+            <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Con errores</p><p className="text-2xl font-black text-destructive">{(statusCounts.CUENTA_INACTIVA || 0) + (statusCounts.CUENTA_NO_POSTEABLE || 0)}</p></Card>
           </div>
           <Card className="p-4">
             <Table>
@@ -828,7 +828,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                               <Badge
                                 key={b.id}
                                 variant="outline"
-                                className={cn('text-[9px] font-black uppercase tracking-widest', linkStatus === 'VINCULADO' ? 'bg-emerald-500/10 text-emerald-600' : linkStatus === 'PENDIENTE' ? (b.isPrimary ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground') : 'bg-red-500/10 text-red-600')}
+                                className={cn('text-[9px] font-black uppercase tracking-widest', linkStatus === 'VINCULADO' ? 'bg-success/10 text-success' : linkStatus === 'PENDIENTE' ? (b.isPrimary ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground') : 'bg-destructive/10 text-destructive')}
                                 title={`${b.isPrimary ? 'Sucursal principal' : 'Sucursal adicional'} · ${linkStatus === 'VINCULADO' ? 'cuenta vinculada' : linkStatus === 'PENDIENTE' ? 'sin cuenta vinculada' : 'cuenta con error'}`}
                               >
                                 {b.name}
@@ -916,7 +916,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                         <p className="text-[9px] uppercase tracking-widest text-muted-foreground">{level.note}</p>
                       </div>
                       {level.exists
-                        ? <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600">Existente</Badge>
+                        ? <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase tracking-widest text-success">Existente</Badge>
                         : <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase tracking-widest text-primary">Se creará</Badge>}
                     </div>
                   ))}
@@ -959,7 +959,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                     )
                   })()}
                   {branchGroupFor(configBranch?.id) && branchAccountId === branchGroupFor(configBranch?.id)?.id ? (
-                    <p className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+                    <p className="flex items-center gap-1.5 text-[10px] text-success">
                       <CheckCircle2 className="size-3" /> Esta sucursal ya tiene cuenta agrupadora y se reutilizará.
                     </p>
                   ) : (
@@ -973,9 +973,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 <div className="space-y-2">
                   <Label>Cuenta de la bodega (recibe movimientos)</Label>
                   {linkableAccounts.length === 0 ? (
-                    <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                      <p className="text-[11px] leading-snug text-amber-700">
+                    <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-warning/5 p-3">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+                      <p className="text-[11px] leading-snug text-warning">
                         No hay cuentas de Activo activas que acepten posteos. Crea una desde <span className="font-semibold">Contabilidad → Plan de Cuentas</span> o usa <span className="font-semibold">Crear automáticamente</span>.
                       </p>
                     </div>
@@ -1081,7 +1081,7 @@ function CostCentersView({ costCenters, onChange }: { costCenters: any[]; onChan
               <TableCell className="font-mono text-xs">{c.code}</TableCell>
               <TableCell className="text-sm">{c.name}</TableCell>
               <TableCell>
-                <Badge variant={c.isActive ? 'default' : 'secondary'} className={c.isActive ? 'bg-emerald-500/10 text-emerald-600' : ''}>
+                <Badge variant={c.isActive ? 'default' : 'secondary'} className={c.isActive ? 'bg-success/10 text-success' : ''}>
                   {c.isActive ? 'Activo' : 'Inactivo'}
                 </Badge>
               </TableCell>

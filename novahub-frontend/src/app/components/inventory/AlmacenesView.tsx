@@ -297,7 +297,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const renderEditableRow = (warehouse: EditingWarehouse) => {
     const isSaving = savingIds.has(warehouse.id);
     return (
-      <TableRow key={warehouse.id} className="bg-blue-500/5">
+      <TableRow key={warehouse.id} className="bg-info/5">
         <TableCell>
           <Input
             value={warehouse.name}
@@ -363,7 +363,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="size-7 text-green-600 hover:bg-green-500/10"
+              className="size-7 text-success hover:bg-success/10"
               onClick={() => handleSaveRow(warehouse.id)}
               disabled={isSaving}
             >
@@ -372,7 +372,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="size-7 text-red-600 hover:bg-red-500/10"
+              className="size-7 text-destructive hover:bg-destructive/10"
               onClick={() => handleCancelEdit(warehouse.id)}
               disabled={isSaving}
             >
@@ -393,7 +393,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="text-[10px] font-black uppercase tracking-widest text-primary">{draft.isNew ? 'Nueva bodega' : 'Editar bodega'}</p>
             <div className="flex items-center gap-1">
-              <Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={() => handleSaveRow(draft.id)} disabled={isSaving} aria-label="Guardar bodega">
+              <Button type="button" variant="ghost" size="icon" className="size-8 text-success" onClick={() => handleSaveRow(draft.id)} disabled={isSaving} aria-label="Guardar bodega">
                 {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
               </Button>
               <Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => handleCancelEdit(draft.id)} disabled={isSaving} aria-label="Cancelar edición"><X className="size-4" /></Button>
@@ -553,7 +553,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                         {canDeactivateWarehouse && <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="size-7 text-red-600 hover:text-white hover:bg-red-700"
+                          className="size-7 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                           onClick={() => handleDeleteWarehouse(wh.id)}
                         >
                           <Trash2 className="size-3.5" />
@@ -670,7 +670,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                       <td className="px-4 py-3 text-muted-foreground">{bodega ? bodega.name : 'No asignada'}</td>
                       <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
                       <td className="px-4 py-3">
-                        <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
+                        <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-success/10 text-success hover:bg-success/20' : ''}>
                           {caja.isActive ? 'Activa' : 'Inactiva'}
                         </Badge>
                       </td>

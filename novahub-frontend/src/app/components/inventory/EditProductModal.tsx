@@ -431,7 +431,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="size-5 text-red-500 hover:text-white hover:bg-red-500"
+                              className="size-5 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                               onClick={(e) => { e.stopPropagation(); toggleAttribute(attr.id); }}
                             >
                               <X className="size-3" />

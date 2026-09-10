@@ -75,19 +75,19 @@ const CURRENCIES = [
 ];
 
 const CATEGORY_BADGES: Record<string, string> = {
-  BUILDING: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
-  VEHICLE: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
-  OFFICE_FURNITURE: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  COMPUTER_EQUIPMENT: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
-  MACHINERY: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
+  BUILDING: 'bg-info/10 text-info border-info/20',
+  VEHICLE: 'bg-info/10 text-info border-info/20',
+  OFFICE_FURNITURE: 'bg-warning/10 text-warning border-warning/20',
+  COMPUTER_EQUIPMENT: 'bg-info/10 text-info border-info/20',
+  MACHINERY: 'bg-warning/10 text-warning border-warning/20',
   OTHER: 'bg-muted text-muted-foreground border-border/30',
 };
 
 const STATUS_BADGES: Record<string, string> = {
-  AVAILABLE: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-  ASSIGNED: 'bg-sky-500/10 text-sky-600 border-sky-500/20',
-  IN_REPAIR: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  DAMAGED: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
+  AVAILABLE: 'bg-success/10 text-success border-success/20',
+  ASSIGNED: 'bg-info/10 text-info border-info/20',
+  IN_REPAIR: 'bg-warning/10 text-warning border-warning/20',
+  DAMAGED: 'bg-destructive/10 text-destructive border-destructive/20',
   DISPOSED: 'bg-muted text-muted-foreground border-border/30',
 };
 
@@ -725,7 +725,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total de activos</p>
                 <p className="text-xl font-black tabular-nums">{effectiveSummary.totalAssets ?? displayTotal}</p>
               </div>
-              {canViewInventoryCost && <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+              {canViewInventoryCost && <div className="rounded-xl border border-success/20 bg-success/5 p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Valor total ({effectiveSummary.baseCurrency || 'USD'})</p>
                 <p className="text-xl font-black tabular-nums">
                   {effectiveSummary.baseCurrency === 'NIO' ? 'C$' : '$'} {fmtCost(Number(effectiveSummary.totalCostBase || 0))}
@@ -735,9 +735,9 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               {canViewInventoryCost && <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desglose por moneda</p>
                 <p className="text-sm font-black tabular-nums">
-                  <span className="text-amber-600">C$ {fmtCost(Number(effectiveSummary.perCurrency?.NIO || 0))}</span>
+                  <span className="text-warning">C$ {fmtCost(Number(effectiveSummary.perCurrency?.NIO || 0))}</span>
                   <span className="mx-1.5 text-muted-foreground">·</span>
-                  <span className="text-emerald-600">$ {fmtCost(Number(effectiveSummary.perCurrency?.USD || 0))}</span>
+                  <span className="text-success">$ {fmtCost(Number(effectiveSummary.perCurrency?.USD || 0))}</span>
                 </p>
                 <p className="text-[9px] text-muted-foreground">Costo original de cada registro</p>
               </div>}
@@ -794,7 +794,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                               <a href={asset.attachmentUrl} target="_blank" rel="noreferrer" title={asset.attachmentName || 'Ver respaldo'} className="text-primary hover:underline inline-flex items-center gap-0.5">
                                 <Paperclip className="size-3.5" />
                               </a>
-                              {canDeleteAssets && <button onClick={() => handleRemoveAttachment(asset)} title="Quitar respaldo" className="text-muted-foreground hover:text-red-500">
+                              {canDeleteAssets && <button onClick={() => handleRemoveAttachment(asset)} title="Quitar respaldo" className="text-muted-foreground hover:text-destructive">
                                 <X className="size-3" />
                               </button>}
                             </div>
@@ -823,7 +823,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                         <TableCell className="py-2 px-2">
                           <div className="flex items-center justify-end gap-1">
                             {canEditAssets && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(asset)} aria-label={`Editar ${asset.name}`} title="Editar activo"><Pencil className="size-3.5" /></Button>}
-                            {canDeleteAssets && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => setDeleteTarget(asset)} aria-label={`Eliminar ${asset.name}`} title="Eliminar activo"><Trash2 className="size-3.5" /></Button>}
+                            {canDeleteAssets && <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => setDeleteTarget(asset)} aria-label={`Eliminar ${asset.name}`} title="Eliminar activo"><Trash2 className="size-3.5" /></Button>}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -949,7 +949,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                 </div>
               )}
               {canViewInventoryCost && displayMode !== 'ORIGINAL' && form.currency === 'NIO' && form.cost && Number(form.cost) > 0 && form.exchangeRate && Number(form.exchangeRate) > 0 && (
-                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-700 sm:col-span-2">
+                <div className="rounded-lg border border-success/20 bg-success/5 px-3 py-2 text-[11px] text-success sm:col-span-2">
                   Equivalente: <strong>$ {fmtCost(Number(form.cost) / Number(form.exchangeRate))} USD</strong>
                   <span className="text-muted-foreground"> · Costo: C$ {fmtCost(Number(form.cost))}</span>
                 </div>
@@ -962,7 +962,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                   </span>
                   <div className="flex shrink-0 items-center gap-2">
                     <a href={editing.attachmentUrl} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-primary hover:underline inline-flex items-center gap-1"><ExternalLink className="size-3" /> Ver</a>
-                    {canDeleteAssets && <button onClick={() => handleRemoveAttachment(editing)} className="text-[10px] font-bold text-red-500 hover:underline">Quitar</button>}
+                    {canDeleteAssets && <button onClick={() => handleRemoveAttachment(editing)} className="text-[10px] font-bold text-destructive hover:underline">Quitar</button>}
                   </div>
                 </div>
               )}
@@ -1009,30 +1009,30 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           {importResult ? (
             <div className="space-y-3" data-tour="mobiliario-import-data">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
-                  <p className="text-2xl font-black text-emerald-600">{importResult.createdCount ?? 0}</p>
+                <div className="rounded-xl border border-success/20 bg-success/5 p-3 text-center">
+                  <p className="text-2xl font-black text-success">{importResult.createdCount ?? 0}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Activos creados</p>
                 </div>
-                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-center">
-                  <p className="text-2xl font-black text-blue-600">{importResult.fixedAssetCount ?? 0}</p>
+                <div className="rounded-xl border border-info/20 bg-info/5 p-3 text-center">
+                  <p className="text-2xl font-black text-info">{importResult.fixedAssetCount ?? 0}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">En Activos Fijos</p>
                 </div>
-                <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-center">
-                  <p className="text-2xl font-black text-rose-600">{importResult.skippedCount ?? 0}</p>
+                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-center">
+                  <p className="text-2xl font-black text-destructive">{importResult.skippedCount ?? 0}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Omitidos</p>
                 </div>
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center">
-                  <p className="text-2xl font-black text-amber-600">{importResult.fixedAssetSkippedCount ?? 0}</p>
+                <div className="rounded-xl border border-warning/20 bg-warning/5 p-3 text-center">
+                  <p className="text-2xl font-black text-warning">{importResult.fixedAssetSkippedCount ?? 0}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sin Activo Fijo</p>
                 </div>
               </div>
               {(importResult.fixedAssetSkipped || []).length > 0 && (
-                <div className="max-h-48 overflow-y-auto rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 scrollbar-overlay">
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-amber-700">Revisión contable</p>
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-warning/30 bg-warning/5 p-3 scrollbar-overlay">
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-warning">Revisión contable</p>
                   {(importResult.fixedAssetSkipped as any[]).map((item, i) => (
-                    <div key={i} className="border-b border-amber-500/20 py-1.5 text-[11px] last:border-0">
+                    <div key={i} className="border-b border-warning/20 py-1.5 text-[11px] last:border-0">
                       <span className="mr-2 font-mono text-muted-foreground">Fila {item.row}</span>
-                      <span className="text-amber-700">{item.error}</span>
+                      <span className="text-warning">{item.error}</span>
                     </div>
                   ))}
                 </div>
@@ -1042,7 +1042,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                   {(importResult.skipped as any[]).map((s, i) => (
                     <div key={i} className="flex items-start justify-between gap-2 border-b border-border/30 px-3 py-1.5 text-[11px] last:border-0">
                       <span className="shrink-0 font-mono text-muted-foreground">Fila {s.row}</span>
-                      <span className="text-rose-600">{s.error}</span>
+                      <span className="text-destructive">{s.error}</span>
                     </div>
                   ))}
                 </div>

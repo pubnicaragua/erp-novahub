@@ -1,10 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Check, Package } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
 import type { ProductVariant } from '../../types/variants';
-import { extractVariantAttributes, findVariantByAttributes } from '../../types/variants';
+import { buildVariantDescription, extractVariantAttributes, findVariantByAttributes } from '../../types/variants';
 
 interface PurchaseVariantPickerModalProps {
   open: boolean;
@@ -17,11 +16,22 @@ export function PurchaseVariantPickerModal({ open, onOpenChange, product, onSele
   const variants = product?.variants || [];
   const attributes = useMemo(() => extractVariantAttributes(variants), [variants]);
   const [selected, setSelected] = useState<Record<string, string>>({});
+  const [selectedVariantId, setSelectedVariantId] = useState('');
+
+  useEffect(() => {
+    setSelected({});
+    setSelectedVariantId(attributes.length === 0 && variants.length === 1 ? variants[0].id : '');
+  }, [product?.id, open]);
 
   const matchedVariant = useMemo(
     () => findVariantByAttributes(variants, selected),
     [variants, selected]
   );
+
+  const selectedDirectVariant = attributes.length === 0
+    ? variants.find((variant) => variant.id === selectedVariantId)
+    : undefined;
+  const selectedVariant = selectedDirectVariant || matchedVariant;
 
   const toggleValue = (attribute: string, value: string) => {
     setSelected((prev) => ({
@@ -31,16 +41,18 @@ export function PurchaseVariantPickerModal({ open, onOpenChange, product, onSele
   };
 
   const handleConfirm = () => {
-    if (matchedVariant) {
-      onSelect(matchedVariant);
+    if (selectedVariant) {
+      onSelect(selectedVariant);
       onOpenChange(false);
       setSelected({});
+      setSelectedVariantId('');
     }
   };
 
   const handleClose = () => {
     onOpenChange(false);
     setSelected({});
+    setSelectedVariantId('');
   };
 
   if (!product) return null;
@@ -57,6 +69,35 @@ export function PurchaseVariantPickerModal({ open, onOpenChange, product, onSele
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {attributes.length === 0 && (
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Variantes disponibles</p>
+              <div className="space-y-2">
+                {variants.map((variant) => {
+                  const isSelected = selectedVariantId === variant.id;
+                  return (
+                    <button
+                      key={variant.id}
+                      type="button"
+                      onClick={() => setSelectedVariantId(variant.id)}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                        isSelected
+                          ? 'border-primary bg-primary/10 text-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:border-primary/30'
+                      }`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-bold">{buildVariantDescription(variant) || 'Variante sin nombre'}</span>
+                        <span className="block font-mono text-[10px] text-muted-foreground">SKU: {variant.sku}</span>
+                      </span>
+                      {isSelected && <Check className="size-4 shrink-0 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {attributes.map(({ attribute, values }) => (
             <div key={attribute}>
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">{attribute}</p>
@@ -83,11 +124,11 @@ export function PurchaseVariantPickerModal({ open, onOpenChange, product, onSele
             </div>
           ))}
 
-          {matchedVariant && (
+          {selectedVariant && (
             <div className="rounded-xl border bg-muted/30 p-3 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">SKU:</span>
-                <span className="font-mono font-bold">{matchedVariant.sku}</span>
+                <span className="font-mono font-bold">{selectedVariant.sku}</span>
               </div>
             </div>
           )}
@@ -95,7 +136,7 @@ export function PurchaseVariantPickerModal({ open, onOpenChange, product, onSele
 
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button variant="outline" onClick={handleClose}>Cancelar</Button>
-          <Button onClick={handleConfirm} disabled={!matchedVariant}>
+          <Button onClick={handleConfirm} disabled={!selectedVariant}>
             Seleccionar
           </Button>
         </div>

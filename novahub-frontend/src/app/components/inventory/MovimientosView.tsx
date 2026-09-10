@@ -84,7 +84,7 @@ function MovementDetailsPanel({ movement, onClose, canViewInventoryCost }: { mov
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Movimiento seleccionado</p>
           <h3 className="mt-1 truncate text-base font-black uppercase italic tracking-tight">Detalle del movimiento</h3>
           <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-            {isEntry ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
+            {isEntry ? <ArrowDownLeft className="size-3.5 text-success" /> : <ArrowUpRight className="size-3.5 text-destructive" />}
             <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>
           </div>
         </div>
@@ -103,7 +103,7 @@ function MovementDetailsPanel({ movement, onClose, canViewInventoryCost }: { mov
         <div className="grid min-w-0 grid-cols-2 gap-3 text-xs">
           <div className="min-w-0"><p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><CalendarDays className="size-3" /> Fecha</p><p className="mt-1 font-semibold">{formatDateEs(movement.date, true)}</p></div>
           <div className="min-w-0"><p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Warehouse className="size-3" /> Bodega afectada</p><p className="mt-1 truncate font-semibold" title={movement.warehouse?.name || undefined}>{movement.warehouse?.name || '—'}</p></div>
-          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Cantidad</p><p className={`mt-1 font-mono font-bold ${isEntry ? 'text-emerald-600' : movement.type === 'OUT' ? 'text-rose-500' : 'text-primary'}`}>{movement.type === 'OUT' ? '-' : '+'}{quantity}</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Cantidad</p><p className={`mt-1 font-mono font-bold ${isEntry ? 'text-success' : movement.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{movement.type === 'OUT' ? '-' : '+'}{quantity}</p></div>
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock</p><p className="mt-1 font-mono font-semibold">{movement.previousQty != null ? Number(movement.previousQty) : '—'} → {movement.resultingQty != null ? Number(movement.resultingQty) : '—'}</p></div>
           {canViewInventoryCost && <>
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo unitario</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? <CurrencyValuationAmount amount={unitCost} sourceCurrency={currency} sourceExchangeRate={movement.exchangeRate} showRate /> : '—'}</p></div>
@@ -202,9 +202,9 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
 
   const getMovementIcon = (type: string) => {
     switch (type) {
-      case 'IN': return <ArrowDownLeft className="size-4 text-green-500" />;
-      case 'OUT': return <ArrowUpRight className="size-4 text-red-500" />;
-      case 'TRANSFER': return <RefreshCcw className="size-4 text-blue-500" />;
+      case 'IN': return <ArrowDownLeft className="size-4 text-success" />;
+      case 'OUT': return <ArrowUpRight className="size-4 text-destructive" />;
+      case 'TRANSFER': return <RefreshCcw className="size-4 text-info" />;
       default: return <History className="size-4 text-muted-foreground" />;
     }
   };
@@ -304,14 +304,14 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
         {filteredData.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><History className="mx-auto mb-2 size-9 opacity-20" /><p>No hay movimientos</p></Card> : filteredData.map((move: any) => (
           <Card key={move.id} role="button" tabIndex={0} aria-busy={String(openingId) === String(move.id) || undefined} data-detail-opening={String(openingId) === String(move.id) ? 'true' : undefined} onClick={() => openMovement(move)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMovement(move); } }} className={`min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selectedMovement?.id === move.id ? 'border-primary/50 bg-primary/5' : ''}`}>
             <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</p></div></div><div className="flex shrink-0 items-center gap-2">{String(openingId) === String(move.id) && <span role="status" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}<Badge variant="outline" className="text-[10px]">{getTypeLabel(move.type)}</Badge></div></div>
-            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{formatDateEs(move.date)}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock Ant. → Res.</p><p className="tabular-nums text-muted-foreground">{move.previousQty != null ? Number(move.previousQty) : '—'} → <span className="font-medium text-foreground">{move.resultingQty != null ? Number(move.resultingQty) : '—'}</span></p></div></div>
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{formatDateEs(move.date)}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-success' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock Ant. → Res.</p><p className="tabular-nums text-muted-foreground">{move.previousQty != null ? Number(move.previousQty) : '—'} → <span className="font-medium text-foreground">{move.resultingQty != null ? Number(move.resultingQty) : '—'}</span></p></div></div>
           </Card>
         ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border/40 bg-muted/20 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-        <span className="flex items-center gap-1.5"><ArrowDownLeft className="size-3.5 text-emerald-500" /> Entradas: <b className="text-emerald-600">{movementSummary.entradas}</b></span>
-        <span className="flex items-center gap-1.5"><ArrowUpRight className="size-3.5 text-red-500" /> Salidas: <b className="text-red-600">{movementSummary.salidas}</b></span>
+        <span className="flex items-center gap-1.5"><ArrowDownLeft className="size-3.5 text-success" /> Entradas: <b className="text-success">{movementSummary.entradas}</b></span>
+        <span className="flex items-center gap-1.5"><ArrowUpRight className="size-3.5 text-destructive" /> Salidas: <b className="text-destructive">{movementSummary.salidas}</b></span>
         <span className="flex items-center gap-1.5"><Package className="size-3.5 text-primary" /> Stock actual total: <b className="text-foreground">{movementSummary.stockTotal}</b></span>
       </div>
 
@@ -353,7 +353,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
                   <TableCell className="text-sm font-medium">{move.product?.name || '-'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{move.warehouse?.name || '-'}</TableCell>
                   <TableCell className="text-right">
-                    <span className={`font-medium ${move.type === 'IN' ? 'text-green-600' : move.type === 'OUT' ? 'text-red-600' : 'text-blue-600'}`}>
+                    <span className={`font-medium ${move.type === 'IN' ? 'text-success' : move.type === 'OUT' ? 'text-destructive' : 'text-info'}`}>
                       {move.type === 'OUT' ? '-' : '+'}{move.quantity}
                     </span>
                   </TableCell>

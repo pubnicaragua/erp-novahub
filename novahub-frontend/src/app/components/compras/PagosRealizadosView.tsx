@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Search, Eye, Pencil, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -149,6 +149,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
   const [detailPayment, setDetailPayment] = useState<PaymentMade | null>(null);
   const [paymentEvidenceFiles, setPaymentEvidenceFiles] = useState<File[]>([]);
+  const consumedInvoiceDraftRef = useRef<Partial<PaymentMade> | null>(null);
   const groupedPayments = useMemo(() => groupMadePayments(data, baseCurrency, globalRate, toBaseAmount), [data, baseCurrency, globalRate, toBaseAmount]);
 
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
@@ -196,6 +197,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     if (editingId) {
       setPaymentEvidenceFiles([]);
       if (editingId === 'NEW') {
+         // El borrador se consume en el mismo ciclo en que se abre esta vista.
+         // No reinicializar el formulario vacío cuando el padre lo limpia.
+         if (!draftPaymentFromInvoice && consumedInvoiceDraftRef.current) return;
          setPartialPaymentEnabled(false);
          const prefilled = draftPaymentFromInvoice || {};
          const prefilledMethod = normalizeMethod(prefilled.method as any);
@@ -228,7 +232,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
            bankAccountId: prefilled.bankAccountId || undefined,
            reference: hasPaymentReferenceField(prefilledMethod) ? (prefilled.reference || '') : '',
          }]);
-         if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
+         if (draftPaymentFromInvoice) {
+           consumedInvoiceDraftRef.current = draftPaymentFromInvoice;
+           onDraftConsumed?.();
+         }
        } else {
           setPartialPaymentEnabled(false);
           const found = data.find(x => x.id === editingId);
@@ -246,6 +253,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           })));
        }
     } else {
+      consumedInvoiceDraftRef.current = null;
       setLocalDoc(null);
       setPaymentLines([paymentLine('CASH')]);
       setPaymentEvidenceFiles([]);

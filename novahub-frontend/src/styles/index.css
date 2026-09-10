@@ -842,6 +842,56 @@ th .column-filter-menu .column-filter-icon,
   overflow-wrap: anywhere;
 }
 
+/* Servicios tiene menos columnas que Productos. En un escritorio amplio,
+   conserva las medidas operativas y reparte el espacio adicional únicamente
+   entre las columnas de texto, para que la tabla llegue al borde del panel sin
+   separar artificialmente Estado, precios y acciones. */
+.inventory-module [data-catalog-table="service"] {
+  display: block;
+  width: 100%;
+  max-width: none;
+  table-layout: auto;
+}
+
+.inventory-module [data-catalog-table="service"] > colgroup {
+  display: none;
+}
+
+.inventory-module [data-catalog-table="service"] > thead,
+.inventory-module [data-catalog-table="service"] > tbody {
+  display: block;
+  width: 100%;
+}
+
+.inventory-module [data-catalog-table="service"] > thead > tr,
+.inventory-module [data-catalog-table="service"] > tbody > tr {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 40px 112px minmax(224px, 1.3fr) minmax(180px, 1.3fr) 144px 180px 112px 112px 128px;
+}
+
+.inventory-module [data-catalog-table="service"][data-catalog-cost="hidden"] > thead > tr,
+.inventory-module [data-catalog-table="service"][data-catalog-cost="hidden"] > tbody > tr {
+  grid-template-columns: 40px 112px minmax(224px, 1.3fr) minmax(180px, 1.3fr) 144px 180px 112px 128px;
+}
+
+.inventory-module [data-catalog-table="service"] > thead > tr > th,
+.inventory-module [data-catalog-table="service"] > tbody > tr > td {
+  display: flex;
+  width: auto !important;
+  min-width: 0;
+  max-width: none;
+}
+
+.inventory-module [data-catalog-table="service"] > thead > tr > th {
+  align-items: center;
+}
+
+.inventory-module [data-catalog-table="service"] > tbody > tr > td[colspan] {
+  display: block;
+  grid-column: 1 / -1;
+}
+
 /* Encabezados persistentes para todas las tablas del ERP. El encabezado y
    sus celdas usan la misma capa para que siga visible tanto cuando el scroll
    vertical pertenece al módulo como cuando pertenece a una tabla acotada.
@@ -979,19 +1029,12 @@ th .column-filter-menu .column-filter-icon,
   border-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
 }
 
-.inventory-module .text-blue-500,
-.inventory-module .text-purple-500,
-.inventory-module .text-indigo-500,
-.inventory-module .text-blue-600,
-.inventory-module .text-purple-600,
-.inventory-module .text-indigo-600 {
-  color: var(--primary) !important;
+.inventory-status-glow-warning {
+  box-shadow: 0 0 8px color-mix(in srgb, var(--warning) 50%, transparent);
 }
 
-.inventory-module .bg-blue-500\/10,
-.inventory-module .bg-purple-500\/10,
-.inventory-module .bg-indigo-500\/10 {
-  background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important;
+.inventory-status-glow-primary {
+  box-shadow: 0 0 8px color-mix(in srgb, var(--primary) 50%, transparent);
 }
 
 .finance-module .text-blue-500,

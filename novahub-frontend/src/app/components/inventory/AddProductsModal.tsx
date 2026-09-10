@@ -835,10 +835,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     data-testid="inventory-product-code"
                     value={draftProduct.code} 
                     onChange={e => handleUpdateDraft('code', e.target.value)} 
-                    className={`h-8 text-xs font-mono w-full ${skuError ? 'border-amber-500 focus-visible:ring-amber-500' : ''}`}
+                    className={`h-8 text-xs font-mono w-full ${skuError ? 'border-warning focus-visible:ring-warning' : ''}`}
                     placeholder="SKU-001" 
                   />
-                  {skuError && <span className="text-[9px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
+                  {skuError && <span className="text-[9px] text-warning dark:text-warning font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
                 </div>
               </div>
               <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-1 md:col-span-9' : 'sm:col-span-2 md:col-start-3 md:row-start-1 md:col-span-3'}>
@@ -1273,7 +1273,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="size-7 shrink-0 text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
+                                  className="size-7 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                   onClick={() => toggleAttribute(attr.id)}
                                   aria-label={`Quitar atributo ${attr.name}`}
                                   title="Quitar atributo"
@@ -1442,7 +1442,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                          <Button 
                            variant="ghost" 
                            size="icon" 
-                           className="size-6 text-red-500 hover:text-white hover:bg-red-700"
+                           className="size-6 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                            onClick={() => handleRemoveFromList(product.id)}
                          >
                            <Trash2 className="size-3" />

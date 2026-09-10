@@ -288,21 +288,21 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Totales</p>
                   <p className="text-xl font-black text-primary">{vacationBalance?.totalDays ?? '—'}</p>
                 </div>
-                <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-xl border border-orange-200 dark:border-orange-800/30 text-center">
+                <div className="bg-warning/10 dark:bg-warning/20 p-3 rounded-xl border border-warning dark:border-warning/30 text-center">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Usados</p>
-                  <p className="text-xl font-black text-orange-600">{vacationBalance?.usedDays ?? '—'}</p>
+                  <p className="text-xl font-black text-warning">{vacationBalance?.usedDays ?? '—'}</p>
                 </div>
-                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-200 dark:border-amber-800/30 text-center">
+                <div className="bg-warning/10 dark:bg-warning/20 p-3 rounded-xl border border-warning dark:border-warning/30 text-center">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Pendientes</p>
-                  <p className="text-xl font-black text-amber-600">{vacationBalance?.pendingDays ?? '—'}</p>
+                  <p className="text-xl font-black text-warning">{vacationBalance?.pendingDays ?? '—'}</p>
                 </div>
-                <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-xl border border-green-200 dark:border-green-800/30 text-center">
+                <div className="bg-success/10 dark:bg-success/20 p-3 rounded-xl border border-success dark:border-success/30 text-center">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Disponibles</p>
-                  <p className="text-xl font-black text-green-600">{vacationBalance?.remainingDays ?? '—'}</p>
+                  <p className="text-xl font-black text-success">{vacationBalance?.remainingDays ?? '—'}</p>
                 </div>
               </div>
               {newRequest.leaveType === 'VACATION' && computedDays > (vacationBalance?.remainingDays ?? Infinity) && (
-                <p className="mt-3 text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 rounded-lg px-3 py-2">
+                <p className="mt-3 text-xs font-bold text-destructive bg-destructive/10 dark:bg-destructive/30 border border-destructive dark:border-destructive/40 rounded-lg px-3 py-2">
                   Los días solicitados ({computedDays}) superan el saldo disponible ({vacationBalance?.remainingDays ?? 0}).
                 </p>
               )}
@@ -515,10 +515,10 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded ${
-                      request.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                      request.status === 'PENDING' ? 'bg-orange-100 text-orange-700' :
-                      request.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
-                      'bg-gray-100 text-gray-700'
+                      request.status === 'APPROVED' ? 'bg-success/10 text-success' :
+                      request.status === 'PENDING' ? 'bg-warning/10 text-warning' :
+                      request.status === 'REJECTED' ? 'bg-destructive/10 text-destructive' :
+                      'bg-muted text-muted-foreground'
                     }`}>
                       {request.status === 'APPROVED' ? 'Aprobada' : request.status === 'PENDING' ? 'Pendiente' : request.status === 'REJECTED' ? 'Rechazada' : request.status}
                     </span>
@@ -539,7 +539,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                           size="sm"
                           variant="ghost"
                           onClick={() => handleApprove(request.id)}
-                          className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                          className="h-7 px-2 text-success hover:text-success-foreground hover:bg-success"
                         >
                           <Check className="size-4" />
                         </Button>}
@@ -547,7 +547,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                           size="sm"
                           variant="ghost"
                           onClick={() => handleReject(request.id)}
-                          className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="h-7 px-2 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                         >
                           <X className="size-4" />
                         </Button>}
@@ -575,9 +575,9 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   </div>
                 </div>
                 <span className={`text-[10px] px-2 py-1 rounded-lg font-bold shadow-sm ${
-                  request.status === 'APPROVED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30' :
-                  request.status === 'REJECTED' ? 'bg-red-100 text-red-700 dark:bg-red-900/30' :
-                  'bg-orange-100 text-orange-700 dark:bg-orange-900/30'
+                  request.status === 'APPROVED' ? 'bg-success/10 text-success dark:bg-success/30' :
+                  request.status === 'REJECTED' ? 'bg-destructive/10 text-destructive dark:bg-destructive/30' :
+                  'bg-warning/10 text-warning dark:bg-warning/30'
                 }`}>
                   {request.status === 'APPROVED' ? 'APROBADO' : request.status === 'REJECTED' ? 'RECHAZADO' : 'PENDIENTE'}
                 </span>
@@ -615,10 +615,10 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   {canPerform('HR_LEAVES', 'edit') && <Button size="sm" variant="outline" onClick={() => handleOpenEditRequest(request)} className="flex-1 rounded-xl text-[11px] h-8 text-primary border-primary/30 hover:bg-primary/10">
                     <Pencil className="size-3 mr-1" /> Editar
                   </Button>}
-                  {canPerform('HR_LEAVES', 'approve') && <Button size="sm" onClick={() => handleApprove(request.id)} className="flex-1 bg-green-700 hover:bg-green-800 text-white rounded-xl text-[11px] h-8">
+                  {canPerform('HR_LEAVES', 'approve') && <Button size="sm" onClick={() => handleApprove(request.id)} className="flex-1 bg-success hover:bg-success text-success-foreground rounded-xl text-[11px] h-8">
                     <Check className="size-3 mr-1" /> Aprobar
                   </Button>}
-                  {canPerform('HR_LEAVES', 'delete') && <Button size="sm" onClick={() => handleReject(request.id)} className="flex-1 bg-red-700 hover:bg-red-800 text-white rounded-xl text-[11px] h-8">
+                  {canPerform('HR_LEAVES', 'delete') && <Button size="sm" onClick={() => handleReject(request.id)} className="flex-1 bg-destructive hover:bg-destructive text-destructive-foreground rounded-xl text-[11px] h-8">
                     <X className="size-3 mr-1" /> Rechazar
                   </Button>}
                 </div>

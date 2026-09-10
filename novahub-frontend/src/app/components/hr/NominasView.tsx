@@ -276,7 +276,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Vencidas Alert */}
       {overdueCount > 0 && (
-        <Alert variant="destructive" className="bg-red-500/10 border-red-500/20 text-red-600">
+        <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
           <AlertTriangle className="size-4" />
           <AlertTitle className="font-black tracking-widest uppercase text-xs">Atención Requerida</AlertTitle>
           <AlertDescription>
@@ -406,15 +406,15 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     <td className="px-4 py-3 text-right text-sm font-bold text-primary">
                       {payrollDisplay(payroll, 'netPay', 'netPayBase')}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-orange-600 dark:text-orange-400">
+                    <td className="px-4 py-3 text-right text-sm font-bold text-warning dark:text-warning">
                       {payrollDisplay(payroll, 'costoTotalEmpresa', 'costoTotalEmpresaBase')}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-1 rounded-lg font-bold ${
-                        payroll.status === 'PAID' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                        isOverdue(payroll) ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-500/20 shadow-sm shadow-red-500/20' :
-                        payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                        'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                        payroll.status === 'PAID' ? 'bg-success/10 text-success dark:bg-success/30 dark:text-success' :
+                        isOverdue(payroll) ? 'bg-destructive/10 text-destructive dark:bg-destructive/30 dark:text-destructive border border-destructive/20 shadow-sm shadow-destructive/20' :
+                        payroll.status === 'PENDING' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
+                        'bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground'
                       }`}>
                         {payroll.status === 'PAID' ? 'Pagado' : isOverdue(payroll) ? 'Vencida' : payroll.status === 'PENDING' ? 'Pendiente' : payroll.status}
                       </span>
@@ -434,8 +434,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                                 Solicitar pago
                               </Button>
                             )}
-                            {String(payroll.paymentStatus || 'PENDING') === 'REQUESTED' && <span className="px-2 text-[10px] font-black uppercase text-amber-600">Solicitud enviada</span>}
-                            {String(payroll.paymentStatus || 'PENDING') === 'APPROVED' && <span className="px-2 text-[10px] font-black uppercase text-sky-600">Aprobada en Contabilidad</span>}
+                            {String(payroll.paymentStatus || 'PENDING') === 'REQUESTED' && <span className="px-2 text-[10px] font-black uppercase text-warning">Solicitud enviada</span>}
+                            {String(payroll.paymentStatus || 'PENDING') === 'APPROVED' && <span className="px-2 text-[10px] font-black uppercase text-info">Aprobada en Contabilidad</span>}
                             {canPerform('HR_PAYROLL', 'edit') && (
                               <Button
                                 size="sm"
@@ -453,7 +453,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                                 size="sm"
                                 variant="ghost"
                                 onClick={(e) => { e.stopPropagation(); setPendingDeleteId(payroll.id); }}
-                                className="h-7 px-3 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 font-semibold"
+                                className="h-7 px-3 text-xs text-destructive hover:text-destructive-foreground hover:bg-destructive/10 font-semibold"
                               >
                                 <Trash2 className="size-3.5 mr-1" />
                                 Eliminar
@@ -473,21 +473,21 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                       <td colSpan={7} className="px-4 py-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                           <div className="space-y-2">
-                            <p className="font-black uppercase tracking-widest text-red-500 text-[10px]">Deducciones Empleado</p>
+                            <p className="font-black uppercase tracking-widest text-destructive text-[10px]">Deducciones Empleado</p>
                             <div className="space-y-1">
                               <div className="flex justify-between"><span className="text-muted-foreground">INSS Laboral ({payroll.snapshotInssLaboralPct || '—'}%)</span><span className="font-bold">-{payrollDisplay(payroll, 'inssLaboral', 'inssLaboralBase')}</span></div>
                               <div className="flex justify-between"><span className="text-muted-foreground">IR ({payroll.snapshotIrPct || '—'}%)</span><span className="font-bold">-{payrollDisplay(payroll, 'ir', 'irBase')}</span></div>
                             </div>
                           </div>
                           <div className="space-y-2">
-                            <p className="font-black uppercase tracking-widest text-orange-500 text-[10px]">Aportes Patronales</p>
+                            <p className="font-black uppercase tracking-widest text-warning text-[10px]">Aportes Patronales</p>
                             <div className="space-y-1">
                               <div className="flex justify-between"><span className="text-muted-foreground">INSS Patronal ({payroll.snapshotInssPatronalPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'inssPatronal', 'inssPatronalBase')}</span></div>
                               <div className="flex justify-between"><span className="text-muted-foreground">INATEC ({payroll.snapshotInatecPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'inatec', 'inatecBase')}</span></div>
                             </div>
                           </div>
                           <div className="space-y-2">
-                            <p className="font-black uppercase tracking-widest text-blue-500 text-[10px]">Provisiones</p>
+                            <p className="font-black uppercase tracking-widest text-info text-[10px]">Provisiones</p>
                             <div className="space-y-1">
                               <div className="flex justify-between"><span className="text-muted-foreground">Treceavo Mes ({payroll.snapshotTrecenoMesPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'trecenoMes', 'trecenoMesBase')}</span></div>
                               <div className="flex justify-between"><span className="text-muted-foreground">Vacaciones ({payroll.snapshotVacacionesPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'vacacionesProv', 'vacacionesProvBase')}</span></div>
@@ -497,12 +497,12 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                           <div className="space-y-2">
                             <p className="font-black uppercase tracking-widest text-muted-foreground text-[10px]">Desglose</p>
                             <div className="space-y-1">
-                              <div className="flex justify-between"><span className="text-muted-foreground">Bonos</span><span className="font-bold text-green-600">+{payrollDisplay(payroll, 'bonuses', 'bonusesBase')}</span></div>
-                              <div className="flex justify-between"><span className="text-muted-foreground">H. Extra</span><span className="font-bold text-blue-600">+{payrollDisplay(payroll, 'overtime', 'overtimeBase')}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Bonos</span><span className="font-bold text-success">+{payrollDisplay(payroll, 'bonuses', 'bonusesBase')}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">H. Extra</span><span className="font-bold text-info">+{payrollDisplay(payroll, 'overtime', 'overtimeBase')}</span></div>
                               {Number(payroll.commissionsSales || 0) > 0 && (
-                                <div className="flex justify-between"><span className="text-muted-foreground">Comisiones por Ventas</span><span className="font-bold text-emerald-600">+{payrollDisplay(payroll, 'commissionsSales', 'commissionsSalesBase')}</span></div>
+                                <div className="flex justify-between"><span className="text-muted-foreground">Comisiones por Ventas</span><span className="font-bold text-success">+{payrollDisplay(payroll, 'commissionsSales', 'commissionsSalesBase')}</span></div>
                               )}
-                              <div className="flex justify-between"><span className="text-muted-foreground">Otras Deducc.</span><span className="font-bold text-red-600">-{payrollDisplay(payroll, 'deductions', 'deductionsBase')}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Otras Deducc.</span><span className="font-bold text-destructive">-{payrollDisplay(payroll, 'deductions', 'deductionsBase')}</span></div>
                             </div>
                           </div>
                         </div>
@@ -532,10 +532,10 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     </div>
                   </div>
                   <span className={`text-[10px] px-2 py-1 rounded-lg font-bold shadow-sm ${
-                    payroll.status === 'PAID' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                    isOverdue(payroll) ? 'bg-red-100 text-red-700 dark:bg-red-900/30 border border-red-500/20 shadow-red-500/20' :
-                    payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                    'bg-gray-100 text-gray-700 dark:bg-gray-800'
+                    payroll.status === 'PAID' ? 'bg-success/10 text-success dark:bg-success/30 dark:text-success' :
+                    isOverdue(payroll) ? 'bg-destructive/10 text-destructive dark:bg-destructive/30 border border-destructive/20 shadow-destructive/20' :
+                    payroll.status === 'PENDING' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
+                    'bg-muted text-muted-foreground dark:bg-muted'
                   }`}>
                     {payroll.status === 'PAID' ? 'PAGADO' : isOverdue(payroll) ? 'VENCIDA' : payroll.status === 'PENDING' ? 'PENDIENTE' : payroll.status}
                   </span>
@@ -556,7 +556,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Costo Total</span>
-                    <span className="font-bold text-orange-600 dark:text-orange-400 text-right">{payrollDisplay(payroll, 'costoTotalEmpresa', 'costoTotalEmpresaBase')}</span>
+                    <span className="font-bold text-warning dark:text-warning text-right">{payrollDisplay(payroll, 'costoTotalEmpresa', 'costoTotalEmpresaBase')}</span>
                   </div>
                 </div>
 
@@ -571,14 +571,14 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                           <Send className="size-3 mr-1" /> Solicitar pago
                         </Button>
                       )}
-                      {String(payroll.paymentStatus || 'PENDING') !== 'PENDING' && <span className="flex flex-1 items-center justify-center text-[10px] font-black uppercase text-amber-600">Solicitud {String(payroll.paymentStatus).toLowerCase()}</span>}
+                      {String(payroll.paymentStatus || 'PENDING') !== 'PENDING' && <span className="flex flex-1 items-center justify-center text-[10px] font-black uppercase text-warning">Solicitud {String(payroll.paymentStatus).toLowerCase()}</span>}
                       {canPerform('HR_PAYROLL', 'edit') && (
                         <Button size="sm" variant="outline" onClick={() => handleOpenEditPayroll(payroll)} className="px-3 text-primary border-primary/30 hover:bg-primary/10 rounded-xl h-8" title="Editar nómina">
                           <Pencil className="size-3.5" />
                         </Button>
                       )}
                       {canPerform('HR_PAYROLL', 'delete') && (
-                        <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 rounded-xl h-8">
+                        <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-destructive border-destructive hover:bg-destructive hover:border-destructive rounded-xl h-8">
                           <Trash2 className="size-3.5" />
                         </Button>
                       )}
@@ -589,29 +589,29 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                 {expandedRow === payroll.id && (
                   <div className="mt-4 pt-4 border-t border-border/50 grid gap-x-4 gap-y-3 grid-cols-2 text-[10px]">
                     <div className="space-y-1.5">
-                      <p className="font-black uppercase tracking-widest text-red-500 text-[9px]">Deducciones</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS L.</span><span className="font-bold text-red-600 text-right">-{payrollDisplay(payroll, 'inssLaboral', 'inssLaboralBase')}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">IR</span><span className="font-bold text-red-600 text-right">-{payrollDisplay(payroll, 'ir', 'irBase')}</span></div>
-                      {Number(payroll.deductions || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground mr-1">Otras</span><span className="font-bold text-red-600 text-right">-{payrollDisplay(payroll, 'deductions', 'deductionsBase')}</span></div>}
+                      <p className="font-black uppercase tracking-widest text-destructive text-[9px]">Deducciones</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS L.</span><span className="font-bold text-destructive text-right">-{payrollDisplay(payroll, 'inssLaboral', 'inssLaboralBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">IR</span><span className="font-bold text-destructive text-right">-{payrollDisplay(payroll, 'ir', 'irBase')}</span></div>
+                      {Number(payroll.deductions || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground mr-1">Otras</span><span className="font-bold text-destructive text-right">-{payrollDisplay(payroll, 'deductions', 'deductionsBase')}</span></div>}
                     </div>
                     <div className="space-y-1.5">
-                      <p className="font-black uppercase tracking-widest text-green-600 text-[9px]">Ingresos</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Bonos</span><span className="font-bold text-green-600 text-right">+{payrollDisplay(payroll, 'bonuses', 'bonusesBase')}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">H. Extra</span><span className="font-bold text-green-600 text-right">+{payrollDisplay(payroll, 'overtime', 'overtimeBase')}</span></div>
+                      <p className="font-black uppercase tracking-widest text-success text-[9px]">Ingresos</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Bonos</span><span className="font-bold text-success text-right">+{payrollDisplay(payroll, 'bonuses', 'bonusesBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">H. Extra</span><span className="font-bold text-success text-right">+{payrollDisplay(payroll, 'overtime', 'overtimeBase')}</span></div>
                       {Number(payroll.commissionsSales || 0) > 0 && (
-                        <div className="flex justify-between"><span className="text-muted-foreground mr-1">Cmsns.</span><span className="font-bold text-emerald-600 text-right">+{payrollDisplay(payroll, 'commissionsSales', 'commissionsSalesBase')}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground mr-1">Cmsns.</span><span className="font-bold text-success text-right">+{payrollDisplay(payroll, 'commissionsSales', 'commissionsSalesBase')}</span></div>
                       )}
                     </div>
                     <div className="space-y-1.5">
-                      <p className="font-black uppercase tracking-widest text-orange-500 text-[9px]">Aportes</p>
+                      <p className="font-black uppercase tracking-widest text-warning text-[9px]">Aportes</p>
                       <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS P.</span><span className="font-bold text-right">+{payrollDisplay(payroll, 'inssPatronal', 'inssPatronalBase')}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground mr-1">INATEC</span><span className="font-bold text-right">+{payrollDisplay(payroll, 'inatec', 'inatecBase')}</span></div>
                     </div>
                     <div className="space-y-1.5">
-                      <p className="font-black uppercase tracking-widest text-blue-500 text-[9px]">Provisiones</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Vacac.</span><span className="font-bold text-blue-600 text-right">+{payrollDisplay(payroll, 'vacacionesProv', 'vacacionesProvBase')}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Treaceavo</span><span className="font-bold text-blue-600 text-right">+{payrollDisplay(payroll, 'trecenoMes', 'trecenoMesBase')}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Indem.</span><span className="font-bold text-blue-600 text-right">+{payrollDisplay(payroll, 'indemnizacion', 'indemnizacionBase')}</span></div>
+                      <p className="font-black uppercase tracking-widest text-info text-[9px]">Provisiones</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Vacac.</span><span className="font-bold text-info text-right">+{payrollDisplay(payroll, 'vacacionesProv', 'vacacionesProvBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Treaceavo</span><span className="font-bold text-info text-right">+{payrollDisplay(payroll, 'trecenoMes', 'trecenoMesBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Indem.</span><span className="font-bold text-info text-right">+{payrollDisplay(payroll, 'indemnizacion', 'indemnizacionBase')}</span></div>
                     </div>
                   </div>
                 )}

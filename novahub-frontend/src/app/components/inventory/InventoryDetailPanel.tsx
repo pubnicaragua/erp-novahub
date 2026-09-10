@@ -43,10 +43,10 @@ function TransferDetail({ data }: { data: any }) {
   const status = String(data?.status || 'PENDING').toUpperCase();
   const statusLabel = status === 'COMPLETED' ? 'Completada' : status === 'PENDING' ? 'Pendiente' : status === 'IN_TRANSIT' ? 'En tránsito' : status === 'CANCELLED' ? 'Cancelada' : status;
   const statusClass = status === 'COMPLETED'
-    ? 'bg-emerald-500/10 text-emerald-600'
+    ? 'bg-success/10 text-success'
     : status === 'CANCELLED'
-      ? 'bg-red-500/10 text-red-600'
-      : 'bg-amber-500/10 text-amber-600';
+      ? 'bg-destructive/10 text-destructive'
+      : 'bg-warning/10 text-warning';
 
   return (
     <div className="space-y-5">
@@ -83,10 +83,10 @@ function TransferDetail({ data }: { data: any }) {
       <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
         <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Movimiento de stock</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/20 text-[10px] font-black">-{totalUnits}</Badge>
+          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 text-[10px] font-black">-{totalUnits}</Badge>
           <span className="min-w-0 max-w-36 truncate text-xs font-semibold" title={data.from?.name}>{data.from?.name || '—'}</span>
           <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] font-black">+{totalUnits}</Badge>
+          <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-[10px] font-black">+{totalUnits}</Badge>
           <span className="min-w-0 max-w-36 truncate text-xs font-semibold" title={data.to?.name}>{data.to?.name || '—'}</span>
         </div>
       </div>
@@ -116,10 +116,10 @@ function TransferDetail({ data }: { data: any }) {
                       {[product.code, variantName].filter(Boolean).join(' · ') || 'Sin referencia'}
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-black text-rose-600">-{itemQty}</span>
+                      <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-black text-destructive">-{itemQty}</span>
                       <span className="max-w-28 truncate text-[9px] text-muted-foreground">{data.from?.name || '—'}</span>
                       <ArrowRight className="size-2.5 text-muted-foreground" />
-                      <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-black text-emerald-600">+{itemQty}</span>
+                      <span className="rounded bg-success/10 px-1.5 py-0.5 text-[10px] font-black text-success">+{itemQty}</span>
                       <span className="max-w-28 truncate text-[9px] text-muted-foreground">{data.to?.name || '—'}</span>
                     </div>
                   </div>
@@ -149,11 +149,11 @@ function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewIn
         <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cantidad neta</p>
-            <p className={`mt-1 text-2xl font-black tabular-nums tracking-tight ${totalDelta >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+            <p className={`mt-1 text-2xl font-black tabular-nums tracking-tight ${totalDelta >= 0 ? 'text-success' : 'text-destructive'}`}>
               {totalDelta >= 0 ? '+' : ''}{totalDelta}
             </p>
           </div>
-          <Badge className={approved ? 'bg-emerald-500/10 text-[10px] text-emerald-600' : 'bg-muted text-[10px] text-muted-foreground'}>
+          <Badge className={approved ? 'bg-success/10 text-[10px] text-success' : 'bg-muted text-[10px] text-muted-foreground'}>
             {approved ? 'Aprobado' : 'Borrador'}
           </Badge>
         </div>
@@ -182,8 +182,8 @@ function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewIn
         <StatCard
           label="Cantidad neta"
           value={`${totalDelta >= 0 ? '+' : ''}${totalDelta}`}
-          className={totalDelta >= 0 ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}
-          valueClassName={totalDelta >= 0 ? 'text-emerald-600' : 'text-rose-500'}
+          className={totalDelta >= 0 ? 'border-success/20 bg-success/5' : 'border-destructive/20 bg-destructive/5'}
+          valueClassName={totalDelta >= 0 ? 'text-success' : 'text-destructive'}
         />
         {canViewInventoryCost && <StatCard label="Costo referencia" value={referenceCost} />}
       </div>
@@ -205,8 +205,8 @@ function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewIn
                 <div key={item.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-3">
                   <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/60">
                     {isEntry
-                      ? <ArrowDownLeft className="size-3.5 text-emerald-600" />
-                      : <ArrowUpRight className="size-3.5 text-rose-500" />}
+                      ? <ArrowDownLeft className="size-3.5 text-success" />
+                      : <ArrowUpRight className="size-3.5 text-destructive" />}
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-xs font-semibold" title={item.product?.name || 'Producto'}>{item.product?.name || 'Producto'}</p>
@@ -216,7 +216,7 @@ function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewIn
                     </p>
                   </div>
                   <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
-                    <p className={isEntry ? 'text-emerald-600' : 'text-rose-500'}>{isEntry ? '+' : ''}{delta}</p>
+                    <p className={isEntry ? 'text-success' : 'text-destructive'}>{isEntry ? '+' : ''}{delta}</p>
                     <p className="mt-0.5 text-[9px] font-medium text-muted-foreground">real {Number(item.actualStock || 0)}</p>
                   </div>
                 </div>

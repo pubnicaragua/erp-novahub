@@ -117,7 +117,7 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', parent: 'PURCHASES' },
   { id: 'PURCHASES_INVOICES_REC', label: 'Compras Recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', parent: 'PURCHASES' },
-  { id: 'PURCHASES_RETURNS', label: 'Créditos de Proveedor', parent: 'PURCHASES' },
+  { id: 'PURCHASES_RETURNS', label: 'Créditos del proveedor', parent: 'PURCHASES' },
 
   // Recursos Humanos
   { id: 'HR_DASHBOARD', label: 'Dashboard HR', parent: 'HR' },
@@ -666,6 +666,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [primaryFgHex, setPrimaryFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.primaryForeground));
   const [portalPrimaryHex, setPortalPrimaryHex] = useState('#10b981');
   const [portalAccentHex, setPortalAccentHex] = useState('#0f172a');
+  const [portalTextHex, setPortalTextHex] = useState('#f8fafc');
   const [paletteMode, setPaletteMode] = useState<ThemePaletteMode>(() => themeConfig.paletteMode);
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -1013,6 +1014,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
     if (branding?.portalPrimaryColor) setPortalPrimaryHex(branding.portalPrimaryColor);
     if (branding?.portalAccentColor) setPortalAccentHex(branding.portalAccentColor);
+    const configuredPortalText = branding?.portalTextColor || branding?.userTheme?.colors?.primaryForeground;
+    if (typeof configuredPortalText === 'string' && configuredPortalText) setPortalTextHex(configuredPortalText.startsWith('oklch') ? oklchToApproxHex(configuredPortalText) : configuredPortalText);
+    else if (branding?.portalAccentColor) setPortalTextHex(getReadableForeground(branding.portalAccentColor));
     if (branding?.companyName) setCompanyName(branding.companyName);
     if (branding) setLogoPreview(branding.logo || null);
     if (branding?.industry) setCompanyIndustry(branding.industry);
@@ -1119,11 +1123,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const handleSavePortalBranding = async () => {
     if (!canEditBranding) return;
     try {
+      const selectedPortalTextHex = normalizeHexColor(portalTextHex, getReadableForeground(portalAccentHex));
+      setPortalTextHex(selectedPortalTextHex);
       await brandingService.update({
         portalPrimaryColor: portalPrimaryHex,
         portalAccentColor: portalAccentHex,
+        portalTextColor: selectedPortalTextHex,
       });
-      toast.success('Personalización del portal guardada', { description: 'El portal utiliza esta paleta oscura independientemente del tema de cada usuario.' });
+      toast.success('Personalización del portal guardada', { description: 'El texto y sus variantes se derivan del color seleccionado y se aplican también a las fechas.' });
     } catch (error) {
       console.error('Error saving public portal branding:', error);
       toast.error('No se pudo guardar la personalización del portal');
@@ -1443,11 +1450,12 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               <Card className="border-border/50 shadow-sm">
                 <CardHeader className="border-b border-border/30 bg-muted/10">
                   <CardTitle className="flex items-center gap-2 text-lg font-black"><Globe className="size-5 text-primary" />Personalización del portal del cliente</CardTitle>
-                  <CardDescription>Define el color principal y el color de las tarjetas del enlace público.</CardDescription>
+                  <CardDescription>Define la paleta del enlace público. El texto secundario se deriva del color de fuente seleccionado.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-6">
                   <ColorField label="Color principal del portal" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} onHexChange={setPortalPrimaryHex} />
                   <ColorField label="Color de las tarjetas" description="Fondos del encabezado, datos y documentos" hexValue={portalAccentHex} onHexChange={setPortalAccentHex} />
+                  <ColorField label="Color del texto del portal" description="Texto normal, fechas, etiquetas y variantes derivadas para estados secundarios" hexValue={portalTextHex} onHexChange={setPortalTextHex} />
                   <Button onClick={handleSavePortalBranding} disabled={!canEditBranding} className="rounded-xl gap-2 font-bold"><Save className="size-4" />Guardar portal</Button>
                 </CardContent>
               </Card>

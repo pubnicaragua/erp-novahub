@@ -135,7 +135,7 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   PURCHASES_ORDERS: 'Órdenes de Compra',
   PURCHASES_RECEIPTS: 'Recepciones de Compra',
   PURCHASES_INVOICES_REC: 'Compras Recurrentes',
-  PURCHASES_RETURNS: 'Devoluciones',
+  PURCHASES_RETURNS: 'Créditos del proveedor',
   PURCHASES_PAYMENTS: 'Pagos Emitidos',
   INVENTORY_PRODUCTS: 'Productos',
   INVENTORY_SERVICES: 'Servicios',

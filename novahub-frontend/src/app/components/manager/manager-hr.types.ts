@@ -16,9 +16,11 @@ export const MANAGER_HR_VIEWS: Array<{ id: ManagerHrView; label: string }> = [
   { id: 'employees', label: 'Empleados' },
   { id: 'departments', label: 'Departamentos' },
   { id: 'payroll', label: 'Nóminas' },
+  { id: 'commissions', label: 'Comisiones' },
   { id: 'attendance', label: 'Asistencia' },
   { id: 'leaves', label: 'Vacaciones y permisos' },
   { id: 'performance', label: 'Desempeño' },
+  { id: 'kpi', label: 'Indicadores KPI' },
   { id: 'training', label: 'Formación' },
   { id: 'benefits', label: 'Beneficios' },
 ];

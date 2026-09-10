@@ -264,7 +264,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             <div className="flex items-center justify-center h-96">
               <div className="flex flex-col items-center gap-4">
                 <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 blur-xl opacity-50 rounded-full" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary to-accent blur-xl opacity-50 rounded-full" />
                   <div className="relative size-16 border-4 border-muted border-t-indigo-500 border-r-purple-600 rounded-full animate-spin" />
                 </div>
                 <p className="text-sm font-bold text-muted-foreground tracking-wide">Cargando datos de RH...</p>
@@ -272,7 +272,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             </div>
           ) : hrQuery.isError && !hrQuery.data ? (
             <div className="mx-auto flex min-h-[380px] max-w-2xl items-center justify-center px-4">
-              <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
+              <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
                 <AlertTriangle className="size-4" />
                 <AlertTitle>No se pudo cargar Recursos Humanos</AlertTitle>
                 <AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3">
@@ -286,7 +286,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           ) : (
             <>
               {hrQuery.isError && (
-                <Alert variant="destructive" className="mb-4 border-red-500/30 bg-red-500/5">
+                <Alert variant="destructive" className="mb-4 border-destructive/30 bg-destructive/5">
                   <AlertTriangle className="size-4" />
                   <AlertTitle>Los datos podrían estar desactualizados</AlertTitle>
                   <AlertDescription className="flex flex-wrap items-center justify-between gap-3">

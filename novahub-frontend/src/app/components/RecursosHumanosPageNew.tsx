@@ -73,24 +73,24 @@ export function RecursosHumanosPageNew() {
       icon: Users,
       trend: '+5%',
       trendUp: true,
-      color: 'text-blue-600 dark:text-blue-400',
-      bgColor: 'bg-blue-50 dark:bg-blue-950/30'
+      color: 'text-info dark:text-info',
+      bgColor: 'bg-info/10 dark:bg-info/30'
     },
     {
       title: 'Planilla Mensual',
       value: `$${(totalPayroll / 1000).toFixed(1)}k`,
       subtitle: 'Costo total nómina',
       icon: DollarSign,
-      color: 'text-emerald-600 dark:text-emerald-400',
-      bgColor: 'bg-emerald-50 dark:bg-emerald-950/30'
+      color: 'text-success dark:text-success',
+      bgColor: 'bg-success/10 dark:bg-success/30'
     },
     {
       title: 'Vacaciones Pendientes',
       value: pendingLeaves,
       subtitle: 'Por aprobar',
       icon: Calendar,
-      color: 'text-orange-600 dark:text-orange-400',
-      bgColor: 'bg-orange-50 dark:bg-orange-950/30'
+      color: 'text-warning dark:text-warning',
+      bgColor: 'bg-warning/10 dark:bg-warning/30'
     },
     {
       title: 'Nuevas Contrataciones',
@@ -104,8 +104,8 @@ export function RecursosHumanosPageNew() {
       icon: TrendingUp,
       trend: '+12%',
       trendUp: true,
-      color: 'text-purple-600 dark:text-purple-400',
-      bgColor: 'bg-purple-50 dark:bg-purple-950/30'
+      color: 'text-info dark:text-info',
+      bgColor: 'bg-info/10 dark:bg-info/30'
     },
   ];
 
@@ -123,7 +123,7 @@ export function RecursosHumanosPageNew() {
   if (loadError && data.employees.length === 0 && data.departments.length === 0) {
     return (
       <div className="flex min-h-[600px] items-center justify-center p-6">
-        <Alert variant="destructive" className="max-w-2xl border-red-500/30 bg-red-500/5">
+        <Alert variant="destructive" className="max-w-2xl border-destructive/30 bg-destructive/5">
           <AlertTriangle className="size-4" />
           <AlertTitle>No se pudo cargar Recursos Humanos</AlertTitle>
           <AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3">
@@ -137,7 +137,7 @@ export function RecursosHumanosPageNew() {
 
   return (
     <div className="space-y-6 p-6">
-      {loadError && <Alert variant="destructive" className="border-red-500/30 bg-red-500/5"><AlertTriangle className="size-4" /><AlertTitle>Los datos podrían estar desactualizados</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{loadError}</span><Button variant="outline" size="sm" onClick={fetchData} className="gap-2"><RefreshCw className="size-3.5" /> Reintentar</Button></AlertDescription></Alert>}
+      {loadError && <Alert variant="destructive" className="border-destructive/30 bg-destructive/5"><AlertTriangle className="size-4" /><AlertTitle>Los datos podrían estar desactualizados</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{loadError}</span><Button variant="outline" size="sm" onClick={fetchData} className="gap-2"><RefreshCw className="size-3.5" /> Reintentar</Button></AlertDescription></Alert>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -148,7 +148,7 @@ export function RecursosHumanosPageNew() {
         </div>
         <div className="flex items-center gap-2">
 
-          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+          <Button size="sm" className="bg-success hover:bg-success text-success-foreground">
             <Plus className="size-4 mr-2" />
             Nuevo Empleado
           </Button>
@@ -178,7 +178,7 @@ export function RecursosHumanosPageNew() {
                       {stat.trend && (
                         <span className={cn(
                           "text-sm font-medium flex items-center gap-1",
-                          stat.trendUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                          stat.trendUp ? "text-success dark:text-success" : "text-destructive dark:text-destructive"
                         )}>
                           <TrendingUp className="size-3" />
                           {stat.trend}
@@ -224,7 +224,7 @@ export function RecursosHumanosPageNew() {
                   className="flex items-center justify-between p-4 rounded-lg border border-border/40 hover:bg-muted/40 transition-colors"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="size-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-semibold text-sm">
+                    <div className="size-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-semibold text-sm">
                       {emp.firstName?.[0]}{emp.lastName?.[0]}
                     </div>
                     <div>
@@ -233,7 +233,7 @@ export function RecursosHumanosPageNew() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Badge variant={emp.employmentStatus === 'ACTIVE' ? 'default' : 'secondary'} className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                    <Badge variant={emp.employmentStatus === 'ACTIVE' ? 'default' : 'secondary'} className="bg-success/10 text-success dark:bg-success/30 dark:text-success">
                       {emp.employmentStatus}
                     </Badge>
                     <span className="text-sm font-medium text-muted-foreground">
@@ -271,16 +271,16 @@ export function RecursosHumanosPageNew() {
                         {leave.leaveType} · {leave.days} días
                       </p>
                     </div>
-                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800">
+                    <Badge variant="outline" className="bg-warning/10 text-warning border-warning dark:bg-warning/30 dark:text-warning dark:border-warning">
                       Pendiente
                     </Badge>
                   </div>
                   <div className="flex items-center gap-2 pt-2">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs text-success hover:text-success-foreground hover:bg-success dark:hover:bg-success/30">
                       <CheckCircle2 className="size-3 mr-1" />
                       Aprobar
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive-foreground hover:bg-destructive dark:hover:bg-destructive/30">
                       <XCircle className="size-3 mr-1" />
                       Rechazar
                     </Button>
@@ -325,7 +325,7 @@ export function RecursosHumanosPageNew() {
                   <p className="text-xs text-muted-foreground mb-3">{dept.description}</p>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all"
+                      className="h-full bg-gradient-to-r from-primary to-accent transition-all"
                       style={{ width: `${(deptEmployees.length / data.employees.length) * 100}%` }}
                     />
                   </div>

@@ -15,7 +15,7 @@ export const ENTERPRISE_MODULE_OPTIONS: EnterpriseModuleOption[] = [
   { id: 'SALES', label: 'Ventas', description: 'Clientes, cotizaciones, facturación y caja' },
   { id: 'RESTAURANT', label: 'Restaurante POS', description: 'Mesas, comandas, cocina y cobro POS; se habilita bajo demanda' },
 { id: 'TRACKING', label: 'Tracking de Importaciones', description: 'Envíos de agencia por código de tracking con estados' },
-  { id: 'PURCHASES', label: 'Compras', description: 'Proveedores, órdenes y recepción' },
+  { id: 'PURCHASES', label: 'Compras', description: 'Proveedores, órdenes, recepción y créditos del proveedor' },
   { id: 'INVENTORY', label: 'Inventario de mercancías', description: 'Productos, servicios, stock, bodegas y transferencias' },
   { id: 'FINANCIAL', label: 'Finanzas', description: 'Ingresos, gastos, bancos y presupuestos' },
   { id: 'ACCOUNTING', label: 'Contabilidad', description: 'Plan de cuentas, asientos y reportes contables' },

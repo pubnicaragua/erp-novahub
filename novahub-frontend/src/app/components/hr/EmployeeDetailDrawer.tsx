@@ -147,7 +147,7 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
   const initials = `${employee?.firstName?.[0] || ''}${employee?.lastName?.[0] || ''}` || '?';
   const totalNet = useMemo(() => payrolls.reduce((sum, payroll) => sum + Number(payroll.netPay || 0), 0), [payrolls]);
   const status = String(employee?.employmentStatus || '').toUpperCase();
-  const statusClass = status === 'ACTIVE' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600' : status === 'INACTIVE' ? 'border-muted bg-muted text-muted-foreground' : 'border-amber-500/20 bg-amber-500/10 text-amber-600';
+  const statusClass = status === 'ACTIVE' ? 'border-success/20 bg-success/10 text-success' : status === 'INACTIVE' ? 'border-muted bg-muted text-muted-foreground' : 'border-warning/20 bg-warning/10 text-warning';
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>

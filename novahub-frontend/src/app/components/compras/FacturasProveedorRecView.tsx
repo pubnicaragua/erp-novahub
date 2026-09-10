@@ -29,6 +29,8 @@ import { isTaxExempt } from '../../utils/taxUtils';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
+import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
+import { buildVariantDisplayName } from '../../types/variants';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; warehouseCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -139,6 +141,9 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<RecurringSupplierInvoice> | null>(null);
   const [detailInvoice, setDetailInvoice] = useState<RecurringSupplierInvoice | null>(null);
+  const [variantPickerOpen, setVariantPickerOpen] = useState(false);
+  const [variantPickerProduct, setVariantPickerProduct] = useState<any | null>(null);
+  const [variantPickerIdx, setVariantPickerIdx] = useState<number | null>(null);
 
   useEffect(() => { setSuppliers(supplierCatalog); }, [supplierCatalog]);
 
@@ -381,6 +386,76 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     });
   };
 
+  const getRecurringProductStock = (product: any, variantId?: string | null, warehouseId?: string | null) => {
+    if (!product) return undefined;
+    const levels = Array.isArray(product.inventoryLevels)
+      ? product.inventoryLevels
+      : Array.isArray(product.stockLevels) ? product.stockLevels : [];
+    const warehouse = String(warehouseId || '').trim();
+    const scoped = warehouse ? levels.filter((level: any) => String(level?.warehouseId || '') === warehouse) : levels;
+    const matching = variantId
+      ? scoped.filter((level: any) => String(level?.variantId || '') === String(variantId))
+      : scoped;
+    if (variantId || warehouse || matching.length > 0) {
+      return matching.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
+    }
+    if (product.stock !== undefined && product.stock !== null) return Number(product.stock);
+    return levels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
+  };
+
+  const applyRecurringProduct = (idx: number, product: any, variant?: any) => {
+    if (!localDoc) return;
+    const items = [...(((localDoc as any).items || []) as any[])];
+    const currentItem = items[idx] || {};
+    const category = product?.category?.name || product?.category || '';
+    const purchasePrice = variant?.costPrice !== null && variant?.costPrice !== undefined && Number.isFinite(Number(variant.costPrice))
+      ? Number(variant.costPrice)
+      : Math.max(0, Number(product?.costPrice ?? product?.cost ?? currentItem.unitPrice ?? 0) + Number(variant?.costModifier || 0));
+    const displayName = variant ? buildVariantDisplayName(String(product?.name || 'Producto'), variant) : String(product?.name || '');
+    items[idx] = {
+      ...currentItem,
+      productId: String(product.id),
+      variantId: variant?.id || null,
+      code: variant?.sku || product?.code || '',
+      name: displayName || product?.name || '',
+      description: displayName || product?.name || '',
+      category,
+      categoryId: product?.categoryId || product?.category?.id || '',
+      currentStock: getRecurringProductStock(product, variant?.id, localDoc.warehouseId),
+      unitPrice: purchasePrice,
+      taxType: currentItem.taxType || 'GRAVADO',
+      taxRate: Number(currentItem.taxRate || 15),
+      commercialNoteSnapshot: product?.commercialNote || null,
+    };
+    recalculateTotals(items);
+  };
+
+  const handleRecurringProductChange = (idx: number, value: string) => {
+    if (!localDoc) return;
+    const product = productCatalog.find((candidate: any) => String(candidate?.id) === String(value));
+    if (!product) {
+      const items = [...(((localDoc as any).items || []) as any[])];
+      items[idx] = { ...items[idx], productId: '', variantId: null, code: '', name: '', description: '', category: '', categoryId: '', currentStock: undefined };
+      recalculateTotals(items);
+      return;
+    }
+    if (Array.isArray(product.variants) && product.variants.length > 0) {
+      setVariantPickerProduct(product);
+      setVariantPickerIdx(idx);
+      setVariantPickerOpen(true);
+      return;
+    }
+    applyRecurringProduct(idx, product);
+  };
+
+  const handleRecurringVariantSelected = (variant: any) => {
+    if (!variantPickerProduct || variantPickerIdx === null) return;
+    applyRecurringProduct(variantPickerIdx, variantPickerProduct, variant);
+    setVariantPickerOpen(false);
+    setVariantPickerProduct(null);
+    setVariantPickerIdx(null);
+  };
+
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
@@ -394,13 +469,13 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     const formatMoney = (value: number) => `${currencySymbol} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const productSnapshot = (item: any) => {
       const product = productCatalog.find((candidate: any) => String(candidate?.id) === String(item?.productId));
-      const stock = product?.stock != null
-        ? Number(product.stock)
-        : product?.inventoryLevels?.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0);
+      const variant = product?.variants?.find((candidate: any) => String(candidate?.id) === String(item?.variantId));
+      const stock = getRecurringProductStock(product, item?.variantId, localDoc.warehouseId);
       return {
         product,
-        code: item?.code || product?.code || '',
-        name: item?.name || product?.name || item?.description || '',
+        variant,
+        code: item?.code || variant?.sku || product?.code || '',
+        name: item?.name || (variant ? buildVariantDisplayName(String(product?.name || ''), variant) : product?.name) || item?.description || '',
         category: item?.category || product?.category?.name || product?.category || '',
         stock: item?.currentStock ?? stock,
       };
@@ -541,7 +616,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           <CardContent className="p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <div><p className="text-xs font-black uppercase tracking-widest text-foreground">Ítems de orden</p><p className="mt-1 text-[10px] text-muted-foreground">Estos productos se copiarán en cada orden y recepción del ciclo.</p></div>
-              {canEditRecurrence && <Button variant="outline" size="sm" onClick={() => recalculateTotals([...items, { id: `new-${Date.now()}`, productId: '', description: '', quantity: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, withholdingTotal: 0, total: 0 }])} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Agregar ítem</Button>}
+              {canEditRecurrence && <Button variant="outline" size="sm" onClick={() => recalculateTotals([...items, { id: `new-${Date.now()}`, productId: '', variantId: null, description: '', quantity: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, withholdingTotal: 0, total: 0 }])} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Agregar ítem</Button>}
             </div>
             <div className="space-y-3" data-tour="purchases-form-items">
               {items.map((item: any, idx: number) => {
@@ -551,7 +626,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                   <div key={item.id || idx} className="group min-w-0 rounded-2xl border-2 border-border/80 bg-card p-4 shadow-sm ring-1 ring-border/20 transition-all hover:border-primary/50 hover:shadow-md">
                     <div className="flex min-w-0 flex-col gap-3 border-b border-border/30 pb-3 sm:flex-row sm:items-end sm:justify-between">
                       <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-widest text-foreground">Producto de inventario *</p><p className="mt-1 text-[10px] text-muted-foreground">La recurrencia necesita un producto existente para poder generar la recepción automáticamente.</p></div>
-                      <div className="flex min-w-0 w-full items-end gap-2 sm:w-[30rem] sm:flex-none"><div className="min-w-0 flex-1"><Combobox disabled={!canEditRecurrence} options={productCatalog.filter(Boolean).map((product: any) => ({ label: `${product.code || ''} - ${product.name || ''}`.trim(), value: String(product.id), description: product.category?.name || product.category || 'Sin categoría' }))} value={item.productId ? String(item.productId) : ''} onChange={(value) => { const product = productCatalog.find((candidate: any) => String(candidate?.id) === String(value)); const nextItems = [...items]; nextItems[idx] = { ...nextItems[idx], productId: value, code: product?.code || '', name: product?.name || '', description: product?.name || '', category: product?.category?.name || product?.category || '', categoryId: product?.categoryId || product?.category?.id || '', currentStock: product?.stock ?? product?.inventoryLevels?.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0), unitPrice: Number(product?.costPrice ?? product?.cost ?? nextItems[idx].unitPrice ?? 0), taxType: nextItems[idx].taxType || 'GRAVADO', taxRate: Number(nextItems[idx].taxRate || 15), commercialNoteSnapshot: product?.commercialNote || null }; recalculateTotals(nextItems); }} placeholder="Buscar producto..." searchPlaceholder="Buscar por nombre, código o SKU..." emptyMessage="No hay productos disponibles" className="h-9 text-xs" /></div>{canEditRecurrence && <Button variant="ghost" size="icon" aria-label="Eliminar ítem" className="size-9 shrink-0 rounded-xl text-muted-foreground/60 hover:bg-rose-500/10 hover:text-rose-500" onClick={() => handleDeleteItem(idx)}><Trash2 className="size-3.5" /></Button>}</div>
+                      <div className="flex min-w-0 w-full items-end gap-2 sm:w-[30rem] sm:flex-none"><div className="min-w-0 flex-1"><Combobox disabled={!canEditRecurrence} options={productCatalog.filter(Boolean).map((product: any) => ({ label: `${product.code || ''} - ${product.name || ''}${Array.isArray(product.variants) && product.variants.length > 0 ? ' · Tiene variantes' : ''}`.trim(), value: String(product.id), description: [product.category?.name || product.category || 'Sin categoría', Array.isArray(product.variants) && product.variants.length > 0 ? `${product.variants.length} variantes disponibles` : null].filter(Boolean).join(' · ') }))} value={item.productId ? String(item.productId) : ''} onChange={(value) => handleRecurringProductChange(idx, value)} placeholder="Buscar producto..." searchPlaceholder="Buscar por nombre, código o SKU..." emptyMessage="No hay productos disponibles" className="h-9 text-xs" />{item.variantId && <Badge variant="secondary" className="mt-1 max-w-full truncate font-mono text-[9px]">Variante · {snapshot.code}</Badge>}</div>{canEditRecurrence && <Button variant="ghost" size="icon" aria-label="Eliminar ítem" className="size-9 shrink-0 rounded-xl text-muted-foreground/60 hover:bg-rose-500/10 hover:text-rose-500" onClick={() => handleDeleteItem(idx)}><Trash2 className="size-3.5" /></Button>}</div>
                     </div>
                     <div className="mt-3 grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-12">
                       <div className="min-w-0 xl:col-span-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-foreground">Código</p><Input disabled value={snapshot.code} className="h-8 bg-muted/30 text-xs font-mono" placeholder="Código" /></div>
@@ -589,6 +664,18 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
               } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: deleteToastId }); }
             finally { setDeleteLoading(false); }
           }}
+        />
+        <PurchaseVariantPickerModal
+          open={variantPickerOpen}
+          onOpenChange={(open) => {
+            setVariantPickerOpen(open);
+            if (!open) {
+              setVariantPickerProduct(null);
+              setVariantPickerIdx(null);
+            }
+          }}
+          product={variantPickerProduct}
+          onSelect={handleRecurringVariantSelected}
         />
       </div>
     );

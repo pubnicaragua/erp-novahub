@@ -15,6 +15,8 @@ export type ManagerInventoryView =
 
 export const MANAGER_INVENTORY_VIEWS: Array<{ id: ManagerInventoryView; label: string }> = [
   { id: 'overview', label: 'Resumen de inventario' },
+  { id: 'branchInventory', label: 'Inventario de sucursal' },
+  { id: 'corporateInventory', label: 'Inventario corporativo' },
   { id: 'products', label: 'Productos' },
   { id: 'services', label: 'Servicios' },
   { id: 'warehouses', label: 'Bodegas' },

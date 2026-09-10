@@ -10,8 +10,7 @@ export type ManagerPurchasesView =
   | 'expenses'
   | 'recurringexpenses'
   | 'requests'
-  | 'management'
-  | 'supplierprices';
+  | 'management';
 
 export const MANAGER_PURCHASES_VIEWS: Array<{ id: ManagerPurchasesView; label: string }> = [
   { id: 'overview', label: 'Resumen de compras' },
@@ -21,10 +20,9 @@ export const MANAGER_PURCHASES_VIEWS: Array<{ id: ManagerPurchasesView; label: s
   { id: 'invoices', label: 'Facturas de proveedor' },
   { id: 'recurring', label: 'Compras recurrentes' },
   { id: 'payments', label: 'Pagos realizados' },
-  { id: 'credits', label: 'Créditos de proveedor' },
+  { id: 'credits', label: 'Créditos del proveedor' },
   { id: 'expenses', label: 'Gastos' },
   { id: 'recurringexpenses', label: 'Gastos recurrentes' },
   { id: 'requests', label: 'Solicitudes de compra' },
   { id: 'management', label: 'Gestión de compras' },
-  { id: 'supplierprices', label: 'Precios de proveedores' },
 ];

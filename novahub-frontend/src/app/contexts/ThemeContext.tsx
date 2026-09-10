@@ -87,11 +87,14 @@ function brandingColors(branding: Branding): Partial<BrandColors> {
     colors.primary = branding.primaryColor;
     colors.sidebarPrimary = branding.primaryColor;
   }
+  if (branding.primaryForeground) colors.primaryForeground = branding.primaryForeground;
   if (branding.sidebarColor) colors.sidebar = branding.sidebarColor;
+  if (branding.sidebarForeground) colors.sidebarForeground = branding.sidebarForeground;
   if (branding.accentColor) {
     colors.accent = branding.accentColor;
     colors.sidebarAccent = branding.accentColor;
   }
+  if (branding.accentForeground) colors.accentForeground = branding.accentForeground;
   return colors;
 }
 

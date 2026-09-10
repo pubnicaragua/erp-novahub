@@ -143,7 +143,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter((b) => {
     const st = (b.status || '').toUpperCase();
-    if (statusFilter === 'PENDING') { if (!['PENDING', 'PARTIAL', 'CREDIT'].includes(st)) return false; }
+    if (statusFilter === 'PENDING') { if (!['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(st)) return false; }
     else if (statusFilter === 'CREDIT') { if (st !== 'CREDIT') return false; }
     else if (statusFilter === 'OVERDUE') { if (st !== 'OVERDUE') return false; }
     else if (statusFilter === 'PAID') { if (st !== 'PAID') return false; }
@@ -177,8 +177,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     const total = Number(invoice.total || 0);
     const amountPaid = Number(invoice.amountPaid || 0);
     const balance = Number(invoice.balance || 0);
-    if (amountPaid > 0) return amountPaid;
-    if (total > 0 && balance >= 0 && balance < total) return total - balance;
+    if (balance > 0) return balance;
+    if (total > 0 && amountPaid > 0 && amountPaid < total) return total - amountPaid;
     return total;
   };
 
@@ -762,17 +762,17 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   }
 
   const pendingTotalInDisplayCurrency = data
-    .filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT'].includes((invoice.status || '').toUpperCase()))
+    .filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes((invoice.status || '').toUpperCase()))
     .reduce((acc, invoice) => {
-      const amount = Number(invoice.total ?? invoice.baseTotal ?? 0);
+      const amount = Number(invoice.balance ?? invoice.total ?? invoice.baseTotal ?? 0);
       const converted = valuationMode === 'CURRENT'
         ? convertCurrentAmount(amount, invoice.currency)
         : convertAmount(amount, invoice.currency, invoice.exchangeRate || globalRate);
       return acc + converted;
     }, 0);
   const originalPendingAmounts = summarizeAmountsByCurrency(
-    data.filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT'].includes((invoice.status || '').toUpperCase())),
-    (invoice) => Number(invoice.total ?? invoice.baseTotal ?? 0),
+    data.filter(invoice => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes((invoice.status || '').toUpperCase())),
+    (invoice) => Number(invoice.balance ?? invoice.total ?? invoice.baseTotal ?? 0),
     (invoice) => invoice.currency,
     baseCurrency,
   );
@@ -795,7 +795,10 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2></div>
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos del proveedor</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Mercancía recibida que el proveedor nos permite pagar después. El saldo mostrado es una obligación de la empresa.</p>
+          </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="invoices" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas de proveedor" />
@@ -820,12 +823,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           actions={(row) => (
             <div className="flex gap-1">
               <Button title={canPerform('PURCHASES_RECEIPTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_RECEIPTS', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
-              {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && onRegisterPaymentFromInvoice && (
+              {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && onRegisterPaymentFromInvoice && Number(row.balance ?? row.total ?? 0) > 0.01 && !['PAID', 'CANCELLED'].includes(String(row.status || '').toUpperCase()) && (
                 <Button
                   title="Registrar Pago"
                   variant="ghost"
                   size="icon"
-                  className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
+                  className="size-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                   onClick={() => onRegisterPaymentFromInvoice({
                     supplierId: row.supplierId,
                     supplierInvoiceId: row.id,

@@ -355,7 +355,7 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
       data-index={index}
       aria-busy={importing}
       style={{ display: 'grid', gridTemplateColumns: gridTemplate, columnGap: '8px', position: 'absolute', left: 0, top: 0, width: '100%', height: isService ? '84px' : hasVariants ? '78px' : '58px', marginBottom: '8px', boxSizing: 'border-box', transform: `translateY(${start}px)` }}
-      className={expandable ? 'border-y-2 border-primary/20 bg-primary/5' : row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}
+      className={expandable ? 'border-y-2 border-primary/20 bg-primary/5' : row._hasError ? 'bg-destructive/10' : row._hasWarning ? 'bg-warning/5' : ''}
     >
       <TableCell className="p-1">
         {expandable ? (
@@ -369,14 +369,14 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
           >
             <ChevronRight className={`size-4 transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" />
           </button>
-        ) : row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}
+        ) : row._hasError ? <AlertTriangle className="size-4 text-destructive" /> : row._hasWarning ? <AlertTriangle className="size-4 text-warning" /> : <Check className="size-4 text-success" />}
       </TableCell>
-      <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
-      <TableCell className="min-w-[220px] p-1"><div className="space-y-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} />{isService && <Input value={row.description || ''} title={row.description || ''} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className="h-8 w-full text-xs" placeholder="Descripción" />}{hasVariants && <span className="flex flex-wrap items-center gap-1 text-[10px] font-black text-primary"><span>Producto padre</span><Badge variant="outline" className="border-primary/25 bg-primary/5 text-[9px] text-primary">{row._variantCount} variantes</Badge></span>}</div></TableCell>
+      <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-destructive' : ''}`} /></TableCell>
+      <TableCell className="min-w-[220px] p-1"><div className="space-y-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-destructive' : ''}`} />{isService && <Input value={row.description || ''} title={row.description || ''} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className="h-8 w-full text-xs" placeholder="Descripción" />}{hasVariants && <span className="flex flex-wrap items-center gap-1 text-[10px] font-black text-primary"><span>Producto padre</span><Badge variant="outline" className="border-primary/25 bg-primary/5 text-[9px] text-primary">{row._variantCount} variantes</Badge></span>}</div></TableCell>
       <TableCell className="p-1"><Input value={row.brand || ''} title={row.brand || ''} onChange={(event) => onRowUpdate(index, 'brand', event.target.value)} className="h-8 text-xs" /></TableCell>
       <TableCell className="min-w-[180px] p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(event) => onRowUpdate(index, 'commercialNote', event.target.value)} className="h-8 w-full text-xs" /></TableCell>
       <TableCell className="p-1 text-center">
-        {row._imageStatus === 'matched' ? <span role="img" aria-label="Imagen vinculada" title="Imagen vinculada"><ImageIcon className="mx-auto size-4 text-emerald-500" /></span> : row._imageStatus === 'missing' ? <span role="img" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU"><ImageOff className="mx-auto size-4 text-red-500" /></span> : <span role="img" aria-label="Sin archivo de imágenes" title="No se cargó un ZIP o RAR de imágenes"><ImageOff className="mx-auto size-4 text-muted-foreground/50" /></span>}
+        {row._imageStatus === 'matched' ? <span role="img" aria-label="Imagen vinculada" title="Imagen vinculada"><ImageIcon className="mx-auto size-4 text-success" /></span> : row._imageStatus === 'missing' ? <span role="img" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU"><ImageOff className="mx-auto size-4 text-destructive" /></span> : <span role="img" aria-label="Sin archivo de imágenes" title="No se cargó un ZIP o RAR de imágenes"><ImageOff className="mx-auto size-4 text-muted-foreground/50" /></span>}
       </TableCell>
       <TableCell className="p-1">
         {categoryExists ? (
@@ -384,14 +384,14 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
         ) : (
           <div className="flex items-center gap-1">
             <Select value="__none__" onValueChange={(value) => { const category = categoryOptions.find((item: any) => item.id === value); if (category) onRowUpdate(index, 'category', category.name); }}>
-              <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 min-w-0 flex-1 border-warning/60 text-xs text-warning"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>
                 {categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}
                 {categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            {canCreateCategory && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')}><Plus className="size-3.5" /></Button>}
+            {canCreateCategory && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-warning" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')}><Plus className="size-3.5" /></Button>}
           </div>
         )}
       </TableCell>
@@ -404,7 +404,7 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
       </> : hasVariants ? <>
         <TableCell className="p-1 text-center"><span className="text-[10px] font-semibold text-muted-foreground">Por variante</span></TableCell>
         <TableCell className="p-1 text-center"><span className="text-[10px] text-muted-foreground">—</span></TableCell>
-        <TableCell className="p-1 text-center" title={advancedWarehouseSummary}><span className={`block min-w-0 whitespace-normal break-words text-[10px] font-semibold leading-tight ${row._hasError ? 'text-red-600' : 'text-muted-foreground'}`}>{advancedWarehouseSummary}</span></TableCell>
+        <TableCell className="p-1 text-center" title={advancedWarehouseSummary}><span className={`block min-w-0 whitespace-normal break-words text-[10px] font-semibold leading-tight ${row._hasError ? 'text-destructive' : 'text-muted-foreground'}`}>{advancedWarehouseSummary}</span></TableCell>
       </> : isAdvanced ? <>
         <TableCell className="p-1 text-right"><span className="text-xs tabular-nums">{Number(row.initialStock || 0)}</span></TableCell>
         <TableCell className="p-1 text-center"><span className="text-[10px] text-muted-foreground">Por bodega</span></TableCell>
@@ -421,14 +421,14 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
           ) : (
             <div className="flex items-center gap-1">
               <Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
-                <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 min-w-0 flex-1 border-warning/60 text-xs text-warning"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           )}
         </TableCell>
       </>}
-      <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span></TableCell>
+      <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-destructive' : row._hasWarning ? 'text-warning' : 'text-success'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span></TableCell>
     </TableRow>
   );
 });
@@ -664,15 +664,15 @@ function ImportPreviewPage({
     return (
       <ImportPreviewMobileCard index={index} title={row.name || row.code} error={row._hasError ? row._errorMessage || 'Fila con errores' : undefined} warning={row._hasWarning ? row._warningMessage || 'Revisar fila' : undefined}>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <ImportPreviewField label={`${isService ? 'Código' : 'Código/Sku'} *`}><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`${importPreviewFieldClass} font-mono ${!row.code ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label={`${isService ? 'Código' : 'Código/Sku'} *`}><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`${importPreviewFieldClass} font-mono ${!row.code ? 'border-destructive' : ''}`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Unidad"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
           {isService && <ImportPreviewField label="Duración (min)"><Input type="number" min={0} step="1" value={row.estimatedDuration ?? ''} onChange={(event) => onRowUpdate(index, 'estimatedDuration', event.target.value === '' ? undefined : Number(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>}
-          <ImportPreviewField label="Nombre *" className="sm:col-span-2"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`${importPreviewFieldClass} ${!row.name ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Nombre *" className="sm:col-span-2"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`${importPreviewFieldClass} ${!row.name ? 'border-destructive' : ''}`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Marca"><Input value={row.brand || ''} title={row.brand || ''} onChange={(event) => onRowUpdate(index, 'brand', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
           {isService && <ImportPreviewField label="Descripción" className="sm:col-span-2"><Input value={row.description || ''} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>}
           <ImportPreviewField label="Nota comercial" className="sm:col-span-2"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(event) => onRowUpdate(index, 'commercialNote', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></ImportPreviewField>
           <ImportPreviewField label="Categoría" className="sm:col-span-2">
-            {categoryExists ? <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className={importPreviewFieldClass} disabled={importing} /> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => { const category = categoryOptions.find((item: any) => item.id === value); if (category) onRowUpdate(index, 'category', category.name); }} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-amber-500/60 text-amber-600`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>{categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}{categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}</SelectContent></Select>{canCreateCategory && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
+            {categoryExists ? <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className={importPreviewFieldClass} disabled={importing} /> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => { const category = categoryOptions.find((item: any) => item.id === value); if (category) onRowUpdate(index, 'category', category.name); }} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-warning/60 text-warning`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>{categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}{categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}</SelectContent></Select>{canCreateCategory && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-warning" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
           </ImportPreviewField>
           {isService ? <ImportPreviewField label="Precio"><ImportMoneyInput type="number" min={0} value={row.salePrice ?? ''} onChange={(event) => onRowUpdate(index, 'servicePrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField> : visiblePriceLists.map((list) => <ImportPreviewField key={list.code} label={list.name}><ImportMoneyInput type="number" min={0} value={row.prices?.[list.code] ?? ''} onChange={(event) => onRowUpdate(index, `price.${list.code}`, event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField>)}
           {canViewInventoryCost && <ImportPreviewField label={isService ? 'Costo del servicio' : 'Costo'}><ImportMoneyInput type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField>}
@@ -687,7 +687,7 @@ function ImportPreviewPage({
             <ImportPreviewField label="Stock mínimo"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
             <ImportPreviewField label="Bodega" className="sm:col-span-2">
               <Select value={warehouseExists ? (row.warehouse || '__none__') : '__invalid__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' || value === '__invalid__' ? '' : value)} disabled={importing}>
-                <SelectTrigger className={`${importPreviewFieldClass} ${warehouseExists ? '' : 'border-amber-500/60 text-amber-600'}`}><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
+                <SelectTrigger className={`${importPreviewFieldClass} ${warehouseExists ? '' : 'border-warning/60 text-warning'}`}><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
                 <SelectContent>
                   {!warehouseExists && <SelectItem value="__invalid__" disabled>{row.warehouse ? `No existe: ${row.warehouse}` : 'Bodega requerida'}</SelectItem>}
                   {warehouseExists && <SelectItem value="__none__">Sin bodega</SelectItem>}
@@ -697,7 +697,7 @@ function ImportPreviewPage({
               </Select>
             </ImportPreviewField>
           </>}
-          <ImportPreviewField label="Imagen" className="sm:col-span-2"><div className="flex min-h-9 items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 text-xs"><span className="shrink-0">{row._imageStatus === 'matched' ? <ImageIcon className="size-4 text-emerald-500" /> : <ImageOff className="size-4 text-muted-foreground" />}</span><span className="min-w-0 break-words text-muted-foreground">{row._imageStatus === 'matched' ? 'Imagen vinculada' : row._imageStatus === 'missing' ? 'No se encontró imagen para este SKU' : 'Sin archivo de imágenes'}</span></div></ImportPreviewField>
+          <ImportPreviewField label="Imagen" className="sm:col-span-2"><div className="flex min-h-9 items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 text-xs"><span className="shrink-0">{row._imageStatus === 'matched' ? <ImageIcon className="size-4 text-success" /> : <ImageOff className="size-4 text-muted-foreground" />}</span><span className="min-w-0 break-words text-muted-foreground">{row._imageStatus === 'matched' ? 'Imagen vinculada' : row._imageStatus === 'missing' ? 'No se encontró imagen para este SKU' : 'Sin archivo de imágenes'}</span></div></ImportPreviewField>
         </div>
       </ImportPreviewMobileCard>
     );
@@ -773,12 +773,12 @@ function ImportPreviewPage({
       <ImportReviewSummary total={importData.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel={isService ? 'servicios' : 'productos'} />
 
       {similarityPendingCount > 0 && !isService && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs" role="alert">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs" role="alert">
           <div className="min-w-0">
-            <p className="font-black text-amber-800 dark:text-amber-200">Hay {similarityPendingCount} coincidencia(s) pendiente(s) por revisar.</p>
-            <p className="mt-1 text-amber-700 dark:text-amber-300">Selecciona el producto existente o resuelve cada alerta antes de importar.</p>
+            <p className="font-black text-warning dark:text-warning">Hay {similarityPendingCount} coincidencia(s) pendiente(s) por revisar.</p>
+            <p className="mt-1 text-warning dark:text-warning">Selecciona el producto existente o resuelve cada alerta antes de importar.</p>
           </div>
-          <Button type="button" variant="outline" size="sm" className="shrink-0 border-amber-500/50 text-amber-800 dark:text-amber-200" onClick={onReviewSimilarities} disabled={importing || !onReviewSimilarities}>
+          <Button type="button" variant="outline" size="sm" className="shrink-0 border-warning/50 text-warning dark:text-warning" onClick={onReviewSimilarities} disabled={importing || !onReviewSimilarities}>
             Revisar coincidencias
           </Button>
         </section>
@@ -852,14 +852,14 @@ function ImportPreviewPage({
                   <span className="truncate font-mono text-xs font-semibold">{stockRow.variantSku || '—'}</span>
                   <span className="text-right text-xs tabular-nums">{Number(stockRow.quantity || 0)}</span>
                   <Select value={selectValue} onValueChange={(value) => onStockWarehouseUpdate(stockIndex, value)} disabled={importing}>
-                    <SelectTrigger className={`h-8 min-w-0 text-xs ${warehouseExists ? '' : 'border-amber-500/60 text-amber-600'}`}><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
+                    <SelectTrigger className={`h-8 min-w-0 text-xs ${warehouseExists ? '' : 'border-warning/60 text-warning'}`}><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
                     <SelectContent>
                       {!warehouseExists && <SelectItem value="__invalid__" disabled>{warehouse ? `No existe: ${warehouse}` : 'Bodega requerida'}</SelectItem>}
                       {warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas activas</SelectItem>}
                       {warehouseOptions.map((option: any) => <SelectItem key={option.id} value={option.name}>{option.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <span className={`text-[10px] font-semibold ${warehouseExists ? 'text-emerald-600' : 'text-red-600'}`}>{warehouseExists ? 'Correcta' : 'Rechazada'}</span>
+                  <span className={`text-[10px] font-semibold ${warehouseExists ? 'text-success' : 'text-destructive'}`}>{warehouseExists ? 'Correcta' : 'Rechazada'}</span>
                 </div>;
               })}
             </div>
@@ -1829,15 +1829,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const inventoryKpis = isServiceView
     ? [
         { title: 'Servicios', value: inventorySummary.total, icon: Package, color: 'text-primary', bg: 'bg-primary/10', kind: 'indicator' as const },
-        { title: 'Categorías', value: serviceSummary.categories, icon: PackageSearch, color: 'text-blue-600', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-        { title: 'Promedio semanal', value: serviceSummary.weeklyAverage.toFixed(1), icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-500/10', kind: 'indicator' as const },
-        { title: 'Precio promedio', value: formatAmount(serviceSummary.averagePrice), icon: Barcode, color: 'text-amber-600', bg: 'bg-amber-500/10', kind: 'indicator' as const },
+        { title: 'Categorías', value: serviceSummary.categories, icon: PackageSearch, color: 'text-info', bg: 'bg-info/10', kind: 'indicator' as const },
+        { title: 'Promedio semanal', value: serviceSummary.weeklyAverage.toFixed(1), icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10', kind: 'indicator' as const },
+        { title: 'Precio promedio', value: formatAmount(serviceSummary.averagePrice), icon: Barcode, color: 'text-warning', bg: 'bg-warning/10', kind: 'indicator' as const },
       ]
     : [
         { title: 'Productos', value: inventorySummary.total, icon: Package, color: 'text-foreground', bg: 'bg-muted/50', kind: 'filter' as const, filter: 'all' as const },
-        { title: 'Disponibles', value: inventorySummary.available, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'available' as const },
-        { title: 'Stock bajo', value: inventorySummary.low, icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'low' as const },
-        { title: 'Sin stock', value: inventorySummary.out, icon: Ban, color: 'text-rose-600', bg: 'bg-rose-500/10', kind: 'filter' as const, filter: 'out' as const },
+        { title: 'Disponibles', value: inventorySummary.available, icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10', kind: 'filter' as const, filter: 'available' as const },
+        { title: 'Stock bajo', value: inventorySummary.low, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10', kind: 'filter' as const, filter: 'low' as const },
+        { title: 'Sin stock', value: inventorySummary.out, icon: Ban, color: 'text-destructive', bg: 'bg-destructive/10', kind: 'filter' as const, filter: 'out' as const },
       ];
   const activeProductFilterCount = [
     Boolean(searchTerm.trim()),
@@ -1916,9 +1916,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   // product.stock si el listado no trae niveles.
   const getStockStatus = (product: any) => {
     const stock = getProductStock(product);
-    if (stock <= 0) return { label: 'Sin Stock', color: 'bg-red-500/10 text-red-500', icon: 'critical' };
-    if (stock <= getProductStockMinimum(product)) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500', icon: 'low' };
-    return { label: 'OK', color: 'bg-green-500/10 text-green-500', icon: 'ok' };
+    if (stock <= 0) return { label: 'Sin Stock', color: 'bg-destructive/10 text-destructive', icon: 'critical' };
+    if (stock <= getProductStockMinimum(product)) return { label: 'Bajo', color: 'bg-warning/10 text-warning', icon: 'low' };
+    return { label: 'OK', color: 'bg-success/10 text-success', icon: 'ok' };
   };
 
   const getProductMaxStock = (product: any) => {
@@ -1931,10 +1931,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const getStockAlertColor = (product: any) => {
     const stock = getProductStock(product);
-    if (stock <= 0) return 'text-red-500 font-bold';
-    if (stock <= getProductStockMinimum(product)) return 'text-orange-500 font-bold';
+    if (stock <= 0) return 'text-destructive font-bold';
+    if (stock <= getProductStockMinimum(product)) return 'text-warning font-bold';
     const maxStock = getProductMaxStock(product);
-    if (maxStock > 0 && stock > maxStock) return 'text-blue-500';
+    if (maxStock > 0 && stock > maxStock) return 'text-info';
     return 'text-foreground';
   };
 
@@ -2327,7 +2327,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const renderEditableRow = (product: EditingProduct) => {
     const isSaving = savingIds.has(product.id);
     return (
-      <TableRow key={product.id} className="bg-blue-500/5">
+      <TableRow key={product.id} className="bg-info/5">
         <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.selector, minWidth: PRODUCT_TABLE_WIDTHS.selector }}>
           <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id, product); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60" aria-pressed={selectedIds.has(String(product.id))} aria-label={selectedIds.has(String(product.id)) ? `Quitar ${product.name} de la selección` : `Seleccionar ${product.name}`} title={selectedIds.has(String(product.id)) ? 'Quitar de la selección' : 'Agregar a la selección'}>
             {selectedIds.has(String(product.id))
@@ -2343,11 +2343,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               value={product.code}
               onChange={(e) => handleUpdateField(product.id, 'code', e.target.value)}
               onKeyDown={(e) => handleKeyDown(e, product.id)}
-              className={`h-8 text-xs font-mono w-full ${skuErrors.get(product.id) ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+              className={`h-8 text-xs font-mono w-full ${skuErrors.get(product.id) ? 'border-destructive focus-visible:ring-destructive' : ''}`}
               disabled={isSaving}
             />
             {skuErrors.get(product.id) && (
-              <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider leading-tight">{skuErrors.get(product.id)}</span>
+              <span className="text-[9px] text-destructive font-bold uppercase tracking-wider leading-tight">{skuErrors.get(product.id)}</span>
             )}
           </div>
         </TableCell>
@@ -2548,7 +2548,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                   </div>
                 ))}
                 <div className="pt-1 flex justify-end">
-                  <Badge className={`text-[10px] tabular-nums h-6 flex items-center ${totalAllocated > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/20 text-muted-foreground'}`}>
+                  <Badge className={`text-[10px] tabular-nums h-6 flex items-center ${totalAllocated > 0 ? 'bg-success/10 text-success' : 'bg-muted/20 text-muted-foreground'}`}>
                     Total: {totalAllocated}
                   </Badge>
                 </div>
@@ -2606,7 +2606,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <Button 
               variant="ghost" 
               size="icon" 
-              className="size-7 text-green-600 hover:text-green-700 hover:bg-green-500/10"
+              className="size-7 text-success hover:text-success-foreground hover:bg-success/10"
               onClick={() => handleSaveRow(product.id)}
               disabled={isSaving || !!skuErrors.get(product.id)}
             >
@@ -2615,7 +2615,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <Button 
               variant="ghost" 
               size="icon" 
-              className="size-7 text-red-600 hover:text-red-700 hover:bg-red-500/10"
+              className="size-7 text-destructive hover:text-destructive-foreground hover:bg-destructive/10"
               onClick={() => handleCancelEdit(product.id)}
               disabled={isSaving}
             >
@@ -3796,7 +3796,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       title="Ver detalle de la bodega"
                       className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:bg-primary/5"
                     >
-                      <WarehouseIcon className="size-3 shrink-0 text-sky-600" />
+                      <WarehouseIcon className="size-3 shrink-0 text-info" />
                       <span className="max-w-40 truncate">{warehouse.name}</span>
                     </button>
                   ))}
@@ -4090,7 +4090,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     </span>
                     <div className={`flex min-w-0 gap-1 ${isServiceView ? 'flex-wrap' : 'flex-col items-stretch'}`}>
                       {isServiceView ? (
-                        <Badge variant="outline" className={product.isActive !== false ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}>
+                        <Badge variant="outline" className={product.isActive !== false ? 'bg-success/10 text-success border-success/20' : 'bg-destructive/10 text-destructive border-destructive/20'}>
                           {product.isActive !== false ? 'Disponible' : 'No disponible'}
                         </Badge>
                       ) : (
@@ -4109,7 +4109,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-8 text-sky-600 hover:bg-sky-700 hover:text-white"
+                    className="size-8 text-info hover:bg-info hover:text-info-foreground"
                     title="Duplicar producto"
                     aria-label="Duplicar producto"
                     disabled={duplicatingId === product.id}
@@ -4133,7 +4133,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 {canPerform(catalogPermissionModule, 'delete') && <Button
                   variant="ghost"
                   size="icon"
-                  className={`size-8 ${product.isActive === false ? 'text-emerald-600 hover:bg-emerald-700 hover:text-white' : 'text-amber-600 hover:bg-amber-800 hover:text-white'}`}
+                  className={`size-8 ${product.isActive === false ? 'text-success hover:bg-success hover:text-success-foreground' : 'text-warning hover:bg-warning hover:text-warning-foreground hover:text-warning-foreground'}`}
                   title={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
                   aria-label={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
                   onClick={(e) => { e.stopPropagation(); handleToggleProductStatus(product); }}
@@ -4156,7 +4156,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           responsiveCards={false}
           containerClassName="w-max min-w-full max-w-none overflow-visible"
           className="table-fixed"
-          style={{ width: `${catalogTableWidth}px`, minWidth: `${catalogTableWidth}px`, maxWidth: 'none' }}
+          data-catalog-table={isServiceView ? 'service' : 'product'}
+          data-catalog-cost={canViewInventoryCost ? 'visible' : 'hidden'}
+          style={isServiceView
+            ? { width: '100%', minWidth: `${catalogTableWidth}px`, maxWidth: 'none' }
+            : { width: `${catalogTableWidth}px`, minWidth: `${catalogTableWidth}px`, maxWidth: 'none' }}
         >
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -4326,7 +4330,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     </TableCell>}
                      <TableCell>
                       {isServiceView ? (
-                        <Badge variant="outline" className={product.isActive !== false ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}>
+                        <Badge variant="outline" className={product.isActive !== false ? 'bg-success/10 text-success border-success/20' : 'bg-destructive/10 text-destructive border-destructive/20'}>
                           {product.isActive !== false ? 'Disponible' : 'No disponible'}
                         </Badge>
                       ) : (
@@ -4368,7 +4372,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                            <Button 
                              variant="ghost" 
                              size="icon" 
-                            className="size-7 text-sky-600 hover:text-sky-700 hover:bg-sky-500/10"
+                            className="size-7 text-info hover:text-info-foreground hover:bg-info/10"
                             title="Duplicar producto"
                             aria-label="Duplicar producto"
                             disabled={duplicatingId === product.id}
@@ -4399,7 +4403,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                             className={`size-7 ${product.isActive === false ? 'text-emerald-600 hover:text-white hover:bg-emerald-700' : 'text-amber-600 hover:text-white hover:bg-amber-800'}`}
+                             className={`size-7 ${product.isActive === false ? 'text-success hover:text-success-foreground hover:bg-success' : 'text-warning hover:text-warning-foreground hover:bg-warning'}`}
                              title={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
                              aria-label={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
                              onClick={(e) => {
@@ -4496,7 +4500,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       <Dialog open={Boolean(warehouseDetail)} onOpenChange={(open) => !open && setWarehouseDetail(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><WarehouseIcon className="size-5 text-sky-600" /> {warehouseDetail?.name || 'Bodega'}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><WarehouseIcon className="size-5 text-info" /> {warehouseDetail?.name || 'Bodega'}</DialogTitle>
             <DialogDescription>Detalle de la bodega con su stock real y productos asignados.</DialogDescription>
           </DialogHeader>
           {warehouseDetail && (() => {
@@ -4540,7 +4544,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       <Dialog open={Boolean(branchDetail)} onOpenChange={(open) => !open && setBranchDetail(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Store className="size-5 text-violet-600" /> {branchDetail?.name || 'Sucursal'}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Store className="size-5 text-info" /> {branchDetail?.name || 'Sucursal'}</DialogTitle>
             <DialogDescription>Detalle de la sucursal con sus bodegas vinculadas y stock agregado.</DialogDescription>
           </DialogHeader>
           {branchDetail && (() => {
@@ -4641,7 +4645,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <div className="min-w-0">
                 <p className="text-sm font-bold">Archivo de imágenes</p>
                 <p className="text-xs text-muted-foreground">ZIP o RAR · JPG, JPEG y PNG · asociación por SKU</p>
-                {bulkImageFileName && <p className="mt-1 truncate text-xs font-medium text-emerald-600" title={bulkImageFileName}>{bulkImageFileName}</p>}
+                {bulkImageFileName && <p className="mt-1 truncate text-xs font-medium text-success" title={bulkImageFileName}>{bulkImageFileName}</p>}
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-2">
                 <Button type="button" variant="outline" className="shrink-0" onClick={() => bulkImageInputRef.current?.click()} disabled={bulkImageProcessing || bulkImageUploading}>
@@ -4656,11 +4660,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             {bulkImageProcessing && <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">Leyendo el archivo y buscando productos por SKU…</div>}
             {bulkImageFileName && !bulkImageProcessing && <div className="grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
               <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-foreground">{bulkImageEntries.size}</p><p className="text-xs text-muted-foreground">Imágenes reconocidas</p></div>
-              <div className="rounded-xl border bg-emerald-500/5 p-3"><p className="text-2xl font-black text-emerald-600">{bulkImageProducts.length}</p><p className="text-xs text-muted-foreground">Productos encontrados</p></div>
-              <div className="rounded-xl border bg-amber-500/5 p-3"><p className="text-2xl font-black text-amber-600">{bulkImageMissingSkus.length}</p><p className="text-xs text-muted-foreground">SKU omitidos</p></div>
+              <div className="rounded-xl border bg-success/5 p-3"><p className="text-2xl font-black text-success">{bulkImageProducts.length}</p><p className="text-xs text-muted-foreground">Productos encontrados</p></div>
+              <div className="rounded-xl border bg-warning/5 p-3"><p className="text-2xl font-black text-warning">{bulkImageMissingSkus.length}</p><p className="text-xs text-muted-foreground">SKU omitidos</p></div>
             </div>}
-            {bulkImageMissingSkus.length > 0 && <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300"><p className="font-bold">No se encontraron estos SKU:</p><p className="mt-1 break-words font-mono">{bulkImageMissingSkus.slice(0, 20).join(', ')}{bulkImageMissingSkus.length > 20 ? ` y ${bulkImageMissingSkus.length - 20} más` : ''}</p></div>}
-            {bulkImageResults && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm"><p className="font-bold text-emerald-700 dark:text-emerald-300">{bulkImageResults.updated} imagen(es) actualizada(s)</p>{bulkImageResults.failed.length > 0 && <p className="mt-1 text-xs text-rose-600">Con incidencia: {bulkImageResults.failed.join(', ')}</p>}</div>}
+            {bulkImageMissingSkus.length > 0 && <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-warning dark:text-warning"><p className="font-bold">No se encontraron estos SKU:</p><p className="mt-1 break-words font-mono">{bulkImageMissingSkus.slice(0, 20).join(', ')}{bulkImageMissingSkus.length > 20 ? ` y ${bulkImageMissingSkus.length - 20} más` : ''}</p></div>}
+            {bulkImageResults && <div className="rounded-lg border border-success/30 bg-success/5 p-3 text-sm"><p className="font-bold text-success dark:text-success">{bulkImageResults.updated} imagen(es) actualizada(s)</p>{bulkImageResults.failed.length > 0 && <p className="mt-1 text-xs text-destructive">Con incidencia: {bulkImageResults.failed.join(', ')}</p>}</div>}
           </div>
           <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between" data-tour="inventory-bulk-images-actions">
             <Button variant="outline" onClick={() => setBulkImageModalOpen(false)} disabled={bulkImageUploading}>Cerrar</Button>
@@ -4722,7 +4726,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <div className="min-w-0">
                <p className="text-xs font-bold">Imágenes de {isServiceView ? 'servicios' : 'productos'} (opcional)</p>
               <p className="whitespace-normal text-[11px] text-muted-foreground">ZIP o RAR con archivos JPG, JPEG o PNG nombrados exactamente como el SKU. Se permiten subcarpetas y la asociación no distingue mayúsculas.</p>
-              {imageArchiveFileName && <p className="mt-1 text-[11px] text-emerald-600">{imageArchiveFileName} · {imageArchiveEntries.size} imagen(es) reconocida(s)</p>}
+              {imageArchiveFileName && <p className="mt-1 text-[11px] text-success">{imageArchiveFileName} · {imageArchiveEntries.size} imagen(es) reconocida(s)</p>}
             </div>
             <div className="flex shrink-0 flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => imageArchiveInputRef.current?.click()} disabled={importing || importProcessing}>
@@ -4804,28 +4808,28 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       </TableHeader>
                       <TableBody>
                         {importData.map((row, i) => (
-                          <TableRow key={i} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
+                          <TableRow key={i} className={row._hasError ? 'bg-destructive/10' : row._hasWarning ? 'bg-warning/5' : ''}>
                             <TableCell>
                               {row._hasError ? (
-                                <AlertTriangle className="size-4 text-red-500" />
+                                <AlertTriangle className="size-4 text-destructive" />
                               ) : row._hasWarning ? (
-                                <AlertTriangle className="size-4 text-amber-500" />
+                                <AlertTriangle className="size-4 text-warning" />
                               ) : (
-                                <Check className="size-4 text-emerald-500" />
+                                <Check className="size-4 text-success" />
                               )}
                             </TableCell>
                             <TableCell className="p-1">
                               <Input
                                 value={row.code}
                                 onChange={(e) => handleImportRowUpdate(i, 'code', e.target.value)}
-                                className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`}
+                                className={`h-8 text-xs font-mono ${!row.code ? 'border-destructive' : ''}`}
                               />
                             </TableCell>
                             <TableCell className="p-1">
                               <Input
                                 value={row.name}
                                 onChange={(e) => handleImportRowUpdate(i, 'name', e.target.value)}
-                                className={`h-8 text-xs ${!row.name ? 'border-red-500' : ''}`}
+                                className={`h-8 text-xs ${!row.name ? 'border-destructive' : ''}`}
                               />
                             </TableCell>
                             <TableCell className="p-1"><Input value={row.brand || ''} onChange={(e) => handleImportRowUpdate(i, 'brand', e.target.value)} className="h-8 text-xs" /></TableCell>
@@ -4844,13 +4848,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                     const category = importCategoryOptions.find((item: any) => item.id === value);
                                     if (category) handleImportRowUpdate(i, 'category', category.name);
                                   }}>
-                                    <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="h-8 min-w-0 flex-1 border-warning/60 text-xs text-warning"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>
                                       {importCategoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
                                     </SelectContent>
                                   </Select>
-                                  {canPerform('INVENTORY_ATTRIBUTES', 'create') && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => {
+                                  {canPerform('INVENTORY_ATTRIBUTES', 'create') && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-warning" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => {
                                     setPendingCategoryRowIndex(i);
                                     setNewCategoryName(row.category || '');
                                     setNewCategoryDescription('');
@@ -4878,7 +4882,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                   const warehouseExists = importWarehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase());
                                   const selectValue = warehouseExists ? row.warehouse : '__invalid__';
                                   return <Select value={selectValue || '__none__'} onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' || value === '__invalid__' ? '' : value)}>
-                                    <SelectTrigger className={`h-8 text-xs ${!warehouseExists ? 'border-amber-500/60 text-amber-600' : ''}`} title="Aplica la bodega seleccionada a las filas de inventario de este producto"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
+                                    <SelectTrigger className={`h-8 text-xs ${!warehouseExists ? 'border-warning/60 text-warning' : ''}`} title="Aplica la bodega seleccionada a las filas de inventario de este producto"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
                                     <SelectContent>
                                       {!warehouseExists && row.warehouse && <SelectItem value="__invalid__">{`No existe: ${row.warehouse}`}</SelectItem>}
                                       <SelectItem value="__none__">Sin bodega</SelectItem>
@@ -4908,7 +4912,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                 ) : (
                                   <div className="flex items-center gap-1">
                                     <Select value="__none__" onValueChange={(value) => handleImportRowUpdate(i, 'warehouse', value === '__none__' ? '' : value)}>
-                                      <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+                                      <SelectTrigger className="h-8 min-w-0 flex-1 border-warning/60 text-xs text-warning"><SelectValue /></SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>
                                         {importWarehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}
@@ -4918,7 +4922,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                 )}
                               </TableCell>
                             </>}
-                            <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span>
+                            <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-destructive' : row._hasWarning ? 'text-warning' : 'text-success'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -5017,7 +5021,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         <DialogContent className="max-w-md">
           <DialogHeader data-tour="inventory-request-title">
             <div className="flex flex-col items-center gap-3 py-3 text-center">
-              <div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500">
+              <div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-success/10 text-success duration-500">
                 <CheckCircle2 className="size-12 animate-pulse" />
               </div>
               <DialogTitle className="text-xl">Importación completada</DialogTitle>
@@ -5025,11 +5029,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </div>
           </DialogHeader>
           <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{importResults?.success || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Importados</p></div>
-            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{importResults?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div>
-            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{importResults?.failed || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Incidencias</p></div>
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-success">{importResults?.success || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Importados</p></div>
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-warning">{importResults?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div>
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-destructive">{importResults?.failed || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Incidencias</p></div>
           </div>
-          {Boolean(importResults?.warnings?.length) && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">{importResults?.warnings?.join(' ')}</p>}
+          {Boolean(importResults?.warnings?.length) && <p className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning dark:text-warning">{importResults?.warnings?.join(' ')}</p>}
           <DialogFooter>
             <Button className="w-full" onClick={() => setImportResults(null)}>Continuar al inventario</Button>
           </DialogFooter>
@@ -5258,7 +5262,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                   </div>
                                 </TableCell>
                                 <TableCell className="max-w-0 whitespace-normal align-middle text-xs text-muted-foreground"><span className="block break-words">{product.category?.name || product.categoryName || 'Sin categoría'}</span></TableCell>
-                                <TableCell className={`align-middle text-right text-xs tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'font-bold text-orange-500' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</TableCell>
+                                <TableCell className={`align-middle text-right text-xs tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'font-bold text-warning' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</TableCell>
                                 <TableCell className="align-middle text-right text-xs tabular-nums">{snapshot.minStock === null ? '—' : snapshot.minStock}</TableCell>
                                 <TableCell className="align-middle text-right">
                                   {isSelected && selectedItem.isVariable ? (
@@ -5293,7 +5297,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                               <div className="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2">
                                 <span className="block text-[10px] font-black uppercase tracking-wide text-muted-foreground">Stock actual</span>
-                                <span className={`mt-1 block font-bold tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'text-orange-500' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</span>
+                                <span className={`mt-1 block font-bold tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'text-warning' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</span>
                               </div>
                               <div className="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2">
                                 <span className="block text-[10px] font-black uppercase tracking-wide text-muted-foreground">Mínimo</span>

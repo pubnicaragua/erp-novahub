@@ -130,14 +130,14 @@ const getMovementBadge = (type: string) => {
     case 'ENTRADA':
       return {
         label: 'Entrada',
-        color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+        color: 'bg-success/10 text-success border-success/20',
         icon: ArrowDownToLine,
       };
     case 'OUT':
     case 'SALIDA':
       return {
         label: 'Salida',
-        color: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
+        color: 'bg-destructive/10 text-destructive border-destructive/20',
         icon: ArrowUpFromLine,
       };
     case 'ADJUST':
@@ -145,14 +145,14 @@ const getMovementBadge = (type: string) => {
     case 'AJUSTE':
       return {
         label: 'Ajuste',
-        color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+        color: 'bg-warning/10 text-warning border-warning/20',
         icon: Activity,
       };
     case 'TRANSFER':
     case 'TRANSFERENCIA':
       return {
         label: 'Transferencia',
-        color: 'bg-sky-500/10 text-sky-600 border-sky-500/20',
+        color: 'bg-info/10 text-info border-info/20',
         icon: ArrowLeftRight,
       };
     default:
@@ -172,19 +172,19 @@ const getSeriesBadge = (status: string) => {
   switch (s) {
     case 'AVAILABLE':
     case 'DISPONIBLE':
-      return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+      return 'bg-success/10 text-success border-success/20';
     case 'SOLD':
     case 'VENDIDO':
-      return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
+      return 'bg-info/10 text-info border-info/20';
     case 'RESERVED':
     case 'RESERVADO':
-      return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+      return 'bg-warning/10 text-warning border-warning/20';
     case 'DAMAGED':
     case 'DAÑADO':
-      return 'bg-rose-500/10 text-rose-600 border-rose-500/20';
+      return 'bg-destructive/10 text-destructive border-destructive/20';
     case 'IN_TRANSIT':
     case 'EN_TRANSITO':
-      return 'bg-sky-500/10 text-sky-600 border-sky-500/20';
+      return 'bg-info/10 text-info border-info/20';
     default:
       return 'bg-muted text-muted-foreground border-border';
   }
@@ -198,13 +198,13 @@ const getStatusBadge = (status: string) => {
   switch (s) {
     case 'ACTIVE':
     case 'ACTIVO':
-      return { label: 'Activo', className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' };
+      return { label: 'Activo', className: 'bg-success/10 text-success border-success/20' };
     case 'INACTIVE':
     case 'INACTIVO':
-      return { label: 'Inactivo', className: 'bg-zinc-500/10 text-zinc-600 border-zinc-500/20' };
+      return { label: 'Inactivo', className: 'bg-muted/10 text-muted-foreground border-border/20' };
     case 'DISCONTINUED':
     case 'DESCONTINUADO':
-      return { label: 'Descontinuado', className: 'bg-orange-500/10 text-orange-600 border-orange-500/20' };
+      return { label: 'Descontinuado', className: 'bg-warning/10 text-warning border-warning/20' };
     default:
       return { label: status || '—', className: 'bg-muted text-muted-foreground border-border' };
   }
@@ -588,12 +588,12 @@ export function ProductDetailDrawer({
                     </Badge>
                   )}
                   {product?.trackSerialNumbers && (
-                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-violet-500/30 text-violet-600 bg-violet-500/10">
+                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-info/30 text-info bg-info/10">
                       IMEI
                     </Badge>
                   )}
                   {isService && (
-                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-violet-500/30 text-violet-600 bg-violet-500/10">
+                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-info/30 text-info bg-info/10">
                       Servicio
                     </Badge>
                   )}
@@ -653,10 +653,10 @@ export function ProductDetailDrawer({
         <div className="flex-1 min-h-0 overflow-y-auto" data-tour="inventory-product-detail-data">
           <div className="px-6 py-4">
             {error && !product && (
-              <Card className="p-4 border-rose-500/30 bg-rose-500/5 flex items-start gap-3">
-                <AlertCircle className="size-4 text-rose-500 shrink-0 mt-0.5" />
+              <Card className="p-4 border-destructive/30 bg-destructive/5 flex items-start gap-3">
+                <AlertCircle className="size-4 text-destructive shrink-0 mt-0.5" />
                 <div className="text-xs">
-                  <p className="font-bold text-rose-600">Error al cargar</p>
+                  <p className="font-bold text-destructive">Error al cargar</p>
                   <p className="text-muted-foreground mt-1">{error}</p>
                 </div>
               </Card>
@@ -689,14 +689,14 @@ export function ProductDetailDrawer({
                       label="Categoría"
                       value={product?.category?.name || '—'}
                       icon={Tag}
-                      accent="text-blue-500"
+                      accent="text-info"
                       loading={false}
                     />
                     <MetricCard
                       label="Tipo"
                       value={isService ? 'Servicio' : 'Producto'}
                       icon={Layers}
-                      accent={isService ? 'text-violet-500' : 'text-sky-500'}
+                      accent={isService ? 'text-info' : 'text-info'}
                       loading={false}
                     />
                      {!isService && canViewInventoryCost && (
@@ -704,7 +704,7 @@ export function ProductDetailDrawer({
                         label="Valor stock"
                         value={<CurrencyValuationAmount amount={stockValue} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
                         icon={DollarSign}
-                        accent="text-emerald-500"
+                        accent="text-success"
                         loading={loading && !productSnapshot}
                        />
                      )}
@@ -713,7 +713,7 @@ export function ProductDetailDrawer({
                         label="Precio"
                         value={<CurrencyValuationAmount {...servicePrice} className="text-base" />}
                         icon={DollarSign}
-                        accent="text-emerald-500"
+                        accent="text-success"
                         loading={loading && !productSnapshot}
                       />
                      ) : canViewInventoryCost ? (
@@ -721,7 +721,7 @@ export function ProductDetailDrawer({
                         label="Precio costo"
                         value={<CurrencyValuationAmount amount={costPrice} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
                         icon={TrendingDown}
-                        accent="text-rose-500"
+                        accent="text-destructive"
                         loading={loading && !productSnapshot}
                       />
                      ) : null}
@@ -942,7 +942,7 @@ export function ProductDetailDrawer({
                                   <div className="flex flex-wrap items-center gap-2">
                                     <Warehouse className="size-3.5 text-muted-foreground" />
                                     <span className="text-sm font-medium">{item.warehouseName}</span>
-                                    {isReadOnlyLevel && <Badge variant="outline" className="text-[9px] text-sky-600">Corporativo</Badge>}
+                                    {isReadOnlyLevel && <Badge variant="outline" className="text-[9px] text-info">Corporativo</Badge>}
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -990,7 +990,7 @@ export function ProductDetailDrawer({
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                                    className="size-8 rounded-lg text-success hover:bg-success/10 hover:text-success"
                                     disabled={isSavingLevel || isReadOnlyLevel || !canEditStockLevels}
                                     title={isReadOnlyLevel ? 'Nivel corporativo de solo lectura' : !canEditStockLevels ? 'No tienes permiso para editar niveles de stock' : 'Guardar mínimo y máximo de esta bodega'}
                                     aria-label={`Guardar niveles de ${item.warehouseName}`}
@@ -1075,7 +1075,7 @@ export function ProductDetailDrawer({
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <span className={`font-mono font-bold tabular-nums ${String(move.type).toUpperCase() === 'OUT' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                  <span className={`font-mono font-bold tabular-nums ${String(move.type).toUpperCase() === 'OUT' ? 'text-destructive' : 'text-success'}`}>
                                     {String(move.type).toUpperCase() === 'OUT' ? '-' : '+'}
                                     {Number(move.quantity || 0)}
                                   </span>

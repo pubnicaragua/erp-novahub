@@ -21,15 +21,15 @@ import { cn } from '../ui/utils';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {
-  HEALTH: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
-  DENTAL: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-  VISION: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
-  LIFE_INSURANCE: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-  RETIREMENT: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-  EDUCATION: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
-  TRANSPORTATION: 'bg-teal-500/10 text-teal-500 border-teal-500/20',
-  FOOD: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  GYM: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  HEALTH: 'bg-destructive/10 text-destructive border-destructive/20',
+  DENTAL: 'bg-info/10 text-info border-info/20',
+  VISION: 'bg-info/10 text-info border-info/20',
+  LIFE_INSURANCE: 'bg-info/10 text-info border-info/20',
+  RETIREMENT: 'bg-warning/10 text-warning border-warning/20',
+  EDUCATION: 'bg-info/10 text-info border-info/20',
+  TRANSPORTATION: 'bg-success/10 text-success border-success/20',
+  FOOD: 'bg-warning/10 text-warning border-warning/20',
+  GYM: 'bg-success/10 text-success border-success/20',
   OTHER: 'bg-muted text-muted-foreground border-border',
 };
 
@@ -284,7 +284,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge className={cn('text-[9px] font-black uppercase', typeColor)}>{typeLabel}</Badge>
-                        {benefit.isActive === false ? <Badge className="text-[9px] font-black uppercase bg-muted text-muted-foreground">Inactivo</Badge> : <CheckCircle className="size-3 text-emerald-500 flex-shrink-0" />}
+                        {benefit.isActive === false ? <Badge className="text-[9px] font-black uppercase bg-muted text-muted-foreground">Inactivo</Badge> : <CheckCircle className="size-3 text-success flex-shrink-0" />}
                       </div>
                       <h4 className="font-black text-sm leading-tight">{benefit.name}</h4>
                       {benefit.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{benefit.description}</p>}
@@ -297,7 +297,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       {benefit.cost && (
                         <div className="flex items-center gap-1">
-                          <DollarSign className="size-3 text-emerald-500" />
+                          <DollarSign className="size-3 text-success" />
                           <CurrencyValuationAmount amount={Number(benefit.cost ?? benefit.baseCost ?? 0)} sourceCurrency={benefit.currency || 'USD'} sourceExchangeRate={benefit.exchangeRate} className="font-bold text-foreground" /><span className="font-normal text-muted-foreground">/mes</span>
                         </div>
                       )}
@@ -306,7 +306,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                         onClick={() => setExpandedId(isExpanded ? null : benefit.id)}
                         title="Ver empleados asignados"
                       >
-                        <Users className="size-3 text-indigo-500" />
+                        <Users className="size-3 text-info" />
                         <span className="font-bold">{assignedCount} asignados</span>
                         {isExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
                       </button>
@@ -318,7 +318,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                         </button>
                       )}
                       {canPerform('HR_BENEFITS', 'delete') && (
-                        <button onClick={() => setPendingDeleteId(benefit.id)} className="size-7 rounded-lg hover:bg-rose-500/10 flex items-center justify-center text-muted-foreground hover:text-rose-500 transition-colors" title="Eliminar">
+                        <button onClick={() => setPendingDeleteId(benefit.id)} className="size-7 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors" title="Eliminar">
                           <Trash2 className="size-3.5" />
                         </button>
                       )}
@@ -342,12 +342,12 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                   )}
 
                   {Number(benefit.cost || 0) > 0 && assignedCount > 0 && benefit.paymentStatus !== 'PAID' && (
-                    <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pago: {benefit.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : benefit.paymentStatus === 'APPROVED' ? 'Aprobado' : 'Pendiente'}</span>
+                    <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-warning/20 bg-warning/5 px-3 py-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-warning">Pago: {benefit.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : benefit.paymentStatus === 'APPROVED' ? 'Aprobado' : 'Pendiente'}</span>
                       {(!benefit.paymentStatus || benefit.paymentStatus === 'PENDING') && canPerform('HR_BENEFITS', 'approve') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(benefit)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
                     </div>
                   )}
-                  {Number(benefit.cost || 0) > 0 && benefit.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600"><CheckCircle className="size-3.5" /> Pago contabilizado</div>}
+                  {Number(benefit.cost || 0) > 0 && benefit.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-success"><CheckCircle className="size-3.5" /> Pago contabilizado</div>}
                 </CardContent>
               </Card>
             </motion.div>

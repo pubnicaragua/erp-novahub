@@ -230,7 +230,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'recepciones-compra': ['PURCHASES_RECEIPTS'],
   'facturas-proveedor-rec': ['PURCHASES_INVOICES_REC'],
   'pagos-realizados': ['PURCHASES_PAYMENTS'],
-  'creditos-proveedor': ['PURCHASES_RETURNS'],
+  'creditos-proveedor': ['PURCHASES_RECEIPTS'],
 
   salon: ['RESTAURANT_SALON'],
   comandas: ['RESTAURANT_ORDERS'],

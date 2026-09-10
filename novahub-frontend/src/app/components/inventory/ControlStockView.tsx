@@ -616,8 +616,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'APPROVED': return 'bg-green-500/10 text-green-600';
-      case 'DRAFT': return 'bg-orange-500/10 text-orange-600';
+      case 'APPROVED': return 'bg-success/10 text-success';
+      case 'DRAFT': return 'bg-warning/10 text-warning';
       default: return 'bg-muted text-muted-foreground';
     }
   };
@@ -647,12 +647,12 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 variant="outline"
                 size="sm"
                 onClick={() => setAuditPickerOpen(true)}
-                className={`h-10 gap-1.5 rounded-xl ${auditsForAdjustment.length > 0 ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100' : ''}`}
+                className={`h-10 gap-1.5 rounded-xl ${auditsForAdjustment.length > 0 ? 'border-warning bg-warning/10 text-warning hover:bg-warning hover:text-warning-foreground' : ''}`}
                 data-tour="stock-audits-btn"
               >
                 <ClipboardCheck className="size-3.5" />
                 Auditorías
-                {auditsForAdjustment.length > 0 && <Badge className="ml-0.5 h-5 min-w-5 border-0 bg-amber-500 px-1 text-[9px] text-white hover:bg-amber-500">{auditsForAdjustment.length}</Badge>}
+                {auditsForAdjustment.length > 0 && <Badge className="ml-0.5 h-5 min-w-5 border-0 bg-warning px-1 text-[9px] text-warning-foreground hover:bg-warning">{auditsForAdjustment.length}</Badge>}
               </Button>
               <Button
                 size="sm"
@@ -691,8 +691,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       <div className={`grid min-w-0 grid-cols-1 gap-6 ${selectedAdjustment ? 'xl:grid-cols-[13fr_7fr]' : 'xl:grid-cols-1'}`}>
         <div className="min-w-0">
           <div className="space-y-3 lg:hidden" data-tour="stock-table">
-         {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-adjustment-form-data"><div className="mb-3 flex items-center justify-between" data-tour="inventory-adjustment-form-title"><div><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><InventoryViewTutorial label="Cómo crear ajuste" targetPrefix="inventory-adjustment-form" copy={{ data: { description: 'Selecciona almacén, razón, producto, variante, cantidad real, costo y moneda.' }, actions: { description: 'Guarda el ajuste como borrador para revisarlo y aprobarlo.' } }} /></div><div className="flex gap-1" data-tour="inventory-adjustment-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => handleAdjustmentWarehouseChange(value)}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Combobox options={adjustmentProductOptions} value={adjustmentSelectionValue(newAdjustment.productId, newAdjustment.variantId)} onChange={handleAdjustmentProductChange} placeholder="Buscar producto o variante..." searchPlaceholder="Buscar por código, nombre o variante..." emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={adjustmentProductOptions.length} className="w-full sm:col-span-2" /><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" />{canViewInventoryCost && <div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: roundReferenceCost(event.target.value) })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>}</div></Card>}
-        {filteredData.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : filteredData.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; const auditGenerated = isAuditGeneratedAdjustment(adjustment); const isOpening = String(openingId) === String(adjustment.id); return <Card key={adjustment.id} aria-busy={isOpening || undefined} data-detail-opening={isOpening ? 'true' : undefined} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => openAdjustment(adjustment)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="truncate font-mono font-bold">{adjustment.number}</p>{isOpening && <span role="status" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</div><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div>{auditGenerated && <Badge variant="outline" className="mt-3 w-fit border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {adjustment.auditNumber || 'vinculada'} · aprobar en Manager global</Badge>}<div className={`mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs ${canViewInventoryCost ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div>{canViewInventoryCost && <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${formatReferenceCost(adjustment.items[0].unitCost)}` : '—'}</p></div>}</div>{adjustment.status === 'DRAFT' && auditGenerated && <p className="mt-3 border-t border-border/40 pt-3 text-[10px] font-semibold leading-relaxed text-amber-700">Este borrador solo puede aprobarse desde el panel del Manager global.</p>}{adjustment.status === 'DRAFT' && !auditGenerated && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adjustment.id); }} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
+         {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-adjustment-form-data"><div className="mb-3 flex items-center justify-between" data-tour="inventory-adjustment-form-title"><div><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><InventoryViewTutorial label="Cómo crear ajuste" targetPrefix="inventory-adjustment-form" copy={{ data: { description: 'Selecciona almacén, razón, producto, variante, cantidad real, costo y moneda.' }, actions: { description: 'Guarda el ajuste como borrador para revisarlo y aprobarlo.' } }} /></div><div className="flex gap-1" data-tour="inventory-adjustment-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-success" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => handleAdjustmentWarehouseChange(value)}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Combobox options={adjustmentProductOptions} value={adjustmentSelectionValue(newAdjustment.productId, newAdjustment.variantId)} onChange={handleAdjustmentProductChange} placeholder="Buscar producto o variante..." searchPlaceholder="Buscar por código, nombre o variante..." emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={adjustmentProductOptions.length} className="w-full sm:col-span-2" /><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" />{canViewInventoryCost && <div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: roundReferenceCost(event.target.value) })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>}</div></Card>}
+        {filteredData.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : filteredData.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; const auditGenerated = isAuditGeneratedAdjustment(adjustment); const isOpening = String(openingId) === String(adjustment.id); return <Card key={adjustment.id} aria-busy={isOpening || undefined} data-detail-opening={isOpening ? 'true' : undefined} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => openAdjustment(adjustment)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="truncate font-mono font-bold">{adjustment.number}</p>{isOpening && <span role="status" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</div><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div>{auditGenerated && <Badge variant="outline" className="mt-3 w-fit border-warning bg-warning/10 text-[9px] font-bold text-warning">Auditoría {adjustment.auditNumber || 'vinculada'} · aprobar en Manager global</Badge>}<div className={`mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs ${canViewInventoryCost ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div>{canViewInventoryCost && <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${formatReferenceCost(adjustment.items[0].unitCost)}` : '—'}</p></div>}</div>{adjustment.status === 'DRAFT' && auditGenerated && <p className="mt-3 border-t border-border/40 pt-3 text-[10px] font-semibold leading-relaxed text-warning">Este borrador solo puede aprobarse desde el panel del Manager global.</p>}{adjustment.status === 'DRAFT' && !auditGenerated && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-success" onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adjustment.id); }} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
         </div>
 
         <div className="hidden overflow-x-auto rounded-lg border xl:block" data-tour="stock-table">
@@ -711,7 +711,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
           </TableHeader>
           <TableBody>
             {isCreating && (
-              <TableRow className="bg-blue-500/5">
+              <TableRow className="bg-info/5">
                 <TableCell className="text-xs text-muted-foreground" data-tour="inventory-adjustment-form-title">
                   <div className="flex items-center gap-2">
                     <span>Auto</span>
@@ -784,10 +784,10 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 <TableCell className="text-xs">Borrador</TableCell>
                 <TableCell>
                   <div className="flex gap-1 justify-end" data-tour="inventory-adjustment-form-actions">
-                    <Button size="icon" variant="ghost" className="size-7 text-green-600" onClick={handleCreateAdjustment} disabled={saving}>
+                    <Button size="icon" variant="ghost" className="size-7 text-success" onClick={handleCreateAdjustment} disabled={saving}>
                       {saving ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Check className="size-4" />}
                     </Button>
-                    <Button size="icon" variant="ghost" className="size-7 text-red-600" onClick={() => setIsCreating(false)} disabled={saving}>
+                    <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => setIsCreating(false)} disabled={saving}>
                       <X className="size-4" />
                     </Button>
                   </div>
@@ -807,7 +807,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 const isApproving = approvingId === adj.id;
                 return (
                   <TableRow key={adj.id} aria-busy={String(openingId) === String(adj.id) || undefined} data-detail-opening={String(openingId) === String(adj.id) ? 'true' : undefined} className="group cursor-pointer hover:bg-muted/30" onClick={() => openAdjustment(adj)}>
-                    <TableCell className="font-mono text-xs"><div className="flex flex-col items-start gap-1"><span className="inline-flex items-center gap-2">{adj.number}{String(openingId) === String(adj.id) && <span role="status" className="inline-flex items-center gap-1 font-sans text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</span>{isAuditGeneratedAdjustment(adj) && <Badge variant="outline" className="border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {adj.auditNumber || 'vinculada'}</Badge>}</div></TableCell>
+                    <TableCell className="font-mono text-xs"><div className="flex flex-col items-start gap-1"><span className="inline-flex items-center gap-2">{adj.number}{String(openingId) === String(adj.id) && <span role="status" className="inline-flex items-center gap-1 font-sans text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</span>{isAuditGeneratedAdjustment(adj) && <Badge variant="outline" className="border-warning bg-warning/10 text-[9px] font-bold text-warning">Auditoría {adj.auditNumber || 'vinculada'}</Badge>}</div></TableCell>
                     <TableCell className="text-sm">{adj.warehouse?.name || '-'}</TableCell>
                     <TableCell className="text-xs">{REASON_OPTIONS.find((r) => r.value === adj.reason)?.label || adj.reason}</TableCell>
                     <TableCell className="text-xs">
@@ -833,12 +833,12 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                     </TableCell>
                     <TableCell className="text-right">
                       {adj.status === 'DRAFT' && isAuditGeneratedAdjustment(adj) ? (
-                        <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700">Manager global</span>
+                        <span className="text-[9px] font-bold uppercase tracking-wide text-warning">Manager global</span>
                       ) : adj.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && (
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          className="h-7 text-xs text-green-600 hover:bg-green-500/10 gap-1"
+                          className="h-7 text-xs text-success hover:bg-success/10 gap-1"
                           onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adj.id); }}
                           disabled={isApproving}
                         >
@@ -912,24 +912,24 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                         </p>
                       </div>
                       {audit.adjustmentId ? (
-                        <Badge variant="outline" className="w-fit border-orange-200 bg-orange-50 text-[9px] font-bold text-orange-700">Ajuste ya generado</Badge>
+                        <Badge variant="outline" className="w-fit border-warning bg-warning/10 text-[9px] font-bold text-warning">Ajuste ya generado</Badge>
                       ) : differences.length > 0 ? (
-                        <Badge variant="outline" className="w-fit border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-700">Requiere ajuste</Badge>
+                        <Badge variant="outline" className="w-fit border-warning bg-warning/10 text-[9px] font-bold text-warning">Requiere ajuste</Badge>
                       ) : (
-                        <Badge variant="outline" className="w-fit border-emerald-200 bg-emerald-50 text-[9px] font-bold text-emerald-700">Sin diferencias</Badge>
+                        <Badge variant="outline" className="w-fit border-success bg-success/10 text-[9px] font-bold text-success">Sin diferencias</Badge>
                       )}
                     </div>
 
                     <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/40 pt-3 text-xs sm:grid-cols-4">
                       <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos</p><p className="font-bold tabular-nums">{items.length}</p></div>
                       <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Diferencias</p><p className="font-bold tabular-nums">{differences.length}</p></div>
-                      <div><p className="text-[9px] font-black uppercase tracking-widest text-red-600">Faltantes</p><p className="font-bold tabular-nums text-red-600">{shortages.length}</p></div>
-                      <div><p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Sobrantes</p><p className="font-bold tabular-nums text-emerald-600">{surpluses.length}</p></div>
+                      <div><p className="text-[9px] font-black uppercase tracking-widest text-destructive">Faltantes</p><p className="font-bold tabular-nums text-destructive">{shortages.length}</p></div>
+                      <div><p className="text-[9px] font-black uppercase tracking-widest text-success">Sobrantes</p><p className="font-bold tabular-nums text-success">{surpluses.length}</p></div>
                     </div>
 
                     {differences.length > 0 && (
-                      <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-2.5 text-[10px] text-amber-900">
-                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                      <div className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-2.5 text-[10px] text-warning">
+                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" />
                         <span>Se generará un borrador con los {differences.length} productos que tienen diferencia. El stock todavía no cambiará.</span>
                       </div>
                     )}
@@ -982,13 +982,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Diferencias</p>
               <p className="mt-1 text-lg font-black tabular-nums">{auditConfirmationDifferences.length}</p>
             </div>
-            <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-center">
-              <p className="text-[9px] font-black uppercase tracking-widest text-red-700">Faltantes</p>
-              <p className="mt-1 text-lg font-black tabular-nums text-red-700">{auditConfirmationShortages.length}</p>
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-2.5 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-destructive">Faltantes</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-destructive">{auditConfirmationShortages.length}</p>
             </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-center">
-              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Sobrantes</p>
-              <p className="mt-1 text-lg font-black tabular-nums text-emerald-700">{auditConfirmationSurpluses.length}</p>
+            <div className="rounded-xl border border-success/20 bg-success/10 p-2.5 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-success">Sobrantes</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-success">{auditConfirmationSurpluses.length}</p>
             </div>
           </div>
           {auditConfirmationDifferences.length > 0 && (
@@ -1007,13 +1007,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       <div className="min-w-0">
                         <p className="truncate text-xs font-semibold">{item.name || 'Producto sin nombre'}</p>
                         <p className="font-mono text-[10px] text-muted-foreground">{item.code || '—'}</p>
-                        <p className={`mt-1 text-[10px] font-semibold ${difference < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                        <p className={`mt-1 text-[10px] font-semibold ${difference < 0 ? 'text-destructive' : 'text-success'}`}>
                           Motivo: {auditReasonLabel(item, difference)}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2 text-right">
                         <span className="font-mono text-[10px] text-muted-foreground">{originalStock} → {countedStock}</span>
-                        <Badge variant="outline" className={`text-[10px] font-bold ${difference < 0 ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                        <Badge variant="outline" className={`text-[10px] font-bold ${difference < 0 ? 'border-destructive bg-destructive/10 text-destructive' : 'border-success bg-success/10 text-success'}`}>
                           {difference > 0 ? '+' : ''}{difference}
                         </Badge>
                       </div>
@@ -1023,8 +1023,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               </div>
             </div>
           )}
-          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <div className="flex items-start gap-2 rounded-xl border border-warning bg-warning/10 p-3 text-xs text-warning">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
             <p className="leading-relaxed">
               {auditConfirmationDifferences.length > 0
                 ? 'Se creará un ajuste como borrador. El stock no cambiará hasta que lo apruebes desde Ajustes.'
@@ -1206,7 +1206,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-8 text-rose-500 hover:bg-rose-700 hover:text-white"
+                    className="size-8 text-destructive hover:bg-destructive hover:text-destructive-foreground"
                     onClick={() => removeAllocationRow(item.id)}
                     disabled={allocations.length <= 1}
                   >
@@ -1216,7 +1216,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               ))}
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Total distribuido</span>
-                <span className={totalAllocated === Number(newReception.totalQuantity || 0) ? 'font-black text-emerald-500' : 'font-black text-rose-500'}>
+                <span className={totalAllocated === Number(newReception.totalQuantity || 0) ? 'font-black text-success' : 'font-black text-destructive'}>
                   {totalAllocated} / {Number(newReception.totalQuantity || 0)}
                 </span>
               </div>

@@ -719,13 +719,13 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                 const itemClassName = cn(
                   'flex w-full items-center gap-3 px-3 py-2 text-[13px] transition-colors duration-150',
                   isActive
-                    ? 'hover:bg-primary hover:text-primary-foreground'
-                    : 'hover:bg-primary/10 hover:text-primary',
+                    ? 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground'
+                    : 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                   isActive && !item.submenu
-                    ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm font-semibold'
                     : isActive && item.submenu
-                      ? 'bg-primary text-primary-foreground ring-1 ring-primary/30 shadow-sm font-semibold'
+                      ? 'bg-sidebar-primary text-sidebar-primary-foreground ring-1 ring-sidebar-primary/30 shadow-sm font-semibold'
                       : 'text-sidebar-foreground/70'
                 );
                 const itemHref = buildModuleHref(item.id as Module | 'overview');
@@ -819,8 +819,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                     'flex w-full items-center gap-2 px-2.5 py-1.5 text-[13px] transition-colors duration-150',
                                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                                     activeModule === item.id && activeSubModule === subItem.id
-                                      ? 'bg-primary text-primary-foreground font-medium shadow-sm hover:bg-primary hover:text-primary-foreground'
-                                      : 'text-sidebar-foreground/55 hover:bg-primary/10 hover:text-primary'
+                                      ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm hover:bg-sidebar-primary hover:text-sidebar-primary-foreground'
+                                      : 'text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                                   )}
                                   aria-current={activeModule === item.id && activeSubModule === subItem.id ? 'page' : undefined}
                                 >

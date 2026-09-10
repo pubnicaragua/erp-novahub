@@ -885,6 +885,13 @@ export interface RecurringSupplierInvoiceItem {
   id: string;
   recurringSupplierInvoiceId: string;
   productId?: string | null;
+  variantId?: string | null;
+  variant?: {
+    id: string;
+    sku: string;
+    name: string;
+    attributes?: Array<{ attributeId?: string; attributeName?: string; value?: string }> | null;
+  } | null;
   description: string;
   commercialNoteSnapshot?: string | null;
   quantity: number;

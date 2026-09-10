@@ -22,10 +22,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-700',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700',
-  COMPLETED: 'bg-green-100 text-green-700',
-  ARCHIVED: 'bg-gray-200 text-gray-600',
+  DRAFT: 'bg-muted text-muted-foreground',
+  IN_PROGRESS: 'bg-info/10 text-info',
+  COMPLETED: 'bg-success/10 text-success',
+  ARCHIVED: 'bg-muted text-muted-foreground',
 };
 
 const formatDate = (value: any) => {
@@ -378,8 +378,8 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
               absenceCheck.loading
                 ? 'border-border/50 bg-muted/20 text-muted-foreground'
                 : absenceCheck.hasAbsence
-                  ? 'border-red-300 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300'
-                  : 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300',
+                  ? 'border-destructive bg-destructive/10 dark:bg-destructive/20 text-destructive dark:text-destructive'
+                  : 'border-success bg-success/10 dark:bg-success/20 text-success dark:text-success',
             )}>
               {absenceCheck.loading ? (
                 <p className="flex items-center gap-2"><RotateCcw className="size-4 animate-spin" /> Verificando ausencias en el período...</p>
@@ -489,7 +489,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                       </Button>
                       <Button
                         size="sm"
-                        className={cn('h-7 px-2 text-xs text-white', isCompleteBlocked ? 'bg-green-700/60 hover:bg-green-700/60' : 'bg-green-600 hover:bg-green-700')}
+                        className={cn('h-7 px-2 text-xs text-primary-foreground', isCompleteBlocked ? 'bg-success/60 hover:bg-success/60' : 'bg-success hover:bg-success')}
                         title={isCompleteBlocked ? 'Completa comentarios y comentarios post-evaluación para habilitar' : 'Completar evaluación'}
                         onClick={() => handleComplete(review)}
                       >
@@ -515,10 +515,10 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 <div className="text-right">
                   <div className="flex items-center gap-1 mb-1 justify-end">
                     {[1, 2, 3, 4, 5].map((star) => (
-                      <Star key={star} className={cn('size-4', star <= Math.round(Number(review.overallRating) || 0) ? 'fill-yellow-500 text-yellow-500' : 'text-gray-300')} />
+                      <Star key={star} className={cn('size-4', star <= Math.round(Number(review.overallRating) || 0) ? 'fill-yellow-500 text-warning' : 'text-muted-foreground')} />
                     ))}
                   </div>
-                  <p className="text-sm font-bold text-yellow-600">{Number(review.overallRating || 0).toFixed(1)}/5.0</p>
+                  <p className="text-sm font-bold text-warning">{Number(review.overallRating || 0).toFixed(1)}/5.0</p>
                 </div>
               </div>
 
@@ -555,7 +555,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                   <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                     <MessageSquarePlus className="size-3.5" /> Comentarios post-evaluación
                     {review.status !== 'COMPLETED' && !(review.postEvaluationComments || '').trim() && (
-                      <span className="text-[10px] font-black uppercase text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] font-black uppercase text-warning bg-warning/10 dark:bg-warning/30 border border-warning dark:border-warning/40 px-1.5 py-0.5 rounded">
                         Obligatorio para completar
                       </span>
                     )}

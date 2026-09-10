@@ -26,6 +26,61 @@ const portalPdfTypes: Record<string, 'estimate' | 'order' | 'invoice' | 'recurri
 const portalDesignKeys: Record<string, string> = { estimate: 'ventas.estimate', 'sales-order': 'ventas.order', invoice: 'ventas.invoice', 'recurring-invoice': 'ventas.recurring', 'payment-received': 'ventas.payment', 'sales-return': 'ventas.return', 'credit-note': 'ventas.credit-note' };
 const documentDateKey = (value: unknown) => { if (!value) return ''; const date = new Date(String(value)); return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10); };
 const portalColor = (value: unknown, fallback: string) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+const portalRelativeLuminance = (hex: string) => {
+  const channels = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(1 + offset, 3 + offset), 16) / 255).map((channel) => channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+};
+const portalHexToRgb = (hex: string) => [0, 2, 4].map((offset) => Number.parseInt(hex.slice(1 + offset, 3 + offset), 16));
+const portalRgbToHex = (channels: number[]) => `#${channels.map((channel) => Math.max(0, Math.min(255, Math.round(channel))).toString(16).padStart(2, '0')).join('')}`;
+const portalBlendColors = (foreground: string, background: string, foregroundWeight = 0.7) => {
+  const foregroundRgb = portalHexToRgb(foreground);
+  const backgroundRgb = portalHexToRgb(background);
+  return portalRgbToHex(foregroundRgb.map((channel, index) => channel * foregroundWeight + backgroundRgb[index] * (1 - foregroundWeight)));
+};
+const portalContrastRatio = (foreground: string, background: string) => {
+  const foregroundLuminance = portalRelativeLuminance(foreground);
+  const backgroundLuminance = portalRelativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+const portalSurfaceColors = (hex: string, preferredText?: string) => {
+  const luminance = portalRelativeLuminance(hex);
+  const whiteContrast = 1.05 / (luminance + 0.05);
+  const darkContrast = (luminance + 0.05) / 0.05;
+  const automaticText = whiteContrast >= darkContrast ? '#f8fafc' : '#0f172a';
+  const selectedText = portalColor(preferredText, automaticText);
+  // El color elegido sigue siendo la fuente visual. Si no contrasta con la
+  // superficie, se deriva un tono de la misma familia acercándolo a negro o
+  // blanco hasta alcanzar AA, en lugar de sustituirlo por un color arbitrario.
+  const contrastSafeText = (color: string, minimumRatio: number) => {
+    if (portalContrastRatio(color, hex) >= minimumRatio) return color;
+    const target = portalContrastRatio('#ffffff', hex) >= portalContrastRatio('#000000', hex)
+      ? '#ffffff'
+      : '#000000';
+    let low = 0;
+    let high = 1;
+    for (let index = 0; index < 16; index += 1) {
+      const amount = (low + high) / 2;
+      const candidate = portalBlendColors(color, target, 1 - amount);
+      if (portalContrastRatio(candidate, hex) >= minimumRatio) high = amount;
+      else low = amount;
+    }
+    return portalBlendColors(color, target, 1 - high);
+  };
+  const text = contrastSafeText(selectedText, 4.5);
+  // Las variantes de menor peso también nacen del texto elegido, conservando
+  // su tonalidad y garantizando contraste legible para etiquetas secundarias.
+  let mutedLow = 0;
+  let mutedHigh = 1;
+  for (let index = 0; index < 16; index += 1) {
+    const weight = (mutedLow + mutedHigh) / 2;
+    const candidate = portalBlendColors(text, hex, weight);
+    if (portalContrastRatio(candidate, hex) >= 3) mutedHigh = weight;
+    else mutedLow = weight;
+  }
+  return { text, muted: portalBlendColors(text, hex, mutedHigh) };
+};
 const getPublicAdditionalCharges = (document: any) => [
   ...normalizeSalesExtraCharges(document)
     .filter((charge) => charge.amount > 0)
@@ -55,7 +110,100 @@ function PublicItemDescription({ item }: { item: any }) {
   </div>;
 }
 
-function AccessShell({ children, company }: { children: React.ReactNode; company?: any }) { const isLight = company?.portalDefaultTheme === 'light'; const primary = portalColor(company?.portalPrimaryColor, isLight ? '#059669' : '#10b981'); const card = isLight ? '#ffffff' : portalColor(company?.portalAccentColor, '#0f172a'); const border = isLight ? '#e2e8f0' : '#1e293b'; const text = isLight ? '#0f172a' : '#f8fafc'; const muted = isLight ? '#64748b' : '#94a3b8'; const bg = isLight ? '#f8fafc' : '#020617'; const subtle = isLight ? '#f1f5f9' : '#0b1220'; return <main style={{ '--portal-primary': primary, '--portal-bg': bg, '--portal-card': card, '--portal-border': border, '--portal-text': text, '--portal-muted': muted, '--portal-subtle': subtle, colorScheme: isLight ? 'light' : 'dark' } as React.CSSProperties} className={isLight ? "novahub-public-portal portal-light min-h-screen px-4 py-8" : "novahub-public-portal portal-dark min-h-screen px-4 py-8"}><style>{'.novahub-public-portal { background: var(--portal-bg); color: var(--portal-text); } .novahub-public-portal.portal-dark { background: #020617 !important; color: #f8fafc !important; } .novahub-public-portal.portal-light { background: var(--portal-bg) !important; color: var(--portal-text) !important; } .novahub-public-portal .bg-slate-950, .novahub-public-portal .bg-slate-950\\/40 { background-color: var(--portal-bg) !important; } .novahub-public-portal .bg-slate-900, .novahub-public-portal .bg-slate-900\\/90, .novahub-public-portal .portal-card { background: var(--portal-card) !important; background-color: var(--portal-card) !important; } .novahub-public-portal .bg-slate-800, .novahub-public-portal .bg-slate-800\\/50 { background-color: var(--portal-subtle) !important; } .novahub-public-portal .border-slate-800, .novahub-public-portal .border-slate-700 { border-color: var(--portal-border) !important; } .novahub-public-portal .text-slate-100, .novahub-public-portal .text-slate-300, .novahub-public-portal .text-white { color: var(--portal-text) !important; } .novahub-public-portal .text-slate-400, .novahub-public-portal .text-slate-500 { color: var(--portal-muted) !important; }'}</style><div className="mx-auto max-w-5xl"><header className="mb-6 flex items-center gap-3 rounded-2xl border bg-slate-900/90 p-5" style={{ borderColor: 'var(--portal-border)' }}><div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl" style={{ backgroundColor: primary + '26' }}><>{company?.logo ? <img src={company.logo} alt={'Logo de ' + (company.name || 'la empresa')} className="size-full object-contain p-1" /> : <ShieldCheck className="size-6 text-[var(--portal-primary)]" />}</></div><p className="flex-1 text-lg font-semibold">{company?.name || 'Acceso seguro'}</p></header>{children}<p className="mt-6 text-center text-xs text-[var(--portal-muted)]">Este enlace es temporal y está protegido por NovaHub.</p></div></main>; }
+function AccessShell({ children, company }: { children: React.ReactNode; company?: any }) {
+  const isLight = company?.portalDefaultTheme === 'light';
+  const primary = portalColor(company?.portalPrimaryColor || company?.primaryColor, isLight ? '#059669' : '#10b981');
+  const card = isLight ? '#ffffff' : portalColor(company?.portalAccentColor || company?.accentColor, '#0f172a');
+  const configuredTextColor = company?.portalTextColor
+    || company?.primaryForeground
+    || company?.userTheme?.colors?.primaryForeground;
+  const cardColors = portalSurfaceColors(card, configuredTextColor);
+  const primaryColors = portalSurfaceColors(primary, configuredTextColor);
+  const border = isLight ? '#e2e8f0' : '#1e293b';
+  const bg = isLight ? '#f8fafc' : '#020617';
+  const pageColors = portalSurfaceColors(bg, configuredTextColor);
+  const text = pageColors.text;
+  const muted = pageColors.muted;
+  const subtle = isLight ? '#f1f5f9' : '#0b1220';
+  const filterText = pageColors.text;
+  const filterMuted = pageColors.muted;
+  const portalColorScheme = portalRelativeLuminance(cardColors.text) < 0.5 ? 'light' : 'dark';
+  return <main
+    style={{ '--portal-primary': primary, '--portal-primary-text': primaryColors.text, '--portal-primary-muted': primaryColors.muted, '--portal-bg': bg, '--portal-card': card, '--portal-border': border, '--portal-text': text, '--portal-muted': muted, '--portal-subtle': subtle, '--portal-card-text': cardColors.text, '--portal-card-muted': cardColors.muted, '--portal-filter-text': filterText, '--portal-filter-muted': filterMuted, '--portal-color-scheme': portalColorScheme, colorScheme: portalColorScheme } as React.CSSProperties}
+    className={isLight ? 'novahub-public-portal portal-light min-h-screen px-4 py-8' : 'novahub-public-portal portal-dark min-h-screen px-4 py-8'}
+  >
+    <style>{`
+      .novahub-public-portal { background: var(--portal-bg); color: var(--portal-text); }
+      .novahub-public-portal.portal-dark { background: var(--portal-bg) !important; color: var(--portal-text) !important; }
+      .novahub-public-portal.portal-light { background: var(--portal-bg) !important; color: var(--portal-text) !important; }
+      .novahub-public-portal .bg-slate-950, .novahub-public-portal .bg-slate-950\\/40 { background-color: var(--portal-bg) !important; }
+      .novahub-public-portal .bg-slate-900, .novahub-public-portal .bg-slate-900\\/90, .novahub-public-portal .portal-card { background: var(--portal-card) !important; background-color: var(--portal-card) !important; }
+      .novahub-public-portal .bg-slate-800, .novahub-public-portal .bg-slate-800\\/50 { background-color: var(--portal-subtle) !important; }
+      .novahub-public-portal .bg-white { background-color: var(--portal-card) !important; color: var(--portal-card-text) !important; }
+      .novahub-public-portal .bg-emerald-500, .novahub-public-portal .bg-emerald-600 { background-color: var(--portal-primary) !important; }
+      .novahub-public-portal :is(.bg-emerald-500, .bg-emerald-600) { color: var(--portal-primary-text) !important; }
+      .novahub-public-portal .border-slate-800, .novahub-public-portal .border-slate-700 { border-color: var(--portal-border) !important; }
+      .novahub-public-portal .border-slate-200, .novahub-public-portal .border-slate-300 { border-color: var(--portal-border) !important; }
+      .novahub-public-portal .text-slate-100, .novahub-public-portal .text-slate-300, .novahub-public-portal .text-white { color: var(--portal-text) !important; }
+      .novahub-public-portal .text-slate-900, .novahub-public-portal .text-slate-950 { color: var(--portal-text) !important; }
+      .novahub-public-portal .text-slate-400, .novahub-public-portal .text-slate-500, .novahub-public-portal .text-slate-600 { color: var(--portal-muted) !important; }
+      .novahub-public-portal .text-emerald-300, .novahub-public-portal .text-emerald-400, .novahub-public-portal .text-emerald-600 { color: var(--portal-primary) !important; }
+      .novahub-public-portal .bg-emerald-500 .text-white, .novahub-public-portal .bg-emerald-600 .text-white { color: var(--portal-primary-text) !important; }
+      .novahub-public-portal :is(.bg-slate-900, .bg-slate-900\\/90, .portal-card) { color: var(--portal-card-text) !important; }
+      .novahub-public-portal :is(.bg-slate-900, .bg-slate-900\\/90, .portal-card) :is(.text-slate-100, .text-slate-200, .text-slate-300, .text-white) { color: var(--portal-card-text) !important; }
+      .novahub-public-portal :is(.bg-slate-900, .bg-slate-900\\/90, .portal-card) :is(.text-slate-400, .text-slate-500) { color: var(--portal-card-muted) !important; }
+      .novahub-public-portal :is(.bg-slate-900, .bg-slate-900\\/90, .portal-card, .bg-white) :is(.text-slate-900, .text-slate-950) { color: var(--portal-card-text) !important; }
+      .novahub-public-portal :is(.bg-slate-900, .bg-slate-900\\/90, .portal-card, .bg-white) :is(.text-slate-400, .text-slate-500, .text-slate-600) { color: var(--portal-card-muted) !important; }
+      .novahub-public-portal :is(.bg-slate-900, .bg-slate-900\\/90, .portal-card, .bg-white) :is(.text-emerald-300, .text-emerald-400, .text-emerald-600) { color: var(--portal-primary) !important; }
+      .novahub-public-portal .bg-white :is(.text-slate-900, .text-slate-950) { color: var(--portal-card-text) !important; }
+      .novahub-public-portal .bg-white :is(.text-slate-100, .text-slate-200, .text-slate-300, .text-white) { color: var(--portal-card-text) !important; }
+      .novahub-public-portal .bg-white :is(.text-slate-400, .text-slate-500, .text-slate-600) { color: var(--portal-card-muted) !important; }
+      .novahub-public-portal .bg-white :is(.text-emerald-300, .text-emerald-400, .text-emerald-600) { color: var(--portal-primary) !important; }
+      .novahub-public-portal .bg-slate-950\\/40 { color: var(--portal-filter-text) !important; }
+      .novahub-public-portal .bg-slate-950\\/40 :is(.text-slate-100, .text-slate-200, .text-slate-300, .text-white) { color: var(--portal-filter-text) !important; }
+      .novahub-public-portal .bg-slate-950\\/40 :is(.text-slate-400, .text-slate-500) { color: var(--portal-filter-muted) !important; }
+      .novahub-public-portal .bg-slate-950\\/40 input { color: var(--portal-card-text) !important; background-color: var(--portal-card) !important; }
+      .novahub-public-portal .bg-slate-950\\/40 input::placeholder { color: var(--portal-card-muted) !important; opacity: 1; }
+      .novahub-public-portal .portal-card-surface, .novahub-public-portal .portal-card { color: var(--portal-card-text) !important; }
+      .novahub-public-portal .portal-card-surface .text-slate-100, .novahub-public-portal .portal-card-surface .text-slate-200, .novahub-public-portal .portal-card-surface .text-slate-300, .novahub-public-portal .portal-card-surface .text-white,
+      .novahub-public-portal .portal-card .text-slate-100, .novahub-public-portal .portal-card .text-slate-200, .novahub-public-portal .portal-card .text-slate-300, .novahub-public-portal .portal-card .text-white { color: var(--portal-card-text) !important; }
+      .novahub-public-portal .portal-card-surface .text-slate-400, .novahub-public-portal .portal-card-surface .text-slate-500,
+      .novahub-public-portal .portal-card .text-slate-400, .novahub-public-portal .portal-card .text-slate-500 { color: var(--portal-card-muted) !important; }
+      .novahub-public-portal .portal-filter { color: var(--portal-filter-text) !important; }
+      .novahub-public-portal .portal-filter .text-slate-100, .novahub-public-portal .portal-filter .text-slate-200, .novahub-public-portal .portal-filter .text-slate-300, .novahub-public-portal .portal-filter .text-white { color: var(--portal-filter-text) !important; }
+      .novahub-public-portal .portal-filter .text-slate-400, .novahub-public-portal .portal-filter .text-slate-500 { color: var(--portal-filter-muted) !important; }
+      .novahub-public-portal .portal-filter input { color: var(--portal-card-text) !important; background-color: var(--portal-card) !important; }
+      .novahub-public-portal .portal-filter input::placeholder { color: var(--portal-card-muted) !important; opacity: 1; }
+      .novahub-public-portal input[type="date"] { color: var(--portal-card-text) !important; -webkit-text-fill-color: var(--portal-card-text) !important; background-color: var(--portal-card) !important; font-weight: 600; color-scheme: var(--portal-color-scheme) !important; }
+      .novahub-public-portal input[type="date"]::-webkit-datetime-edit,
+      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-text,
+      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+      .novahub-public-portal input[type="date"]::-webkit-date-and-time-value,
+      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-month-field,
+      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-day-field,
+      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-year-field { color: var(--portal-card-text) !important; -webkit-text-fill-color: var(--portal-card-text) !important; font-weight: 600; opacity: 1; }
+      .novahub-public-portal input[type="date"]::placeholder { color: var(--portal-card-muted) !important; opacity: 1; }
+      .novahub-public-portal input[type="date"].portal-date-input { color: transparent !important; -webkit-text-fill-color: transparent !important; caret-color: transparent !important; background-color: var(--portal-card) !important; color-scheme: var(--portal-color-scheme) !important; }
+      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit,
+      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-text,
+      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-fields-wrapper,
+      .novahub-public-portal input[type="date"].portal-date-input::-webkit-date-and-time-value,
+      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-month-field,
+      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-day-field,
+      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-year-field { color: transparent !important; -webkit-text-fill-color: transparent !important; }
+    `}</style>
+    <div className="mx-auto max-w-5xl">
+      <header className="portal-card-surface mb-6 flex items-center gap-3 rounded-2xl border bg-slate-900/90 p-5" style={{ borderColor: 'var(--portal-border)' }}>
+        <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl" style={{ backgroundColor: primary + '26' }}>
+          {company?.logo ? <img src={company.logo} alt={'Logo de ' + (company.name || 'la empresa')} className="size-full object-contain p-1" /> : <ShieldCheck className="size-6 text-[var(--portal-primary)]" />}
+        </div>
+        <p className="flex-1 text-lg font-semibold">{company?.name || 'Acceso seguro'}</p>
+      </header>
+      {children}
+      <p className="mt-6 text-center text-xs text-[var(--portal-muted)]">Este enlace es temporal y está protegido por NovaHub.</p>
+    </div>
+  </main>;
+}
 
 function OtpForm({ token, mode, maskedTarget, onVerified }: { token: string; mode: 'document' | 'portal'; maskedTarget?: string | null; onVerified: (session: string) => void }) { const [challengeId, setChallengeId] = useState<string | null>(null); const [code, setCode] = useState(''); const [message, setMessage] = useState(''); const requestCode = async () => { try { const result = await publicRequest(`/public-access/${mode}/${token}/otp`, { method: 'POST' }); setChallengeId(result.challengeId); setMessage(result.devCode ? `Código de desarrollo: ${result.devCode}` : `Enviamos un código a ${result.maskedTarget}.`); } catch (error: any) { setMessage(error.message); } }; const verify = async () => { try { const result = await publicRequest(`/public-access/${mode}/${token}/verify`, { method: 'POST', body: JSON.stringify({ challengeId, code }) }); onVerified(result.sessionToken); } catch (error: any) { setMessage(error.message); } }; return <div className="mx-auto max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-7"><LockKeyhole className="mb-4 size-8 text-emerald-400" /><h1 className="text-xl font-semibold">Verifica tu acceso</h1><p className="mt-2 text-sm text-slate-400">Por seguridad necesitamos confirmar tu identidad{maskedTarget ? ` en ${maskedTarget}` : ''}.</p>{message && <p className="mt-4 rounded-lg bg-slate-800 p-3 text-sm text-emerald-300">{message}</p>}{!challengeId ? <button onClick={requestCode} className="mt-6 w-full rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-slate-950">Enviar código</button> : <div className="mt-6 space-y-3"><input value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" maxLength={6} placeholder="Código de 6 dígitos" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-[var(--portal-primary)]" /><button onClick={verify} className="w-full rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-slate-950">Continuar</button></div>}</div>; }
 
@@ -88,6 +236,35 @@ function PortalPagination({ pagination, pageLoading, onPageChange }: { paginatio
       <button type="button" disabled={!hasMore || pageLoading} onClick={() => onPageChange?.(page + 1, pageSize)} className="rounded-lg border border-slate-700 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50">Siguiente</button>
     </div>
   </div>;
+}
+
+const formatPortalInputDate = (value: string) => {
+  if (!value) return 'dd/mm/aaaa';
+  const [year, month, day] = value.split('-');
+  return year && month && day ? `${day}/${month}/${year}` : 'dd/mm/aaaa';
+};
+
+function PortalDateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="text-sm text-slate-300">
+    <span>{label}</span>
+    <div className="relative mt-1">
+      <CalendarDays className="pointer-events-none absolute right-3 top-1/2 z-20 size-4 -translate-y-1/2 text-[var(--portal-primary)]" />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-3 z-10 flex items-center text-sm font-semibold"
+        style={{ color: value ? 'var(--portal-card-text)' : 'var(--portal-card-muted)' }}
+      >
+        {formatPortalInputDate(value)}
+      </span>
+      <input
+        type="date"
+        aria-label={label}
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className="portal-date-input mt-1 block w-full appearance-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 pr-10 text-transparent caret-transparent outline-none focus:border-[var(--portal-primary)] focus:ring-2 focus:ring-[var(--portal-primary)]/30 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+      />
+    </div>
+  </label>;
 }
 
 function PortalView({ data, pageLoading, onPageChange }: { data: any; pageLoading?: boolean; onPageChange?: (page: number, pageSize: number) => void }) {
@@ -129,7 +306,7 @@ function PortalView({ data, pageLoading, onPageChange }: { data: any; pageLoadin
     }
   };
 
-  return <AccessShell company={data.company}><div className="grid gap-5 md:grid-cols-3"><div className="md:col-span-3 rounded-2xl border border-slate-800 bg-slate-900 p-6"><p className="text-sm text-slate-400">Información del cliente</p><h1 className="text-2xl font-semibold">{customer.name}</h1><div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-3"><p><span className="text-slate-500">Código:</span> {customer.code || '—'}</p><p><span className="text-slate-500">Correo:</span> {customer.email || '—'}</p><p><span className="text-slate-500">Teléfono:</span> {customer.phone || '—'}</p><p><span className="text-slate-500">RUC / identificación:</span> {customer.ruc || customer.taxId || '—'}</p><p><span className="text-slate-500">Dirección:</span> {customer.address || '—'}</p><p><span className="text-slate-500">Ciudad:</span> {customer.city || '—'}</p><p><span className="text-slate-500">Departamento:</span> {customer.department || '—'}</p><p><span className="text-slate-500">País:</span> {customer.country || '—'}</p><p><span className="text-slate-500">Contacto:</span> {customer.contactName || '—'}</p></div></div>{[['Total facturado', data.summary.totalInvoiced], ['Total pagado', data.summary.totalPaid], ['Saldo pendiente', data.summary.balance]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><p className="text-sm text-slate-400">{label}</p><p className="mt-2 text-2xl font-bold text-[var(--portal-primary)]">{formatAmount(value)}</p></div>)}<div className="md:col-span-3 rounded-2xl border border-slate-800 bg-slate-900 p-6"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><WalletCards className="size-5 text-[var(--portal-primary)]" /><h2 className="text-lg font-semibold">Documentos del cliente</h2></div><span className="text-sm text-slate-400">{filteredDocuments.length} de {documents.length} transacciones</span></div><div className="mb-5 grid gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4 sm:grid-cols-[1fr_1fr_auto]"><label className="text-sm text-slate-300"><span>Desde</span><div className="relative mt-1"><CalendarDays className="pointer-events-none absolute right-3 top-1/2 z-10 size-4 -translate-y-1/2 text-[var(--portal-primary)]" /><input type="date" value={fromDate} onChange={event => setFromDate(event.target.value)} style={{ colorScheme: 'dark' }} className="mt-1 block w-full appearance-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 pr-10 text-slate-100 outline-none focus:border-[var(--portal-primary)] [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0" /></div></label><label className="text-sm text-slate-300"><span>Hasta</span><div className="relative mt-1"><CalendarDays className="pointer-events-none absolute right-3 top-1/2 z-10 size-4 -translate-y-1/2 text-[var(--portal-primary)]" /><input type="date" value={toDate} onChange={event => setToDate(event.target.value)} style={{ colorScheme: 'dark' }} className="mt-1 block w-full appearance-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 pr-10 text-slate-100 outline-none focus:border-[var(--portal-primary)] [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0" /></div></label><button type="button" onClick={() => { setFromDate(''); setToDate(''); }} className="self-end rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-[var(--portal-primary)] hover:text-[var(--portal-primary)]">Limpiar filtros</button></div>{invalidRange && <p className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-200">El rango de fechas no es válido. La fecha inicial debe ser anterior a la fecha final.</p>}{pdfError && <p className="mb-4 rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200">{pdfError}</p>}<p className="mb-4 text-sm text-slate-400">Selecciona una transacción para consultar todos sus detalles.</p><div className="space-y-2">{filteredDocuments.length ? filteredDocuments.map((doc: any) => { const isSelected = selectedDocument?.document.id === doc.document.id && selectedDocument?.type === doc.type; const documentId = `${doc.type}-${doc.document?.id}`; return <div key={documentId} role="button" tabIndex={0} onClick={() => setSelectedDocument(isSelected ? null : doc)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') setSelectedDocument(isSelected ? null : doc); }} className={`portal-card cursor-pointer rounded-xl border p-4 transition-colors ${isSelected ? 'border-[var(--portal-primary)]' : 'border-slate-800 hover:border-[var(--portal-primary)]/60'}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">{labelFor(doc.type, documentTypeLabels, 'Documento')} · {doc.document.number}</p><p className="text-sm text-slate-400">Fecha: {formatDate(doc.document.date)} · Estado: {labelFor(doc.document.status, statusLabels, 'Emitido')}</p></div><div className="flex items-center gap-3"><p className="font-semibold text-[var(--portal-primary)]">{formatAmount(doc.document.total, doc.document.currency)}</p>{canDownload && <button type="button" title="Descargar PDF" aria-label={`Descargar PDF de ${doc.document.number}`} disabled={pdfGenerating === documentId} onClick={event => { event.stopPropagation(); void downloadPdf(doc); }} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-[var(--portal-primary)] hover:text-[var(--portal-primary)] disabled:cursor-wait disabled:opacity-60">{pdfGenerating === documentId ? <Loader2 className="size-4 animate-spin" /> : <FileDown className="size-4" />} PDF</button>}<ChevronDown className={`size-4 text-slate-400 transition-transform ${isSelected ? 'rotate-180 text-[var(--portal-primary)]' : ''}`} /></div></div>{isSelected && <TransactionDetail documentData={doc} />}</div>; }) : <p className="rounded-xl border border-dashed border-slate-700 p-5 text-sm text-slate-400">{documents.length ? 'No hay transacciones en el rango seleccionado.' : 'No hay documentos registrados.'}</p>}<PortalPagination pagination={data.pagination} pageLoading={pageLoading} onPageChange={onPageChange} /></div></div></div></AccessShell>;
+  return <AccessShell company={data.company}><div className="grid gap-5 md:grid-cols-3"><div className="md:col-span-3 rounded-2xl border border-slate-800 bg-slate-900 p-6"><p className="text-sm text-slate-400">Información del cliente</p><h1 className="text-2xl font-semibold">{customer.name}</h1><div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-3"><p><span className="text-slate-500">Código:</span> {customer.code || '—'}</p><p><span className="text-slate-500">Correo:</span> {customer.email || '—'}</p><p><span className="text-slate-500">Teléfono:</span> {customer.phone || '—'}</p><p><span className="text-slate-500">RUC / identificación:</span> {customer.ruc || customer.taxId || '—'}</p><p><span className="text-slate-500">Dirección:</span> {customer.address || '—'}</p><p><span className="text-slate-500">Ciudad:</span> {customer.city || '—'}</p><p><span className="text-slate-500">Departamento:</span> {customer.department || '—'}</p><p><span className="text-slate-500">País:</span> {customer.country || '—'}</p><p><span className="text-slate-500">Contacto:</span> {customer.contactName || '—'}</p></div></div>{[['Total facturado', data.summary.totalInvoiced], ['Total pagado', data.summary.totalPaid], ['Saldo pendiente', data.summary.balance]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><p className="text-sm text-slate-400">{label}</p><p className="mt-2 text-2xl font-bold text-[var(--portal-primary)]">{formatAmount(value)}</p></div>)}<div className="md:col-span-3 rounded-2xl border border-slate-800 bg-slate-900 p-6"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><WalletCards className="size-5 text-[var(--portal-primary)]" /><h2 className="text-lg font-semibold">Documentos del cliente</h2></div><span className="text-sm text-slate-400">{filteredDocuments.length} de {documents.length} transacciones</span></div><div className="mb-5 grid gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4 sm:grid-cols-[1fr_1fr_auto]"><PortalDateField label="Desde" value={fromDate} onChange={setFromDate} /><PortalDateField label="Hasta" value={toDate} onChange={setToDate} /><button type="button" onClick={() => { setFromDate(''); setToDate(''); }} className="self-end rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-[var(--portal-primary)] hover:text-[var(--portal-primary)]">Limpiar filtros</button></div>{invalidRange && <p className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-200">El rango de fechas no es válido. La fecha inicial debe ser anterior a la fecha final.</p>}{pdfError && <p className="mb-4 rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200">{pdfError}</p>}<p className="mb-4 text-sm text-slate-400">Selecciona una transacción para consultar todos sus detalles.</p><div className="space-y-2">{filteredDocuments.length ? filteredDocuments.map((doc: any) => { const isSelected = selectedDocument?.document.id === doc.document.id && selectedDocument?.type === doc.type; const documentId = `${doc.type}-${doc.document?.id}`; return <div key={documentId} role="button" tabIndex={0} onClick={() => setSelectedDocument(isSelected ? null : doc)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') setSelectedDocument(isSelected ? null : doc); }} className={`portal-card cursor-pointer rounded-xl border p-4 transition-colors ${isSelected ? 'border-[var(--portal-primary)]' : 'border-slate-800 hover:border-[var(--portal-primary)]/60'}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">{labelFor(doc.type, documentTypeLabels, 'Documento')} · {doc.document.number}</p><p className="text-sm text-slate-400">Fecha: {formatDate(doc.document.date)} · Estado: {labelFor(doc.document.status, statusLabels, 'Emitido')}</p></div><div className="flex items-center gap-3"><p className="font-semibold text-[var(--portal-primary)]">{formatAmount(doc.document.total, doc.document.currency)}</p>{canDownload && <button type="button" title="Descargar PDF" aria-label={`Descargar PDF de ${doc.document.number}`} disabled={pdfGenerating === documentId} onClick={event => { event.stopPropagation(); void downloadPdf(doc); }} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-[var(--portal-primary)] hover:text-[var(--portal-primary)] disabled:cursor-wait disabled:opacity-60">{pdfGenerating === documentId ? <Loader2 className="size-4 animate-spin" /> : <FileDown className="size-4" />} PDF</button>}<ChevronDown className={`size-4 text-slate-400 transition-transform ${isSelected ? 'rotate-180 text-[var(--portal-primary)]' : ''}`} /></div></div>{isSelected && <TransactionDetail documentData={doc} />}</div>; }) : <p className="rounded-xl border border-dashed border-slate-700 p-5 text-sm text-slate-400">{documents.length ? 'No hay transacciones en el rango seleccionado.' : 'No hay documentos registrados.'}</p>}<PortalPagination pagination={data.pagination} pageLoading={pageLoading} onPageChange={onPageChange} /></div></div></div></AccessShell>;
 }
 
 function TransactionDetail({ documentData }: { documentData: any }) { const { document, items = [], payments = [], customer } = documentData; return <div className="mt-5 space-y-5 border-t border-slate-700 pt-5" onClick={event => event.stopPropagation()}><div className="grid gap-3 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-4"><p><span className="text-slate-500">Fecha:</span> {formatDate(document.date)}</p><p><span className="text-slate-500">Vencimiento:</span> {formatDate(document.dueDate)}</p><p><span className="text-slate-500">Moneda:</span> {labelFor(document.currency || 'NIO', currencyLabels, 'Moneda local')}</p><p><span className="text-slate-500">Cliente:</span> {customer.name}</p></div><div className="overflow-x-auto rounded-xl border border-slate-700"><table className="w-full text-sm"><thead className="bg-slate-800"><tr><th className="p-3 text-left">Producto o servicio</th><th className="p-3 text-right">Cantidad</th><th className="p-3 text-right">Precio unitario</th><th className="p-3 text-right">Total</th></tr></thead><tbody>{items.length ? items.map((item: any, index: number) => <tr key={index} className="border-t border-slate-800"><td className="p-3"><PublicItemDescription item={item} /></td><td className="p-3 text-right">{item.quantity ?? '—'}</td><td className="p-3 text-right">{formatAmount(item.unitPrice, document.currency)}</td><td className="p-3 text-right">{formatAmount(item.total, document.currency)}</td></tr>) : <tr><td colSpan={4} className="p-4 text-center text-slate-400">Este documento no tiene líneas de detalle.</td></tr>}</tbody></table></div><div className="grid gap-4 lg:grid-cols-2"><div className="space-y-2 rounded-xl border border-slate-700 p-4 text-sm"><p className="font-semibold text-white">Resumen de la transacción</p><p>Subtotal: <span className="float-right">{formatAmount(document.subtotal, document.currency)}</span></p><p>Impuestos: <span className="float-right">{formatAmount(document.taxAmount, document.currency)}</span></p><AdditionalChargesSummary document={document} /><p>Total: <span className="float-right font-bold text-[var(--portal-primary)]">{formatAmount(document.total, document.currency)}</span></p><p>Pagado: <span className="float-right">{formatAmount(document.amountPaid, document.currency)}</span></p><p>Saldo: <span className="float-right font-bold">{formatAmount(document.balance, document.currency)}</span></p>{document.paymentMethod && <p>Método de pago: <span className="float-right">{labelFor(document.paymentMethod, paymentMethodLabels, 'No especificado')}</span></p>}{document.reference && <p>Referencia: <span className="float-right">{document.reference}</span></p>}</div><div className="space-y-3 rounded-xl border border-slate-700 p-4 text-sm"><p className="font-semibold text-white">Pagos relacionados</p>{payments.length ? payments.map((payment: any, index: number) => <div key={index} className="flex justify-between border-t border-slate-800 pt-2"><span>{payment.number || 'Pago'} · {formatDate(payment.date)}</span><span className="font-semibold text-[var(--portal-primary)]">{formatAmount(payment.amount, payment.currency || document.currency)}</span></div>) : <p className="text-slate-400">No hay pagos relacionados.</p>}</div></div>{document.notes && <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 text-sm"><p className="font-semibold text-white">Observaciones</p><p className="mt-1 text-slate-300">{document.notes}</p></div>}</div>; }

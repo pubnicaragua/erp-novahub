@@ -754,17 +754,17 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const auditStatusBadgeClass = (status?: string): string => {
     const s = String(status || 'OPEN').toUpperCase();
     const classes: Record<string, string> = {
-      PENDING: 'bg-amber-100 text-amber-700 border-amber-200',
-      OPEN: 'bg-gray-100 text-gray-700 border-gray-200',
-      IN_PROGRESS: 'bg-blue-100 text-blue-700 border-blue-200',
-      CLOSED: 'bg-orange-100 text-orange-700 border-orange-200',
-      APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-      CANCELLED: 'bg-red-100 text-red-700 border-red-200',
-      REOPENED: 'bg-purple-100 text-purple-700 border-purple-200',
-      ADJUSTMENT_PENDING: 'bg-amber-100 text-amber-700 border-amber-200',
-      COMPLETED: 'bg-gray-100 text-gray-700 border-gray-200',
+      PENDING: 'bg-warning/10 text-warning border-warning',
+      OPEN: 'bg-muted text-muted-foreground border-border',
+      IN_PROGRESS: 'bg-info/10 text-info border-info',
+      CLOSED: 'bg-warning/10 text-warning border-warning',
+      APPROVED: 'bg-success/10 text-success border-success',
+      CANCELLED: 'bg-destructive/10 text-destructive border-destructive',
+      REOPENED: 'bg-info/10 text-info border-info',
+      ADJUSTMENT_PENDING: 'bg-warning/10 text-warning border-warning',
+      COMPLETED: 'bg-muted text-muted-foreground border-border',
     };
-    return classes[s] || 'bg-gray-100 text-gray-700 border-gray-200';
+    return classes[s] || 'bg-muted text-muted-foreground border-border';
   };
 
   const handleWorkflow = async (audit: any, targetStatus: string) => {
@@ -919,7 +919,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/40 pt-3">
         <div><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Stock sistema</p><p className="mt-1 font-mono text-xs tabular-nums">{fmtQty(item.systemStock)}</p></div>
         <div><Label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Contado</Label><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="mt-1 h-8 w-full text-right font-mono text-xs" /></div>
-        <div className="text-right"><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Diferencia</p><p className={cn('mt-2 font-mono text-xs font-bold tabular-nums', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</p></div>
+        <div className="text-right"><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Diferencia</p><p className={cn('mt-2 font-mono text-xs font-bold tabular-nums', item.difference < 0 ? 'text-destructive' : item.difference > 0 ? 'text-success' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</p></div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-3">
         <Label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Motivo</Label>
@@ -937,7 +937,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       <TableCell className="min-w-[260px]"><Select value={auditItemSelectionValue(item)} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}><SelectTrigger className="h-8 min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Selecciona un producto o variante' : 'Selecciona una bodega'} /></SelectTrigger><SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">{productOptionItems.length > 0 ? productOptionItems : <SelectItem value="__empty_desktop__" disabled className="text-[10px]">No hay coincidencias con estos filtros</SelectItem>}</SelectContent></Select></TableCell>
       <TableCell className="text-right"><span className="font-mono text-xs text-muted-foreground">{fmtQty(item.systemStock)}</span></TableCell>
       <TableCell className="text-right"><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="ml-auto h-8 w-28 text-right font-mono text-xs" /></TableCell>
-      <TableCell className="text-right"><span className={cn('font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</span></TableCell>
+      <TableCell className="text-right"><span className={cn('font-mono text-xs font-bold', item.difference < 0 ? 'text-destructive' : item.difference > 0 ? 'text-success' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</span></TableCell>
       <TableCell><AuditReasonSelect value={item.reason} onChange={(value) => updateReason(item.key, value)} disabled={item.difference === 0} /></TableCell>
       <TableCell className="text-right"><Button variant="ghost" size="icon" aria-label="Quitar producto" className="size-7 hover:text-destructive" onClick={() => removeItem(item.key)}><X className="size-3.5" /></Button></TableCell>
     </TableRow>;
@@ -1090,7 +1090,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     <div className={cn('flex items-center gap-1', mobile ? 'flex-wrap justify-start' : 'justify-end')}>
       {canDeleteAudits && (audit.status === 'OPEN' || audit.status === 'COMPLETED') && (
         <Button
-            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-red-50 hover:text-red-600"
+            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive hover:text-destructive-foreground"
             disabled={workflowLoading === audit.id}
             onClick={() => handleWorkflow(audit, 'CANCELLED')}
             title="Cancelar" aria-label="Cancelar auditoría"
@@ -1100,7 +1100,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       )}
       {canApproveAudits && audit.status === 'IN_PROGRESS' && (
         <Button
-          variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-orange-50 hover:text-orange-600"
+          variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-warning hover:text-warning-foreground"
           disabled={workflowLoading === audit.id}
           onClick={() => handleWorkflow(audit, 'CLOSED')}
           title="Cerrar conteo" aria-label="Cerrar conteo"
@@ -1111,7 +1111,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       {canApproveAudits && audit.status === 'CLOSED' && (
         <>
           <Button
-            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-50 hover:text-emerald-600"
+            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-success hover:text-success-foreground"
             disabled={workflowLoading === audit.id}
             onClick={() => handleWorkflow(audit, 'APPROVED')}
             title="Aprobar diferencias" aria-label="Aprobar diferencias"
@@ -1119,7 +1119,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             <CheckCircle2 className="size-4" />
           </Button>
           <Button
-            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-purple-50 hover:text-purple-600"
+            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-info hover:text-info-foreground"
             disabled={workflowLoading === audit.id}
             onClick={() => handleWorkflow(audit, 'REOPENED')}
             title="Reabrir" aria-label="Reabrir auditoría"
@@ -1386,7 +1386,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                     </Table>
                   </div>
                 )}
-                {itemsWithProduct.length > 0 && <div className="mt-2 flex flex-wrap items-center justify-end gap-4 border-t border-border/40 pt-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground"><span>Total contado: <span className="text-foreground tabular-nums">{fmtQty(totalContado)}</span></span><span>Diferencia neta: <span className={cn('tabular-nums', totalDiferencia < 0 ? 'text-red-600' : totalDiferencia > 0 ? 'text-emerald-600' : '')}>{totalDiferencia > 0 ? '+' : ''}{fmtQty(totalDiferencia)}</span></span></div>}
+                {itemsWithProduct.length > 0 && <div className="mt-2 flex flex-wrap items-center justify-end gap-4 border-t border-border/40 pt-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground"><span>Total contado: <span className="text-foreground tabular-nums">{fmtQty(totalContado)}</span></span><span>Diferencia neta: <span className={cn('tabular-nums', totalDiferencia < 0 ? 'text-destructive' : totalDiferencia > 0 ? 'text-success' : '')}>{totalDiferencia > 0 ? '+' : ''}{fmtQty(totalDiferencia)}</span></span></div>}
               </div>
             </div>
           </div>
@@ -1546,7 +1546,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         <DialogContent className="w-[calc(100vw-2rem)] !max-w-4xl min-w-0 max-h-[min(88vh,calc(100dvh-3rem))] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
-              <AlertTriangle className="size-5 text-amber-500" />
+              <AlertTriangle className="size-5 text-warning" />
               Revisar diferencias de {comparisonAudit?.number || 'auditoría'}
             </DialogTitle>
             <DialogDescription className="text-xs">
@@ -1563,10 +1563,10 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
               <div className={cn(
                 'flex min-w-0 gap-3 rounded-xl border p-3 text-xs',
                 comparisonDifferences.length > 0
-                  ? 'border-amber-300 bg-amber-50 text-amber-950'
-                  : 'border-emerald-300 bg-emerald-50 text-emerald-950',
+                  ? 'border-warning bg-warning/10 text-warning'
+                  : 'border-success bg-success/10 text-success',
               )}>
-                {comparisonDifferences.length > 0 ? <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
+                {comparisonDifferences.length > 0 ? <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />}
                 <div className="min-w-0">
                   <p className="font-bold">
                     {comparisonDifferences.length > 0
@@ -1586,15 +1586,15 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                   <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos revisados</p>
                   <p className="mt-1 text-lg font-black tabular-nums">{comparisonItems.length}</p>
                 </div>
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-red-700">Faltantes · se restan</p>
-                  <p className="mt-1 text-lg font-black tabular-nums text-red-700">
+                <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-destructive">Faltantes · se restan</p>
+                  <p className="mt-1 text-lg font-black tabular-nums text-destructive">
                     {fmtQty(comparisonShortages.reduce((total, item) => total + Math.abs(item.difference), 0))}
                   </p>
                 </div>
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Sobrantes · se suman</p>
-                  <p className="mt-1 text-lg font-black tabular-nums text-emerald-700">
+                <div className="rounded-xl border border-success/20 bg-success/10 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-success">Sobrantes · se suman</p>
+                  <p className="mt-1 text-lg font-black tabular-nums text-success">
                     {fmtQty(comparisonSurpluses.reduce((total, item) => total + item.difference, 0))}
                   </p>
                 </div>
@@ -1625,7 +1625,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">{fmtQty(item.theoreticalStock)}</TableCell>
                         <TableCell className="text-right font-mono text-xs">{fmtQty(item.countedStock)}</TableCell>
-                        <TableCell className={cn('text-right font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>
+                        <TableCell className={cn('text-right font-mono text-xs font-bold', item.difference < 0 ? 'text-destructive' : item.difference > 0 ? 'text-success' : 'text-muted-foreground')}>
                           {item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}
                         </TableCell>
                         <TableCell>
@@ -1636,8 +1636,8 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                           />
                         </TableCell>
                         <TableCell>
-                          {item.difference < 0 ? <Badge variant="outline" className="border-red-200 bg-red-50 text-[9px] font-bold text-red-700">Faltante · restar {fmtQty(Math.abs(item.difference))}</Badge>
-                            : item.difference > 0 ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[9px] font-bold text-emerald-700">Sobrante · sumar {fmtQty(item.difference)}</Badge>
+                          {item.difference < 0 ? <Badge variant="outline" className="border-destructive bg-destructive/10 text-[9px] font-bold text-destructive">Faltante · restar {fmtQty(Math.abs(item.difference))}</Badge>
+                            : item.difference > 0 ? <Badge variant="outline" className="border-success bg-success/10 text-[9px] font-bold text-success">Sobrante · sumar {fmtQty(item.difference)}</Badge>
                               : <Badge variant="outline" className="text-[9px] font-bold text-muted-foreground">Sin diferencia</Badge>}
                         </TableCell>
                       </TableRow>
@@ -1728,7 +1728,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                         <TableCell className="text-xs">{item.name}{(item.variantName || item.variantLabel) ? <span className="block text-[10px] text-muted-foreground">{item.variantName || item.variantLabel}</span> : null}</TableCell>
                         <TableCell className="text-right font-mono text-[10px]">{fmtQty(item.systemStock)}</TableCell>
                         <TableCell className="text-right font-mono text-[10px]">{fmtQty(item.countedStock)}</TableCell>
-                        <TableCell className={cn('text-right font-mono text-[10px] font-bold', Number(item.difference) < 0 ? 'text-red-600' : Number(item.difference) > 0 ? 'text-emerald-600' : '')}>
+                        <TableCell className={cn('text-right font-mono text-[10px] font-bold', Number(item.difference) < 0 ? 'text-destructive' : Number(item.difference) > 0 ? 'text-success' : '')}>
                           {Number(item.difference) > 0 ? '+' : ''}{fmtQty(item.difference)}
                         </TableCell>
                         <TableCell className="text-right font-mono text-[10px] font-bold text-primary">
@@ -1749,6 +1749,6 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
 function cnActa(hasFile: boolean) {
   return `flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 px-3 py-2.5 text-[10px] font-bold transition-all h-9 ${
-    hasFile ? 'border-emerald-500/50 bg-emerald-500/5 text-emerald-600' : 'hover:border-primary/50 hover:bg-muted/30'
+    hasFile ? 'border-success/50 bg-success/5 text-success' : 'hover:border-primary/50 hover:bg-muted/30'
   }`;
 }

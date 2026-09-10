@@ -159,10 +159,10 @@ export function RecursosHumanosFinal() {
   const pendingLeaves = data.leaveRequests.filter((l: any) => l.status === 'PENDING').length;
 
   const stats = [
-    { title: 'Total Empleados', value: data.employees.length, subtitle: `${activeEmployees} activos`, icon: Users, color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-950/30' },
-    { title: 'Planilla Mensual', value: `$${(totalPayroll / 1000).toFixed(1)}k`, subtitle: 'Costo total nómina', icon: DollarSign, color: 'text-emerald-600', bgColor: 'bg-emerald-50 dark:bg-emerald-950/30' },
-    { title: 'Vacaciones Pendientes', value: pendingLeaves, subtitle: 'Por aprobar', icon: Calendar, color: 'text-orange-600', bgColor: 'bg-orange-50 dark:bg-orange-950/30' },
-    { title: 'Departamentos', value: data.departments.length, subtitle: 'Áreas activas', icon: Building2, color: 'text-purple-600', bgColor: 'bg-purple-50 dark:bg-purple-950/30' },
+    { title: 'Total Empleados', value: data.employees.length, subtitle: `${activeEmployees} activos`, icon: Users, color: 'text-info', bgColor: 'bg-info/10 dark:bg-info/30' },
+    { title: 'Planilla Mensual', value: `$${(totalPayroll / 1000).toFixed(1)}k`, subtitle: 'Costo total nómina', icon: DollarSign, color: 'text-success', bgColor: 'bg-success/10 dark:bg-success/30' },
+    { title: 'Vacaciones Pendientes', value: pendingLeaves, subtitle: 'Por aprobar', icon: Calendar, color: 'text-warning', bgColor: 'bg-warning/10 dark:bg-warning/30' },
+    { title: 'Departamentos', value: data.departments.length, subtitle: 'Áreas activas', icon: Building2, color: 'text-info', bgColor: 'bg-info/10 dark:bg-info/30' },
   ];
 
   if (loading) {
@@ -179,7 +179,7 @@ export function RecursosHumanosFinal() {
   if (loadError && data.employees.length === 0 && data.departments.length === 0) {
     return (
       <div className="flex min-h-[600px] items-center justify-center p-6">
-        <Alert variant="destructive" className="max-w-2xl border-red-500/30 bg-red-500/5">
+        <Alert variant="destructive" className="max-w-2xl border-destructive/30 bg-destructive/5">
           <AlertTriangle className="size-4" />
           <AlertTitle>No se pudo cargar Recursos Humanos</AlertTitle>
           <AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3">
@@ -193,7 +193,7 @@ export function RecursosHumanosFinal() {
 
   return (
     <div className="space-y-6 p-6">
-      {loadError && <Alert variant="destructive" className="border-red-500/30 bg-red-500/5"><AlertTriangle className="size-4" /><AlertTitle>Los datos podrían estar desactualizados</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{loadError}</span><Button variant="outline" size="sm" onClick={fetchData} className="gap-2"><RefreshCw className="size-3.5" /> Reintentar</Button></AlertDescription></Alert>}
+      {loadError && <Alert variant="destructive" className="border-destructive/30 bg-destructive/5"><AlertTriangle className="size-4" /><AlertTitle>Los datos podrían estar desactualizados</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{loadError}</span><Button variant="outline" size="sm" onClick={fetchData} className="gap-2"><RefreshCw className="size-3.5" /> Reintentar</Button></AlertDescription></Alert>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -202,7 +202,7 @@ export function RecursosHumanosFinal() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={fetchData}><RefreshCw className="size-4 mr-2" />Actualizar</Button>
-          <Button size="sm" onClick={() => { setSelectedEmployee(null); resetEmployeeForm(); setIsEmployeeDialogOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700">
+          <Button size="sm" onClick={() => { setSelectedEmployee(null); resetEmployeeForm(); setIsEmployeeDialogOpen(true); }} className="bg-success hover:bg-success">
             <Plus className="size-4 mr-2" />Nuevo Empleado
           </Button>
           <Button variant="outline" size="sm" onClick={() => setIsDepartmentDialogOpen(true)}><Building2 className="size-4 mr-2" />Nuevo Depto</Button>
@@ -248,7 +248,7 @@ export function RecursosHumanosFinal() {
               <motion.div key={emp.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.02 }}
                 className="flex items-center justify-between p-4 rounded-lg border border-border/40 hover:bg-muted/40 transition-colors">
                 <div className="flex items-center gap-4">
-                  <div className="size-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-semibold text-sm">
+                  <div className="size-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-semibold text-sm">
                     {emp.firstName?.[0]}{emp.lastName?.[0]}
                   </div>
                   <div>
@@ -257,12 +257,12 @@ export function RecursosHumanosFinal() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge variant={emp.employmentStatus === 'ACTIVE' ? 'default' : 'secondary'} className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                  <Badge variant={emp.employmentStatus === 'ACTIVE' ? 'default' : 'secondary'} className="bg-success/10 text-success dark:bg-success/30 dark:text-success">
                     {emp.employmentStatus}
                   </Badge>
                   <span className="text-sm font-medium text-muted-foreground">${Number(emp.salary || 0).toLocaleString()}</span>
                   <Button variant="ghost" size="sm" onClick={() => openEditEmployee(emp)}><Edit2 className="size-4" /></Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDeleteEmployee(emp.id, `${emp.firstName} ${emp.lastName}`)}><Trash2 className="size-4 text-red-600" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteEmployee(emp.id, `${emp.firstName} ${emp.lastName}`)}><Trash2 className="size-4 text-destructive" /></Button>
                 </div>
               </motion.div>
             ))}
@@ -329,7 +329,7 @@ export function RecursosHumanosFinal() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEmployeeDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={selectedEmployee ? handleUpdateEmployee : handleCreateEmployee} className="bg-emerald-600 hover:bg-emerald-700">
+            <Button onClick={selectedEmployee ? handleUpdateEmployee : handleCreateEmployee} className="bg-success hover:bg-success">
               {selectedEmployee ? 'Actualizar' : 'Crear'}
             </Button>
           </DialogFooter>
@@ -366,7 +366,7 @@ export function RecursosHumanosFinal() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDepartmentDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreateDepartment} className="bg-emerald-600 hover:bg-emerald-700">Crear</Button>
+            <Button onClick={handleCreateDepartment} className="bg-success hover:bg-success">Crear</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

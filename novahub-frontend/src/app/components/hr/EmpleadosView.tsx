@@ -1039,27 +1039,27 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                     {isColumnVisible('department') && <td className="px-4 py-2 text-sm"><div className="flex items-center gap-1.5"><span className="truncate">{emp.department?.name || '—'}</span>{canPerform('HR_EMPLOYEES', 'edit') && <Button size="icon" variant="ghost" className="size-7 shrink-0" onClick={(event) => { event.stopPropagation(); openDepartmentEditor(emp); }} title="Gestionar departamentos"><Building2 className="size-3.5 text-primary" /></Button>}</div></td>}
                     {isColumnVisible('position') && <td className="px-4 py-2 text-sm">{emp.position?.title || '—'}</td>}
                     {isColumnVisible('salary') && <td className="px-4 py-2"><div className="flex flex-col"><CurrencyValuationAmount amount={Number(emp.salary || 0)} sourceCurrency={emp.currency || 'USD'} sourceExchangeRate={emp.exchangeRate} className="text-sm font-bold text-primary" /><span className="text-[9px] text-muted-foreground uppercase font-black">Original: {emp.currency}</span></div></td>}
-                    {isColumnVisible('status') && <td className="px-4 py-2"><span className={`text-[10px] px-2 py-1 rounded-lg font-black uppercase tracking-tighter ${emp.employmentStatus === 'ACTIVE' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : emp.employmentStatus === 'INACTIVE' ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'}`}>{emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus === 'ON_LEAVE' ? 'Licencia' : emp.employmentStatus === 'TERMINATED' ? 'Terminado' : emp.employmentStatus}</span></td>}
-                    {isColumnVisible('auth') && <td className="px-4 py-2">{(() => { const opts: Record<string, { label: string; color: string }> = { APPROVED: { label: 'Aprobado', color: 'bg-emerald-500/10 text-emerald-500' }, PENDING_APPROVAL: { label: 'Pendiente', color: 'bg-amber-500/10 text-amber-500' }, REJECTED: { label: 'Rechazado', color: 'bg-rose-500/10 text-rose-500' }, DRAFT: { label: 'Borrador', color: 'bg-muted/20 text-muted-foreground' } }; const status = opts[String(emp.approvalStatus || 'APPROVED').toUpperCase()] || opts.APPROVED; return <Badge variant="outline" className={cn('text-[8px] font-black uppercase px-1.5 py-0 border-none', status.color)}>{status.label}</Badge>; })()}</td>}
+                    {isColumnVisible('status') && <td className="px-4 py-2"><span className={`text-[10px] px-2 py-1 rounded-lg font-black uppercase tracking-tighter ${emp.employmentStatus === 'ACTIVE' ? 'bg-success/10 text-success dark:bg-success/30 dark:text-success' : emp.employmentStatus === 'INACTIVE' ? 'bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground' : 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning'}`}>{emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus === 'ON_LEAVE' ? 'Licencia' : emp.employmentStatus === 'TERMINATED' ? 'Terminado' : emp.employmentStatus}</span></td>}
+                    {isColumnVisible('auth') && <td className="px-4 py-2">{(() => { const opts: Record<string, { label: string; color: string }> = { APPROVED: { label: 'Aprobado', color: 'bg-success/10 text-success' }, PENDING_APPROVAL: { label: 'Pendiente', color: 'bg-warning/10 text-warning' }, REJECTED: { label: 'Rechazado', color: 'bg-destructive/10 text-destructive' }, DRAFT: { label: 'Borrador', color: 'bg-muted/20 text-muted-foreground' } }; const status = opts[String(emp.approvalStatus || 'APPROVED').toUpperCase()] || opts.APPROVED; return <Badge variant="outline" className={cn('text-[8px] font-black uppercase px-1.5 py-0 border-none', status.color)}>{status.label}</Badge>; })()}</td>}
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
                         {canPerform('HR_EMPLOYEES', 'edit') && <Button variant="ghost" size="icon" title="Editar empleado" aria-label="Editar empleado" onClick={(event) => { event.stopPropagation(); handleEdit(emp); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Edit2 className="size-4" /></Button>}
                             {emp.approvalStatus === 'DRAFT' && canPerform('HR_EMPLOYEES', 'approve') && (
-                              <Button title="Enviar a aprobación" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={(e) => { e.stopPropagation(); handleSubmitApproval(emp.id); }}>
+                              <Button title="Enviar a aprobación" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-warning/10 hover:text-warning" onClick={(e) => { e.stopPropagation(); handleSubmitApproval(emp.id); }}>
                                 <Send className="size-4" />
                               </Button>
                             )}
                             {emp.approvalStatus === 'PENDING_APPROVAL' && (canPerform('HR_EMPLOYEES', 'approve') || canPerform('HR_EMPLOYEES', 'delete')) && (
                               <>
-                                {canPerform('HR_EMPLOYEES', 'approve') && <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApprove(emp.id); }}>
+                                {canPerform('HR_EMPLOYEES', 'approve') && <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-success/10 hover:text-success" onClick={(e) => { e.stopPropagation(); handleApprove(emp.id); }}>
                                   <CheckCircle2 className="size-4" />
                                 </Button>}
-                                {canPerform('HR_EMPLOYEES', 'delete') && <Button title="Rechazar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={(e) => { e.stopPropagation(); setRejectEmpId(emp.id); }}>
+                                {canPerform('HR_EMPLOYEES', 'delete') && <Button title="Rechazar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={(e) => { e.stopPropagation(); setRejectEmpId(emp.id); }}>
                                   <XCircle className="size-4" />
                                 </Button>}
                               </>
                             )}
-                            <Button title="Historial de cambios" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" onClick={(e) => { e.stopPropagation(); loadChangeLog(emp.id); }}>
+                            <Button title="Historial de cambios" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-info/10 hover:text-info" onClick={(e) => { e.stopPropagation(); loadChangeLog(emp.id); }}>
                               <History className="size-4" />
                             </Button>
                             {canPerform('HR_EMPLOYEES', 'delete') && <Button variant="ghost" size="icon" title="Anular empleado" aria-label="Anular empleado" onClick={(event) => { event.stopPropagation(); setPendingDeleteId(emp.id); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Ban className="size-4" /></Button>}
@@ -1097,8 +1097,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                 </div>
                 {isColumnVisible('status') && <span className={`text-xs px-2 py-1 rounded ${
                   emp.employmentStatus === 'ACTIVE' 
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                    : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                    ? 'bg-success/10 text-success dark:bg-success/30 dark:text-success'
+                    : 'bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground'
                 }`}>
                   {getEmploymentStatusLabel(emp.employmentStatus)}
                 </span>}
@@ -1147,7 +1147,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                   title="Historial de cambios"
                   aria-label="Historial de cambios"
                   onClick={(event) => { event.stopPropagation(); loadChangeLog(emp.id); }}
-                  className="size-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500 transition-colors"
+                  className="size-8 rounded-lg hover:bg-info/10 hover:text-info transition-colors"
                 >
                   <History className="size-4" />
                 </Button>

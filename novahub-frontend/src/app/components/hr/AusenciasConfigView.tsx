@@ -321,16 +321,16 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
               <div className="rounded-xl border border-border/40 bg-background p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cobertura de pago</p>
-                  <p className={cn('text-xs font-black', form.paidByCompanyPct + form.paidByThirdPartyPct > 100 ? 'text-rose-600' : 'text-foreground')}>
+                  <p className={cn('text-xs font-black', form.paidByCompanyPct + form.paidByThirdPartyPct > 100 ? 'text-destructive' : 'text-foreground')}>
                     {form.paidByCompanyPct}% + {form.paidByThirdPartyPct}% = {form.paidByCompanyPct + form.paidByThirdPartyPct}%
                   </p>
                 </div>
                 <div className="h-2 w-full bg-muted rounded-full overflow-hidden flex">
                   <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(form.paidByCompanyPct, 100)}%` }} />
-                  <div className="h-full bg-blue-500/60 transition-all" style={{ width: `${Math.min(form.paidByThirdPartyPct, Math.max(0, 100 - form.paidByCompanyPct))}%` }} />
+                  <div className="h-full bg-info/60 transition-all" style={{ width: `${Math.min(form.paidByThirdPartyPct, Math.max(0, 100 - form.paidByCompanyPct))}%` }} />
                 </div>
                 {form.paidByCompanyPct + form.paidByThirdPartyPct > 100 && (
-                  <p className="mt-2 text-[11px] font-bold text-rose-600">La suma supera el 100%. Ajusta los porcentajes.</p>
+                  <p className="mt-2 text-[11px] font-bold text-destructive">La suma supera el 100%. Ajusta los porcentajes.</p>
                 )}
               </div>
 
@@ -397,8 +397,8 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
                             <DollarSign className="size-3" /> Tope: <strong className="text-foreground">C${Number(at.cap).toLocaleString()}</strong>
                           </span>
                         )}
-                        <span className={cn("flex items-center gap-1", at.requiresDoc ? "text-amber-600" : "")}>
-                          {at.requiresDoc ? <AlertTriangle className="size-3" /> : <Check className="size-3 text-green-500" />}
+                        <span className={cn("flex items-center gap-1", at.requiresDoc ? "text-warning" : "")}>
+                          {at.requiresDoc ? <AlertTriangle className="size-3" /> : <Check className="size-3 text-success" />}
                           {at.requiresDoc ? 'Requiere doc' : 'Sin documento'}
                         </span>
                       </div>
