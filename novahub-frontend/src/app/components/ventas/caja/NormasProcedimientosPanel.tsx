@@ -7,6 +7,7 @@ import { ClipboardList, CalendarClock, AlertTriangle, CheckCircle2, ArrowDownToL
 import { toast } from 'sonner';
 import { cajaService } from '../../../services/caja.service';
 import { api, getApiErrorMessage } from '../../../services/api';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const WEEKDAYS = [
   { index: 1, label: 'L', name: 'Lunes' },
@@ -38,6 +39,10 @@ interface ProtocolFieldDraft {
 }
 
 export function NormasProcedimientosPanel() {
+  const { canPerform } = useAuth();
+  const canReadBankAccounts = canPerform('FINANCIAL_ACCOUNTS', 'view')
+    || canPerform('RETAIL_POS', 'view')
+    || canPerform('RETAIL_CASH_CONTROL', 'view');
   const [norms, setNorms] = useState<any>(null);
   const [autoClose, setAutoClose] = useState<any>(null);
   const [, setProtocol] = useState<any>(null);
@@ -53,17 +58,21 @@ export function NormasProcedimientosPanel() {
     const load = async () => {
       setNormsLoading(true);
       try {
-        const [normsRes, autoCloseRes, protocolRes, banksRes] = await Promise.all([
+        const [normsRes, autoCloseRes, protocolRes] = await Promise.all([
           cajaService.getCashNorms(),
           cajaService.getAutoCloseConfig(),
           cajaService.getClosureProtocol(),
-          api.get<any[]>('/bank-accounts'),
         ]);
+        let banks: any[] = [];
+        if (canReadBankAccounts) {
+          const banksRes = await api.get<any[]>('/bank-accounts/payment-options');
+          banks = Array.isArray(banksRes) ? banksRes : ((banksRes as any)?.data || []);
+        }
         if (cancelled) return;
         setNorms(normsRes);
         setAutoClose(autoCloseRes);
         setProtocol(protocolRes);
-        setBankAccounts(Array.isArray(banksRes) ? banksRes : ((banksRes as any)?.data || []));
+        setBankAccounts(banks);
         setFieldDrafts((protocolRes?.fields || []).map((field: any) => ({
           id: field.id || '',
           label: field.label || '',
@@ -80,7 +89,7 @@ export function NormasProcedimientosPanel() {
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [canReadBankAccounts]);
 
   const saveNorms = async () => {
     if (!norms) return;

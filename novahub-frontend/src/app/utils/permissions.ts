@@ -6,6 +6,7 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'approve', label: 'Aprobar', description: 'Permite aprobar o avanzar el flujo: enviar a otra vista, confirmar/procesar, convertir, aplicar o registrar pagos.' },
   { key: 'import', label: 'Importar', description: 'Permite cargar registros desde archivos o cargas masivas.' },
   { key: 'export', label: 'Exportar', description: 'Permite descargar o exportar información de la vista.' },
+  { key: 'manage', label: 'Administrar caja', description: 'Permite mostrar y usar el botón para crear, editar y configurar cajas registradoras.' },
 ] as const;
 
 /** Permisos de datos sensibles que solo aplican a filas concretas de la matriz. */
@@ -118,7 +119,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   SALES_CREDIT_NOTES: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
   SALES_PRICE_LISTS: ['read', 'create', 'edit', 'import', 'export'],
   RETAIL_POS: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
-  RETAIL_CASH_CONTROL: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
+  RETAIL_CASH_CONTROL: ['read', 'create', 'edit', 'delete', 'approve', 'export', 'manage'],
 
   // IDs separados para las pestañas del POS de restaurante.
   RESTAURANT_TABLES: ['read', 'create', 'approve'],
@@ -339,4 +340,33 @@ export function hydratePermissionActions(permission: any, module: string) {
       ? { allowedPriceListIds: Array.isArray(permission.allowedPriceListIds) ? [...permission.allowedPriceListIds] : [] }
       : {}),
   };
+}
+
+/**
+ * Serializa la matriz del editor con las claves canónicas que consume el API.
+ * Esto evita que una edición vuelva a guardar únicamente `read` cuando el
+ * rol venía de una versión histórica con claves `canCreate`/`canEdit` o
+ * `write`.
+ */
+export function serializePermissionActions(input: any): any[] {
+  const entries = Array.isArray(input)
+    ? input
+    : input && typeof input === 'object'
+      ? Object.entries(input).map(([module, value]: [string, any]) => ({
+          module,
+          ...(value && typeof value === 'object' ? value : {}),
+        }))
+      : [];
+
+  return entries
+    .filter((permission: any) => permission && typeof permission === 'object' && permission.module)
+    .map((permission: any) => ({
+      module: String(permission.module).trim().toUpperCase(),
+      ...Object.fromEntries(PERMISSION_ACTION_DEFINITIONS.map(({ key }) => [key, permissionValue(permission, key)])),
+      viewCost: permissionValue(permission, 'viewCost'),
+      write: permissionValue(permission, 'create') || permissionValue(permission, 'edit') || permission.write === true,
+      ...(Object.prototype.hasOwnProperty.call(permission, 'allowedPriceListIds')
+        ? { allowedPriceListIds: Array.isArray(permission.allowedPriceListIds) ? [...permission.allowedPriceListIds] : [] }
+        : {}),
+    }));
 }

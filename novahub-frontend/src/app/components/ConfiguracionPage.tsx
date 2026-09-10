@@ -34,7 +34,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
-import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
+import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, serializePermissionActions, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
 import {
   HIDDEN_PERMISSION_MODULE_IDS,
   LEGACY_VIEW_PERMISSION_ALIASES,
@@ -610,6 +610,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       .map(normalize)
       .filter(Boolean);
     const enabled = new Set(sessionModules);
+    const hasSalesScope = enabled.has('SALES') || sessionModules.some((candidate) => candidate.startsWith('SALES_'));
     const hasParentScope = (moduleId: string) => enabled.has(moduleId)
       || sessionModules.some((candidate) => candidate.startsWith(`${moduleId}_`));
 
@@ -623,7 +624,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           ...(LEGACY_VIEW_PERMISSION_ALIASES[moduleId] || []),
         ];
         const hasDirectAccess = enabled.has(moduleId)
-          || directAliases.some((alias) => enabled.has(normalize(alias)));
+          || directAliases.some((alias) => enabled.has(normalize(alias)))
+          || (['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(moduleId) && hasSalesScope);
 
         // Dashboard y los permisos administrativos internos pertenecen a la
         // sucursal aunque no tengan una fila de suscripción operativa.
@@ -1182,23 +1184,21 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           result.push({ ...permission, module });
           return result;
         }
-        ['read', 'create', 'edit', 'delete', 'approve', 'import', 'export', 'viewCost'].forEach((action) => {
-          existing[action] = Boolean(existing[action] || permission[action]);
+        [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS].forEach(({ key: action }) => {
+          existing[action] = Boolean(existing[action] || permissionValue(permission, action));
         });
         existing.write = Boolean(existing.write || permission.write);
         return result;
       }, []);
-      const permissions = mergedPermissions
+      const permissions = serializePermissionActions(mergedPermissions)
         .filter((p: any) => {
           const module = String(p.module || '').toUpperCase();
-          return tenantPermModuleIds.has(module) && !HIDDEN_PERMISSION_MODULE_IDS.has(module);
+          // El backend es la autoridad del alcance de la sucursal. No
+          // eliminamos permisos por un catálogo de módulos que puede estar
+          // desactualizado mientras se edita el rol.
+          return !HIDDEN_PERMISSION_MODULE_IDS.has(module);
         })
-        .map((p: any) => ({
-        ...p,
-        // El backend conserva `write` por compatibilidad con roles antiguos;
-        // las acciones visibles de la matriz siguen siendo las canónicas.
-        write: !!(p.create || p.edit || p.write),
-        }));
+        .map((p: any) => ({ ...p }));
       const payload = {
         name: cleanRole.name,
         description: cleanRole.description || '',

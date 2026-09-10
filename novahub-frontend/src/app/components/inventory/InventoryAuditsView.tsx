@@ -363,7 +363,7 @@ function useVirtualAuditRows(rows: AuditRenderRow[], estimatedRowHeight: number,
 }
 
 export function InventoryAuditsView({ audits, warehouses, products, onRefresh, onRefreshWarehouses, pagination }: InventoryAuditsViewProps) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const isMobile = useIsMobile();
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
   const canCreateAudits = canPerform('INVENTORY_AUDITS', 'create');
@@ -428,12 +428,17 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     retry: 1,
   });
   const tenantUsers = useMemo(() => {
-    const list = usersQuery.data || [];
-    return list
+    const list = [...(usersQuery.data || []), user].filter(Boolean);
+    const uniqueUsers = new Map<string, any>();
+    for (const current of list) {
+      if (!current?.id) continue;
+      uniqueUsers.set(String(current.id), current);
+    }
+    return [...uniqueUsers.values()]
       .filter((u: any) => u?.isActive !== false)
       .map((u: any) => ({ id: String(u.id), name: String(u.name || u.email || 'Usuario') }))
       .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)));
-  }, [usersQuery.data]);
+  }, [user, usersQuery.data]);
 
   const productOptions = useMemo(() => {
     if (!form.warehouseId) return [];

@@ -1,4 +1,4 @@
-import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactElement, type ReactNode, type RefObject } from 'react';
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactElement, type ReactNode, type RefObject, type WheelEvent as ReactWheelEvent } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './button';
 import { Table, TableHeader, TableHead, TableRow } from './table';
@@ -11,10 +11,11 @@ interface HorizontalTableScrollerProps {
   tableClassName?: string;
   scrollRef?: RefObject<HTMLDivElement | null>;
   scrollBehavior?: ScrollBehavior;
+  verticalWheelBehavior?: 'container' | 'page';
 }
 
 /** Scroll container shared by import previews and other wide tables. */
-export function HorizontalTableScroller({ children, label = 'Desplazamiento horizontal', className, tableClassName, scrollRef: externalScrollRef, scrollBehavior = 'smooth' }: HorizontalTableScrollerProps) {
+export function HorizontalTableScroller({ children, label = 'Desplazamiento horizontal', className, tableClassName, scrollRef: externalScrollRef, scrollBehavior = 'smooth', verticalWheelBehavior = 'container' }: HorizontalTableScrollerProps) {
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = externalScrollRef || internalScrollRef;
   const pointerInside = useRef(false);
@@ -122,6 +123,15 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
     }
   };
 
+  const handleTableWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (verticalWheelBehavior !== 'page' || event.ctrlKey || event.deltaY === 0 || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    const pageScroller = scrollRef.current?.closest('main') as HTMLElement | null
+      || document.scrollingElement
+      || document.documentElement;
+    event.preventDefault();
+    pageScroller.scrollBy({ top: event.deltaY, behavior: 'auto' });
+  };
+
   return (
     <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-2xl border bg-card shadow-sm', className)} onMouseEnter={() => { pointerInside.current = true; }} onMouseLeave={() => { pointerInside.current = false; }}>
       <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-muted/10 px-3 py-2">
@@ -142,7 +152,7 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
           </div>
         </div>
       )}
-      <div ref={scrollRef} data-import-preview-horizontal-scroller="true" tabIndex={0} onKeyDownCapture={handleTableKeyDown} onMouseDown={() => scrollRef.current?.focus({ preventScroll: true })} aria-label={`${label}. Usa las flechas izquierda y derecha para moverte por columna.`} className={cn('min-h-0 min-w-0 w-full flex-1 overflow-x-auto overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-primary/40 scrollbar-overlay [&_[data-slot="table-container"]]:!w-max [&_[data-slot="table-container"]]:!min-w-full [&_[data-slot="table-container"]]:!max-w-none [&_[data-slot="table-container"]]:!overflow-visible', tableClassName)} style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
+      <div ref={scrollRef} data-import-preview-horizontal-scroller="true" tabIndex={0} onKeyDownCapture={handleTableKeyDown} onWheel={handleTableWheel} onMouseDown={() => scrollRef.current?.focus({ preventScroll: true })} aria-label={`${label}. Usa las flechas izquierda y derecha para moverte por columna.`} className={cn('min-h-0 min-w-0 w-full flex-1 overflow-x-auto overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-primary/40 scrollbar-overlay [&_[data-slot="table-container"]]:!w-max [&_[data-slot="table-container"]]:!min-w-full [&_[data-slot="table-container"]]:!max-w-none [&_[data-slot="table-container"]]:!overflow-visible', tableClassName)} style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
         {splitTable ? splitTable.bodyTable : children}
       </div>
     </div>

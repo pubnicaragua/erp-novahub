@@ -23,7 +23,7 @@ export interface TenantUser {
   role: string;
   isPrincipalAdmin?: boolean;
   customRoleId?: string | null;
-  customRole?: { id: string; name: string; permissions?: any; allowedModules: string[] } | null;
+  customRole?: { id: string; name: string; permissions?: any; allowedModules: string[]; warehouseIds?: string[] } | null;
   departments?: Array<{ id: string; code?: string; name: string; isPrimary?: boolean }>;
   departmentMemberships?: Array<{ id: string; isPrimary: boolean; department: { id: string; name: string } }>;
   employeeDepartmentMemberships?: Array<{ isPrimary: boolean; department: { id: string; name: string } }>;
@@ -58,6 +58,7 @@ export const tenantsService = {
   
   // User management within a tenant
   getUsers: (tenantId: string, signal?: AbortSignal) => api.get<TenantUser[]>(`/tenants/${tenantId}/users`, { signal }),
+  getWarehouses: (tenantId: string, signal?: AbortSignal) => api.get<any[]>(`/tenants/${tenantId}/warehouses`, { signal }),
   addUser: (data: { 
     clientTenantId: string; 
     name: string; 

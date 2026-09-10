@@ -433,18 +433,18 @@ interface FacturacionCajaViewProps {
 export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
-  const canPayPos = canPerform('RETAIL_POS', 'pay');
+  const canCreatePosInvoice = canPerform('RETAIL_POS', 'create');
+  const canPayPos = canCreatePosInvoice;
+  const canApprovePosQueue = canPerform('RETAIL_POS', 'approve');
   const canClaimPosQueue = canPerform('RETAIL_POS', 'edit');
   const canReleasePosQueue = canPerform('RETAIL_POS', 'delete');
   const canReconcilePosQueue = canPerform('RETAIL_POS', 'approve');
   const canCreatePosHold = canPerform('RETAIL_POS', 'create');
-  const canManagePosRegisters = canPerform('RETAIL_POS', 'create')
-    || canPerform('RETAIL_POS', 'edit')
-    || canPerform('RETAIL_POS', 'delete');
+  const canManagePosRegisters = canPerform('RETAIL_CASH_CONTROL', 'manage');
   // El comprobante se genera localmente después de un cobro POS exitoso.
   // Todo usuario que puede cobrar debe poder imprimir su voucher/ticket,
   // aunque su rol granular no tenga el flag histórico `print`.
-  const canPrintPos = canPayPos || canPerform('RETAIL_POS', 'print');
+  const canPrintPos = canCreatePosInvoice || canApprovePosQueue || canPerform('RETAIL_POS', 'print');
   const queryClient = useQueryClient();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
@@ -803,7 +803,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   };
 
   const submitCashQueuePayment = async () => {
-    if (!canPayPos) return;
+    if (!canApprovePosQueue) return;
     if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmittingRef.current) return;
     const queueReceipt = queueInvoice;
     const document = getQueueDocument(queueReceipt);
@@ -2113,7 +2113,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     <div className="flex items-center gap-2">
                       {canClaimPosQueue && queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black text-primary-foreground hover:bg-primary/90" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : `Tomar ${isCreditQueue ? 'crédito' : 'factura'}`}</Button>}
                        {canReleasePosQueue && queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-primary/40 text-xs font-black text-primary" onClick={() => void handleReleaseCashQueue(queue)} disabled={queueReleasingId !== null}>{queueReleasingId === queue.id ? 'Liberando…' : 'Liberar'}</Button>}
-                      {canPayPos && isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); }}>Cobrar ahora</Button>}
+                      {canApprovePosQueue && isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); }}>Cobrar ahora</Button>}
                     </div>
                   </div>
                 );
@@ -3082,7 +3082,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                           <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
                         )}
                         {payment.method === 'CHECK' && <Input className="mt-2" placeholder="Número de cheque *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
+                        {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
                         {isCardPaymentMethod(payment.method) && payment.bankAccountId && Number(payment.cardCommissionPercent || 0) > 0 && (
                           <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
                             <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
@@ -3181,7 +3181,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   </div>
                   {payment.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatCurrency(getCustomerFavorBase(document.customerId), baseCurrency)}. Puedes aplicar solo una parte.</p>}
                   {requiresPaymentReference(payment.method) && <Input className="mt-2" placeholder="Referencia obligatoria" value={payment.reference || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                  {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco de destino" />}
+                  {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco de destino" />}
                 </div>
               ))}
                {queueMixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => setQueuePayments((current) => [...current, paymentLine('CARD', 0, document.currency)])}>+ Agregar pago mixto</Button>}
@@ -3276,7 +3276,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           loadInitialData();
           setActiveSession(null);
         }}
-        permissionModule="RETAIL_POS"
+        permissionModule="RETAIL_CASH_CONTROL"
       />
     </div>
   );

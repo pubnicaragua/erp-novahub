@@ -42,6 +42,7 @@ interface TransferLocation {
   branchName?: string;
   businessUnitId?: string | null;
   clientTenantId?: string | null;
+  canUseAsSource?: boolean;
 }
 
 interface TransferItemDraft {
@@ -269,6 +270,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           branchName: branch.name,
           businessUnitId: branch.businessUnitId || warehouse.businessUnitId || null,
           clientTenantId: branch.id,
+          canUseAsSource: false,
         });
       }
     }
@@ -281,7 +283,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       // que pertenece a otra.
       if (selectedBranchId && warehouseBranchId && String(warehouseBranchId) !== String(selectedBranchId)) continue;
       seen.add(warehouse.id);
-      branchLocations.push({ id: warehouse.id, name: warehouse.name, kind: 'BODEGA', branchId: warehouseBranchId, branchName: 'Sucursal actual', clientTenantId: warehouseBranchId });
+      branchLocations.push({ id: warehouse.id, name: warehouse.name, kind: 'BODEGA', branchId: warehouseBranchId, branchName: 'Sucursal actual', clientTenantId: warehouseBranchId, canUseAsSource: true });
     }
     const corporateLocations = [...backendCorporateLocations, ...corporateWarehouses
       .filter((warehouse) => warehouse?.id && warehouse.isActive !== false)
@@ -291,19 +293,16 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         kind: 'ALMACEN_CORPORATIVO' as const,
         businessUnitId: warehouse.businessUnitId || null,
         clientTenantId: null,
+        canUseAsSource: true,
       }))];
     const allLocations = [...branchLocations, ...corporateLocations];
     return allLocations.filter((location, index) => allLocations.findIndex((candidate) => candidate.id === location.id) === index);
   }, [branches, warehouses, transferBranchWarehouses, corporateWarehouses, selectedBranchId]);
 
   const locationById = useMemo(() => new Map(transferLocations.map((location) => [location.id, location])), [transferLocations]);
-  const sourceBranchId = String(selectedBranchId || user?.clientTenantId || user?.tenantId || '');
   const sourceTransferLocations = useMemo(() => {
-    return transferLocations.filter((location) => (
-      location.kind === 'ALMACEN_CORPORATIVO'
-      || (sourceBranchId && String(location.branchId || location.clientTenantId || '') === sourceBranchId)
-    ));
-  }, [sourceBranchId, transferLocations]);
+    return transferLocations.filter((location) => location.canUseAsSource === true);
+  }, [transferLocations]);
   const selectedFromLocation = locationById.get(newTransfer.fromId);
 
   useEffect(() => {

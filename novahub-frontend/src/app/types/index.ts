@@ -1280,6 +1280,7 @@ export interface RoleManagement {
   name: string;
   description?: string;
   permissions: Permission[];
+  warehouseIds?: string[];
   color?: string;
   createdAt: string;
   updatedAt: string;

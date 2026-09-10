@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronsDown, ChevronsUp, CircleHelp, Edit2, Eye, ListChecks, Plus, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronsDown, ChevronsUp, CircleHelp, Edit2, Eye, ListChecks, Plus, ShieldCheck, Trash2, UserCog, Users, Warehouse } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,7 +14,7 @@ import { subscriptionsService } from '../../services/subscriptions.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { allowedModulesFromPermissions, getPermissionActionKeys, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
+import { allowedModulesFromPermissions, getPermissionActionKeys, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, serializePermissionActions, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
 import { HIDDEN_PERMISSION_MODULE_IDS, LEGACY_VIEW_PERMISSION_ALIASES, PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_MODULE_IDS } from '../../utils/sidebarPermissions';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
@@ -152,6 +152,14 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
   const [editingRole, setEditingRole] = useState<any | null>(null);
   const [viewingRole, setViewingRole] = useState<any | null>(null);
   const [assignedUsersRole, setAssignedUsersRole] = useState<any | null>(null);
+  const { data: warehouseCatalogData, isPending: warehouseCatalogLoading } = useTenantQuery<any[]>(
+    ['role-warehouse-catalog', tenantId],
+    async (signal) => asList(await rolesService.getWarehouses(signal)),
+    {
+      enabled: Boolean(tenantId && canViewRoles),
+      onError: (error) => toast.error(error.message || 'No se pudo cargar el catálogo de bodegas'),
+    },
+  );
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedViews, setExpandedViews] = useState<Record<string, boolean>>({});
   const [rolesLayout, setRolesLayout] = useState<ViewLayoutMode>('table');
@@ -172,8 +180,10 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       ? currentUser.enabledModules
       : [];
     const scope = new Set((enabledModulesData ?? fallback).map((module) => String(module || '').trim().toUpperCase()).filter(Boolean));
+    const hasSalesScope = scope.has('SALES') || [...scope].some((module) => module.startsWith('SALES_'));
     const hasScope = (moduleId: string) => scope.has(moduleId)
-      || (LEGACY_VIEW_PERMISSION_ALIASES[moduleId] || []).some((alias) => scope.has(String(alias).toUpperCase()));
+      || (LEGACY_VIEW_PERMISSION_ALIASES[moduleId] || []).some((alias) => scope.has(String(alias).toUpperCase()))
+      || (['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(moduleId) && hasSalesScope);
     const hasParentScope = (parent: string) => hasScope(parent)
       || [...scope].some((module) => module.startsWith(`${parent}_`));
 
@@ -189,11 +199,6 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       return hasParentScope(module.parent) && scope.has(module.parent);
     });
   }, [currentUser, enabledModulesData, tenantId]);
-
-  const rolePermissionModuleIds = useMemo(
-    () => new Set(rolePermissionModules.map((module: any) => String(module.id).toUpperCase())),
-    [rolePermissionModules],
-  );
 
   useEffect(() => {
     if (!roleHighlightRequest?.roleId) return;
@@ -229,6 +234,32 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
   const roles = teamData?.roles || [];
   const priceListCatalog = priceListCatalogData || [];
+  const warehouseCatalog = warehouseCatalogData || [];
+  const getRoleWarehouseIds = (role: any) => Array.isArray(role?.warehouseIds)
+    ? role.warehouseIds.filter((warehouseId: string) => warehouseCatalog.some((warehouse: any) => warehouse.id === warehouseId))
+    : warehouseCatalog.map((warehouse: any) => warehouse.id);
+  const roleWarehouseScopeIsComplete = (role: any) => warehouseCatalog.length > 0
+    && warehouseCatalog.every((warehouse: any) => getRoleWarehouseIds(role).includes(warehouse.id));
+
+  const toggleRoleWarehouse = (warehouseId: string) => {
+    if ((!canEditRoles && !canCreateRoles) || !warehouseId) return;
+    setEditingRole((current: any) => {
+      if (!current) return current;
+      const currentIds = new Set(getRoleWarehouseIds(current));
+      if (currentIds.has(warehouseId)) currentIds.delete(warehouseId);
+      else currentIds.add(warehouseId);
+      return { ...current, warehouseIds: [...currentIds] };
+    });
+  };
+
+  const toggleAllRoleWarehouses = () => {
+    if ((!canEditRoles && !canCreateRoles) || !warehouseCatalog.length) return;
+    setEditingRole((current: any) => {
+      if (!current) return current;
+      const nextIds = roleWarehouseScopeIsComplete(current) ? [] : warehouseCatalog.map((warehouse: any) => warehouse.id);
+      return { ...current, warehouseIds: nextIds };
+    });
+  };
 
   const load = async () => {
     try {
@@ -373,7 +404,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
   const openCreateRole = () => {
     if (!canCreateRoles) return;
-    setEditingRole({ name: '', description: '', permissions: emptyPermissions() });
+    setEditingRole({ name: '', description: '', permissions: emptyPermissions(), ...(warehouseCatalogLoading ? {} : { warehouseIds: warehouseCatalog.map((warehouse: any) => warehouse.id) }) });
     setViewingRole(null);
     collapseAll();
     setRoleView('editor');
@@ -391,14 +422,14 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
   const openEditRole = (role: any) => {
     if (!canEditRoles) return;
-    setEditingRole({ ...role, permissions: hydratePermissions(role) });
+    setEditingRole({ ...role, permissions: hydratePermissions(role), ...(Array.isArray(role.warehouseIds) ? { warehouseIds: role.warehouseIds } : {}) });
     setViewingRole(null);
     collapseAll();
     setRoleView('editor');
   };
 
   const openViewRole = (role: any) => {
-    setViewingRole({ ...role, permissions: hydratePermissions(role) });
+    setViewingRole({ ...role, permissions: hydratePermissions(role), ...(Array.isArray(role.warehouseIds) ? { warehouseIds: role.warehouseIds } : {}) });
     setEditingRole(null);
     collapseAll();
     setRoleView('preview');
@@ -470,18 +501,18 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         existing.write = Boolean(existing.write || permission.write);
         return result;
       }, []);
-      const permissions = mergedPermissions
-        .filter((permission: any) => rolePermissionModuleIds.has(String(permission.module || '').toUpperCase()))
-        .map((permission: any) => ({
-        ...permission,
-        write: !!(permission.create || permission.edit || permission.write),
-        ...Object.fromEntries(permissionActions.filter(({ key }) => key !== 'read').map(({ key }) => [key, permissionValue(permission, key)])),
-        }));
+      const permissions = serializePermissionActions(mergedPermissions)
+        // El catálogo visible puede estar cargando o usar un identificador
+        // histórico. El backend valida el alcance real de la sucursal; no
+        // descartamos aquí una vista que el usuario acaba de marcar.
+        .filter((permission: any) => !HIDDEN_PERMISSION_MODULE_IDS.has(String(permission.module || '').toUpperCase()))
+        .map((permission: any) => ({ ...permission }));
       const payload = {
         name,
         description: String(editingRole.description || '').trim(),
         permissions,
         allowedModules: allowedModulesFromPermissions(permissions),
+        warehouseIds: getRoleWarehouseIds(editingRole),
         clientTenantId: tenantId,
       };
       if (editingRole.id) await rolesService.update(editingRole.id, payload);
@@ -593,10 +624,12 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       {roleView === 'editor' && editingRole && <>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} disabled={roleSaving} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">{editingRole.id ? 'Editar rol' : 'Nuevo rol'}</h2><p className="truncate text-xs text-muted-foreground">Define el acceso de este rol dentro de {tenantName}.</p></div></div>
-          <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={closeRoleView} disabled={roleSaving}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
+          <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={closeRoleView} disabled={roleSaving}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving || warehouseCatalogLoading}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
         </div>
 
           <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><ShieldCheck className="size-4 text-primary" /> Datos del rol</CardTitle><CardDescription className="mt-1 text-xs">El nombre y la descripción ayudan a identificar el alcance del equipo.</CardDescription></CardHeader><CardContent className="grid min-w-0 gap-4 p-4 sm:p-6 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="role-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del rol</Label><Input id="role-name" data-tour="role-name" value={editingRole.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ej: Gerencia" className="h-11" /></div><div className="space-y-2"><Label htmlFor="role-description" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción (opcional)</Label><Input id="role-description" data-tour="role-description" value={editingRole.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe el alcance del rol" className="h-11" /></div>{editingRole.id && <div className="md:col-span-2"><AuditHistoryDisclosure entity="ROLE" entityId={String(editingRole.id)} createdAt={editingRole.createdAt} /></div>}</CardContent></Card>
+
+        <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Warehouse className="size-4 text-primary" /> Bodegas del rol</CardTitle><CardDescription className="mt-1 text-xs">Estas son las bodegas que recibirá un usuario al asignarle este rol. Después podrás ajustar las bodegas de cada usuario sin cambiar el rol.</CardDescription></CardHeader><CardContent className="space-y-3 p-4 sm:p-6"><div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs"><p className="font-bold text-primary">Módulos afectados por esta selección</p><p className="mt-1 leading-relaxed text-muted-foreground">Ventas, Compras, Inventario de Mercancías, Facturación por caja y Control de Caja.</p></div>{warehouseCatalogLoading ? <p className="rounded-xl border border-dashed border-border p-5 text-center text-xs text-muted-foreground">Cargando bodegas...</p> : warehouseCatalog.length === 0 ? <p className="rounded-xl border border-dashed border-border p-5 text-center text-xs text-muted-foreground">No hay bodegas activas en esta sucursal.</p> : <><div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3"><label className="flex cursor-pointer items-center gap-2 text-xs font-bold"><Checkbox checked={roleWarehouseScopeIsComplete(editingRole)} onCheckedChange={toggleAllRoleWarehouses} /> Todas las bodegas</label><Badge variant="outline" className="text-[10px]">{getRoleWarehouseIds(editingRole).length} de {warehouseCatalog.length}</Badge></div><div className="grid gap-2 sm:grid-cols-2">{warehouseCatalog.map((warehouse: any) => <label key={warehouse.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/50 bg-muted/20 p-3 text-xs"><Checkbox checked={getRoleWarehouseIds(editingRole).includes(warehouse.id)} onCheckedChange={() => toggleRoleWarehouse(warehouse.id)} /><span className="truncate">{warehouse.name}</span></label>)}</div></>}</CardContent></Card>
 
         <Card data-tour="role-permissions" className="min-w-0 border-border/50"><CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-sm font-black uppercase tracking-wider">Permisos</CardTitle><CardDescription className="mt-1 text-xs">Cada sección es un módulo y cada tarjeta es una vista o tab real. Despliega o contrae los módulos y sus vistas para definir el acceso.</CardDescription></div><div className="flex items-center gap-2"><Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{rolePermissionModules.length} módulos y vistas</Badge>{enabledModulesLoading && <span className="text-[10px] text-muted-foreground">Validando alcance…</span>}</div></div><div data-tour="role-permission-actions" className="flex flex-wrap items-center gap-2 border-t border-border/30 pt-3"><RolePermissionsTutorial mode="editor" /><Button type="button" variant="outline" size="sm" onClick={expandAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsDown className="size-3.5" /> Expandir todo</Button><Button type="button" variant="outline" size="sm" onClick={collapseAll} disabled={roleSaving} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ChevronsUp className="size-3.5" /> Contraer todo</Button><Button type="button" variant="secondary" size="sm" onClick={toggleAllPermissions} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wider"><ListChecks className="size-3.5" /> {isAllPermissionsEnabled() ? 'Desmarcar todo' : 'Marcar todo'}</Button><span className="text-[10px] text-muted-foreground">Puedes marcar una vista, un módulo o todos los permisos.</span></div></CardHeader><CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
            {Object.entries(groupedModules).map(([group, modules]) => {

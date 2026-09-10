@@ -255,7 +255,9 @@ function tenantAdminHasModuleEnabled(user: User, module: string): boolean {
   const normalized = String(module || '').toUpperCase();
   if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized)) return true;
   const enabledModules = new Set((user.enabledModules || []).map((item) => String(item).toUpperCase()));
-  return tenantPermissionSubscriptionCandidates(normalized).some((candidate) => enabledModules.has(candidate));
+  const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(normalized)
+    && [...enabledModules].some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
+  return cashViewHasSalesScope || tenantPermissionSubscriptionCandidates(normalized).some((candidate) => enabledModules.has(candidate));
 }
 
 export interface BranchInfo {
@@ -455,7 +457,11 @@ const createUserObject = (apiPayload: any): User => {
     'SUBSCRIPTIONS': 'suscripciones',
     'QA_CONSOLE': 'qa-console',
     'FORCE_SALES': 'fuerza-comercial',
-    'RETAIL_POS': 'ventas',
+    // Estas son vistas granulares de Ventas, no deben colisionar con la fila
+    // padre `ventas`; de lo contrario el permiso directo se descarta al
+    // construir la sesión y POS termina sin crear/cobrar.
+    'RETAIL_POS': 'RETAIL_POS',
+    'RETAIL_CASH_CONTROL': 'RETAIL_CASH_CONTROL',
     'FINANCING': 'financiamiento-pyme',
     'LEGAL': 'asesoria-legal',
     'HR_TRAINING': 'centro-capacitacion',
@@ -892,9 +898,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const groupModules = moduleGroupMap[module] || [];
     
     // HR es especial: buscar cualquier submódulo HR_*
+    const subscriptionCandidates = tenantPermissionSubscriptionCandidates(backendModuleName);
+    const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(backendModuleName)
+      && user.enabledModules.some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
     let isSubscribed = coreModules.includes(module)
       || isAdminControlModule
-      || user.enabledModules.includes(backendModuleName)
+      || cashViewHasSalesScope
+      || subscriptionCandidates.some((candidate) => user.enabledModules.includes(candidate))
       || groupModules.some(m => user.enabledModules.includes(m));
     
     if (module === 'rh' && !isSubscribed) {
@@ -1018,6 +1028,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Facturación por Caja y Control de Caja son vistas de Ventas. Algunos
+    // roles antiguos guardan la fila técnica RETAIL_POS/RETAIL_CASH_CONTROL
+    // en falso aunque el permiso padre SALES esté activo; para entrar a la
+    // vista de lectura debe prevalecer el módulo padre. Las acciones de
+    // operación (cobrar, cerrar, administrar, etc.) siguen usando la fila
+    // específica y no heredan este atajo.
+    if (action === 'view'
+      && ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(upperModule)
+      && !permission?.canView) {
+      const salesPermission = findPermission('SALES');
+      if (salesPermission?.canView === true) permission = salesPermission;
+    }
     if (!permission) return false;
     if (permission.canManage === true) return true;
     const legacyActionAllowed = (permission as any)[`can${action.charAt(0).toUpperCase()}${action.slice(1)}`] === true;
