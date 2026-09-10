@@ -87,7 +87,7 @@ export interface ManagerOverview {
 
 export interface ManagerUserActivityItem {
   id: string;
-  clientTenantId: string;
+  clientTenantId: string | null;
   userId?: string | null;
   module: string;
   entity: string;
@@ -97,6 +97,10 @@ export interface ManagerUserActivityItem {
   view?: string | null;
   actionType?: string | null;
   entityLabel?: string | null;
+  recordLabel?: string | null;
+  actorName?: string | null;
+  actorEmail?: string | null;
+  actorRole?: string | null;
   description?: string | null;
   result?: string | null;
   source?: string | null;
@@ -111,7 +115,7 @@ export interface ManagerUserActivityItem {
   details?: string | null;
   createdAt: string;
   user?: { id: string; name?: string | null; email?: string | null; role?: string | null } | null;
-  clientTenant?: { id: string; name: string } | null;
+  clientTenant?: { id: string; name: string; businessUnitId?: string | null; businessUnit?: { id: string; name: string } | null } | null;
 }
 
 export interface ManagerUserActivityResponse {
@@ -124,6 +128,7 @@ export interface ManagerUserActivityResponse {
 
 export interface ManagerUserActivityQuery {
   branchId?: string;
+  businessUnitId?: string;
   userId?: string;
   module?: string;
   action?: string;
@@ -426,6 +431,17 @@ export interface ManagerHrModuleResponse {
   data: any[];
   meta: { total: number; page: number; pageSize: number; totalPages: number };
   metrics: Record<string, any>;
+}
+
+export type ManagerOperationsModule = 'activities' | 'projects' | 'tickets' | 'documents' | 'restaurant' | 'logistics' | 'financing' | 'legal' | 'novachat' | 'support';
+
+export interface ManagerOperationsModuleResponse {
+  module: ManagerOperationsModule;
+  view: string;
+  data: any[];
+  meta: { total: number; page: number; pageSize: number; totalPages: number };
+  metrics: Record<string, any>;
+  filters?: { businessUnitId: string | null; branchId: string | null; branchIds: string[] };
 }
 
 export interface PlatformQuoteItem {
@@ -800,6 +816,8 @@ export const enterpriseGroupsService = {
       businessUnitId?: string;
       branchId?: string;
       status?: string;
+      accountType?: string;
+      currency?: string;
       search?: string;
       dateFrom?: string;
       dateTo?: string;
@@ -851,6 +869,28 @@ export const enterpriseGroupsService = {
   ) =>
     api.get<ManagerHrModuleResponse>(
       `/enterprise-groups/manager/${groupId}/hr/module`,
+      { params, signal },
+    ),
+  getOperationsModule: (
+    groupId: string,
+    params: {
+      module: ManagerOperationsModule;
+      view: string;
+      businessUnitId?: string;
+      branchId?: string;
+      status?: string;
+      search?: string;
+      type?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      page?: number;
+      pageSize?: number;
+      report?: boolean;
+    },
+    signal?: AbortSignal,
+  ) =>
+    api.get<ManagerOperationsModuleResponse>(
+      `/enterprise-groups/manager/${groupId}/operations/module`,
       { params, signal },
     ),
   importSharedInventory: (groupId: string, body: any) =>
@@ -1029,9 +1069,9 @@ export const enterpriseGroupsService = {
       `/enterprise-groups/manager/${groupId}/accounting/consolidated/branch-comparison`,
       { params: { dateFrom, dateTo }, signal },
     ),
-  getTransfers: (groupId: string, branchId?: string, signal?: AbortSignal) =>
+  getTransfers: (groupId: string, branchId?: string, signal?: AbortSignal, businessUnitId?: string) =>
     api.get<any[]>(`/enterprise-groups/manager/${groupId}/transfers`, {
-      params: branchId ? { branchId } : undefined,
+      params: branchId || businessUnitId ? { branchId, businessUnitId } : undefined,
       signal,
     }),
   updateTransferStatus: (groupId: string, transferId: string, status: string) =>

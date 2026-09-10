@@ -44,4 +44,5 @@ export const brandingService = {
     return normalizeBrandingResponse(response);
   },
   update: (data: Partial<Branding> & { userTheme?: Branding['userTheme'] }) => api.post('/branding/update', data),
+  updateTheme: (userTheme: Branding['userTheme']) => api.post('/branding/theme', { userTheme }),
 };

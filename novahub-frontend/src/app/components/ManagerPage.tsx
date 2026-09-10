@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
-import { Activity, ArrowRight, ArrowRightLeft, ArrowUpRight, BarChart3, Building2, Boxes, ChevronLeft, ChevronRight, Cloud, Download, FileStack, KeyRound, Landmark, MapPin, Package, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, Users, UserCheck, UserX, Warehouse, RefreshCw, Tags, X } from 'lucide-react';
+import { Activity, ArrowRightLeft, ArrowUpRight, BarChart3, Building2, Boxes, ChevronLeft, ChevronRight, Cloud, Download, FileStack, KeyRound, Landmark, MapPin, Package, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, Users, UserCheck, UserX, Warehouse, RefreshCw, Tags, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -10,8 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery } from '../hooks/useTenantQuery';
 import { useImpersonation } from '../contexts/ImpersonationContext';
-import { enterpriseGroupsService, type ManagerOverview, type ManagerUserActivityResponse } from '../services/enterprise-groups.service';
-import { MANAGER_SECTIONS, ManagerShell, type ManagerSection } from './ManagerShell';
+import { enterpriseGroupsService, type ManagerOverview, type ManagerOperationsModule, type ManagerUserActivityResponse } from '../services/enterprise-groups.service';
+import { MANAGER_SECTIONS, ManagerShell, type ManagerSection, type ManagerSettingsView } from './ManagerShell';
 import { ManagerInventoryModule } from './manager/ManagerInventoryModule';
 import type { ManagerInventoryView } from './manager/manager-inventory.types';
 import { ManagerSalesModule } from './manager/ManagerSalesModule';
@@ -26,6 +26,7 @@ import { ManagerReportsModule } from './manager/ManagerReportsModule';
 import type { ManagerReportsView } from './manager/manager-reports.types';
 import { ManagerHRModule } from './manager/ManagerHRModule';
 import type { ManagerHrView } from './manager/manager-hr.types';
+import { ManagerOperationsModule as ManagerOperationsView } from './manager/ManagerOperationsModule';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { BrandLogo } from './BrandLogo';
 import { InventoryDetailPanel } from './inventory/InventoryDetailPanel';
@@ -38,6 +39,7 @@ import { buildDownloadFileName } from '../utils/exportFileNames';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { getPasswordError } from '../utils/accountValidation';
 import { PasswordRequirements } from './PasswordRequirements';
+import { auditActionLabel, auditDescriptionLabel, auditModuleLabel, auditRoleLabel } from './AuditoriaPage';
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
@@ -77,6 +79,7 @@ async function readSpreadsheet(file: File) {
 export function ManagerPage() {
   const { displayMode, baseCurrency } = useCurrency();
   const [section, setSection] = useState<ManagerSection>('overview');
+  const [settingsView, setSettingsView] = useState<ManagerSettingsView>('theme');
   const [inventoryView, setInventoryView] = useState<ManagerInventoryView>('products');
   const [salesView, setSalesView] = useState<ManagerSalesView>('overview');
   const [purchasesView, setPurchasesView] = useState<ManagerPurchasesView>('overview');
@@ -84,6 +87,7 @@ export function ManagerPage() {
   const [accountingView, setAccountingView] = useState<ManagerAccountingView>('overview');
   const [reportView, setReportView] = useState<ManagerReportsView>('overview');
   const [hrView, setHrView] = useState<ManagerHrView>('overview');
+  const [operationsModule, setOperationsModule] = useState<ManagerOperationsModule>('activities');
   const [transferToApprove, setTransferToApprove] = useState<any | null>(null);
   const [selectedBusinessUnitId, setSelectedBusinessUnitId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
@@ -102,9 +106,7 @@ export function ManagerPage() {
   const [managerPermissionState, setManagerPermissionState] = useState<ManagerPermissionState>(defaultManagerPermissionState);
   const [editingBranchUser, setEditingBranchUser] = useState<any | null>(null);
   const [usersActivitySearch, setUsersActivitySearch] = useState('');
-  const [usersActivityUserId, setUsersActivityUserId] = useState('');
   const [usersActivityModule, setUsersActivityModule] = useState('');
-  const [usersActivityAction, setUsersActivityAction] = useState('');
   const [usersActivityPage, setUsersActivityPage] = useState(1);
   const [catalogSourceBranchId, setCatalogSourceBranchId] = useState('');
   const [catalogProductIds, setCatalogProductIds] = useState<string[]>([]);
@@ -124,15 +126,26 @@ export function ManagerPage() {
   const groups = groupsQuery.data || [];
   const groupId = groups[0]?.id || '';
   const group = groups[0];
+  const managerAccess = group?.managerAccess;
   const businessUnits = group?.businessUnits || [];
   const branchOptions = useMemo(
     () => (group?.branches || []).filter((branch) => branch.isActive !== false && (!selectedBusinessUnitId || branch.businessUnitId === selectedBusinessUnitId)),
     [group?.branches, selectedBusinessUnitId],
   );
-  const allowedSections = useMemo(() => getAllowedManagerSections(group?.managerAccess), [group?.managerAccess]);
+  const allowedSections = useMemo(() => getAllowedManagerSections(managerAccess), [managerAccess]);
+  const allowedOperationsModules = useMemo<ManagerOperationsModule[]>(() => {
+    const all: ManagerOperationsModule[] = ['activities', 'projects', 'tickets', 'documents', 'restaurant', 'logistics', 'financing', 'legal', 'novachat', 'support'];
+    if (!managerAccess || managerAccess.isOwner) return all;
+    const permissionByModule: Record<ManagerOperationsModule, string> = {
+      activities: 'MANAGER_ACTIVITIES', projects: 'MANAGER_PROJECTS', tickets: 'MANAGER_TICKETS', documents: 'MANAGER_DOCUMENTS',
+      restaurant: 'MANAGER_RESTAURANT', logistics: 'MANAGER_LOGISTICS', financing: 'MANAGER_FINANCING', legal: 'MANAGER_LEGAL', novachat: 'MANAGER_NOVACHAT', support: 'MANAGER_SUPPORT',
+    };
+    return all.filter((module) => managerAccessAllows(managerAccess, permissionByModule[module]));
+  }, [managerAccess]);
   const canEnterBranch = useMemo(() => Boolean(group?.managerAccess?.canEdit) || managerAccessAllows(group?.managerAccess, 'BRANCH_OPERATIONS') || managerAccessAllows(group?.managerAccess, 'MANAGER_SALES'), [group?.managerAccess]);
   const canEditBranchUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'edit'), [group?.managerAccess]);
   const canManageManagersFromUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_MANAGERS', 'manage'), [group?.managerAccess]);
+  const canViewManagerAudit = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'read'), [group?.managerAccess]);
   const canApproveManagerTransfers = useMemo(() => {
     const access = group?.managerAccess;
     const canCreateTransfer = managerAccessAllowsAction(access, 'MANAGER_TRANSFERS', 'create');
@@ -142,13 +155,10 @@ export function ManagerPage() {
 
   useEffect(() => {
     if (selectedBusinessUnitId && !businessUnits.some((unit) => unit.id === selectedBusinessUnitId && unit.isActive !== false)) setSelectedBusinessUnitId('');
-    if ((section === 'inventory' || section === 'finances' || section === 'accounting') && !selectedBusinessUnitId) {
-      const firstActiveUnit = businessUnits.find((unit) => unit.isActive !== false && (group?.branches || []).some((branch) => branch.isActive !== false && branch.businessUnitId === unit.id));
-      if (firstActiveUnit) setSelectedBusinessUnitId(firstActiveUnit.id);
-    }
     if (selectedBranchId && !branchOptions.some((branch) => branch.id === selectedBranchId)) setSelectedBranchId('');
     if (!allowedSections.includes(section) && allowedSections[0]) setSection(allowedSections[0]);
-  }, [groupId, selectedBusinessUnitId, selectedBranchId, businessUnits, group?.branches, branchOptions, allowedSections, section]);
+    if (allowedOperationsModules.length && !allowedOperationsModules.includes(operationsModule)) setOperationsModule(allowedOperationsModules[0]);
+  }, [groupId, selectedBusinessUnitId, selectedBranchId, businessUnits, group?.branches, branchOptions, allowedSections, section, allowedOperationsModules, operationsModule]);
 
   const effectiveSelectedBranchId = selectedBranchId && branchOptions.some((branch) => branch.id === selectedBranchId) ? selectedBranchId : '';
 
@@ -180,20 +190,19 @@ export function ManagerPage() {
   const usersQuery = useTenantQuery(
     ['manager-users', groupId, effectiveSelectedBranchId || 'all'],
     (signal) => enterpriseGroupsService.getUsers(groupId, effectiveSelectedBranchId || undefined, signal),
-    { enabled: Boolean(groupId) && section === 'users' },
+    { enabled: Boolean(groupId) && (section === 'users' || (section === 'settings' && settingsView === 'audit')) },
   );
   const usersActivityQuery = useTenantQuery(
-    ['manager-users-activity', groupId, effectiveSelectedBranchId || 'all', usersActivityPage, usersActivitySearch, usersActivityUserId, usersActivityModule, usersActivityAction],
+    ['manager-users-activity', groupId, selectedBusinessUnitId || 'all', effectiveSelectedBranchId || 'all', usersActivityPage, usersActivitySearch, usersActivityModule],
     (signal) => enterpriseGroupsService.getUserActivity(groupId, {
       branchId: effectiveSelectedBranchId || undefined,
+      businessUnitId: selectedBusinessUnitId || undefined,
       page: usersActivityPage,
       pageSize: 25,
       search: usersActivitySearch || undefined,
-      userId: usersActivityUserId || undefined,
       module: usersActivityModule || undefined,
-      action: usersActivityAction || undefined,
     }, signal),
-    { enabled: Boolean(groupId) && section === 'users' },
+    { enabled: Boolean(groupId) && (section === 'users' || (section === 'settings' && settingsView === 'audit')) },
   );
   const managersQuery = useTenantQuery(
     ['manager-assignments', groupId],
@@ -295,8 +304,8 @@ export function ManagerPage() {
     { enabled: Boolean(groupId) && section === 'consolidated' },
   );
   const transfersQuery = useTenantQuery(
-    ['manager-transfers', groupId],
-    (signal) => enterpriseGroupsService.getTransfers(groupId, undefined, signal),
+    ['manager-transfers', groupId, selectedBusinessUnitId || 'all', effectiveSelectedBranchId || 'all'],
+    (signal) => enterpriseGroupsService.getTransfers(groupId, effectiveSelectedBranchId || undefined, signal, selectedBusinessUnitId || undefined),
     { enabled: Boolean(groupId) && section === 'transfers' },
   );
   const approveTransferMutation = useMutation({
@@ -347,6 +356,13 @@ export function ManagerPage() {
       hrView={hrView}
       onHrViewChange={setHrView}
       allowedSections={allowedSections}
+      settingsView={settingsView}
+      onSettingsViewChange={(view) => {
+        if (view === 'audit' && !canViewManagerAudit) return;
+        setSettingsView(view);
+        setSection('settings');
+      }}
+      canViewAudit={canViewManagerAudit}
       selectedBranchId={effectiveSelectedBranchId}
       onBranchChange={(branchId) => { setSelectedBranchId(branchId); setUsersActivityPage(1); }}
       reportCurrency={activeManagerCurrency}
@@ -370,7 +386,9 @@ export function ManagerPage() {
         {section === 'accounting' && allowedSections.includes('accounting') && <ManagerAccountingModule view={accountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} />}
         {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={reportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} />}
         {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={hrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} />}
-        {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={usersActivityQuery.data} activityLoading={usersActivityQuery.isLoading} activityError={usersActivityQuery.error} activitySearch={usersActivitySearch} activityUserId={usersActivityUserId} activityModule={usersActivityModule} activityAction={usersActivityAction} activityPage={usersActivityPage} setActivitySearch={(value) => { setUsersActivitySearch(value); setUsersActivityPage(1); }} setActivityUserId={(value) => { setUsersActivityUserId(value); setUsersActivityPage(1); }} setActivityModule={(value) => { setUsersActivityModule(value); setUsersActivityPage(1); }} setActivityAction={(value) => { setUsersActivityAction(value); setUsersActivityPage(1); }} onActivityPageChange={setUsersActivityPage} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
+        {section === 'operations' && allowedSections.includes('operations') && <ManagerOperationsView module={operationsModule} onModuleChange={setOperationsModule} allowedModules={allowedOperationsModules} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} />}
+        {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={usersActivityQuery.data} activityLoading={usersActivityQuery.isLoading} activityError={usersActivityQuery.error} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={(value) => { setUsersActivitySearch(value); setUsersActivityPage(1); }} setActivityModule={(value) => { setUsersActivityModule(value); setUsersActivityPage(1); }} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={(value) => { setSelectedBusinessUnitId(value); setSelectedBranchId(''); setUsersActivityPage(1); }} setActivityBranchId={(value) => { setSelectedBranchId(value); setUsersActivityPage(1); }} onActivityPageChange={setUsersActivityPage} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
+        {section === 'settings' && settingsView === 'audit' && canViewManagerAudit && <UsersContent auditOnly data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={usersActivityQuery.data} activityLoading={usersActivityQuery.isLoading} activityError={usersActivityQuery.error} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={(value) => { setUsersActivitySearch(value); setUsersActivityPage(1); }} setActivityModule={(value) => { setUsersActivityModule(value); setUsersActivityPage(1); }} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={(value) => { setSelectedBusinessUnitId(value); setSelectedBranchId(''); setUsersActivityPage(1); }} setActivityBranchId={(value) => { setSelectedBranchId(value); setUsersActivityPage(1); }} onActivityPageChange={setUsersActivityPage} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={() => undefined} togglingUserId="" onCreateManager={() => undefined} />}
         {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
         {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
         {section === 'transfers' && <TransfersContent data={transfersQuery.data || []} loading={transfersQuery.isLoading} canApprove={canApproveManagerTransfers} approvingId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApprove={setTransferToApprove} />}
@@ -402,7 +420,7 @@ export function ManagerPage() {
 
 function defaultManagerPermissionState(): ManagerPermissionState {
   const state = emptyManagerPermissionState();
-  ['MANAGER_OVERVIEW', 'MANAGER_SALES', 'MANAGER_PURCHASES', 'MANAGER_INVENTORY', 'MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_REPORTS', 'MANAGER_HR', 'MANAGER_CONSOLIDATED', 'MANAGER_TRANSFERS', 'MANAGER_CATALOG', 'MANAGER_USERS', 'MANAGER_WAREHOUSES'].forEach((module) => { state[module] = 'READ'; });
+  ['MANAGER_OVERVIEW', 'MANAGER_SALES', 'MANAGER_PURCHASES', 'MANAGER_INVENTORY', 'MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_REPORTS', 'MANAGER_HR', 'MANAGER_ACTIVITIES', 'MANAGER_PROJECTS', 'MANAGER_TICKETS', 'MANAGER_DOCUMENTS', 'MANAGER_RESTAURANT', 'MANAGER_LOGISTICS', 'MANAGER_FINANCING', 'MANAGER_LEGAL', 'MANAGER_NOVACHAT', 'MANAGER_SUPPORT', 'MANAGER_CONSOLIDATED', 'MANAGER_TRANSFERS', 'MANAGER_CATALOG', 'MANAGER_USERS', 'MANAGER_WAREHOUSES'].forEach((module) => { state[module] = 'READ'; });
   return state;
 }
 
@@ -414,7 +432,8 @@ const MANAGER_SECTION_MODULES: Partial<Record<ManagerSection, string>> = {
   finances: 'MANAGER_FINANCE',
   accounting: 'MANAGER_ACCOUNTING',
   reports: 'MANAGER_REPORTS',
-  hr: 'MANAGER_HR',
+hr: 'MANAGER_HR',
+  operations: 'MANAGER_ACTIVITIES',
   consolidated: 'MANAGER_CONSOLIDATED',
   transfers: 'MANAGER_TRANSFERS',
   catalog: 'MANAGER_CATALOG',
@@ -435,6 +454,9 @@ function getAllowedManagerSections(access?: ManagerOverview['group']['managerAcc
     }
     if (item.id === 'accounting') {
       return ['MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED'].some((module) => managerPermissionGranted(permissions, module));
+    }
+    if (item.id === 'operations') {
+      return ['MANAGER_ACTIVITIES', 'MANAGER_PROJECTS', 'MANAGER_TICKETS', 'MANAGER_DOCUMENTS', 'MANAGER_RESTAURANT', 'MANAGER_LOGISTICS', 'MANAGER_FINANCING', 'MANAGER_LEGAL', 'MANAGER_NOVACHAT', 'MANAGER_SUPPORT'].some((module) => managerPermissionGranted(permissions, module));
     }
     const module = MANAGER_SECTION_MODULES[item.id];
     return managerPermissionGranted(permissions, module);
@@ -592,48 +614,21 @@ function AccountingContent({ data, loading, units, branches, importUnitId, setIm
   return <div className="space-y-6"><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Landmark className="size-5 text-primary" /> Propagar plan de cuentas por rubro</CardTitle><p className="text-sm text-muted-foreground">Los códigos se emparejan en cada sucursal; los saldos y cuentas adicionales existentes se conservan.</p></CardHeader><CardContent className="min-w-0 space-y-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><select value={importUnitId} onChange={(event) => { setImportUnitId(event.target.value); setImportBranchIds([]); }} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value="">Seleccionar rubro</option>{units.filter((unit) => unit.isActive !== false).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select><div className="flex min-w-0 gap-2"><label className="flex h-10 min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xl border border-dashed border-border px-3 text-sm font-semibold hover:bg-muted/40"><input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="sr-only" />{importFileName || 'Seleccionar Excel/CSV'}</label>{importFileName && <Button type="button" variant="ghost" size="sm" className="h-10 shrink-0 rounded-xl px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={clearImportFile} disabled={importing}><X className="mr-1 size-3.5" />Quitar</Button>}</div></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{targetBranches.map((branch) => <label key={branch.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-border/60 p-3 text-sm"><input type="checkbox" checked={importBranchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span></label>)}{!importUnitId && <p className="text-xs text-muted-foreground">Selecciona un rubro para listar sus sucursales.</p>}</div>{importRows.length > 0 && <div data-import-preview-horizontal-scroller="true" className="overflow-x-auto rounded-2xl border border-border/60 scrollbar-overlay"><div className="min-w-[620px]"><div className="grid grid-cols-[minmax(120px,1fr)_minmax(220px,2fr)_minmax(140px,1fr)_minmax(120px,1fr)] gap-3 border-b border-border/50 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><span>Código</span><span>Nombre</span><span>Tipo</span><span>Padre</span></div><VirtualizedImportList count={importRows.length} estimateSize={38} className="h-64" renderItem={(index) => { const row = importRows[index]; return <div className="grid grid-cols-[minmax(120px,1fr)_minmax(220px,2fr)_minmax(140px,1fr)_minmax(120px,1fr)] gap-3 border-b border-border/30 px-3 py-2 text-xs"><span className="truncate font-mono">{String(row.codigo ?? row.code ?? '-')}</span><span className="truncate">{String(row.nombre ?? row.name ?? '-')}</span><span className="truncate">{String(row.tipo_cuenta ?? row.type ?? '-')}</span><span className="truncate">{String(row.codigo_padre ?? row.parentCode ?? '-')}</span></div>; }} /></div><p className="px-3 py-2 text-xs text-muted-foreground">Vista previa completa: {importRows.length} cuenta(s). La propagación es atómica; solo se dibujan las filas visibles.</p></div>}<Button className="w-full rounded-xl" disabled={!importUnitId || !importBranchIds.length || !importRows.length || importing} onClick={onImport}>{importing ? 'Propagando plan...' : 'Propagar plan a sucursales seleccionadas'}</Button></CardContent></Card><div className="grid grid-cols-1 gap-6 xl:grid-cols-2"><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Landmark className="size-5 text-primary" /> Catálogo contable consolidado</CardTitle></CardHeader><CardContent>{loading ? <div className="p-8 text-center text-muted-foreground">Cargando contabilidad...</div> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Cuenta</TableHead><TableHead>Sucursal</TableHead><TableHead className="text-right">Saldo</TableHead></TableRow></TableHeader><TableBody>{(data?.accounts || []).map((account, index) => <TableRow key={`${account.clientTenantId}-${account.code}-${index}`}><TableCell className="font-mono text-primary">{account.code}</TableCell><TableCell>{account.name}</TableCell><TableCell>{account.clientTenant?.name || account.clientTenantId}</TableCell><TableCell className="text-right font-bold">{formatNumber(account.balance)}</TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Últimos movimientos</CardTitle></CardHeader><CardContent><div className="space-y-2">{(data?.transactions || []).slice(0, 12).map((transaction) => <div key={transaction.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3 text-xs"><div className="min-w-0"><p className="truncate text-sm font-semibold">{transaction.description}</p><p className="text-xs text-muted-foreground">{transaction.clientTenant?.name} · {transaction.account?.code}</p></div><div className="shrink-0 text-right tabular-nums"><p className="text-emerald-500">D {formatNumber(transaction.debit)}</p><p className="text-rose-500">C {formatNumber(transaction.credit)}</p></div></div>)}</div></CardContent></Card></div></div>;
 }
 
-const AUDIT_ACTION_LABELS: Record<string, string> = {
-  CREATE: 'Creó',
-  UPDATE: 'Actualizó',
-  DELETE: 'Eliminó',
-  PAYMENT: 'Registró pago',
-  STATUS_CHANGE: 'Cambió estado',
-  INVENTORY_AUDIT: 'Auditó inventario',
-  MANAGER_UPDATE_USER: 'Actualizó usuario',
-  MANAGER_DEACTIVATE_USER: 'Inhabilitó usuario',
-  IMPERSONATE_ENTER: 'Ingresó a sucursal',
-};
+const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
+const TECHNICAL_TEXT_PATTERN = /(endpoint|metadata|correlation|user.?agent|ip.?address|https?:\/\/|\/api\/|\b(?:GET|POST|PUT|PATCH|DELETE)\b)/i;
 
-function auditLabel(value: unknown) {
-  const raw = String(value || '').trim().toUpperCase();
-  if (!raw) return 'Sin identificar';
-  return AUDIT_ACTION_LABELS[raw] || raw.toLowerCase().split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+function activityRecordLabel(item: any) {
+  const value = item.recordLabel || item.entityLabel;
+  if (value && !UUID_PATTERN.test(String(value).trim()) && !TECHNICAL_TEXT_PATTERN.test(String(value).trim())) return String(value).trim();
+  return 'Registro de actividad';
 }
 
-function auditValue(value: unknown) {
-  if (value === null || value === undefined || value === '') return '—';
-  if (typeof value === 'string') return value;
-  try { return JSON.stringify(value); } catch { return String(value); }
+function activityDescription(item: any) {
+  return auditDescriptionLabel(item);
 }
 
-function formatAuditDetails(details: unknown) {
-  if (!details) return 'Sin detalle adicional';
-  let parsed: any = details;
-  if (typeof details === 'string') {
-    try { parsed = JSON.parse(details); } catch { return details; }
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return auditValue(parsed);
-  const changes = parsed.changes;
-  if (changes && typeof changes === 'object' && !Array.isArray(changes)) {
-    const changeSummary = Object.entries(changes).map(([key, value]: [string, any]) => {
-      if (value && typeof value === 'object' && ('from' in value || 'to' in value)) return `${auditLabel(key)}: ${auditValue(value.from)} → ${auditValue(value.to)}`;
-      return `${auditLabel(key)}: ${auditValue(value)}`;
-    });
-    if (changeSummary.length) return changeSummary.join(' · ');
-  }
-  const hiddenKeys = new Set(['groupId', 'managerId', 'managerName', 'targetUserId']);
-  const entries = Object.entries(parsed).filter(([key]) => !hiddenKeys.has(key)).slice(0, 4);
-  return entries.length ? entries.map(([key, value]) => `${auditLabel(key)}: ${auditValue(value)}`).join(' · ') : 'Sin detalle adicional';
+function activityActorName(item: any) {
+  return item.user?.name || item.actorName || item.user?.email || item.actorEmail || 'Sistema';
 }
 
 function auditTone(action: unknown) {
@@ -644,7 +639,8 @@ function auditTone(action: unknown) {
   return 'border-primary/20 bg-primary/10 text-primary';
 }
 
-function UsersContent({ data, loading, error, activity, activityLoading, activityError, activitySearch, activityUserId, activityModule, activityAction, activityPage, setActivitySearch, setActivityUserId, setActivityModule, setActivityAction, onActivityPageChange, canEditUsers, canManageManagers, onEditUser, onToggleUser, togglingUserId, onCreateManager }: {
+function UsersContent({ auditOnly = false, data, loading, error, activity, activityLoading, activityError, activitySearch, activityModule, activityPage, setActivitySearch, setActivityModule, activityBusinessUnitId, activityBranchId, activityBusinessUnits, activityBranches, setActivityBusinessUnitId, setActivityBranchId, onActivityPageChange, canEditUsers, canManageManagers, onEditUser, onToggleUser, togglingUserId, onCreateManager }: {
+  auditOnly?: boolean;
   data: any[];
   loading: boolean;
   error?: Error | null;
@@ -652,14 +648,16 @@ function UsersContent({ data, loading, error, activity, activityLoading, activit
   activityLoading: boolean;
   activityError?: Error | null;
   activitySearch: string;
-  activityUserId: string;
   activityModule: string;
-  activityAction: string;
   activityPage: number;
   setActivitySearch: (value: string) => void;
-  setActivityUserId: (value: string) => void;
   setActivityModule: (value: string) => void;
-  setActivityAction: (value: string) => void;
+  activityBusinessUnitId: string;
+  activityBranchId: string;
+  activityBusinessUnits: Array<{ id: string; name: string; isActive?: boolean }>;
+  activityBranches: Array<{ id: string; name: string; businessUnitId?: string | null }>;
+  setActivityBusinessUnitId: (value: string) => void;
+  setActivityBranchId: (value: string) => void;
   onActivityPageChange: (value: number) => void;
   canEditUsers: boolean;
   canManageManagers: boolean;
@@ -669,28 +667,20 @@ function UsersContent({ data, loading, error, activity, activityLoading, activit
   onCreateManager: () => void;
 }) {
   const activityItems = activity?.items || [];
-  const activityUsers = useMemo(() => {
-    const users = new Map<string, { id: string; name: string; email?: string }>();
-    [...data, ...activityItems.map((item) => item.user).filter(Boolean)].forEach((user: any) => {
-      if (user?.id) users.set(user.id, { id: user.id, name: user.name || user.email || 'Usuario', email: user.email });
-    });
-    return [...users.values()].sort((left, right) => left.name.localeCompare(right.name, 'es'));
-  }, [data, activityItems]);
   const activityModules = useMemo(() => [...new Set(activityItems.map((item) => item.module).filter(Boolean))].sort(), [activityItems]);
-  const activityActions = useMemo(() => [...new Set(activityItems.map((item) => item.action).filter(Boolean))].sort(), [activityItems]);
   const totalActivity = Number(activity?.total || 0);
   const activityStart = totalActivity ? ((activity?.page || activityPage) - 1) * (activity?.pageSize || 25) + 1 : 0;
   const activityEnd = totalActivity ? Math.min(activityStart + (activity?.items.length || 0) - 1, totalActivity) : 0;
   const formatActivityDate = (value: string) => new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
   const clearActivityFilters = () => {
     setActivitySearch('');
-    setActivityUserId('');
     setActivityModule('');
-    setActivityAction('');
+    setActivityBusinessUnitId('');
+    setActivityBranchId('');
   };
 
   return <div className="space-y-6">
-    <Card className="rounded-3xl border-border/60">
+    {!auditOnly && <Card className="rounded-3xl border-border/60">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Users className="size-5 text-primary" /> Recuento general de usuarios</CardTitle>
@@ -712,15 +702,15 @@ function UsersContent({ data, loading, error, activity, activityLoading, activit
           </TableRow>;
         })}</TableBody></Table>}
       </CardContent>
-    </Card>
+    </Card>}
 
-    <Card className="rounded-3xl border-primary/20 bg-primary/[0.025]">
+    <Card className="rounded-3xl border-border/60 bg-card">
       <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Activity className="size-5 text-primary" /> Auditoría consolidada</CardTitle>
           <p className="text-sm text-muted-foreground">Logs inmutables de las sucursales dentro de tu alcance autorizado.</p>
         </div>
-        <Button type="button" variant="outline" className="w-full rounded-xl sm:w-auto" disabled={!activityItems.length} onClick={() => downloadCsv('manager-usuarios-actividad.csv', activityItems.map((item) => ({ fecha: formatActivityDate(item.createdAt), usuario: item.user?.name || item.user?.email || 'Sistema', accion: auditLabel(item.action), modulo: auditLabel(item.module), entidad: auditLabel(item.entity), sucursal: item.clientTenant?.name || '—', detalle: formatAuditDetails(item.details) })))}><Download className="mr-2 size-4" /> Exportar página</Button>
+         <Button type="button" variant="outline" className="w-full rounded-xl sm:w-auto" disabled={!activityItems.length} onClick={() => downloadCsv('manager-usuarios-actividad.csv', activityItems.map((item) => ({ fecha: formatActivityDate(item.createdAt), autor: activityActorName(item), rubro: item.clientTenant?.businessUnit?.name || '—', sucursal: item.clientTenant?.name || '—', modulo: auditModuleLabel(item.module), accion: auditActionLabel(item.action), registro: activityRecordLabel(item), resultado: item.result === 'SUCCESS' ? 'Correcto' : 'Fallido', descripcion: activityDescription(item) })))}><Download className="mr-2 size-4" /> Exportar página</Button>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-2xl border border-border/60 bg-background/70 p-3">
@@ -728,17 +718,17 @@ function UsersContent({ data, loading, error, activity, activityLoading, activit
             <label className="space-y-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground md:col-span-2 xl:col-span-1">Buscar acción
               <span className="relative block"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><input value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} placeholder="Módulo, usuario o detalle" className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-9 text-sm font-normal normal-case tracking-normal outline-none focus:border-primary" />{activitySearch && <button type="button" aria-label="Limpiar búsqueda" onClick={() => setActivitySearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-muted-foreground hover:bg-muted"><X className="size-3.5" /></button>}</span>
             </label>
-            <label className="space-y-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground">Usuario
-              <select value={activityUserId} onChange={(event) => setActivityUserId(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal normal-case tracking-normal"><option value="">Todos los usuarios</option>{activityUsers.map((user) => <option key={user.id} value={user.id}>{user.name}{user.email ? ` · ${user.email}` : ''}</option>)}</select>
+            <label className="space-y-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground">Rubro
+              <select aria-label="Filtrar rubro en auditoría" value={activityBusinessUnitId} onChange={(event) => setActivityBusinessUnitId(event.target.value)} className="h-10 max-w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"><option value="">Todos los rubros</option>{activityBusinessUnits.filter((unit) => unit.isActive !== false).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select>
+            </label>
+            <label className="space-y-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursal
+              <select aria-label="Filtrar sucursal en auditoría" value={activityBranchId} onChange={(event) => setActivityBranchId(event.target.value)} disabled={!activityBusinessUnitId} className="h-10 max-w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"><option value="">{activityBusinessUnitId ? 'Todas las sucursales' : 'Selecciona un rubro'}</option>{activityBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select>
             </label>
             <label className="space-y-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground">Módulo
-              <select value={activityModule} onChange={(event) => setActivityModule(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal normal-case tracking-normal"><option value="">Todos los módulos</option>{activityModules.map((module) => <option key={module} value={module}>{auditLabel(module)}</option>)}{activityModule && !activityModules.includes(activityModule) && <option value={activityModule}>{auditLabel(activityModule)}</option>}</select>
-            </label>
-            <label className="space-y-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground">Acción
-              <select value={activityAction} onChange={(event) => setActivityAction(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal normal-case tracking-normal"><option value="">Todas las acciones</option>{activityActions.map((action) => <option key={action} value={action}>{auditLabel(action)}</option>)}{activityAction && !activityActions.includes(activityAction) && <option value={activityAction}>{auditLabel(activityAction)}</option>}</select>
+              <select value={activityModule} onChange={(event) => setActivityModule(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal normal-case tracking-normal"><option value="">Todos los módulos</option>{activityModules.map((module) => <option key={module} value={module}>{auditModuleLabel(module)}</option>)}{activityModule && !activityModules.includes(activityModule) && <option value={activityModule}>{auditModuleLabel(activityModule)}</option>}</select>
             </label>
           </div>
-          {(activitySearch || activityUserId || activityModule || activityAction) && <button type="button" onClick={clearActivityFilters} className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline">Limpiar filtros <X className="size-3.5" /></button>}
+          {(activitySearch || activityModule || activityBusinessUnitId || activityBranchId) && <button type="button" onClick={clearActivityFilters} className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline">Limpiar filtros <X className="size-3.5" /></button>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -747,14 +737,16 @@ function UsersContent({ data, loading, error, activity, activityLoading, activit
           {totalActivity > 0 && <span className="ml-auto text-xs font-semibold text-muted-foreground">Mostrando {activityStart}–{activityEnd}</span>}
         </div>
 
-        {activityLoading ? <div className="flex min-h-[220px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-5 animate-spin" /> Cargando auditoría...</div> : activityError ? <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive"><p className="font-bold">No se pudo cargar la auditoría de usuarios.</p><p className="mt-1 break-words">{activityError.message}</p></div> : !activityItems.length ? <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground"><Activity className="mx-auto mb-3 size-7 text-primary/60" />No hay logs para este filtro.</div> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Usuario / rol</TableHead><TableHead>Acción</TableHead><TableHead>Módulo / entidad</TableHead><TableHead>Sucursal</TableHead><TableHead>Resultado</TableHead><TableHead>Descripción</TableHead></TableRow></TableHeader><TableBody>{activityItems.map((item) => <TableRow key={item.id}>
+        {activityLoading ? <div className="flex min-h-[220px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-5 animate-spin" /> Cargando auditoría...</div> : activityError ? <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive"><p className="font-bold">No se pudo cargar la auditoría de usuarios.</p><p className="mt-1 break-words">{activityError.message}</p></div> : !activityItems.length ? <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground"><Activity className="mx-auto mb-3 size-7 text-primary/60" />No hay registros para este filtro.</div> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Autor</TableHead><TableHead>Rubro</TableHead><TableHead>Sucursal</TableHead><TableHead>Módulo</TableHead><TableHead>Acción</TableHead><TableHead>Registro</TableHead><TableHead>Resultado</TableHead><TableHead>Descripción</TableHead></TableRow></TableHeader><TableBody>{activityItems.map((item) => <TableRow key={item.id}>
           <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatActivityDate(item.createdAt)}</TableCell>
-          <TableCell><p className="font-semibold">{item.user?.name || item.user?.email || 'Sistema'}</p><p className="text-xs text-muted-foreground">{item.user?.email || (item.userId ? `ID ${item.userId.slice(0, 8)}` : 'Proceso del sistema')} · {(item as any).actorRole || item.user?.role || '—'}</p></TableCell>
-          <TableCell><Badge variant="outline" className={`whitespace-nowrap ${auditTone(item.action)}`}>{auditLabel(item.action)}</Badge></TableCell>
-          <TableCell><p className="font-semibold">{auditLabel(item.module)}</p><p className="text-xs text-muted-foreground">{auditLabel(item.entity)} · {item.entityId.slice(0, 8)}</p></TableCell>
+          <TableCell><p className="font-semibold">{activityActorName(item)}</p><p className="text-xs text-muted-foreground">{auditRoleLabel((item as any).actorRole || item.user?.role)}</p></TableCell>
+          <TableCell className="whitespace-nowrap text-sm">{item.clientTenant?.businessUnit?.name || '—'}</TableCell>
           <TableCell className="whitespace-nowrap text-sm">{item.clientTenant?.name || '—'}</TableCell>
-          <TableCell><Badge variant="outline" className={(item as any).result === 'SUCCESS' ? 'text-emerald-600' : 'text-destructive'}>{(item as any).result || 'SUCCESS'}</Badge></TableCell>
-          <TableCell className="min-w-[260px] max-w-[420px] text-xs text-muted-foreground" title={(item as any).description || formatAuditDetails(item.details)}><span className="line-clamp-2">{(item as any).description || formatAuditDetails(item.details)}</span></TableCell>
+          <TableCell><p className="font-semibold">{auditModuleLabel(item.module)}</p></TableCell>
+          <TableCell><Badge variant="outline" className={`whitespace-nowrap ${auditTone(item.action)}`}>{auditActionLabel(item.action)}</Badge></TableCell>
+          <TableCell><p className="font-semibold">Registro</p><p className="break-words text-xs text-muted-foreground">{activityRecordLabel(item)}</p></TableCell>
+          <TableCell><Badge variant="outline" className={(item as any).result === 'SUCCESS' ? 'text-emerald-600' : 'text-destructive'}>{(item as any).result === 'SUCCESS' ? 'Correcto' : 'Fallido'}</Badge></TableCell>
+          <TableCell className="min-w-[260px] max-w-[420px] text-xs text-muted-foreground"><span className="line-clamp-2">{activityDescription(item)}</span></TableCell>
         </TableRow>)}</TableBody></Table>}
 
         {totalActivity > 0 && <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-4">

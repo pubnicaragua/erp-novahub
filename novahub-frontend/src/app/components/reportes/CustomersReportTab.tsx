@@ -117,6 +117,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const d = toDate(c.createdAt);
     return d && d >= currentStart;
   }), [customers, currentStart]);
+  const activeCustomers = useMemo(() => customers.filter((customer: any) => String(customer.status || '').toUpperCase() === 'ACTIVE').length, [customers]);
+  const inactiveCustomers = Math.max(0, customers.length - activeCustomers);
 
   const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
   const documentTotal = (i: any) => toBaseAmount(Number(i.total ?? i.baseTotal ?? 0), i.currency, sourceRate(i.exchangeRate));
@@ -126,8 +128,9 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   
   const payRatio = totalSold > 0 ? (totalPaid / totalSold) * 100 : 0;
   
-  // Average Customer Lifetime Value - Only summing non-cancelled/draft invoices
-  const avgLTV = useMemo(() => {
+  // Average historical billed value per registered customer. This is not LTV:
+  // the system does not store a customer lifetime/churn model in this report.
+  const averageSalePerCustomer = useMemo(() => {
     if (customers.length === 0) return 0;
     const validInvoices = invoices.filter(i => i.status !== 'CANCELLED' && i.status !== 'DRAFT');
     const totalValid = validInvoices.reduce((acc, i) => acc + documentTotal(i), 0);
@@ -137,7 +140,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const originalSum = (rows: any[], amountOf: (row: any) => number, currency: SupportedCurrency) => rows.filter((row) => normalizeCurrency(row.currency || baseCurrency) === currency).reduce((sum, row) => sum + (Number.isFinite(amountOf(row)) ? amountOf(row) : 0), 0);
   const originalSold = (currency: SupportedCurrency) => originalSum(fInv, (row) => Number(row.total ?? row.baseTotal ?? 0), currency);
   const originalPaid = (currency: SupportedCurrency) => originalSum(fPay, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
-  const originalLtv = (currency: SupportedCurrency) => {
+  const originalAverageSale = (currency: SupportedCurrency) => {
     const valid = invoices.filter((invoice) => invoice.status !== 'CANCELLED' && invoice.status !== 'DRAFT');
     return customers.length > 0 ? originalSum(valid, (row) => Number(row.total ?? row.baseTotal ?? 0), currency) / customers.length : 0;
   };
@@ -245,7 +248,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           { label: 'CARTERA', value: formatConvertedAmount(totalSold, 'NIO'), detail: `${customers.length} clientes`, color: [59, 130, 246] },
           { label: 'ADQUISICIÓN', value: `${fCus.length}`, detail: 'Nuevos clientes', color: [16, 185, 129] },
           { label: 'RATIO PAGO', value: `${payRatio.toFixed(1)}%`, detail: 'Eficiencia', color: [168, 85, 247] },
-          { label: 'LTV PROMEDIO', value: formatConvertedAmount(avgLTV, 'NIO'), detail: 'Retorno', color: [245, 158, 11] },
+          { label: 'VENTA PROMEDIO / CLIENTE', value: formatConvertedAmount(averageSalePerCustomer, baseCurrency), detail: 'Facturación histórica', color: [245, 158, 11] },
         ];
 
         const boxH = 22;
@@ -268,9 +271,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           ['Clientes nuevos', fCus.length, 'Altas del período'],
         ], [16, 185, 129]);
         renderSection('Composición del Mercado', ['Segmento', 'Clientes', 'Participación'], [
-          ['Activos', Math.round(customers.length * 0.7), percent(customers.length > 0 ? 70 : 0)],
-          ['Nuevos', fCus.length, percent(customers.length > 0 ? (fCus.length / customers.length) * 100 : 0)],
-          ['Inactivos', Math.round(customers.length * 0.1), percent(customers.length > 0 ? 10 : 0)],
+          ['Activos', activeCustomers, percent(customers.length > 0 ? (activeCustomers / customers.length) * 100 : 0)],
+          ['Inactivos', inactiveCustomers, percent(customers.length > 0 ? (inactiveCustomers / customers.length) * 100 : 0)],
         ], [59, 130, 246]);
         renderSection('Clientes con Mayor Saldo', ['Cliente', 'Saldo pendiente'], topByBalance.map(customer => [customer.name, money(customer.value)]), [245, 158, 11]);
         renderSection('Líderes de Facturación', ['Cliente', 'Ventas netas', 'Participación'], topCustomers.map(customer => [customer.name, money(customer.value), percent(totalSold > 0 ? (customer.value / totalSold) * 100 : 0)]), [59, 130, 246]);
@@ -334,7 +336,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           { label: 'CARTERA', value: formatConvertedAmount(totalSold, 'NIO'), detail: `${customers.length} clientes`, bgColor: 'FF3B82F6' },
           { label: 'ADQUISICIÓN', value: `${fCus.length}`, detail: 'Nuevos', bgColor: 'FF10B981' },
           { label: 'RATIO PAGO', value: `${payRatio.toFixed(1)}%`, detail: 'Eficiencia', bgColor: 'FFA855F7' },
-          { label: 'LTV PROMEDIO', value: formatConvertedAmount(avgLTV, 'NIO'), detail: 'Retorno', bgColor: 'FFF59E0B' },
+          { label: 'VENTA PROMEDIO / CLIENTE', value: formatConvertedAmount(averageSalePerCustomer, baseCurrency), detail: 'Facturación histórica', bgColor: 'FFF59E0B' },
         ];
 
         ws.getRow(currentRow).height = 18;
@@ -430,7 +432,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         {renderCustomerMoneyKpi('Cobros recibidos', totalPaid, originalPaid, 'text-purple-500', (currency) => `${originalPaid(currency) ? 'Cobros' : 'Sin cobros'} del período`)}
 
-        {renderCustomerMoneyKpi('Valor de Vida (LTV)', avgLTV, originalLtv, 'text-amber-500', () => 'Retorno promedio por cliente')}
+        {renderCustomerMoneyKpi('Venta promedio por cliente', averageSalePerCustomer, originalAverageSale, 'text-amber-500', () => 'Facturación histórica por cliente')}
       </div>
 
       {/* ═══ Charts Row ═══ */}
@@ -504,11 +506,10 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie
-                    data={[
-                      { name: 'Activos', value: customers.length * 0.7 },
-                      { name: 'Nuevos', value: fCus.length },
-                      { name: 'Inactivos', value: customers.length * 0.1 }
+                    <Pie
+                      data={[
+                      { name: 'Activos', value: activeCustomers },
+                      { name: 'Inactivos', value: inactiveCustomers }
                     ]}
                     innerRadius={60}
                     outerRadius={80}

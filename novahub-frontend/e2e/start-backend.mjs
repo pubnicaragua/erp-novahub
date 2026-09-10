@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import process from 'node:process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +22,8 @@ if (!/(?:e2e|test|qa)/i.test(databaseName) && declaredDatabaseName !== databaseN
 
 const backendDir = process.env.E2E_BACKEND_DIR?.trim() || path.resolve(process.cwd(), '..', '..', 'Backend');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const localPrisma = path.join(backendDir, 'node_modules', 'prisma', 'build', 'index.js');
+const prismaCommand = fs.existsSync(localPrisma) ? { command: process.execPath, args: [localPrisma] } : { command: process.platform === 'win32' ? 'npx.cmd' : 'npx', args: ['prisma'] };
 const normalDatabaseUrl = process.env.DATABASE_URL?.trim() || '';
 const e2eFrontendOrigin = process.env.E2E_BASE_URL?.trim()
   || `http://localhost:${process.env.E2E_FRONTEND_PORT || '5173'}`;
@@ -50,7 +52,7 @@ if (schemaMode === 'datamodel') {
   });
   if (provision.status !== 0) process.exit(provision.status || 1);
 } else {
-  const status = spawnSync(npxCommand, ['prisma', 'migrate', 'status', '--schema', 'prisma/schema.prisma'], {
+  const status = spawnSync(prismaCommand.command, [...prismaCommand.args, 'migrate', 'status', '--schema', 'prisma/schema.prisma'], {
     cwd: backendDir,
     env: childEnv,
     stdio: 'inherit',
@@ -58,7 +60,7 @@ if (schemaMode === 'datamodel') {
   });
   if (status.status !== 0) process.exit(status.status || 1);
 
-  const deploy = spawnSync(npxCommand, ['prisma', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'], {
+  const deploy = spawnSync(prismaCommand.command, [...prismaCommand.args, 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'], {
     cwd: backendDir,
     env: childEnv,
     stdio: 'inherit',

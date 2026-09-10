@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
@@ -25,7 +26,10 @@ const { Pool } = requireBackend(path.join(backendDir, 'node_modules', 'pg'));
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 
 function prismaCli() {
-  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const localScript = path.join(backendDir, 'node_modules', 'prisma', 'build', 'index.js');
+  return fs.existsSync(localScript)
+    ? { command: process.execPath, args: [localScript] }
+    : { command: process.platform === 'win32' ? 'npx.cmd' : 'npx', args: ['prisma'] };
 }
 
 async function main() {
@@ -44,13 +48,14 @@ async function main() {
       DATABASE_URL: databaseUrl,
       DIRECT_URL: databaseUrl,
     };
+    const prisma = prismaCli();
     const diff = spawnSync(
-      prismaCli(),
-      ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema', 'prisma/schema.prisma', '--script'],
+      prisma.command,
+      [...prisma.args, 'migrate', 'diff', '--from-empty', '--to-schema', 'prisma/schema.prisma', '--script'],
       { cwd: backendDir, env, encoding: 'utf8', shell: false },
     );
     if (diff.status !== 0) {
-      throw new Error(`No se pudo generar el DDL desde Prisma:\n${diff.stderr || diff.stdout}`);
+      throw new Error(`No se pudo generar el DDL desde Prisma:\n${diff.error?.message || diff.stderr || diff.stdout}`);
     }
     const marker = diff.stdout.indexOf('-- CreateSchema');
     const sql = marker >= 0 ? diff.stdout.slice(marker) : diff.stdout;

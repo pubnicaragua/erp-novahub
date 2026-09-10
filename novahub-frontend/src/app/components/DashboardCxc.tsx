@@ -11,6 +11,7 @@ import { reportsService } from '../services/ventas.service';
 import { purchasesReportsService } from '../services/compras.service';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from '../contexts/AuthContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -25,10 +26,8 @@ const itemVariants: Variants = {
   show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
 };
 
-const fmt = (amount: number) =>
-  new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(amount);
-
 interface AgingData {
+  baseCurrency?: 'NIO' | 'USD';
   summary: { current: number; days1_30: number; days31_60: number; days61_90: number; days90plus: number; total: number };
   byCustomer?: any[];
   bySupplier?: any[];
@@ -53,6 +52,7 @@ const defaultChecklist: ChecklistItem[] = [
 
 function DashboardCxc() {
   const { canPerform } = useAuth();
+  const { baseCurrency, formatExplicitAmount } = useCurrency();
   const canViewSales = canPerform('SALES', 'view');
   const canViewPurchases = canPerform('PURCHASES', 'view');
   const [loading, setLoading] = useState(true);
@@ -96,6 +96,8 @@ function DashboardCxc() {
   };
 
   const progress = checklist.length > 0 ? Math.round((checklist.filter(c => c.done).length / checklist.length) * 100) : 0;
+  const reportCurrency = ar?.baseCurrency || ap?.baseCurrency || baseCurrency;
+  const fmt = (amount: number) => formatExplicitAmount(Number(amount || 0), reportCurrency);
 
   const buildBucketData = (summary: AgingData['summary']) => [
     { name: 'Al día', value: summary.current },
@@ -205,7 +207,7 @@ function DashboardCxc() {
               <BarChart data={buildBucketData(ar.summary)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v) => `C$${(v / 1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
                 <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} formatter={(value: number) => [fmt(value), 'Saldo']} />
                 <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={48} />
               </BarChart>
@@ -225,7 +227,7 @@ function DashboardCxc() {
               <BarChart data={buildBucketData(ap.summary)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v) => `C$${(v / 1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
                 <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} formatter={(value: number) => [fmt(value), 'Saldo']} />
                 <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={48} />
               </BarChart>

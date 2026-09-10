@@ -14,6 +14,7 @@ import { invoicesService } from '../../services/ventas.service';
 import { supplierInvoicesService } from '../../services/compras.service';
 import { accountsService } from '../../services/finanzas.service';
 import { toast } from 'sonner';
+import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard, financeCategoryLabel } from './financeChartTheme';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 
@@ -29,6 +30,19 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 
 const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
 
+const monthlyFactor = (frequency: unknown) => {
+  switch (String(frequency || '').toUpperCase()) {
+    case 'DAILY': return 365 / 12;
+    case 'WEEKLY': return 52 / 12;
+    case 'BIWEEKLY': return 26 / 12;
+    case 'QUARTERLY': return 1 / 3;
+    case 'SEMIANNUAL': return 1 / 6;
+    case 'YEARLY': return 1 / 12;
+    case 'MONTHLY':
+    default: return 1;
+  }
+};
+
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, onNavigate }: Props) {
   const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user, canPerform } = useAuth();
@@ -40,7 +54,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
 
   const salesInvoicesQuery = useQuery({
     queryKey: ['finance', 'sales-invoices', tenantKey],
-    queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    queryFn: ({ signal }) => fetchAllReportPages(
+      (filters) => invoicesService.getAll(filters, signal),
+      { pageSize: 5000, report: true },
+      signal,
+    ),
     enabled: canReadSales,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -49,7 +67,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   });
   const supplierInvoicesQuery = useQuery({
     queryKey: ['finance', 'supplier-invoices', tenantKey],
-    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    queryFn: ({ signal }) => fetchAllReportPages(
+      (filters) => supplierInvoicesService.getAll(filters, signal),
+      { pageSize: 5000, report: true },
+      signal,
+    ),
     enabled: canReadPurchases,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -58,7 +80,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   });
   const chartAccountsQuery = useQuery({
     queryKey: ['finance', 'accounts', tenantKey],
-    queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal),
+    queryFn: ({ signal }) => fetchAllReportPages(
+      (filters) => accountsService.getAll(filters, signal),
+      { pageSize: 5000, report: true },
+      signal,
+    ),
     enabled: canReadFinancial,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
@@ -119,11 +145,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const activeRecurringExpenses = useMemo(() => recurringExpenses.filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringExpenses]);
   const activeRecurringIncomes = useMemo(() => (recurringIncomes || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringIncomes]);
   const monthlyRecurring = useMemo(() =>
-    activeRecurringExpenses.reduce((a, r) => a + cv(r), 0),
+    activeRecurringExpenses.reduce((a, r) => a + cv(r) * monthlyFactor(r.frequency), 0),
     [activeRecurringExpenses, valuationMode, convertAmount, convertCurrentAmount]
   );
   const monthlyRecurringIncome = useMemo(() =>
-    activeRecurringIncomes.reduce((a, r) => a + cv(r), 0),
+    activeRecurringIncomes.reduce((a, r) => a + cv(r) * monthlyFactor(r.frequency), 0),
     [activeRecurringIncomes, valuationMode, convertAmount, convertCurrentAmount]
   );
   const projected30 = netCashFlow + monthlyRecurringIncome - monthlyRecurring;

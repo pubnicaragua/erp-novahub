@@ -3,9 +3,11 @@ import { api } from './api';
 export interface AuditLog {
   id: string;
   createdAt: string;
-  clientTenantId: string;
+  clientTenantId: string | null;
   branchId?: string;
   branchName?: string | null;
+  businessUnitId?: string | null;
+  businessUnitName?: string | null;
   enterpriseGroupId?: string | null;
   companyId?: string | null;
   companyName?: string | null;
@@ -21,6 +23,7 @@ export interface AuditLog {
   entity: string;
   entityId: string;
   entityLabel?: string | null;
+  recordLabel?: string | null;
   description?: string | null;
   result?: string | null;
   source?: string | null;
@@ -43,9 +46,9 @@ export interface AuditLogQuery {
   dateFrom?: string;
   dateTo?: string;
   userId?: string;
-  role?: string;
   enterpriseGroupId?: string;
   companyId?: string;
+  businessUnitId?: string;
   branchId?: string;
   module?: string;
   submodule?: string;
@@ -73,9 +76,9 @@ export interface AuditFilterOptions {
   actions: string[];
   entities: string[];
   results: string[];
-  roles: string[];
   users: Array<{ id: string; name?: string | null; email?: string | null; role?: string | null }>;
-  branches?: Array<{ id: string; name: string; companyId?: string | null; companyName?: string | null }>;
+  branches?: Array<{ id: string; name: string; companyId?: string | null; companyName?: string | null; businessUnitId?: string | null; businessUnitName?: string | null }>;
+  businessUnits?: Array<{ id: string; name: string; enterpriseGroupId?: string | null }>;
   companies?: Array<{ id: string; name: string }>;
 }
 

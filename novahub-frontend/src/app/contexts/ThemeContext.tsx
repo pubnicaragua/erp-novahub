@@ -152,16 +152,19 @@ function readStoredTheme(userId: string, tenantId: string): ThemeConfig {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const themeUserId = user?.id || 'anonymous';
+  const isPlatformUser = Boolean(user?.isPlatformAdmin);
   // clientTenantId is the canonical active tenant after a group/branch
   // context switch. It remains context for the fallback corporate branding,
   // but the saved visual preference is always keyed by the user id.
   const activeTenantId = user?.clientTenantId || user?.tenantId || 'default';
   const brandingSessionKey = user ? `${user.id}:${activeTenantId}` : 'anonymous';
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme(themeUserId, activeTenantId));
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => isPlatformUser
+    ? createDefaultTheme(themeUserId, 'default')
+    : readStoredTheme(themeUserId, activeTenantId));
   const [readyBrandingSessionKey, setReadyBrandingSessionKey] = useState<string | null>(
     () => user && activeTenantId !== 'default' ? null : 'anonymous',
   );
-  const isBrandingReady = !user || activeTenantId === 'default' || readyBrandingSessionKey === brandingSessionKey;
+  const isBrandingReady = !user || isPlatformUser || activeTenantId === 'default' || readyBrandingSessionKey === brandingSessionKey;
 
   const updateTheme = useCallback((colors: Partial<BrandColors>, paletteMode?: ThemePaletteMode) => {
     setThemeConfig(prev => ({
@@ -220,13 +223,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Cada usuario mantiene su propia preferencia visual. El tenant solo aporta
     // el fallback corporativo cuando ese usuario aún no ha personalizado el tema.
-    setThemeConfig(() => (!user ? createDefaultTheme() : readStoredTheme(themeUserId, activeTenantId)));
-  }, [activeTenantId, themeUserId]);
+    setThemeConfig(() => {
+      if (!user) return createDefaultTheme();
+      return isPlatformUser
+        ? createDefaultTheme(themeUserId, 'default')
+        : readStoredTheme(themeUserId, activeTenantId);
+    });
+  }, [activeTenantId, isPlatformUser, themeUserId, user]);
 
   useEffect(() => {
     // Login/profile ya transporta la preferencia privada. Aplicarla aquí evita
     // que una sesión nueva dependa de visitar Configuración para descubrirla.
-    if (!user) return;
+    if (!user || isPlatformUser) return;
     const userTheme = normalizeUserTheme(user.themeSettings);
     if (!userTheme.paletteMode && Object.keys(userTheme.colors || {}).length === 0) return;
     setThemeConfig(previous => {
@@ -245,7 +253,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         },
       };
     });
-  }, [activeTenantId, themeUserId, user?.themeSettings]);
+  }, [activeTenantId, isPlatformUser, themeUserId, user?.themeSettings]);
 
   useLayoutEffect(() => {
     // Apply brand colors and choose whether the sidebar is neutral or branded.
@@ -255,7 +263,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Read the active tenant's persisted theme synchronously during the
     // transition. Applying the global default here caused a visible gray/
     // default-color flash until the synchronization effect finished.
-    const activeTheme = themeConfig.userId === themeUserId && themeConfig.tenantId === activeTenantId
+    const activeTheme = isPlatformUser
+      ? createDefaultTheme(themeUserId, 'default')
+      : themeConfig.userId === themeUserId && themeConfig.tenantId === activeTenantId
       ? themeConfig
       : readStoredTheme(themeUserId, activeTenantId);
     const sidebarKeys = new Set(['sidebar', 'sidebarForeground', 'sidebarPrimary', 'sidebarAccent']);
@@ -308,11 +318,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     observer.observe(root, { attributes: true, attributeFilter: ['class'] });
 
     // No persistir un tema de otra sesión durante una transición de usuario.
-    if (activeTheme.userId === themeUserId && activeTheme.tenantId === activeTenantId && themeConfig.userId === themeUserId) {
+    if (!isPlatformUser && activeTheme.userId === themeUserId && activeTheme.tenantId === activeTenantId && themeConfig.userId === themeUserId) {
       safeSetItem(themeStorageKey(themeUserId), JSON.stringify(themeConfig));
     }
     return () => observer.disconnect();
-  }, [themeConfig, activeTenantId, themeUserId]);
+  }, [isPlatformUser, themeConfig, activeTenantId, themeUserId]);
 
   // Handle branding from server — re-fetch when user/token changes (login/switch/logout).
   // No se usa polling: `user` de useAuth cambia en login, switch de empresa y logout,
@@ -331,7 +341,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user || activeTenantId === 'default') {
+    if (!user || isPlatformUser || activeTenantId === 'default') {
       setReadyBrandingSessionKey('anonymous');
       return;
     }
@@ -367,7 +377,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       controller.abort();
     };
-  }, [user?.id, activeTenantId, brandingSessionKey, themeUserId, applyServerBranding]);
+  }, [user?.id, activeTenantId, brandingSessionKey, themeUserId, isPlatformUser, applyServerBranding]);
 
   const resetTheme = () => {
     setThemeConfig(createDefaultTheme(themeUserId, activeTenantId));

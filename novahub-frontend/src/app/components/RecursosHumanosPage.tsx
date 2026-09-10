@@ -37,6 +37,7 @@ import { ConfigNominaView } from './hr/ConfigNominaView';
 import { ComisionesView } from './hr/ComisionesView';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { fetchAllReportPages } from '../hooks/useTenantQuery';
 
 interface RecursosHumanosPageProps {
   activeSubModule?: string;
@@ -95,12 +96,13 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
       const page = { page: 1, pageSize: 200 };
       switch (activeTab) {
         case 'dashboard': {
+          const reportFilters = { pageSize: 5000, report: true };
           const [stats, employees, departments, leaveRequests, reviews] = await Promise.all([
             hrService.getDashboardStats(signal),
-            hrService.getEmployees(page, signal),
+            fetchAllReportPages((filters) => hrService.getEmployees(filters, signal), reportFilters, signal),
             hrService.getDepartments(signal),
-            hrService.getLeaveRequests({ ...page, status: 'PENDING' }, signal),
-            hrService.getPerformanceReviews(undefined, signal, page),
+            fetchAllReportPages((filters) => hrService.getLeaveRequests({ ...filters, status: 'PENDING' }, signal), reportFilters, signal),
+            fetchAllReportPages((filters) => hrService.getPerformanceReviews(undefined, signal, filters), reportFilters, signal),
           ]);
           return { stats, employees, departments, leaveRequests, reviews };
         }

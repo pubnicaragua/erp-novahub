@@ -1,5 +1,6 @@
 import {
   createContext,
+  useMemo,
   useContext,
   useEffect,
   useRef,
@@ -7,7 +8,6 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
 import {
   BarChart3,
   BookOpen,
@@ -46,6 +46,7 @@ import {
   Bell,
   Receipt,
   Repeat2,
+  RefreshCw,
   CreditCard,
   Truck,
   Scale,
@@ -55,6 +56,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCurrency, type CurrencyDisplayMode } from "../contexts/CurrencyContext";
+import { useTheme, type ThemeConfig } from "../contexts/ThemeContext";
+import { brandingService, type ThemePaletteMode } from "../services/branding.service";
 import { type ManagerGroup } from "../services/enterprise-groups.service";
 import { safeGetItem, safeSetItem } from "../services/safe-storage";
 import { persistThemeMode, readPersistedDarkMode } from "../utils/theme-mode";
@@ -65,7 +68,9 @@ import { notificationsService } from "../services/notifications.service";
 import { playNotificationSound } from "../utils/notificationSound";
 import { useQuery } from "@tanstack/react-query";
 import { formatCurrencyDescriptor, getCurrencyMetadata } from "../utils/currency";
-import { getReadableForeground, validateThemeRoot } from "../utils/color-contrast";
+import { getReadableForeground } from "../utils/color-contrast";
+import { THEME_PRESETS, type ThemePreset } from "../constants/themePresets";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -227,6 +232,7 @@ export type ManagerSection =
   | "accounting"
   | "reports"
   | "hr"
+  | "operations"
   | "users"
   | "managers"
   | "settings"
@@ -253,6 +259,7 @@ export const MANAGER_SECTIONS: Array<{
   },
   { id: "reports", label: "Reportes", icon: BarChart3, group: "Consolidado" },
   { id: "hr", label: "Recursos Humanos", icon: Users, group: "Consolidado" },
+  { id: "operations", label: "Operaciones", icon: ListChecks, group: "Consolidado" },
   {
     id: "transfers",
     label: "Transferencias",
@@ -275,56 +282,13 @@ export const MANAGER_SECTIONS: Array<{
   { id: "settings", label: "Configuración", icon: Settings2, group: "Sistema" },
 ];
 
-type ManagerThemeState = {
-  mode: "light" | "dark";
-  preset: keyof typeof MANAGER_THEME_PRESETS;
-};
-
-const MANAGER_THEME_KEY = "novahub:manager-theme";
 const MANAGER_SIDEBAR_COLLAPSED_KEY = "novahub:manager-sidebar-collapsed";
 const ManagerShellNavigationContext = createContext({
   sidebarCollapsed: false,
 });
 export const useManagerShellNavigation = () =>
   useContext(ManagerShellNavigationContext);
-const MANAGER_THEME_VARIABLES = [
-  "--primary",
-  "--primary-foreground",
-  "--accent",
-  "--accent-foreground",
-  "--sidebar",
-  "--sidebar-foreground",
-  "--sidebar-primary",
-  "--sidebar-primary-foreground",
-  "--sidebar-accent",
-  "--sidebar-accent-foreground",
-];
-const MANAGER_THEME_PRESETS = {
-  emerald: {
-    label: "Esmeralda",
-    primary: "oklch(0.65 0.2 155)",
-    sidebar: "oklch(0.16 0.01 155)",
-    accent: "oklch(0.22 0.02 155)",
-  },
-  indigo: {
-    label: "Índigo",
-    primary: "oklch(0.62 0.2 270)",
-    sidebar: "oklch(0.15 0.02 270)",
-    accent: "oklch(0.23 0.04 270)",
-  },
-  amber: {
-    label: "Ámbar",
-    primary: "oklch(0.72 0.17 80)",
-    sidebar: "oklch(0.17 0.025 80)",
-    accent: "oklch(0.24 0.04 80)",
-  },
-  rose: {
-    label: "Rosa",
-    primary: "oklch(0.64 0.2 20)",
-    sidebar: "oklch(0.16 0.02 20)",
-    accent: "oklch(0.23 0.04 20)",
-  },
-} as const;
+export type ManagerSettingsView = "theme" | "audit";
 
 interface ThemeTransition {
   finished: Promise<void>;
@@ -336,83 +300,6 @@ type ThemeTransitionDocument = Document & {
 };
 
 let activeManagerThemeTransition: ThemeTransition | null = null;
-let managerThemeChangeVersion = 0;
-
-function readManagerTheme(): ManagerThemeState {
-  try {
-    const saved = JSON.parse(
-      safeGetItem(MANAGER_THEME_KEY) || "null",
-    ) as Partial<ManagerThemeState> | null;
-    const preset =
-      saved?.preset && saved.preset in MANAGER_THEME_PRESETS
-        ? saved.preset
-        : "emerald";
-    const globalMode = safeGetItem("erp-theme-mode");
-    const mode = globalMode === "light" || globalMode === "dark"
-      ? globalMode
-      : saved?.mode === "light" || saved?.mode === "dark"
-        ? saved.mode
-        : readPersistedDarkMode() ? "dark" : "light";
-    return {
-      mode,
-      preset: preset as ManagerThemeState["preset"],
-    };
-  } catch {
-    return { mode: readPersistedDarkMode() ? "dark" : "light", preset: "emerald" };
-  }
-}
-
-function applyManagerTheme(theme: ManagerThemeState) {
-  const root = document.documentElement;
-  const preset = MANAGER_THEME_PRESETS[theme.preset];
-  root.classList.toggle("dark", theme.mode === "dark");
-  root.style.setProperty("--primary", preset.primary);
-  root.style.setProperty("--primary-foreground", getReadableForeground(preset.primary));
-  root.style.setProperty("--sidebar-primary", preset.primary);
-  root.style.setProperty("--sidebar-primary-foreground", getReadableForeground(preset.primary));
-  root.style.setProperty("--accent", preset.accent);
-  root.style.setProperty("--accent-foreground", getReadableForeground(preset.accent));
-  root.style.setProperty("--sidebar", preset.sidebar);
-  root.style.setProperty("--sidebar-foreground", getReadableForeground(preset.sidebar));
-  root.style.setProperty("--sidebar-accent", preset.accent);
-  root.style.setProperty("--sidebar-accent-foreground", getReadableForeground(preset.accent));
-  const issues = validateThemeRoot(root);
-  root.dataset.themeContrast = issues.length === 0 ? "pass" : "issues";
-  if (import.meta.env.DEV && issues.length > 0) {
-    console.warn("[NovaHub manager theme] Combinaciones con contraste insuficiente:", issues);
-  }
-}
-
-function useManagerTheme() {
-  const [theme, setTheme] = useState<ManagerThemeState>(readManagerTheme);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const previousVariables = Object.fromEntries(
-      MANAGER_THEME_VARIABLES.map((name) => [
-        name,
-        root.style.getPropertyValue(name),
-      ]),
-    );
-    applyManagerTheme(theme);
-    return () => {
-      root.classList.toggle("dark", readPersistedDarkMode());
-      MANAGER_THEME_VARIABLES.forEach((name) => {
-        const value = previousVariables[name];
-        if (value) root.style.setProperty(name, value);
-        else root.style.removeProperty(name);
-      });
-    };
-  }, []);
-
-  useEffect(() => {
-    applyManagerTheme(theme);
-    safeSetItem(MANAGER_THEME_KEY, JSON.stringify(theme));
-    persistThemeMode(theme.mode === "dark");
-  }, [theme]);
-
-  return { theme, setTheme };
-}
 
 type ManagerShellProps = {
   children: ReactNode;
@@ -442,6 +329,9 @@ type ManagerShellProps = {
   reportCurrency: string;
   onReportCurrencyChange: (currency: string) => void;
   allowedSections?: ManagerSection[];
+  settingsView?: ManagerSettingsView;
+  onSettingsViewChange?: (view: ManagerSettingsView) => void;
+  canViewAudit?: boolean;
 };
 
 export function ManagerShell({
@@ -471,6 +361,9 @@ export function ManagerShell({
   onBranchChange,
   onReportCurrencyChange,
   allowedSections,
+  settingsView = "theme",
+  onSettingsViewChange,
+  canViewAudit = true,
 }: ManagerShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -481,7 +374,15 @@ export function ManagerShell({
   );
   const { user, logout } = useAuth();
   const { currency, displayMode, setDisplayMode, displayModeLabel } = useCurrency();
-  const { theme, setTheme } = useManagerTheme();
+  const { themeConfig, updateTheme, resetTheme } = useTheme();
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
+  const [themeMode, setThemeMode] = useState<"light" | "dark">(
+    () => (document.documentElement.classList.contains("dark") || readPersistedDarkMode() ? "dark" : "light"),
+  );
+  const activePresetName = useMemo(() => {
+    const currentPrimary = String(themeConfig.colors.primary || '').toLowerCase();
+    return THEME_PRESETS.find((preset) => preset.primary.toLowerCase() === currentPrimary)?.name || null;
+  }, [themeConfig.colors.primary]);
   const managerBranding = user?.sessionBranding?.kind === "group" ? user.sessionBranding : undefined;
   const displayGroupName = group?.name || managerBranding?.name || "Grupo empresarial";
   const displayGroupLogo = group?.logo ?? managerBranding?.logo ?? null;
@@ -543,25 +444,14 @@ export function ManagerShell({
     onInventoryViewChange(metadata.navigation.filter === 'transfers' ? 'transfers' : 'adjustments');
   };
 
-  useEffect(() => {
-    if (section !== "inventory" && section !== "sales" && section !== "purchases" && section !== "finances" && section !== "accounting" && section !== "reports" && section !== "hr")
-      setExpandedSection(null);
-  }, [section]);
-
   const toggleTheme = (event?: MouseEvent<HTMLElement>) => {
     const root = document.documentElement;
     const transitionDocument = document as ThemeTransitionDocument;
     const nextDark = !root.classList.contains("dark");
-    const requestVersion = ++managerThemeChangeVersion;
     const applyTheme = () => {
-      if (requestVersion !== managerThemeChangeVersion) return;
       root.classList.toggle("dark", nextDark);
-      flushSync(() =>
-        setTheme((current) => ({
-          ...current,
-          mode: nextDark ? "dark" : "light",
-        })),
-      );
+      setThemeMode(nextDark ? "dark" : "light");
+      persistThemeMode(nextDark);
     };
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -639,8 +529,38 @@ export function ManagerShell({
       setExpandedSection((current) => (current === next ? null : next));
       return;
     }
+    if (next === "settings") {
+      if (section !== next) updateSection(next);
+      setExpandedSection((current) => (current === next ? null : next));
+      return;
+    }
     setExpandedSection(null);
     updateSection(next);
+  };
+
+  const saveSharedTheme = async () => {
+    if (isSavingTheme) return;
+    setIsSavingTheme(true);
+    try {
+      await brandingService.updateTheme({ paletteMode: themeConfig.paletteMode, colors: themeConfig.colors });
+      toast.success("Tema actualizado correctamente");
+    } catch (error) {
+      console.error("Error guardando el tema del Manager:", error);
+      toast.error("No se pudo guardar el tema");
+    } finally {
+      setIsSavingTheme(false);
+    }
+  };
+
+  const resetSharedTheme = async () => {
+    resetTheme();
+    try {
+      await brandingService.updateTheme(null);
+      toast.info("Tema personal restaurado al predeterminado");
+    } catch (error) {
+      console.error("Error restaurando el tema del Manager:", error);
+      toast.error("No se pudo restaurar el tema");
+    }
   };
 
   const toggleSidebarCollapsed = () => {
@@ -664,6 +584,9 @@ export function ManagerShell({
           groupName={displayGroupName}
           groupLogo={displayGroupLogo}
           sections={visibleSections}
+          settingsView={settingsView}
+          onSettingsViewChange={onSettingsViewChange}
+          canViewAudit={canViewAudit}
           inventoryView={inventoryView}
           onInventoryViewChange={onInventoryViewChange}
           salesView={salesView}
@@ -687,7 +610,7 @@ export function ManagerShell({
         >
           <header className="shrink-0 border-b border-border/60 bg-card/90 backdrop-blur-xl">
             <div className="flex min-h-16 w-full min-w-0 flex-wrap items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4 lg:gap-4 lg:px-6">
-              <Button
+                  <Button
                 variant="outline"
                 size="icon"
                 className="size-10 shrink-0 rounded-xl lg:hidden"
@@ -732,11 +655,7 @@ export function ManagerShell({
                   onChange={(event) => onBusinessUnitChange(event.target.value)}
                   className="h-10 min-w-0 max-w-full rounded-xl border border-border bg-background px-3 text-sm sm:w-48"
                 >
-                  <option value="" disabled={section === "inventory"}>
-                    {section === "inventory"
-                      ? "Seleccionar rubro"
-                      : "Todos los rubros"}
-                  </option>
+                  <option value="">Todos los rubros</option>
                   {businessUnits
                     .filter((unit) => unit.isActive !== false)
                     .map((unit) => (
@@ -749,9 +668,12 @@ export function ManagerShell({
                   aria-label="Filtrar sucursal"
                   value={selectedBranchId}
                   onChange={(event) => onBranchChange(event.target.value)}
-                  className="h-10 min-w-0 max-w-full rounded-xl border border-border bg-background px-3 text-sm sm:w-52"
+                  disabled={!branches.length}
+                  className="h-10 min-w-0 max-w-full rounded-xl border border-border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:w-52"
                 >
-                  <option value="">Todas las sucursales</option>
+                  <option value="">
+                    {branches.length ? "Todas las sucursales" : "Sin sucursales disponibles"}
+                  </option>
                   {scopedBranches.map((branch) => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}
@@ -846,13 +768,13 @@ export function ManagerShell({
                   className="size-10 rounded-xl"
                   onClick={toggleTheme}
                   aria-label={
-                    theme.mode === "dark"
+                    themeMode === "dark"
                       ? "Activar modo claro"
                       : "Activar modo oscuro"
                   }
-                  title={theme.mode === "dark" ? "Modo claro" : "Modo oscuro"}
+                  title={themeMode === "dark" ? "Modo claro" : "Modo oscuro"}
                 >
-                  {theme.mode === "dark" ? (
+                  {themeMode === "dark" ? (
                     <Sun className="size-5" />
                   ) : (
                     <Moon className="size-5" />
@@ -918,13 +840,28 @@ export function ManagerShell({
                 : "p-4 sm:p-5 lg:p-7",
             )}
           >
-            {section === "settings" ? (
+            {section === "settings" && settingsView === "theme" ? (
               <ManagerThemeSettings
-                theme={theme}
-                onPresetChange={(preset) =>
-                  setTheme((current) => ({ ...current, preset }))
-                }
+                themeConfig={themeConfig}
+                themeMode={themeMode}
+                activePresetName={activePresetName}
+                onPresetChange={(preset) => {
+                  updateTheme({
+                    primary: preset.primary,
+                    primaryForeground: getReadableForeground(preset.primary),
+                    accent: preset.accent,
+                    accentForeground: getReadableForeground(preset.accent),
+                    sidebar: preset.sidebar,
+                    sidebarForeground: getReadableForeground(preset.sidebar),
+                    sidebarPrimary: preset.primary,
+                    sidebarAccent: preset.accent,
+                  }, themeConfig.paletteMode);
+                }}
+                onPaletteModeChange={(mode) => updateTheme({}, mode)}
                 onToggleTheme={toggleTheme}
+                onSaveTheme={saveSharedTheme}
+                isSavingTheme={isSavingTheme}
+                onResetTheme={resetSharedTheme}
               />
             ) : (
               children
@@ -946,6 +883,9 @@ function ManagerSidebar({
   groupName,
   groupLogo,
   sections = MANAGER_SECTIONS,
+  settingsView = "theme",
+  onSettingsViewChange,
+  canViewAudit = true,
   inventoryView,
   onInventoryViewChange,
   salesView,
@@ -970,6 +910,9 @@ function ManagerSidebar({
   groupName?: string;
   groupLogo?: string | null;
   sections?: typeof MANAGER_SECTIONS;
+  settingsView?: ManagerSettingsView;
+  onSettingsViewChange?: (view: ManagerSettingsView) => void;
+  canViewAudit?: boolean;
   inventoryView: ManagerInventoryView;
   onInventoryViewChange: (view: ManagerInventoryView) => void;
   salesView: ManagerSalesView;
@@ -1088,7 +1031,7 @@ function ManagerSidebar({
                         const Icon = item.icon;
                         const active = section === item.id;
                         const hasSubmenu =
-                          item.id === "inventory" || item.id === "sales" || item.id === "purchases" || item.id === "finances" || item.id === "accounting" || item.id === "reports" || item.id === "hr";
+                          item.id === "inventory" || item.id === "sales" || item.id === "purchases" || item.id === "finances" || item.id === "accounting" || item.id === "reports" || item.id === "hr" || item.id === "settings";
                         const isExpanded = expandedSection === item.id;
                         const button = (
                           <button
@@ -1131,7 +1074,42 @@ function ManagerSidebar({
                           isExpanded &&
                           !sidebarCollapsed && (
                             <div className="ml-5 mt-0.5 max-h-[52vh] space-y-0.5 overflow-y-auto py-1 pl-3">
-                              {(item.id === "inventory"
+                              {item.id === "settings" ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => onSettingsViewChange?.("theme")}
+                                    aria-current={settingsView === "theme" ? "page" : undefined}
+                                    className={cn(
+                                      "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
+                                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                                      settingsView === "theme"
+                                        ? "bg-primary text-primary-foreground font-medium shadow-sm hover:bg-primary hover:text-primary-foreground"
+                                        : "text-sidebar-foreground/55 hover:bg-primary/10 hover:text-primary",
+                                    )}
+                                  >
+                                    <Tags className="size-4 shrink-0" />
+                                    <span className="flex-1 truncate text-left">Temas</span>
+                                  </button>
+                                  {canViewAudit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onSettingsViewChange?.("audit")}
+                                      aria-current={settingsView === "audit" ? "page" : undefined}
+                                      className={cn(
+                                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
+                                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                                        settingsView === "audit"
+                                          ? "bg-primary text-primary-foreground font-medium shadow-sm hover:bg-primary hover:text-primary-foreground"
+                                          : "text-sidebar-foreground/55 hover:bg-primary/10 hover:text-primary",
+                                      )}
+                                    >
+                                      <History className="size-4 shrink-0" />
+                                      <span className="flex-1 truncate text-left">Logs y auditoría</span>
+                                    </button>
+                                  )}
+                                </>
+                              ) : (item.id === "inventory"
                                 ? MANAGER_INVENTORY_VIEWS
                                 : item.id === "sales"
                                   ? VISIBLE_MANAGER_SALES_VIEWS
@@ -1274,118 +1252,90 @@ function ManagerSidebar({
 }
 
 function ManagerThemeSettings({
-  theme,
+  themeConfig,
+  themeMode,
+  activePresetName,
   onPresetChange,
+  onPaletteModeChange,
   onToggleTheme,
+  onSaveTheme,
+  isSavingTheme,
+  onResetTheme,
 }: {
-  theme: ManagerThemeState;
-  onPresetChange: (preset: ManagerThemeState["preset"]) => void;
+  themeConfig: ThemeConfig;
+  themeMode: "light" | "dark";
+  activePresetName: string | null;
+  onPresetChange: (preset: ThemePreset) => void;
+  onPaletteModeChange: (mode: ThemePaletteMode) => void;
   onToggleTheme: (event?: MouseEvent<HTMLElement>) => void;
+  onSaveTheme: () => void;
+  isSavingTheme: boolean;
+  onResetTheme: () => void;
 }) {
+  const isComplete = themeConfig.paletteMode === "complete";
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex min-w-0 flex-col gap-2">
-        <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">
-          Panel de Control
-        </p>
-        <h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
-          Configuración
-        </h2>
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Panel de Control</p>
+        <h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">Configuración</h2>
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
         <div className="space-y-6">
           <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-sm sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-lg font-black uppercase italic tracking-tight">
-                  Modo de color
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Cambia entre claro y oscuro con la misma transición de las
-                  sucursales.
-                </p>
+                <h3 className="text-lg font-black uppercase italic tracking-tight">Modo de color</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Cambia entre claro y oscuro con la misma transición de las sucursales.</p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full shrink-0 rounded-xl sm:w-auto"
-                onClick={onToggleTheme}
-              >
-                {theme.mode === "dark" ? (
-                  <Sun className="mr-2 size-4" />
-                ) : (
-                  <Moon className="mr-2 size-4" />
-                )}
-                {theme.mode === "dark" ? "Usar modo claro" : "Usar modo oscuro"}
+              <Button type="button" variant="outline" className="w-full shrink-0 rounded-xl sm:w-auto" onClick={onToggleTheme}>
+                {themeMode === "dark" ? <Sun className="mr-2 size-4" /> : <Moon className="mr-2 size-4" />}
+                {themeMode === "dark" ? "Usar modo claro" : "Usar modo oscuro"}
               </Button>
             </div>
           </section>
           <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-sm sm:p-6">
             <div>
-              <h3 className="text-lg font-black uppercase italic tracking-tight">
-                Tema de la vista Manager
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Selecciona el acento visual del panel y su sidebar.
-              </p>
+              <h3 className="text-lg font-black uppercase italic tracking-tight">Paletas de color</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Las mismas paletas y modos de aplicación disponibles en la configuración de sucursal.</p>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {Object.entries(MANAGER_THEME_PRESETS).map(([id, preset]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() =>
-                    onPresetChange(id as ManagerThemeState["preset"])
-                  }
-                  className={cn(
-                    "flex min-w-0 items-center gap-3 rounded-2xl border p-4 text-left transition-colors",
-                    theme.preset === id
-                      ? "border-primary bg-primary/10"
-                      : "border-border/60 hover:border-primary/50",
-                  )}
-                >
-                  <span
-                    className="size-10 shrink-0 rounded-xl shadow-inner"
-                    style={{ background: preset.primary }}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-black">
-                      {preset.label}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      Acento y navegación Manager
-                    </span>
-                  </span>
-                  {theme.preset === id && (
-                    <span className="shrink-0 text-sm font-black text-primary">
-                      ✓
-                    </span>
-                  )}
+              {THEME_PRESETS.map((preset) => (
+                <button key={preset.name} type="button" onClick={() => onPresetChange(preset)} aria-pressed={activePresetName === preset.name}
+                  className={cn("flex min-w-0 items-center gap-3 rounded-2xl border p-4 text-left transition-colors", activePresetName === preset.name ? "border-primary bg-primary/10" : "border-border/60 hover:border-primary/50")}>
+                  <span className="size-10 shrink-0 rounded-xl shadow-inner" style={{ background: preset.primary }} />
+                  <span className="min-w-0 flex-1"><span className="block text-sm font-black">{preset.name}</span><span className="mt-1 block text-xs text-muted-foreground">{preset.description}</span></span>
+                  {activePresetName === preset.name && <span className="shrink-0 text-sm font-black text-primary">✓</span>}
                 </button>
               ))}
+            </div>
+            <div className="mt-5 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Modo de aplicación de la paleta">
+              <button type="button" role="radio" aria-checked={!isComplete} onClick={() => onPaletteModeChange("details")}
+                className={cn("rounded-xl border p-3 text-left transition-colors", !isComplete ? "border-primary bg-background shadow-sm" : "border-border/60 hover:border-primary/40")}>
+                <span className="text-sm font-bold">{!isComplete ? "✓ " : ""}Modo detalles</span>
+                <span className="mt-1 block text-xs text-muted-foreground">Cambia los elementos internos; el sidebar se mantiene neutral según el modo.</span>
+              </button>
+              <button type="button" role="radio" aria-checked={isComplete} onClick={() => onPaletteModeChange("complete")}
+                className={cn("rounded-xl border p-3 text-left transition-colors", isComplete ? "border-primary bg-background shadow-sm" : "border-border/60 hover:border-primary/40")}>
+                <span className="text-sm font-bold">{isComplete ? "✓ " : ""}Modo completo</span>
+                <span className="mt-1 block text-xs text-muted-foreground">Aplica también la tonalidad de la paleta al sidebar.</span>
+              </button>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button type="button" className="rounded-xl" onClick={onSaveTheme} disabled={isSavingTheme}>
+                {isSavingTheme ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}
+                {isSavingTheme ? "Guardando…" : "Guardar tema"}
+              </Button>
+              <Button type="button" variant="outline" className="rounded-xl" onClick={onResetTheme}>Restaurar predeterminado</Button>
             </div>
           </section>
         </div>
         <aside className="h-fit rounded-3xl border border-primary/20 bg-primary/5 p-5 sm:p-6">
-          <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Settings2 className="size-5" />
-          </div>
-          <h3 className="mt-4 text-lg font-black uppercase italic tracking-tight">
-            Alcance de esta configuración
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Estos ajustes se guardan para la consola Manager y no modifican la
-            apariencia de las sucursales ni la personalización del portal de
-            clientes.
-          </p>
+          <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Settings2 className="size-5" /></div>
+          <h3 className="mt-4 text-lg font-black uppercase italic tracking-tight">Alcance de esta configuración</h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Manager y sucursales comparten la preferencia visual de este usuario. El modo detalles conserva el sidebar neutro en claro y oscuro.</p>
           <div className="mt-5 rounded-2xl border border-border/60 bg-background/70 p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              Estado actual
-            </p>
-            <p className="mt-2 text-sm font-bold">
-              {theme.mode === "dark" ? "Modo oscuro" : "Modo claro"} ·{" "}
-              {MANAGER_THEME_PRESETS[theme.preset].label}
-            </p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado actual</p>
+            <p className="mt-2 text-sm font-bold">{themeMode === "dark" ? "Modo oscuro" : "Modo claro"} · {isComplete ? "Modo completo" : "Modo detalles"}</p>
           </div>
         </aside>
       </div>

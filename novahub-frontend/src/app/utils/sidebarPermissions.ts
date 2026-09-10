@@ -208,6 +208,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'configuracion:branding': ['CONFIG_BRANDING'],
   'configuracion:documentos-pdf': ['CONFIG_PDF'],
   'configuracion:seguridad': ['CONFIG_SECURITY'],
+  'configuracion:auditoria': ['AUDIT_LOGS'],
   'configuracion:currency': ['CONFIG_CURRENCY'],
   clientes: ['SALES_CLIENTS'],
   estimaciones: ['SALES_QUOTES'],
@@ -393,6 +394,7 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'configuracion:branding': ['CONFIG_BRANDING'],
   'configuracion:documentos-pdf': ['CONFIG_PDF'],
   'configuracion:seguridad': ['CONFIG_SECURITY'],
+  'configuracion:auditoria': ['AUDIT_LOGS'],
   'configuracion:currency': ['CONFIG_CURRENCY'],
   'cuentas-cobrar': ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES'],
   'cuentas-pagar': ['FINANCIAL_PAYABLES', 'FINANCIAL_EXPENSES'],
@@ -446,7 +448,7 @@ export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
 /** Permisos internos que siguen existiendo, pero se gobiernan desde su vista padre. */
 export const SIDEBAR_PERMISSION_PARENT_ALIASES: Record<string, string[]> = {
   MY_COMPANY: ['MY_COMPANY', 'CONFIG_COMPANY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DEPARTMENTS', 'CONFIG_DOMAINS', 'SUBSCRIPTIONS'],
-  CONFIGURATION: ['CONFIGURATION', 'CONFIG_BRANDING', 'CONFIG_SECURITY', 'CONFIG_CURRENCY', 'CONFIG_PDF'],
+  CONFIGURATION: ['CONFIGURATION', 'CONFIG_BRANDING', 'CONFIG_SECURITY', 'AUDIT_LOGS', 'CONFIG_CURRENCY', 'CONFIG_PDF'],
 };
 
 /** Alias de lectura para roles guardados antes de separar las vistas. */

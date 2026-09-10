@@ -120,6 +120,14 @@ export interface InventoryMovementSnapshot {
   clientTenantId: string;
 }
 
+export interface ManagerSeed {
+  groupId: string;
+  branchId: string;
+  userId: string;
+  email: string;
+  password: string;
+}
+
 function e2eDatabaseUrl(): string {
   const url = process.env.DATABASE_URL_E2E?.trim();
   if (!url) throw new Error('Falta DATABASE_URL_E2E; la suite no puede tocar una base no aislada.');
@@ -224,6 +232,54 @@ export class DbAssertions {
       tenantId,
     );
     return id;
+  }
+
+  async createManagerForTenant(tenantId: string, runId: string): Promise<ManagerSeed> {
+    await this.connect();
+    const rows = await this.runtime.client.$queryRawUnsafe<Array<{ enterpriseGroupId: string }>>(
+      `SELECT "enterpriseGroupId" FROM ${tableName('clientTenants')} WHERE id = $1 LIMIT 1`,
+      tenantId,
+    );
+    const groupId = rows[0]?.enterpriseGroupId;
+    if (!groupId) throw new Error(`No existe el grupo empresarial del tenant E2E ${tenantId}.`);
+
+    const branches = await this.runtime.client.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM ${tableName('clientTenants')} WHERE "enterpriseGroupId" = $1 AND "isActive" = true ORDER BY "createdAt" ASC LIMIT 1`,
+      groupId,
+    );
+    const branchId = branches[0]?.id;
+    if (!branchId) throw new Error(`El grupo E2E ${groupId} no tiene una sucursal activa.`);
+
+    const userId = randomUUID();
+    const assignmentId = randomUUID();
+    const suffix = runId.replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase();
+    const email = `manager-${suffix}@novahub.test`;
+    const password = 'E2eManager!2026Xx';
+    const passwordHash = '$2b$10$fmw9XrG88KT4yRGbC8DHRu8PPIkQ4MGjy/hAdsckTG8OSdWNosW1.';
+    const permissions = JSON.stringify([
+      { module: 'MANAGER_OVERVIEW', read: true },
+      { module: 'MANAGER_USERS', read: true, export: true },
+      { module: 'MANAGER_CONSOLIDATED', read: true },
+    ]);
+
+    await this.runtime.client.$executeRawUnsafe(
+      `INSERT INTO "User" (id, email, "passwordHash", name, "userType", role, "isActive", "sessionVersion", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'MANAGER'::"UserType", 'EMPLOYEE'::"SystemRole", true, 0, NOW(), NOW())`,
+      userId,
+      email,
+      passwordHash,
+      `Manager E2E ${suffix}`,
+    );
+    await this.runtime.client.$executeRawUnsafe(
+      `INSERT INTO "GroupManagerAssignment" (id, "enterpriseGroupId", "userId", "isOwner", "canManageManagers", "canEdit", "branchIds", "warehouseIds", permissions, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, false, false, false, $4::text[], '{}'::text[], $5::jsonb, NOW(), NOW())`,
+      assignmentId,
+      groupId,
+      userId,
+      [branchId],
+      permissions,
+    );
+    return { groupId, branchId, userId, email, password };
   }
 
   async assertOwned(table: SafeTable, recordId: string, clientTenantId: string): Promise<void> {

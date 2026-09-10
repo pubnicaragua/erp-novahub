@@ -392,14 +392,9 @@ const menuItems: MenuItem[] = [
       { id: 'branding', label: 'Marca y tema', icon: <Tags className="size-4" /> },
       { id: 'documentos-pdf', label: 'Documentos PDF', icon: <FileText className="size-4" /> },
       { id: 'seguridad', label: 'Seguridad', icon: <ShieldCheck className="size-4" /> },
+      { id: 'auditoria', label: 'Logs y auditoría', icon: <History className="size-4" /> },
       { id: 'currency', label: 'Moneda y cambio', icon: <Coins className="size-4" /> },
     ],
-  },
-  {
-    id: 'auditoria',
-    label: 'Logs y auditoría',
-    icon: <History className="size-5" />,
-    section: 'Sistema',
   },
 ];
 
@@ -433,22 +428,10 @@ const platformMenuItems: MenuItem[] = [
     icon: <Building2 className="size-5" />,
   },
   {
-    id: 'configuracion',
-    label: 'Configuración global',
-    icon: <Settings className="size-5" />,
-    section: 'Ajustes',
-    submenu: [
-      { id: 'branding', label: 'Marca y tema', icon: <Tags className="size-4" /> },
-      { id: 'documentos-pdf', label: 'Documentos PDF', icon: <FileText className="size-4" /> },
-      { id: 'seguridad', label: 'Seguridad', icon: <ShieldCheck className="size-4" /> },
-      { id: 'currency', label: 'Moneda y cambio', icon: <Coins className="size-4" /> },
-    ],
-  },
-  {
     id: 'auditoria',
     label: 'Logs y auditoría',
     icon: <History className="size-5" />,
-    section: 'Seguridad',
+    section: 'Ajustes',
   },
   {
     id: 'centro-capacitacion',

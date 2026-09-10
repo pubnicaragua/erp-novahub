@@ -1667,6 +1667,17 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     return Number(product.stock || 0);
   };
 
+  const getProductStockMinimum = (product: any) => {
+    const allLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
+    const levels = stockWarehouseIdSet.size > 0
+      ? allLevels.filter((level: any) => stockWarehouseIdSet.has(level.warehouseId || level.warehouse?.id))
+      : allLevels;
+    const levelMinimums = levels.map((level: any) => Number(level.minStock || 0)).filter((value: number) => value > 0);
+    if (levelMinimums.length > 0) return Math.max(...levelMinimums);
+    const productMinimum = Number(product.minStock ?? product.details?.minStock ?? 0);
+    return productMinimum > 0 ? productMinimum : 10;
+  };
+
   const colFilters = useColumnFilters();
   const filterGetters = {
     code: (p: any) => p.code || '',
@@ -1708,8 +1719,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const pType = String(p.itemType || p.type || 'PRODUCT').toUpperCase();
     const matchesType = pType === catalogItemType;
     const stock = getProductStock(p);
-    const pMinStock = Number(p.minStock || 0);
-    const stockThreshold = pMinStock > 0 ? pMinStock : 10;
+    const stockThreshold = getProductStockMinimum(p);
     const matchesKpiStock = stockFilter === 'all'
       || (stockFilter === 'available' && pType === 'PRODUCT' && stock > stockThreshold)
       || (stockFilter === 'available' && pType === 'PRODUCT' && stockThreshold <= 0 && stock > 0)
@@ -1784,8 +1794,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const isLow = (p: any) => {
       const stock = getProductStock(p);
       if (stock <= 0) return false;
-      const minStock = Number(p.minStock || 0);
-      return minStock > 0 ? stock <= minStock : stock < 10;
+      return stock <= getProductStockMinimum(p);
     };
     return {
       total: stockProducts.length,
@@ -1793,8 +1802,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         if (catalogItemType === 'SERVICE') return true;
         const stock = getProductStock(p);
         if (stock <= 0) return false;
-        const minStock = Number(p.minStock || 0);
-        return minStock > 0 ? stock > minStock : stock >= 10;
+        return stock > getProductStockMinimum(p);
       }).length,
       low: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter(isLow).length,
       out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => getProductStock(p) <= 0).length,
@@ -1909,9 +1917,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const getStockStatus = (product: any) => {
     const stock = getProductStock(product);
     if (stock <= 0) return { label: 'Sin Stock', color: 'bg-red-500/10 text-red-500', icon: 'critical' };
-    const minStock = Number(product.minStock || 0);
-    if (minStock > 0 && stock <= minStock) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500', icon: 'low' };
-    if (stock < 10) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500', icon: 'low' };
+    if (stock <= getProductStockMinimum(product)) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500', icon: 'low' };
     return { label: 'OK', color: 'bg-green-500/10 text-green-500', icon: 'ok' };
   };
 
@@ -1926,9 +1932,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const getStockAlertColor = (product: any) => {
     const stock = getProductStock(product);
     if (stock <= 0) return 'text-red-500 font-bold';
-    const minStock = Number(product.minStock || 0);
-    if (minStock > 0 && stock <= minStock) return 'text-orange-500 font-bold';
-    if (stock < 10) return 'text-orange-500';
+    if (stock <= getProductStockMinimum(product)) return 'text-orange-500 font-bold';
     const maxStock = getProductMaxStock(product);
     if (maxStock > 0 && stock > maxStock) return 'text-blue-500';
     return 'text-foreground';

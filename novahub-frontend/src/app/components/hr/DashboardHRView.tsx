@@ -17,13 +17,16 @@ const DEPT_COLORS = [
   'from-sky-500 to-blue-600',
 ];
 
-export function DashboardHRView({ employees, departments, leaveRequests, reviews }: any) {
+export function DashboardHRView({ stats, employees, departments, leaveRequests, reviews }: any) {
   const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
-  const activeEmployees = employees.filter((e: any) => e.employmentStatus === 'ACTIVE').length;
-  const inactiveEmployees = employees.filter((e: any) => e.employmentStatus !== 'ACTIVE').length;
-  const pendingLeaves = leaveRequests.filter((l: any) => l.status === 'PENDING').length;
+  const activeEmployees = Number(stats?.activeEmployees ?? employees.filter((e: any) => e.employmentStatus === 'ACTIVE').length);
+  const totalEmployees = Number(stats?.totalEmployees ?? employees.length);
+  const inactiveEmployees = Math.max(0, totalEmployees - activeEmployees);
+  const pendingLeaves = Number(stats?.pendingLeaves ?? leaveRequests.filter((l: any) => l.status === 'PENDING').length);
+  const departmentCount = Number(stats?.departments ?? departments.length);
+  const activePayrollEmployees = employees.filter((employee: any) => employee.employmentStatus === 'ACTIVE');
   
-  const totalPayroll = employees.reduce((sum: number, e: any) => {
+  const totalPayroll = activePayrollEmployees.reduce((sum: number, e: any) => {
     const salary = Number(e.salary ?? e.salaryBase ?? 0) || 0;
     return sum + (valuationMode === 'CURRENT'
       ? convertCurrentAmount(salary, e.currency || 'USD')
@@ -31,19 +34,19 @@ export function DashboardHRView({ employees, departments, leaveRequests, reviews
   }, 0);
 
   const formattedPayroll = formatCurrentAmount(totalPayroll, displayCurrency);
-  const payrollCurrencies = summarizeAmountsByCurrency(employees, () => 0, (employee: any) => employee.currency || 'USD').map((item) => item.currency);
-  const originalPayroll = (currency: SupportedCurrency) => employees
+  const payrollCurrencies = summarizeAmountsByCurrency(activePayrollEmployees, () => 0, (employee: any) => employee.currency || 'USD').map((item) => item.currency);
+  const originalPayroll = (currency: SupportedCurrency) => activePayrollEmployees
     .filter((employee: any) => normalizeCurrency(employee.currency || 'USD') === currency)
     .reduce((sum: number, employee: any) => sum + (Number(employee.salary ?? employee.salaryBase ?? 0) || 0), 0);
   const payrollCards = displayMode === 'ORIGINAL'
-    ? payrollCurrencies.map((currency) => ({ label: `Planilla Mensual (${currency})`, value: formatExplicitAmount(originalPayroll(currency), currency), sub: 'Costo total nómina', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }))
-    : [{ label: `Planilla Mensual${valuationModeSuffix}`, value: formattedPayroll, sub: 'Costo total nómina', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }];
+    ? payrollCurrencies.map((currency) => ({ label: `Salarios activos (${currency})`, value: formatExplicitAmount(originalPayroll(currency), currency), sub: 'Suma de salarios registrados', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }))
+    : [{ label: `Salarios activos${valuationModeSuffix}`, value: formattedPayroll, sub: 'Suma de salarios registrados', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }];
 
   const statCards = [
-    { label: 'Total Empleados', value: employees.length, sub: `${activeEmployees} activos · ${inactiveEmployees} inactivos`, icon: Users, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
+    { label: 'Total Empleados', value: totalEmployees, sub: `${activeEmployees} activos · ${inactiveEmployees} inactivos`, icon: Users, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
     ...payrollCards,
     { label: 'Ausencias Pendientes', value: pendingLeaves, sub: 'Por aprobar', icon: Clock, color: pendingLeaves > 0 ? 'text-orange-500' : 'text-emerald-500', bg: pendingLeaves > 0 ? 'bg-orange-500/10' : 'bg-emerald-500/10', border: pendingLeaves > 0 ? 'border-orange-500/20' : 'border-emerald-500/20' },
-    { label: 'Departamentos', value: departments.length, sub: 'Áreas activas', icon: Briefcase, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
+    { label: 'Departamentos', value: departmentCount, sub: 'Áreas activas', icon: Briefcase, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
   ];
 
   // Department distribution

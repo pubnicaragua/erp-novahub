@@ -19,7 +19,7 @@ import { Button } from './ui/button';
 import { masterConsoleService } from '../services/master-console.service';
 import { useTenantQuery } from '../hooks/useTenantQuery';
 import {
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line 
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell
 } from 'recharts';
 
 function formatStorageBytes(bytes: number | undefined) {
@@ -32,7 +32,7 @@ function formatStorageBytes(bytes: number | undefined) {
 }
 
 export function AdminOverview() {
-  const { data: overview, isLoading: loading } = useTenantQuery(
+  const { data: overview, isLoading: loading, isError: overviewUnavailable } = useTenantQuery(
     ['master-console-overview'],
     (signal) => masterConsoleService.getOverview(signal),
     { onError: (error) => console.error('Error fetching admin stats:', error) },
@@ -46,8 +46,26 @@ export function AdminOverview() {
   const storageLoading = storageQuery.isLoading;
   const storageUnavailable = storageQuery.isError;
   const databaseUnavailable = storage?.database.status === 'unavailable';
+  const systemStatus = loading || storageLoading ? 'Sincronizando' : overviewUnavailable || storageUnavailable || databaseUnavailable ? 'Atención' : 'Operativo';
+  const systemStatusClass = systemStatus === 'Atención'
+    ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+    : systemStatus === 'Sincronizando'
+      ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+      : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+  const systemStatusDot = systemStatus === 'Atención' ? 'bg-amber-500' : systemStatus === 'Sincronizando' ? 'bg-blue-500' : 'bg-emerald-500';
   const tenants = overview?.tenantsSummary || [];
   const requests = overview?.pendingRequestDetails || [];
+  const planDistribution = Object.entries(overview?.planDistribution || {}).map(([plan, value]) => ({
+    plan: plan === 'BASIC' ? 'Básico' : plan === 'PROFESSIONAL' ? 'Profesional' : plan === 'ENTERPRISE' ? 'Enterprise' : 'Personalizado',
+    value: Number(value || 0),
+  }));
+  const operationalSummary = [
+    { label: 'Empresas activas', value: overview?.activeTenants || 0, color: 'bg-emerald-500' },
+    { label: 'Empresas en mora', value: overview?.tenantsInMora || 0, color: 'bg-amber-500' },
+    { label: 'Empresas suspendidas', value: overview?.suspendedTenants || 0, color: 'bg-rose-500' },
+    { label: 'Implementaciones pendientes', value: overview?.pendingImplementations || 0, color: 'bg-blue-500' },
+    { label: 'Tickets abiertos', value: overview?.openTickets || 0, color: 'bg-violet-500' },
+  ];
 
   const stats = [
     { label: 'Empresas Totales', value: overview?.totalTenants || 0, icon: Building2, color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -63,9 +81,9 @@ export function AdminOverview() {
       {/* Header Section */}
       <div className="flex justify-end">
         <div className="flex items-center gap-3">
-          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 gap-1.5 font-bold uppercase tracking-widest text-[10px]">
-            <div className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Sistema en Línea
+          <Badge variant="outline" className={`${systemStatusClass} px-3 py-1 gap-1.5 font-bold uppercase tracking-widest text-[10px]`}>
+            <div className={`size-1.5 rounded-full ${systemStatusDot} ${systemStatus === 'Operativo' ? 'animate-pulse' : ''}`} />
+            {systemStatus}
           </Badge>
         </div>
       </div>
@@ -155,57 +173,48 @@ export function AdminOverview() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Growth Chart */}
+        {/* Distribución real de la cartera */}
         <Card className="lg:col-span-2 rounded-3xl border-border/50 bg-card/30 backdrop-blur-md overflow-hidden">
           <CardHeader>
             <CardTitle className="text-lg font-bold flex items-center gap-2 uppercase tracking-tight">
-              <TrendingUp className="size-5 text-primary" /> Crecimiento de la Red
+              <TrendingUp className="size-5 text-primary" /> Distribución de la Red
             </CardTitle>
-            <CardDescription>Incorporación de nuevos Tenants y Usuarios por mes.</CardDescription>
+            <CardDescription>Empresas registradas por plan según la cartera actual.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={[
-                { name: 'Ene', tenants: 4, users: 12 },
-                { name: 'Feb', tenants: 7, users: 25 },
-                { name: 'Mar', tenants: overview?.totalTenants || 0, users: overview?.totalUsers || 0 },
-              ]}>
+              <BarChart data={planDistribution} margin={{ top: 16, right: 20, left: 0, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.3} />
-                <XAxis dataKey="name" fontSize={12} stroke="currentColor" opacity={0.5} />
+                <XAxis dataKey="plan" fontSize={12} stroke="currentColor" opacity={0.5} />
                 <YAxis fontSize={12} stroke="currentColor" opacity={0.5} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
                 />
-                <Line type="monotone" dataKey="tenants" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 6 }} activeDot={{ r: 8 }} />
-                <Line type="monotone" dataKey="users" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 6 }} />
-              </LineChart>
+                <Bar dataKey="value" name="Empresas" radius={[8, 8, 0, 0]} maxBarSize={64}>
+                  {planDistribution.map((entry) => <Cell key={entry.plan} fill={entry.value > 0 ? 'hsl(var(--primary))' : 'hsl(var(--muted))'} />)}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* System Health */}
+        {/* Estado operativo real */}
         <Card className="rounded-3xl border-border/50 bg-card/30 backdrop-blur-md">
           <CardHeader>
             <CardTitle className="text-lg font-bold flex items-center gap-2 uppercase tracking-tight">
-               <Activity className="size-5 text-emerald-500" /> Estado de Servicios
+               <Activity className="size-5 text-emerald-500" /> Estado operativo
             </CardTitle>
+            <CardDescription>Indicadores calculados desde empresas, soporte y suscripciones.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-4">
-              {[
-                { label: 'API Gateway', status: 'Healthy', latency: '24ms', color: 'bg-emerald-500' },
-                { label: 'Database Service', status: 'Healthy', latency: '8ms', color: 'bg-emerald-500' },
-                { label: 'Storage S3', status: 'Healthy', latency: '42ms', color: 'bg-emerald-500' },
-                { label: 'Notification Socket', status: 'Slow', latency: '180ms', color: 'bg-amber-500' },
-              ].map((s, i) => (
-                <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-border/50">
+              {operationalSummary.map((s) => (
+                <div key={s.label} className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-border/50">
                   <div className="flex items-center gap-3">
                     <div className={`size-2 rounded-full ${s.color} animate-pulse`} />
                     <span className="text-sm font-bold text-foreground/80">{s.label}</span>
                   </div>
-                  <div className="text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
-                    {s.status} / {s.latency}
-                  </div>
+                  <span className="text-lg font-black tabular-nums text-foreground">{s.value}</span>
                 </div>
               ))}
             </div>

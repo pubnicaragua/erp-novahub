@@ -30,12 +30,16 @@ export function PartnerDashboard({ onNavigate }: PartnerDashboardProps) {
   );
   const tenants = partnerData?.tenants || [];
   const requests = partnerData?.requests || [];
+  const enabledModulesFor = (tenant: any) => (tenant.subscriptions || tenant.enabledModules || [])
+    .filter((subscription: any) => subscription?.isActive !== false).length;
+  const enabledModuleCount = tenants.reduce((acc, tenant) => acc + enabledModulesFor(tenant), 0);
+  const averageModulesPerClient = tenants.length > 0 ? enabledModuleCount / tenants.length : 0;
 
   const stats = [
     { title: 'Clientes Activos', value: tenants.length, icon: Building2, color: 'text-blue-500', bgColor: 'bg-blue-500/10' },
-    { title: 'Módulos Habilitados', value: tenants.reduce((acc, t) => acc + (t.enabledModules?.length || 0), 0), icon: Zap, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10' },
+    { title: 'Módulos Habilitados', value: enabledModuleCount, icon: Zap, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10' },
     { title: 'Solicitudes Pendientes', value: requests.filter(r => r.status === 'PENDING').length, icon: Clock, color: 'text-amber-500', bgColor: 'bg-amber-500/10' },
-    { title: 'Ingresos Proyectados', value: `$${tenants.length * 125}`, icon: TrendingUp, color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+    { title: 'Promedio módulos/cliente', value: averageModulesPerClient.toFixed(1), icon: TrendingUp, color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
   ];
 
   return (
@@ -105,7 +109,7 @@ export function PartnerDashboard({ onNavigate }: PartnerDashboardProps) {
                       <p className="text-xs text-muted-foreground/60 font-medium uppercase tracking-tighter flex items-center gap-2">
                          <span className="text-primary/50">✦ {tenant.industry || 'General'}</span>
                          <span className="opacity-20">|</span>
-                         <span>{tenant.enabledModules?.length || 0} Módulos</span>
+                         <span>{enabledModulesFor(tenant)} Módulos</span>
                       </p>
                     </div>
                   </div>

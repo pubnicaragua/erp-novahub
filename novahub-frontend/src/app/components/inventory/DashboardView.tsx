@@ -8,7 +8,19 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
   const { displayCurrency, displayMode, valuationMode, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
-  const productValue = (product: any) => Number(product.stock || 0) * Number(product.costPrice || 0);
+  const stockInfo = (product: any) => {
+    const levels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
+    const stock = levels.length > 0
+      ? levels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0)
+      : Number(product?.stock || 0);
+    const configuredMinStock = Number(product?.minStock ?? product?.details?.minStock ?? 0);
+    const defaultMinimum = configuredMinStock > 0 ? configuredMinStock : 10;
+    const hasLowLevel = levels.length > 0
+      ? levels.some((level: any) => Number(level?.quantity || 0) > 0 && Number(level?.quantity || 0) <= (Number(level?.minStock || 0) > 0 ? Number(level.minStock) : defaultMinimum))
+      : stock > 0 && stock <= defaultMinimum;
+    return { stock, hasLowLevel, outOfStock: stock <= 0 };
+  };
+  const productValue = (product: any) => stockInfo(product).stock * Number(product.costPrice ?? product.details?.costPrice ?? 0);
   const totalValue = products.reduce((acc: number, product: any) => {
     const amount = productValue(product);
     return acc + (valuationMode === 'CURRENT' ? convertCurrentAmount(amount, product.currency) : convertAmount(amount, product.currency, product.exchangeRate));
@@ -18,10 +30,10 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
     .filter((product: any) => normalizeCurrency(product.currency) === currency)
     .reduce((acc: number, product: any) => acc + productValue(product), 0);
   const originalProductCount = (currency: SupportedCurrency) => products.filter((product: any) => normalizeCurrency(product.currency) === currency).length;
-  const totalStockUnits = products.reduce((acc: number, p: any) => acc + Number(p.stock || 0), 0);
+  const totalStockUnits = products.reduce((acc: number, p: any) => acc + stockInfo(p).stock, 0);
   const averageTicketValue = products.length > 0 ? totalValue / products.length : 0;
-  const lowStockCount = products.filter((p: any) => (p.stock || 0) < 10 && (p.stock || 0) > 0).length;
-  const outOfStockCount = products.filter((p: any) => (p.stock || 0) === 0).length;
+  const lowStockCount = products.filter((p: any) => stockInfo(p).hasLowLevel).length;
+  const outOfStockCount = products.filter((p: any) => stockInfo(p).outOfStock).length;
   const pendingTransfers = transfers.filter((t: any) => ['PENDING', 'IN_TRANSIT'].includes(String(t.status || '').toUpperCase())).length;
   const draftAdjustments = adjustments.filter((a: any) => String(a.status || '').toUpperCase() === 'DRAFT').length;
   
@@ -53,7 +65,7 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
     })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 5);
 
-  const lowStockProducts = products.filter((p: any) => (p.stock || 0) < 10).slice(0, 5);
+  const lowStockProducts = products.filter((p: any) => stockInfo(p).hasLowLevel || stockInfo(p).outOfStock).slice(0, 5);
 
   return (
     <div className="space-y-4">
@@ -99,8 +111,8 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
                       <p className="text-sm font-bold italic truncate">{p.name}</p>
                       <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest truncate">{p.code}</p>
                     </div>
-                    <span className={`text-sm font-bold shrink-0 ${(p.stock || 0) === 0 ? 'text-red-600' : 'text-orange-600'}`}>
-                      {p.stock || 0} uds
+                    <span className={`text-sm font-bold shrink-0 ${stockInfo(p).outOfStock ? 'text-red-600' : 'text-orange-600'}`}>
+                      {stockInfo(p).stock} uds
                     </span>
                   </div>
                 ))}

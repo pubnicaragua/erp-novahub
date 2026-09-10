@@ -759,8 +759,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
       if (module === 'guia-implementacion') return user.role === 'superadmin';
+      // La consola de SuperAdmin expone la auditoría como vista propia; no
+      // debe conservar el módulo general de Configuración ni sus subpáginas.
+      if (module === 'configuracion') return false;
       const platformModules = [
-        'dashboard', 'suscripciones', 'tenant-admin', 'configuracion', 'notificaciones',
+        'dashboard', 'suscripciones', 'tenant-admin', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
         'qa-console', 'fuerza-comercial',
         'auditoria',
