@@ -32,6 +32,7 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { useAuth } from '../../contexts/AuthContext';
 import { trainingService } from '../../services/training.service';
 import { cn } from '../ui/utils';
@@ -181,20 +182,41 @@ export function TrainingHubView() {
 
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:px-10 md:pb-10 md:pt-4">
-      <div className="flex justify-end">
-        {isSuperAdmin && (
-          <Button 
-            onClick={() => setShowUploadModal(true)}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 py-6 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all"
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <GraduationCap className="size-6" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Centro de capacitación</p>
+            <h1 className="mt-1 text-2xl font-black uppercase italic tracking-tight sm:text-3xl">Aprende a usar NovaHub</h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Encuentra guías, videos y material de referencia para trabajar mejor con tu ERP.</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={openAiChat}
+            className="h-11 rounded-xl border-primary/30 px-4 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/5 hover:text-primary"
           >
-            <Plus className="size-5 mr-2" />
-            Subir Video
+            <Bot className="mr-2 size-4" />
+            Pregúntale a la IA
           </Button>
-        )}
+          {isSuperAdmin && (
+            <Button
+              type="button"
+              onClick={() => setShowUploadModal(true)}
+              className="h-11 rounded-xl bg-primary px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
+            >
+              <Plus className="mr-2 size-4" />
+              Subir Video
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Stats Quick View */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="bg-gradient-to-br from-primary/10 to-transparent p-4 rounded-3xl border border-primary/20 backdrop-blur-sm shadow-sm">
           <p className="text-[10px] font-black uppercase tracking-widest text-primary/60 mb-1">Total Guías</p>
           <p className="text-3xl font-black tracking-tighter italic">{videos.length} VIDEOS</p>
@@ -209,9 +231,8 @@ export function TrainingHubView() {
         </div>
       </div>
 
-      {/* Search & Filters Original */}
-      <div className="flex flex-col md:flex-row gap-4 items-center bg-muted/30 p-2 rounded-3xl border border-border/40 backdrop-blur-md">
-        <div className="relative flex-1">
+      <div className="space-y-3">
+        <div className="relative w-full max-w-xl">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input 
             placeholder="¿Qué quieres aprender hoy?..." 
@@ -222,32 +243,32 @@ export function TrainingHubView() {
                 openAiChat();
               }
             }}
-            className="pl-11 bg-background/50 border-transparent focus:bg-background rounded-2xl h-12 text-sm font-bold shadow-none"
+            className="h-11 rounded-xl border-border/50 bg-card/80 pl-11 text-sm font-bold shadow-sm focus:bg-background"
           />
         </div>
-        <Button
-          onClick={openAiChat}
-          className="bg-gradient-to-br from-primary to-emerald-600 hover:from-primary/90 hover:to-emerald-600/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 h-12 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all"
-        >
-          <Bot className="size-5 mr-2" />
-          Pregúntale a la IA
-        </Button>
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 px-2 no-scrollbar">
-          {MODULE_CATEGORIES.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={cn(
-                "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border border-transparent",
-                activeCategory === cat.id 
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" 
-                  : "bg-background/50 text-muted-foreground hover:bg-background hover:text-primary"
-              )}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+        <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
+          <div className="w-full overflow-x-auto custom-scrollbar">
+            <div className="flex w-full min-w-max justify-center">
+              <TabsList className="flex h-auto w-max shrink-0 flex-nowrap gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
+                {MODULE_CATEGORIES.map((cat) => {
+                  const Icon = cat.icon;
+                  return (
+                    <TabsTrigger
+                      key={cat.id}
+                      value={cat.id}
+                      className="flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-[10px] font-black uppercase tracking-widest transition-[background-color,color,box-shadow,transform] duration-200 active:scale-[0.98] sm:px-4
+                        data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+                        data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg"
+                    >
+                      <Icon className="size-4" />
+                      <span>{cat.label}</span>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </div>
+          </div>
+        </Tabs>
       </div>
 
       {PDF_GUIDES.length > 0 && (activeCategory === 'ALL' || PDF_GUIDES.some((guide) => guide.module === activeCategory)) && (

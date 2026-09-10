@@ -76,9 +76,12 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
     }
   };
 
-  const filteredCases = cases.filter((c) =>
-    !search || c.number.toLowerCase().includes(search.toLowerCase()) || c.description.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredCases = cases.filter((c) => {
+    const query = search.toLowerCase();
+    return !query
+      || String(c.number ?? '').toLowerCase().includes(query)
+      || String(c.description ?? '').toLowerCase().includes(query);
+  });
 
   const stats = {
     total: cases.length,
@@ -326,6 +329,8 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const c = detailQuery.data || caseData;
+  const documents = Array.isArray(c.documents) ? c.documents : [];
+  const notes = Array.isArray(c.notes) ? c.notes : [];
 
   const handleAddNote = async () => {
     if (!note.trim()) return;
@@ -394,11 +399,11 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
           </div>
         </div>
 
-        {c.documents.length > 0 && (
+        {documents.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Documentos ({c.documents.length})</h4>
+            <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Documentos ({documents.length})</h4>
             <div className="space-y-1">
-              {c.documents.map((doc) => (
+              {documents.map((doc) => (
                 <div key={doc.id} className="flex items-center justify-between rounded-xl bg-muted/30 px-4 py-2 border border-border/30">
                   <span className="text-sm font-bold">{doc.name}</span>
                   <span className="text-xs text-muted-foreground">{new Date(doc.createdAt).toLocaleDateString('es-NI')}</span>
@@ -409,10 +414,10 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
         )}
 
         <div className="space-y-3">
-          <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Notas ({c.notes.length})</h4>
-          {c.notes.length === 0 && <p className="text-xs text-muted-foreground">Sin notas aún.</p>}
+          <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Notas ({notes.length})</h4>
+          {notes.length === 0 && <p className="text-xs text-muted-foreground">Sin notas aún.</p>}
           <div className="space-y-2">
-            {c.notes.map((n) => (
+            {notes.map((n) => (
               <div key={n.id} className={cn('rounded-xl p-3 border text-sm', n.isInternal ? 'bg-amber-50 border-amber-200' : 'bg-muted/30 border-border/30')}>
                 <p className="whitespace-pre-wrap">{n.content}</p>
                 <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
@@ -544,6 +549,7 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
 }
 
 function NewReminderForm({ cases, onComplete, onCancel }: { cases: LegalCase[]; onComplete: (r: LegalReminder) => void; onCancel: () => void }) {
+  const NO_CASE_VALUE = '__no_legal_case__';
   const [form, setForm] = useState({ title: '', description: '', dueDate: '', caseId: '' });
   const [loading, setLoading] = useState(false);
 
@@ -580,10 +586,13 @@ function NewReminderForm({ cases, onComplete, onCancel }: { cases: LegalCase[]; 
         </div>
         <div className="space-y-1.5">
           <Label className="text-[10px] uppercase font-black tracking-widest">Caso vinculado</Label>
-          <Select value={form.caseId} onValueChange={(v) => setForm({ ...form, caseId: v })}>
+          <Select
+            value={form.caseId || NO_CASE_VALUE}
+            onValueChange={(v) => setForm({ ...form, caseId: v === NO_CASE_VALUE ? '' : v })}
+          >
             <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Ninguno" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Ninguno</SelectItem>
+              <SelectItem value={NO_CASE_VALUE}>Ninguno</SelectItem>
               {cases.map((c) => <SelectItem key={c.id} value={c.id}>{c.number} — {legalService.getCaseTypeLabel(c.type)}</SelectItem>)}
             </SelectContent>
           </Select>

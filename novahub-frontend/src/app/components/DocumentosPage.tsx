@@ -21,7 +21,18 @@ interface DocumentosPageProps {
 
 export const DocumentosPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: DocumentosPageProps) => {
   const { user, canPerform } = useAuth();
-  const normalizeTab = (value?: string) => value === 'nova-cloud-planes' ? 'planes' : value;
+  const normalizeTab = (value?: string) => {
+    if (value === 'nova-cloud-planes') return 'planes';
+    if (value === 'doc-facturas') return 'facturas';
+    if (value === 'doc-reportes') return 'reportes';
+    return value;
+  };
+  const toSidebarSubModule = (value: string) => {
+    if (value === 'planes') return 'nova-cloud-planes';
+    if (value === 'facturas') return 'doc-facturas';
+    if (value === 'reportes') return 'doc-reportes';
+    return value;
+  };
   const tabs = [
     { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500', module: 'DOCUMENTS_FILES' },
     { id: 'contratos', label: 'Contratos', icon: Scale, color: 'text-emerald-500', module: 'DOCUMENTS_CONTRACTS' },
@@ -62,30 +73,30 @@ export const DocumentosPage = ({ activeSubModule, onSubModuleChange, isSidebarCo
   const handleTabChange = (value: string) => {
     if (!visibleTabs.some((tab) => tab.id === value)) return;
     setActiveTab(value);
-    onSubModuleChange?.(value === 'planes' ? 'nova-cloud-planes' : value);
+    onSubModuleChange?.(toSidebarSubModule(value));
   };
 
   return (
-    <div className="flex flex-1 bg-background w-full">
-      <main className="flex-1 relative">
-        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
+    <div className="flex min-w-0 flex-1 overflow-x-hidden bg-background">
+      <main className="relative min-w-0 flex-1">
+        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] overflow-x-hidden p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
 
           <CurrencyValuationBanner className="mb-3" />
 
-          <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-          <div className={cn("w-full overflow-x-auto custom-scrollbar mb-4", !isSidebarCollapsed && "hidden lg:hidden")}>
-          <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
+          <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
+          <div className={cn("mb-4 w-full min-w-0 max-w-full overscroll-x-contain overflow-x-auto custom-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
+          <TabsList className="flex h-auto w-max min-w-full max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {visibleTabs.map((tab) => {
                 return (
                 <TabsTrigger 
                   key={tab.id} 
                   value={tab.id}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                  className="flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-xs font-black uppercase tracking-widest sm:px-4
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
                 >
                   <tab.icon className="size-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span>{tab.label}</span>
                 </TabsTrigger>
                 );
               })}
@@ -95,6 +106,7 @@ export const DocumentosPage = ({ activeSubModule, onSubModuleChange, isSidebarCo
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
+                className="w-full min-w-0"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
