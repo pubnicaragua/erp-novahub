@@ -134,7 +134,14 @@ function hydratePermissions(role: any) {
   const hydrated = ROLE_PERMISSION_MODULES.map((module: any) => {
     const candidates = [module.id, ...(LEGACY_VIEW_PERMISSION_ALIASES[module.id] || [])]
       .map((candidate) => String(candidate).toUpperCase());
-    const existing = current.find((permission: any) => candidates.includes(String(permission.module || '').toUpperCase()));
+    // La fila canónica de la vista siempre tiene prioridad. Antes se buscaba
+    // cualquier alias con `find` sobre el arreglo completo; como el módulo
+    // padre suele aparecer primero, un padre en false podía ocultar una vista
+    // hija en true al volver a editar el rol.
+    const existing = current.find((permission: any) => String(permission.module || '').toUpperCase() === candidates[0])
+      || candidates.slice(1)
+        .map((candidate) => current.find((permission: any) => String(permission.module || '').toUpperCase() === candidate))
+        .find(Boolean);
     const parent = module.parent
       ? current.find((permission: any) => String(permission.module || '').toUpperCase() === String(module.parent).toUpperCase())
       : undefined;
@@ -149,6 +156,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
   const { user: currentUser } = useAuth();
   const [roleView, setRoleView] = useState<'list' | 'editor' | 'preview'>('list');
   const [roleSaving, setRoleSaving] = useState(false);
+  const [roleLoading, setRoleLoading] = useState(false);
   const [editingRole, setEditingRole] = useState<any | null>(null);
   const [viewingRole, setViewingRole] = useState<any | null>(null);
   const [assignedUsersRole, setAssignedUsersRole] = useState<any | null>(null);
@@ -262,11 +270,8 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
   };
 
   const load = async () => {
-    try {
-      await refetchTeam();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'No se pudo cargar la configuración del equipo');
-    }
+    const result = await refetchTeam({ throwOnError: true });
+    return result.data?.roles || [];
   };
 
   const groupedModules = useMemo(() => rolePermissionModules.reduce((groups: Record<string, any[]>, module: any) => {
@@ -420,12 +425,28 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
 
   const isAllPermissionsEnabled = () => rolePermissionModules.length > 0 && rolePermissionModules.every((module: any) => isViewFullyEnabled(module));
 
-  const openEditRole = (role: any) => {
-    if (!canEditRoles) return;
-    setEditingRole({ ...role, permissions: hydratePermissions(role), ...(Array.isArray(role.warehouseIds) ? { warehouseIds: role.warehouseIds } : {}) });
-    setViewingRole(null);
-    collapseAll();
-    setRoleView('editor');
+  const openEditRole = async (role: any) => {
+    if (!canEditRoles || roleLoading || !role?.id) return;
+    setRoleLoading(true);
+    try {
+      // La fila de la tabla puede quedar desactualizada después de guardar.
+      // El editor debe reconstruirse desde la respuesta autoritativa del API.
+      const response = await rolesService.getById(String(role.id));
+      const freshRole = response?.data?.id ? response.data : response;
+      if (!freshRole?.id) throw new Error('El servidor no devolvió el rol solicitado');
+      setEditingRole({
+        ...freshRole,
+        permissions: hydratePermissions(freshRole),
+        ...(Array.isArray(freshRole.warehouseIds) ? { warehouseIds: freshRole.warehouseIds } : {}),
+      });
+      setViewingRole(null);
+      collapseAll();
+      setRoleView('editor');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo cargar la información actualizada del rol');
+    } finally {
+      setRoleLoading(false);
+    }
   };
 
   const openViewRole = (role: any) => {
@@ -515,8 +536,20 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
         warehouseIds: getRoleWarehouseIds(editingRole),
         clientTenantId: tenantId,
       };
-      if (editingRole.id) await rolesService.update(editingRole.id, payload);
-      else await rolesService.create(payload);
+      const savedResponse = editingRole.id
+        ? await rolesService.update(editingRole.id, payload)
+        : await rolesService.create(payload);
+      const savedRole = savedResponse?.data?.id ? savedResponse.data : savedResponse;
+      const savedRoleId = String(editingRole.id || savedRole?.id || '');
+
+      // Confirmar lo que realmente quedó persistido antes de cerrar el editor.
+      // Esto evita que una respuesta antigua de la lista vuelva a pintar los
+      // permisos desactivados.
+      if (savedRoleId) {
+        const verifiedResponse = await rolesService.getById(savedRoleId);
+        const verifiedRole = verifiedResponse?.data?.id ? verifiedResponse.data : verifiedResponse;
+        if (!verifiedRole?.id) throw new Error('El servidor no devolvió el rol actualizado');
+      }
       toast.success(editingRole.id ? 'Rol actualizado' : 'Rol creado');
       closeRoleView();
       await load();
@@ -624,7 +657,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       {roleView === 'editor' && editingRole && <>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3"><Button variant="outline" size="icon" onClick={closeRoleView} disabled={roleSaving} aria-label="Volver a Roles y permisos"><ArrowLeft className="size-4" /></Button><div className="min-w-0"><h2 className="truncate text-2xl font-black uppercase italic tracking-tight">{editingRole.id ? 'Editar rol' : 'Nuevo rol'}</h2><p className="truncate text-xs text-muted-foreground">Define el acceso de este rol dentro de {tenantName}.</p></div></div>
-          <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={closeRoleView} disabled={roleSaving}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving || warehouseCatalogLoading}>{roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
+          <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={closeRoleView} disabled={roleSaving || roleLoading}>Cancelar</Button>{(editingRole.id ? canEditRoles : canCreateRoles) && <Button onClick={() => void saveRole()} disabled={roleSaving || roleLoading || warehouseCatalogLoading}>{roleLoading ? 'Cargando...' : roleSaving ? 'Guardando...' : 'Guardar rol'}</Button>}</div>
         </div>
 
           <Card className="min-w-0 border-border/50"><CardHeader className="border-b border-border/30 bg-muted/10"><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><ShieldCheck className="size-4 text-primary" /> Datos del rol</CardTitle><CardDescription className="mt-1 text-xs">El nombre y la descripción ayudan a identificar el alcance del equipo.</CardDescription></CardHeader><CardContent className="grid min-w-0 gap-4 p-4 sm:p-6 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="role-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del rol</Label><Input id="role-name" data-tour="role-name" value={editingRole.name || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ej: Gerencia" className="h-11" /></div><div className="space-y-2"><Label htmlFor="role-description" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción (opcional)</Label><Input id="role-description" data-tour="role-description" value={editingRole.description || ''} onChange={(event) => setEditingRole((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe el alcance del rol" className="h-11" /></div>{editingRole.id && <div className="md:col-span-2"><AuditHistoryDisclosure entity="ROLE" entityId={String(editingRole.id)} createdAt={editingRole.createdAt} /></div>}</CardContent></Card>
