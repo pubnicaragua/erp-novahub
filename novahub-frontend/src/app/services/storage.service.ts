@@ -50,6 +50,16 @@ const supabase = supabaseUrl && supabaseAnonKey
 const storageUrlCache = new Map<string, { value: string; expiresAt: number } | Promise<string>>();
 const STORAGE_URL_CACHE_TTL_MS = 5 * 60_000;
 
+function getPublicProductImageUrl(uri: string): string | null {
+  if (!supabase || !uri.startsWith('storage://')) return null;
+  const value = uri.slice('storage://'.length);
+  const slash = value.indexOf('/');
+  if (slash <= 0 || value.slice(0, slash) !== 'product_images') return null;
+  const path = value.slice(slash + 1);
+  if (!path) return null;
+  return supabase.storage.from('product_images').getPublicUrl(path).data.publicUrl || null;
+}
+
 export function clearStorageUrlCache() {
   storageUrlCache.clear();
 }
@@ -160,6 +170,11 @@ export const storageService = {
 
   async resolveUrl(uri?: string | null): Promise<string> {
     if (!uri || !uri.startsWith('storage://')) return uri || '';
+    // Las imágenes de productos viven en un bucket público. No deben pasar
+    // por /storage/resolve porque esa ruta protege archivos privados con
+    // DOCUMENTS_FILES y bloquea a los usuarios que solo tienen Inventario.
+    const publicProductImageUrl = getPublicProductImageUrl(uri);
+    if (publicProductImageUrl) return publicProductImageUrl;
     const cached = storageUrlCache.get(uri);
     if (cached) {
       if (cached instanceof Promise) return cached;

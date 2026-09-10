@@ -4150,6 +4150,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           scrollRef={catalogTableScrollRef}
           className="min-w-0 max-w-full"
           tableClassName="overflow-x-auto overflow-y-clip scrollbar-overlay"
+          verticalWheelBehavior="page"
           label="Desplazamiento horizontal · columna por columna"
         >
         <Table

@@ -64,14 +64,18 @@ export function ControlDashboardCajaView({
   const [savingCharge, setSavingCharge] = useState<string | null>(null);
 
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const canEditCash = canPerform('RETAIL_CASH_CONTROL', 'edit');
   const canApproveCash = canPerform('RETAIL_CASH_CONTROL', 'approve');
   const canExportCash = canPerform('RETAIL_CASH_CONTROL', 'export');
-  const canManageRegisters = canPerform('RETAIL_CASH_CONTROL', 'create')
-    || canPerform('RETAIL_CASH_CONTROL', 'edit')
-    || canPerform('RETAIL_CASH_CONTROL', 'delete');
+  const canManageRegisters = canPerform('RETAIL_CASH_CONTROL', 'manage');
   const canResolveDeficits = canPerform('RETAIL_CASH_CONTROL', 'approve');
+  const canReadTeamUsers = canPerform('CONFIG_USERS', 'view');
+  const canSelectAllRegisters = Boolean(
+    user?.isTenantAdmin
+      || user?.isPlatformAdmin
+      || ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()),
+  );
   const isUSD = displayCurrency === 'USD';
   const symbol = isUSD ? '$' : 'C$';
 
@@ -97,7 +101,9 @@ export function ControlDashboardCajaView({
       setRegisters(registersData);
       if (registersData.length > 0) {
         const openRegister = registersData.find((r: any) => r.hasActiveSession);
-        setSelectedRegister(prev => prev || (openRegister ? openRegister.id : registersData[0].id));
+        setSelectedRegister(prev => registersData.some((register: any) => register.id === prev)
+          ? prev
+          : (openRegister ? openRegister.id : registersData[0].id));
       }
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Error al cargar cajas'));
@@ -116,10 +122,8 @@ export function ControlDashboardCajaView({
   const loadDeficits = useCallback(async () => {
     try {
       setDeficitsLoading(true);
-      const [charges, users] = await Promise.all([
-        cajaService.getDeficitCharges(),
-        api.get<any[]>('/users'),
-      ]);
+      const charges = await cajaService.getDeficitCharges();
+      const users = canReadTeamUsers ? await api.get<any[]>('/users') : [];
       const chargesData = Array.isArray(charges) ? charges : (((charges as any)?.data || []) as any[]);
       setDeficitCharges(chargesData);
       setTeamUsers(Array.isArray(users) ? users : ((users as any)?.data || []));
@@ -133,7 +137,7 @@ export function ControlDashboardCajaView({
     } finally {
       setDeficitsLoading(false);
     }
-  }, []);
+  }, [canReadTeamUsers]);
 
   useEffect(() => {
     if (activeSection !== 'deficits') return;
@@ -270,7 +274,7 @@ export function ControlDashboardCajaView({
               <SelectValue placeholder="Seleccione caja" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL" className="font-bold text-primary">Todas las cajas (Global)</SelectItem>
+              {canSelectAllRegisters && <SelectItem value="ALL" className="font-bold text-primary">Todas las cajas (Global)</SelectItem>}
               {registers?.map(r => (
                 <SelectItem key={r.id} value={r.id}>{r.name} ({r.code})</SelectItem>
               ))}
@@ -371,7 +375,7 @@ export function ControlDashboardCajaView({
                           </div>
                           {pending && (
                             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                              <Select value={responsibleDrafts[charge.id] || ''} onValueChange={(v) => setResponsibleDrafts((current) => ({ ...current, [charge.id]: v }))}>
+                              {canReadTeamUsers ? <Select value={responsibleDrafts[charge.id] || ''} onValueChange={(v) => setResponsibleDrafts((current) => ({ ...current, [charge.id]: v }))}>
                                 <SelectTrigger className="h-8 w-full sm:w-56 text-xs">
                                   <SelectValue placeholder="Responsable (opcional)" />
                                 </SelectTrigger>
@@ -380,7 +384,7 @@ export function ControlDashboardCajaView({
                                     <SelectItem key={user.id} value={user.id}>{user.name} {user.email ? `· ${user.email}` : ''}</SelectItem>
                                   ))}
                                 </SelectContent>
-                              </Select>
+                              </Select> : <span className="rounded-md border border-dashed border-border/60 px-3 py-2 text-[10px] text-muted-foreground">Sin acceso al directorio de usuarios</span>}
                               {canResolveDeficits && <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white" disabled={savingCharge === charge.id} onClick={() => void resolveDeficitCharge(charge.id, 'COLLECTED')}>
                                 {savingCharge === charge.id ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Cobrar
                               </Button>}

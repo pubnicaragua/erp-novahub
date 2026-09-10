@@ -79,7 +79,7 @@ export function SesionActivaStep({
         const [norms, protocol, banksRes] = await Promise.all([
           cajaService.getCashNorms(),
           cajaService.getClosureProtocol(),
-          api.get<any[]>('/bank-accounts'),
+          api.get<any[]>('/bank-accounts/payment-options'),
         ]);
         if (cancelled) return;
         setCloseConfig({

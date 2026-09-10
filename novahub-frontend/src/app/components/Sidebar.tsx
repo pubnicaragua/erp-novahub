@@ -660,7 +660,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 h-dvh max-h-[100dvh] min-h-0 w-[270px] overflow-hidden overscroll-none border-r border-sidebar-border bg-sidebar transition-all duration-300',
+          'fixed left-0 top-0 z-50 h-dvh max-h-[100dvh] min-h-0 w-[min(270px,calc(100vw-0.5rem))] overflow-hidden overscroll-none border-r border-sidebar-border bg-sidebar transition-all duration-300',
           isOpen ? 'translate-x-0' : '-translate-x-full',
           'lg:sticky lg:translate-x-0',
           sidebarCollapsed ? 'lg:w-[72px]' : 'lg:w-[270px]'
@@ -668,8 +668,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
           {/* Logo */}
-          <div className={cn("flex h-16 items-center justify-between border-b border-sidebar-border px-3 overflow-visible", sidebarCollapsed && "lg:justify-center")}>
-            <div className="flex items-center gap-3">
+          <div className={cn("flex min-h-16 min-w-0 items-center justify-between border-b border-sidebar-border px-3 py-2 overflow-visible", sidebarCollapsed && "lg:justify-center lg:py-0")}>
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <BrandLogo
                 src={workspaceLogo}
                 alt={`Logo de ${workspaceName}`}
@@ -678,11 +678,11 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                 imageClassName="rounded-xl"
               />
               {!sidebarCollapsed && (
-                <div className="flex flex-col items-start leading-none overflow-hidden">
-                  <span className="text-sm font-black tracking-tight text-sidebar-foreground truncate max-w-[130px]">
+                <div className="flex min-w-0 flex-1 flex-col items-start leading-tight">
+                  <span className="max-w-full break-words text-sm font-black tracking-tight text-sidebar-foreground">
                     {workspaceName}
                   </span>
-                  <span className="text-[10px] text-sidebar-foreground/50 tracking-widest uppercase mt-0.5 truncate max-w-[130px]">
+                  <span className="mt-0.5 max-w-full truncate text-[10px] uppercase tracking-widest text-sidebar-foreground/50">
                     {user?.isPlatformAdmin ? 'NovaHub Platform' : user?.managerMode ? 'Modo supervisor' : 'NovaHub ERP'}
                   </span>
                 </div>
@@ -690,7 +690,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
             </div>
             <button
               onClick={onClose}
-              className="flex size-8 items-center justify-center text-sidebar-foreground/60 transition-colors hover:bg-primary/10 hover:text-primary lg:hidden"
+              className="flex size-8 shrink-0 items-center justify-center text-sidebar-foreground/60 transition-colors hover:bg-primary/10 hover:text-primary lg:hidden"
               aria-label="Cerrar menú"
             >
               <X className="size-5" />

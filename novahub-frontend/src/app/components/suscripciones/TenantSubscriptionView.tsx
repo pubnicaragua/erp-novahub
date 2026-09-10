@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  ArrowRight, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck
+  ArrowRight, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Info, Crown, Link2, UserRoundCheck, Warehouse
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -34,6 +34,7 @@ import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { pendingUserCreate, clearPendingUserCreate } from '../../utils/pendingUserCreate';
 import { PasswordRequirements } from '../PasswordRequirements';
 import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
+import { Checkbox } from '../ui/checkbox';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -121,9 +122,17 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
+  const [isWarehouseAccessDialogOpen, setIsWarehouseAccessDialogOpen] = useState(false);
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [warehouseAccessUser, setWarehouseAccessUser] = useState<any>(null);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
+  const [newUserWarehouseIds, setNewUserWarehouseIds] = useState<string[]>([]);
+  const [warehouseCashRegisterIds, setWarehouseCashRegisterIds] = useState<string[]>([]);
+  const [loadingWarehouses, setLoadingWarehouses] = useState(false);
+  const [savingWarehouseAccess, setSavingWarehouseAccess] = useState(false);
   const [roleHighlightRequest, setRoleHighlightRequest] = useState<{ roleId: string; token: number } | null>(null);
   const roleHighlightTimeoutRef = useRef<number | null>(null);
   const [linkingUser, setLinkingUser] = useState<any>(null);
@@ -412,6 +421,70 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     }
   };
 
+  const loadWarehouseCatalog = async () => {
+    if (!canEditUsers) return;
+    setLoadingWarehouses(true);
+    try {
+      const response = await tenantsService.getWarehouses(tenant.id);
+      setWarehouses(asList(response));
+      setNewUserWarehouseIds((current) => current.length ? current : asList(response).map((warehouse: any) => warehouse.id));
+    } catch (error: any) {
+      setWarehouses([]);
+      toast.error(error?.response?.data?.message || 'No se pudieron cargar las bodegas de la sucursal');
+    } finally {
+      setLoadingWarehouses(false);
+    }
+  };
+
+  const handleOpenCreateUser = () => {
+    setUserDialogMode('plain');
+    setSelectedCreateEmployeeId('');
+    setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
+    setNewUserWarehouseIds([]);
+    setIsUserDialogOpen(true);
+    void loadWarehouseCatalog();
+  };
+
+  const handleOpenWarehouseAccess = async (user: any) => {
+    if (!canEditUsers || !user?.id) return;
+    setWarehouseAccessUser(user);
+    setSelectedWarehouseIds([]);
+    setWarehouseCashRegisterIds([]);
+    setIsWarehouseAccessDialogOpen(true);
+    setLoadingWarehouses(true);
+    try {
+      const [access, warehouseResponse] = await Promise.all([
+        tenantsService.getUserAccess(tenant.id, user.id),
+        tenantsService.getWarehouses(tenant.id),
+      ]);
+      setSelectedWarehouseIds(access?.warehouseIds || []);
+      setWarehouseCashRegisterIds(access?.cashRegisterIds || []);
+      setWarehouses(asList(warehouseResponse));
+    } catch (error: any) {
+      setIsWarehouseAccessDialogOpen(false);
+      toast.error(error?.response?.data?.message || 'No se pudieron cargar los accesos de bodega');
+    } finally {
+      setLoadingWarehouses(false);
+    }
+  };
+
+  const handleSaveWarehouseAccess = async () => {
+    if (!canEditUsers || !warehouseAccessUser?.id) return;
+    try {
+      setSavingWarehouseAccess(true);
+      await tenantsService.updateUserAccess(tenant.id, warehouseAccessUser.id, {
+        warehouseIds: selectedWarehouseIds,
+        cashRegisterIds: warehouseCashRegisterIds,
+      });
+      toast.success('Acceso a bodegas actualizado');
+      setIsWarehouseAccessDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'No se pudo actualizar el acceso a bodegas');
+    } finally {
+      setSavingWarehouseAccess(false);
+    }
+  };
+
   if (!tenant) return (
     <div className="p-20 flex flex-col items-center justify-center text-muted-foreground italic">
       <Clock className="size-12 mb-4 opacity-20 animate-pulse" />
@@ -445,9 +518,16 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
         employeeId: canViewEmployees && canEditEmployees ? (selectedCreateEmployeeId || null) : null,
       });
       const createdUser = createdResponse?.data || createdResponse;
+      if (createdUser?.id && userForm.role === 'EMPLOYEE' && canEditUsers) {
+        await tenantsService.updateUserAccess(tenant.id, createdUser.id, {
+          warehouseIds: newUserWarehouseIds,
+          cashRegisterIds: [],
+        });
+      }
       toast.success(createdUser?.employee ? 'Usuario creado y vinculado al empleado' : 'Usuario agregado correctamente');
       setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
       setSelectedCreateEmployeeId('');
+      setNewUserWarehouseIds([]);
       setUserDialogMode('plain');
       setIsUserDialogOpen(false);
       fetchUsers();
@@ -771,7 +851,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                     <CircleHelp className="size-4" />
                   </Button>}
                   <ViewLayoutSelect value={effectiveTeamUsersLayout} onChange={setTeamUsersLayout} ariaLabel="Distribución de usuarios" className="h-8" />
-                  {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => { setUserDialogMode('plain'); setSelectedCreateEmployeeId(''); setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' }); setIsUserDialogOpen(true); }}>
+                  {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={handleOpenCreateUser}>
                     <Plus className="size-4" /> Crear usuario
                   </Button>}
                 </div>
@@ -837,6 +917,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
 
                    {canChangeThisPassword && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
                    {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
+                  {canEditUsers && isCollaborator && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => void handleOpenWarehouseAccess(u)} title="Administrar bodegas permitidas"><Warehouse className="size-3" /> Bodegas</Button>}
                   {(canViewUsers || canViewRoles) && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>}
                    {canDeactivateUsers && <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : 'hover:bg-primary/10 hover:text-primary')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
                     {u.isActive ? <><X className="size-3" /> {isCurrentUser ? 'Tu usuario' : 'Suspender'}</> : <><Check className="size-3" /> Activar</>}
@@ -979,8 +1060,51 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isUserDialogOpen} onOpenChange={(open) => { setIsUserDialogOpen(open); if (!open) { setSelectedCreateEmployeeId(''); setUserDialogMode('plain'); } }}>
-        <DialogContent className="sm:max-w-[450px]">
+      <Dialog open={isWarehouseAccessDialogOpen} onOpenChange={setIsWarehouseAccessDialogOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3 text-2xl font-black uppercase italic tracking-tighter">
+              <Warehouse className="size-6 text-primary" />
+              Bodegas de {warehouseAccessUser?.name}
+            </DialogTitle>
+            <DialogDescription>Selecciona una, varias o todas las bodegas activas para este usuario. Este ajuste no modifica su rol.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {loadingWarehouses ? <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Cargando bodegas...</p> : warehouses.length === 0 ? <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No hay bodegas activas en esta sucursal.</p> : (
+              <div className="max-h-[45vh] space-y-1 overflow-y-auto rounded-xl border border-border p-3">
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg p-3 text-sm font-bold hover:bg-muted/40">
+                  <Checkbox
+                    checked={selectedWarehouseIds.length === warehouses.length}
+                    onCheckedChange={(value) => setSelectedWarehouseIds(value ? warehouses.map((warehouse: any) => warehouse.id) : [])}
+                    aria-label="Dar acceso a todas las bodegas"
+                  />
+                  Todas las bodegas
+                </label>
+                {warehouses.map((warehouse: any) => (
+                  <label key={warehouse.id} className="flex cursor-pointer items-center gap-3 rounded-lg p-3 text-sm hover:bg-muted/40">
+                    <Checkbox
+                      checked={selectedWarehouseIds.includes(warehouse.id)}
+                      onCheckedChange={(value) => setSelectedWarehouseIds((current) => value ? [...new Set([...current, warehouse.id])] : current.filter((id) => id !== warehouse.id))}
+                      aria-label={`Dar acceso a ${warehouse.name}`}
+                    />
+                    <span className="truncate">{warehouse.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">El usuario podrá consultar y operar únicamente en las bodegas seleccionadas, según los permisos de su rol.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsWarehouseAccessDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => void handleSaveWarehouseAccess()} disabled={loadingWarehouses || savingWarehouseAccess}>
+              {savingWarehouseAccess ? 'Guardando...' : 'Guardar bodegas'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isUserDialogOpen} onOpenChange={(open) => { setIsUserDialogOpen(open); if (!open) { setSelectedCreateEmployeeId(''); setNewUserWarehouseIds([]); setUserDialogMode('plain'); } }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
               <Users className="size-6 text-primary" />
@@ -1049,6 +1173,37 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                 </p>
               )}
             </div>
+            {userForm.role === 'EMPLOYEE' && canEditUsers && (
+              <div className="space-y-2 rounded-xl border border-primary/15 bg-primary/[0.03] p-3">
+                <div>
+                  <Label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><Warehouse className="size-3 text-primary" /> Bodegas para el usuario</Label>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Selecciona una, varias o todas las bodegas de esta sucursal.</p>
+                </div>
+                {loadingWarehouses ? <p className="text-xs text-muted-foreground">Cargando bodegas...</p> : warehouses.length === 0 ? <p className="text-xs text-muted-foreground">No hay bodegas activas en esta sucursal.</p> : (
+                  <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-md p-2 text-xs font-bold hover:bg-muted/40">
+                      <Checkbox
+                        checked={newUserWarehouseIds.length === warehouses.length}
+                        onCheckedChange={(value) => setNewUserWarehouseIds(value ? warehouses.map((warehouse: any) => warehouse.id) : [])}
+                        aria-label="Dar acceso a todas las bodegas"
+                      />
+                      Todas las bodegas
+                    </label>
+                    {warehouses.map((warehouse: any) => (
+                      <label key={warehouse.id} className="flex cursor-pointer items-center gap-2 rounded-md p-2 text-xs hover:bg-muted/40">
+                        <Checkbox
+                          checked={newUserWarehouseIds.includes(warehouse.id)}
+                          onCheckedChange={(value) => setNewUserWarehouseIds((current) => value ? [...new Set([...current, warehouse.id])] : current.filter((id) => id !== warehouse.id))}
+                          aria-label={`Dar acceso a ${warehouse.name}`}
+                        />
+                        <span className="truncate">{warehouse.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground">Estas bodegas se podrán ajustar después sin modificar el rol del usuario.</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contraseña Temporal *</Label>
               <Input

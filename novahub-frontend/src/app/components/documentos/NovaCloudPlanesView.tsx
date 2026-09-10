@@ -67,7 +67,7 @@ export const NovaCloudPlanesView = () => {
   const currentPlan = 'Básico';
 
   return (
-    <div className="space-y-8">
+    <div className="min-w-0 space-y-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -82,7 +82,7 @@ export const NovaCloudPlanesView = () => {
           </h2>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid min-w-0 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan, i) => {
             const PlanIcon = plan.icon;
             return (
@@ -137,7 +137,7 @@ export const NovaCloudPlanesView = () => {
           })}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {benefits.map((b) => {
             const BIcon = b.icon;
             return (

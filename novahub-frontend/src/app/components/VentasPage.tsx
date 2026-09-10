@@ -58,8 +58,8 @@ const SALES_SECTIONS = [
   { id: 'devoluciones-venta', label: 'Notas de Crédito', icon: FileOutput, description: 'Retornos y saldos a favor', requiredModules: ['SALES_RETURNS'] },
   { id: 'notas-credito', label: 'Créditos', icon: FileMinus, description: 'Productos y servicios a crédito', requiredModules: ['SALES_CREDIT_NOTES'] },
   { id: 'listas-precios', label: 'Listas de Precios', icon: Tags, description: 'Tarifas de venta', requiredModules: ['SALES_PRICE_LISTS'] },
-  { id: 'facturacion-caja', label: 'Facturación por Caja', icon: Calculator, description: 'POS y facturación directa', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
-  { id: 'control-caja', label: 'Control de Caja', icon: Coins, description: 'Apertura, arqueo y dashboard', requiredModules: ['RETAIL_CASH_CONTROL'] },
+  { id: 'facturacion-caja', label: 'Facturación por Caja', icon: Calculator, description: 'POS y facturación directa', requiredModules: ['SALES'] },
+  { id: 'control-caja', label: 'Control de Caja', icon: Coins, description: 'Apertura, arqueo y dashboard', requiredModules: ['SALES'] },
 ];
 const VISIBLE_SALES_SECTIONS = SALES_SECTIONS.filter((section) => !section.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(section.id));
 
@@ -287,19 +287,19 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const productsQuery = useQuery({
     queryKey: ['sales', 'products-catalog', tenantKey, 1, 200],
     queryFn: () => inventoryService.getProducts({ page: 1, pageSize: 200 }),
-    enabled: canPerform('INVENTORY_PRODUCTS', 'view') && needsProducts,
+    enabled: canViewSalesSection(activeSection) && needsProducts,
     placeholderData: keepPreviousData,
   });
   const seriesQuery = useQuery({
     queryKey: ['sales', 'series', tenantKey],
     queryFn: () => inventoryService.getSeries(),
-     enabled: canPerform('INVENTORY_PRODUCTS', 'view') && activeSection === 'facturas',
+     enabled: canViewSalesSection('facturas') && activeSection === 'facturas',
     placeholderData: keepPreviousData,
   });
   const warehousesQuery = useQuery({
     queryKey: ['sales', 'warehouses', tenantKey],
     queryFn: () => inventoryService.getWarehouses(),
-    enabled: canPerform('INVENTORY_WAREHOUSES', 'view') && needsProducts,
+    enabled: canViewSalesSection(activeSection) && needsProducts,
     placeholderData: keepPreviousData,
   });
   const employeesQuery = useQuery({

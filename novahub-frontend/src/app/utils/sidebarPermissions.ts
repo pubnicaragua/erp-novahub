@@ -218,8 +218,8 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'pagos-recibidos': ['SALES_PAYMENTS'],
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
-  'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
-  'control-caja': ['RETAIL_CASH_CONTROL'],
+  'facturacion-caja': ['SALES'],
+  'control-caja': ['SALES'],
   'listas-precios': ['SALES_PRICE_LISTS'],
 
   solicitudes: ['PURCHASES_REQUESTS', 'PURCHASES'],
@@ -453,7 +453,8 @@ export const SIDEBAR_PERMISSION_PARENT_ALIASES: Record<string, string[]> = {
 
 /** Alias de lectura para roles guardados antes de separar las vistas. */
 export const LEGACY_VIEW_PERMISSION_ALIASES: Record<string, string[]> = {
-  RETAIL_CASH_CONTROL: ['RETAIL_POS'],
+  RETAIL_POS: ['SALES_POS', 'SALES', 'CAJA'],
+  RETAIL_CASH_CONTROL: ['RETAIL_POS', 'SALES_POS', 'SALES', 'CAJA'],
   RESTAURANT_SALON: ['RESTAURANT_TABLES'],
   RESTAURANT_ORDERS: ['RESTAURANT_TABLES'],
   TICKETS_LIST: ['TICKETS_VIEW', 'TICKETS'],

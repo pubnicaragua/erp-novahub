@@ -157,6 +157,10 @@ const PERMISSION_LABELS: Record<string, string> = {
 function humanize403Message(raw: string, context?: string): string {
   let msg = raw;
 
+  if (/RETAIL_CASH_CONTROL/i.test(raw) && /(?:permiso|permission).*['\"]?edit['\"]?/i.test(raw)) {
+    return 'No tienes permiso para editar esta vista.';
+  }
+
   // Reemplazar permisos tecnicos (read, write, etc.)
   msg = msg.replace(/permiso\s+'(\w+)'/gi, (_, perm) => {
     const label = PERMISSION_LABELS[perm.toLowerCase()] || perm;

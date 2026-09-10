@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { api } from '../../services/api';
+import { api, getApiErrorMessage } from '../../services/api';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 
@@ -21,6 +21,7 @@ type BankAccountSelectProps = {
   required?: boolean;
   disabled?: boolean;
   className?: string;
+  endpoint?: string;
 };
 
 export function BankAccountSelect({
@@ -32,9 +33,10 @@ export function BankAccountSelect({
   required = true,
   disabled = false,
   className,
+  endpoint = '/bank-accounts',
 }: BankAccountSelectProps) {
-  const query = useAccountingQuery<any[]>(['bank-accounts', 'payment-options'], async (signal) =>
-    accountingList(await api.get('/bank-accounts', { signal })),
+  const query = useAccountingQuery<any[]>(['bank-accounts', endpoint, 'payment-options'], async (signal) =>
+    accountingList(await api.get(endpoint, { signal })),
   );
   const accounts = useMemo(() => (query.data || [])
     .filter((account) => account.isActive !== false && account.accountId)
@@ -71,13 +73,18 @@ export function BankAccountSelect({
               </SelectItem>
             );
           })}
-          {!query.isLoading && accounts.length === 0 && (
+          {!query.isLoading && !query.isError && accounts.length === 0 && (
             <SelectItem value="__no_bank_accounts__" disabled>
               No hay cuentas bancarias activas con cuenta contable hija vinculada.
             </SelectItem>
           )}
         </SelectContent>
       </Select>
+      {query.isError && (
+        <p className="mt-1 text-[10px] font-medium text-destructive">
+          {getApiErrorMessage(query.error, 'No se pudieron cargar los bancos disponibles para el pago.')}
+        </p>
+      )}
     </div>
   );
 }
