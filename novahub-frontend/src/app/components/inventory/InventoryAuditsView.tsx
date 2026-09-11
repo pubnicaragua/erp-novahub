@@ -1091,7 +1091,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     await confirmCloseOnly();
   };
 
-  const renderAuditActions = (audit: any, mobile = false) => (
+  const renderAuditActions = (audit: any, mobile = false, includeView = true) => (
     <div className={cn('flex items-center gap-1', mobile ? 'flex-wrap justify-start' : 'justify-end')}>
       {canDeleteAudits && (audit.status === 'OPEN' || audit.status === 'COMPLETED') && (
         <Button
@@ -1133,9 +1133,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
           </Button>
         </>
       )}
-      <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailAudit(audit)} title="Ver detalle" aria-label="Ver detalle">
+      {includeView && <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailAudit(audit)} title="Ver detalle" aria-label="Ver detalle">
         <Eye className="size-4" />
-      </Button>
+      </Button>}
       {canDeleteAudits && (audit.status === 'PENDING' || audit.status === 'OPEN' || audit.status === 'COMPLETED' || audit.status === 'CANCELLED') && (
         <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" disabled={deletingId === audit.id} onClick={() => handleDelete(audit)} title="Eliminar" aria-label="Eliminar auditoría">
           <Trash2 className="size-4" />
@@ -1678,6 +1678,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             </DialogDescription>
             <InventoryViewTutorial label="Cómo consultar auditoría" targetPrefix="inventory-audit-detail" stepKeys={['title', 'data']} copy={{ data: { description: 'Revisa responsables, bodega, respaldo, observaciones, stock del sistema y diferencias encontradas.' } }} />
           </DialogHeader>
+          {detailAudit && <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border/40 pb-3" data-tour="inventory-audit-detail-actions">{renderAuditActions(detailAudit, true, false)}</div>}
           <div className="min-w-0 space-y-4" data-tour="inventory-audit-detail-data">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-muted/30 p-3">

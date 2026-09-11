@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Combobox } from '../ui/Combobox';
 import { Input } from '../ui/input';
 import { Search, RefreshCw, Tags, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
@@ -55,6 +56,15 @@ export function MarcasClienteView() {
     const term = search.trim().toLocaleLowerCase();
     return (query.data?.brands || []).filter((brand) => !term || brand.name.toLocaleLowerCase().includes(term) || String(brand.customer?.name || '').toLocaleLowerCase().includes(term));
   }, [query.data?.brands, search]);
+
+  const customerOptions = useMemo(() => [
+    { value: '', label: 'Sin cliente asignado' },
+    ...(query.data?.customers || []).map((customer) => ({
+      value: customer.id,
+      label: customer.name,
+      description: customer.code || undefined,
+    })),
+  ], [query.data?.customers]);
 
   return (
     <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm">
@@ -110,10 +120,19 @@ export function MarcasClienteView() {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
                           <UserRound className="size-4 shrink-0 text-muted-foreground" />
-                          <select aria-label={`Cliente para la marca ${brand.name}`} value={brand.customerId || ''} disabled={!canEdit || saving} onChange={(event) => assignMutation.mutate({ brandId: brand.id, customerId: event.target.value || null })} className="h-10 min-w-[260px] rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60">
-                            <option value="">Sin cliente asignado</option>
-                            {(query.data?.customers || []).map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.code ? ` · ${customer.code}` : ''}</option>)}
-                          </select>
+                          <Combobox
+                            ariaLabel={`Cliente para la marca ${brand.name}`}
+                            value={brand.customerId || ''}
+                            disabled={!canEdit || saving}
+                            onChange={(customerId) => assignMutation.mutate({ brandId: brand.id, customerId: customerId || null })}
+                            options={customerOptions}
+                            placeholder="Sin cliente asignado"
+                            searchPlaceholder="Buscar cliente por nombre o código..."
+                            emptyMessage="No se encontró ese cliente."
+                            maxVisibleOptions={100}
+                            className="h-10 min-w-[260px] rounded-lg text-sm font-medium"
+                            contentClassName="min-w-[min(26rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)]"
+                          />
                         </div>
                       </td>
                       <td className="px-5 py-4 text-right font-mono tabular-nums">{brand._count?.productDetails || 0}</td>

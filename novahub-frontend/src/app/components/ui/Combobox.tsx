@@ -31,6 +31,7 @@ interface ComboboxProps {
   contentClassName?: string
   disabled?: boolean
   allowCustomValue?: boolean
+  ariaLabel?: string
 }
 
 export function Combobox({
@@ -45,6 +46,7 @@ export function Combobox({
   contentClassName,
   disabled = false,
   allowCustomValue = false,
+  ariaLabel,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -127,6 +129,7 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-label={ariaLabel}
           disabled={disabled}
           className={cn("w-full min-w-0 justify-between overflow-hidden h-8 text-xs font-medium", className, 
             disabled && "opacity-50 cursor-not-allowed bg-muted/50"

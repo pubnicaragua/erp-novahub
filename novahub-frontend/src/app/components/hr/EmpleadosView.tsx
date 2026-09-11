@@ -1461,6 +1461,17 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         onEdit={handleEdit}
         onManageDepartments={openDepartmentEditor}
         canEdit={canPerform('HR_EMPLOYEES', 'edit')}
+        extraActions={(() => {
+          const employee = employees.find((candidate: any) => candidate.id === detailEmployeeId);
+          if (!employee) return undefined;
+          return <>
+            {employee.approvalStatus === 'DRAFT' && canPerform('HR_EMPLOYEES', 'approve') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setDetailEmployeeId(null); handleSubmitApproval(employee.id); }}><Send className="mr-1.5 size-3.5" />Enviar a aprobación</Button>}
+            {employee.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'approve') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-success" onClick={() => { setDetailEmployeeId(null); handleApprove(employee.id); }}><CheckCircle2 className="mr-1.5 size-3.5" />Aprobar</Button>}
+            {employee.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setDetailEmployeeId(null); setRejectEmpId(employee.id); }}><XCircle className="mr-1.5 size-3.5" />Rechazar</Button>}
+            <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setDetailEmployeeId(null); loadChangeLog(employee.id); }}><History className="mr-1.5 size-3.5" />Historial</Button>
+            {canPerform('HR_EMPLOYEES', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setDetailEmployeeId(null); setPendingDeleteId(employee.id); }}><Ban className="mr-1.5 size-3.5" />Anular</Button>}
+          </>;
+        })()}
       />
     </div>
   );

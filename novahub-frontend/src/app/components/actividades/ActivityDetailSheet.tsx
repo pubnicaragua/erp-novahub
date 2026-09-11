@@ -1,5 +1,5 @@
-import { CalendarDays, CalendarClock, CheckCircle2, Clock3, DollarSign, FileText, Flag, Hash, History, Info, Link2, MapPin, Paperclip, Users, XCircle, BookOpen, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { CalendarDays, CalendarClock, CheckCircle2, Clock3, DollarSign, FileText, Flag, Hash, History, Info, Link2, MapPin, Paperclip, Trash2, Users, XCircle, BookOpen, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -7,6 +7,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { cn } from '../ui/utils';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 export type ActivityDetailKind = 'task' | 'event' | 'reminder' | 'log';
 
@@ -21,6 +22,8 @@ interface ActivityDetailSheetProps {
   linkedIncomeAccount?: any;
   linkedExpenseJournal?: any;
   linkedIncomeJournal?: any;
+  extraActions?: ReactNode;
+  onDelete?: () => void | Promise<void>;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -242,13 +245,15 @@ function DetailSection({ title, icon: Icon, children }: { title: string; icon: a
   return <Card className="space-y-3 rounded-2xl border-border/50 bg-card/80 p-4 shadow-sm"><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><Icon className="size-4 text-primary" /> {title}</h3>{children}</Card>;
 }
 
-export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense, linkedIncome, linkedExpenseAccount, linkedIncomeAccount, linkedExpenseJournal, linkedIncomeJournal, onOpenChange }: ActivityDetailSheetProps) {
+export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense, linkedIncome, linkedExpenseAccount, linkedIncomeAccount, linkedExpenseJournal, linkedIncomeJournal, extraActions, onDelete, onOpenChange }: ActivityDetailSheetProps) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const config = labels[kind];
   const title = item?.title || (kind === 'log' ? formatLabel(item?.entity) : item?.entity) || config.singular;
   const displayStatus = kind === 'task' ? getTaskDisplayStatus(item) : item?.status;
   const description = kind === 'event' ? (item?.location || 'Registro de actividad') : kind === 'log' ? (item?.action ? formatLabel(item.action) : 'Auditoría del sistema') : (displayStatus ? formatLabel(displayStatus) : 'Registro de actividad');
 
   return (
+    <>
     <Sheet open={Boolean(item)} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="erp-detail-panel w-full gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-xl">
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 backdrop-blur-md sm:px-6">
@@ -257,10 +262,13 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
             <div className="min-w-0 flex-1"><SheetTitle className="truncate text-lg font-black tracking-tight">{title}</SheetTitle><SheetDescription className="mt-1 truncate text-xs">{config.singular} · {description}</SheetDescription></div>
           </div>
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
+          {(extraActions || onDelete) && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}{onDelete && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => setDeleteOpen(true)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}</div>}
         </SheetHeader>
         <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} />}{item && kind === 'event' && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>
+    <ConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} title={`¿Eliminar ${config.singular.toLowerCase()}?`} description="Esta acción eliminará el registro y no se puede deshacer." confirmLabel="Eliminar" onConfirm={async () => { await onDelete?.(); setDeleteOpen(false); }} />
+    </>
   );
 }

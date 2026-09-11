@@ -6,8 +6,10 @@ import { queryClient } from '../services/query-client';
 import { clearSessionCache } from '../services/session-cache';
 import { clearStorageUrlCache } from '../services/storage.service';
 import { BrandLogoLoader } from '../components/BrandLogo';
-import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
+import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_PARENT_ORDER, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
 import type { UserThemeSettings } from '../services/branding.service';
+
+const SIDEBAR_PERMISSION_PARENT_MODULE_IDS = new Set<string>(SIDEBAR_PERMISSION_PARENT_ORDER);
 
 export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
 export type UserType = 'admin' | 'collaborator' | 'manager' | 'customer_portal';
@@ -231,6 +233,7 @@ const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
   DOCUMENTS_STORAGE_PLANS: ['DOCUMENTS_STORAGE_PLANS', 'DOCUMENTS'],
   HR_DEPARTMENTS: ['HR_DEPARTMENTS', 'HR_EMPLOYEES', 'HR'],
   FINANCIAL_ACCOUNTS: ['FINANCIAL_ACCOUNTS', 'FINANCIAL_BANK', 'FINANCIAL_DASHBOARD', 'FINANCIAL_BALANCE'],
+  FINANCIAL_BANK: ['FINANCIAL_BANK', 'FINANCIAL_ACCOUNTS'],
   FINANCIAL_INCOMES: ['FINANCIAL_INCOMES', 'FINANCIAL_RECEIVABLES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   FINANCIAL_RECEIVABLES: ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   FINANCIAL_EXPENSES: ['FINANCIAL_EXPENSES', 'FINANCIAL_PAYABLES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE', 'FINANCIAL_LOSSES'],
@@ -932,7 +935,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 2. Verificar permisos del Rol
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
     const directPermission = permissions.find((p) => p.module.toUpperCase() === module.toUpperCase())
-      || permissions.find((p) => p.module.toUpperCase() === backendModuleName.toUpperCase());
+      || permissions.find((p) => p.module.toUpperCase() === backendModuleName.toUpperCase())
+      // Las rutas antiguas pueden pedir el nombre del contenedor (Clientes,
+      // Proveedores, POS, etc.) mientras el rol solo conserva la vista hija.
+      // Una fila canónica falsa sigue teniendo prioridad sobre estos aliases.
+      || (LEGACY_VIEW_PERMISSION_ALIASES[backendModuleName] || [])
+        .map((alias) => permissions.find((p) => p.module.toUpperCase() === alias.toUpperCase()))
+        .find((permission) => permission?.canView === true);
     // Si existe una fila explícita para la vista, esa fila es la autoridad.
     // Así, desactivar un hijo no queda anulado por el permiso del módulo padre.
     if (directPermission?.canView === true) return true;
@@ -941,7 +950,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // sus hijos; no debe ocultar el shell que contiene al hijo permitido.
     // Para una vista hija, en cambio, la fila explícita falsa sigue siendo
     // una denegación fuerte y no se continúa con la herencia.
-    const isParentModuleRequest = !String(module).includes('_');
+    const isParentModuleRequest = SIDEBAR_PERMISSION_PARENT_MODULE_IDS.has(backendModuleName.toUpperCase())
+      || !SIDEBAR_PERMISSION_MODULE_IDS.has(String(module).toUpperCase());
     if (directPermission && !isParentModuleRequest) return false;
 
     const parentAliases = SIDEBAR_PERMISSION_PARENT_ALIASES[backendModuleName] || [];

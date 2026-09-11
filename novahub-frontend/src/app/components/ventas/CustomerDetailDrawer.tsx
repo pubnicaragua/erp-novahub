@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -97,6 +97,7 @@ interface CustomerDetailDrawerProps {
   onOpenChange: (open: boolean) => void;
   customerSnapshot?: Customer | null;
   canExport?: boolean;
+  extraActions?: ReactNode;
 }
 
 type TabKey = 'general' | 'movimientos' | 'historial';
@@ -204,6 +205,7 @@ export function CustomerDetailDrawer({
   onOpenChange,
   customerSnapshot,
   canExport = true,
+  extraActions,
 }: CustomerDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
   const { user } = useAuth();
@@ -549,7 +551,8 @@ export function CustomerDetailDrawer({
               </div>
             </div>
 
-            <div className="flex justify-end" data-tour="customer-detail-actions">
+            <div className="flex flex-wrap justify-end gap-2" data-tour="customer-detail-actions">
+              {extraActions}
               {canExport && (
                 <Button
                   type="button"

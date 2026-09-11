@@ -218,8 +218,8 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'pagos-recibidos': ['SALES_PAYMENTS'],
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
-  'facturacion-caja': ['SALES'],
-  'control-caja': ['SALES'],
+  'facturacion-caja': ['SALES', 'RETAIL_POS', 'SALES_POS', 'CAJA'],
+  'control-caja': ['SALES', 'RETAIL_CASH_CONTROL', 'RETAIL_POS', 'SALES_POS', 'CAJA'],
   'listas-precios': ['SALES_PRICE_LISTS'],
 
   solicitudes: ['PURCHASES_REQUESTS', 'PURCHASES'],
@@ -230,7 +230,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'recepciones-compra': ['PURCHASES_RECEIPTS'],
   'facturas-proveedor-rec': ['PURCHASES_INVOICES_REC'],
   'pagos-realizados': ['PURCHASES_PAYMENTS'],
-  'creditos-proveedor': ['PURCHASES_RECEIPTS'],
+  'creditos-proveedor': ['PURCHASES_RETURNS'],
 
   salon: ['RESTAURANT_SALON'],
   comandas: ['RESTAURANT_ORDERS'],
@@ -259,7 +259,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'config-nomina': ['HR_PAYROLL_CONFIG'],
 
   'resumen-financiero': ['FINANCIAL_DASHBOARD'],
-  'caja-bancos': ['FINANCIAL_BANK', 'FINANCIAL_DASHBOARD'],
+  'caja-bancos': ['FINANCIAL_BANK', 'FINANCIAL_ACCOUNTS'],
   'cuentas-cobrar': ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES'],
   'cuentas-pagar': ['FINANCIAL_PAYABLES', 'FINANCIAL_EXPENSES'],
   ingresos: ['FINANCIAL_INCOMES'],
@@ -397,8 +397,12 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'configuracion:seguridad': ['CONFIG_SECURITY'],
   'configuracion:auditoria': ['AUDIT_LOGS'],
   'configuracion:currency': ['CONFIG_CURRENCY'],
+  'facturacion-caja': ['RETAIL_POS'],
+  'control-caja': ['RETAIL_CASH_CONTROL'],
+  'creditos-proveedor': ['PURCHASES_RETURNS'],
   'cuentas-cobrar': ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES'],
   'cuentas-pagar': ['FINANCIAL_PAYABLES', 'FINANCIAL_EXPENSES'],
+  'caja-bancos': ['FINANCIAL_BANK', 'FINANCIAL_ACCOUNTS'],
   'calendario-financiero': ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD'],
   'analisis-ingresos-gastos': ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   'finanzas:perdidas': ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
@@ -415,6 +419,10 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
 
 /** Tabs internos que no son entradas propias del sidebar, pero sí requieren autorización individual. */
 export const INTERNAL_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
+  // Cuentas financieras se muestran dentro de Caja y Bancos, pero sus
+  // operaciones tienen endpoints y acciones propios en la API.
+  { id: 'FINANCIAL_ACCOUNTS', label: 'Cuentas financieras', parent: 'FINANCIAL', subscription: false },
+
   // Configuración
   { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION', subscription: false },
   { id: 'CONFIG_PDF', label: 'Documentos PDF', parent: 'CONFIGURATION', subscription: false },
@@ -457,6 +465,10 @@ export const SIDEBAR_PERMISSION_PARENT_ALIASES: Record<string, string[]> = {
 export const LEGACY_VIEW_PERMISSION_ALIASES: Record<string, string[]> = {
   RETAIL_POS: ['SALES_POS', 'SALES', 'CAJA'],
   RETAIL_CASH_CONTROL: ['RETAIL_POS', 'SALES_POS', 'SALES', 'CAJA'],
+  FINANCIAL_BANK: ['FINANCIAL_ACCOUNTS'],
+  FINANCIAL_ACCOUNTS: ['FINANCIAL_BANK'],
+  CLIENTS: ['SALES_CLIENTS'],
+  PROVIDERS: ['PURCHASES_PROVIDERS'],
   RESTAURANT_SALON: ['RESTAURANT_TABLES'],
   RESTAURANT_ORDERS: ['RESTAURANT_TABLES'],
   TICKETS_LIST: ['TICKETS_VIEW', 'TICKETS'],

@@ -1220,6 +1220,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         extraActions={detailCredit && (() => {
           const status = String(detailCredit.status || '').toUpperCase();
           return <>
+            {canPerform('PURCHASES_RETURNS', 'edit') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailCredit(null); openEditor(detailCredit.id); }}><Pencil className="size-4" /> Editar</Button>}
             {canPerform('PURCHASES_RETURNS', 'approve') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-blue-600" onClick={() => setPendingIssueId(detailCredit.id)}><Send className="size-4" /> Emitir</Button>}
             {canPerform('PURCHASES_RETURNS', 'approve') && status === 'ISSUED' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => setApplyTarget(detailCredit)}><CheckCircle2 className="size-4" /> Aplicar</Button>}
             {canPerform('PURCHASES_RETURNS', 'delete') && ['DRAFT', 'ISSUED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingVoidId(detailCredit.id)}><Ban className="size-4" /> Anular</Button>}

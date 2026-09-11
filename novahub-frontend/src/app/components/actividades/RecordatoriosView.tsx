@@ -162,7 +162,22 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         />
       </Card>
 
-      <ActivityDetailSheet kind="reminder" item={selectedReminder} users={availableUsers} onOpenChange={(open) => { if (!open) setSelectedReminder(null); }} />
+      <ActivityDetailSheet
+        kind="reminder"
+        item={selectedReminder}
+        users={availableUsers}
+        onDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') && selectedReminder ? async () => {
+          try {
+            await remindersService.delete(String(selectedReminder.id));
+            toast.success('Recordatorio eliminado');
+            onRefresh();
+            setSelectedReminder(null);
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar recordatorio');
+          }
+        } : undefined}
+        onOpenChange={(open) => { if (!open) setSelectedReminder(null); }}
+      />
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl sm:max-w-xl">

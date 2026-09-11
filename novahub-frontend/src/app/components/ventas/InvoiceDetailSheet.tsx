@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Clock3, Eye, FileText, History, UserRound, Wallet } from 'lucide-react';
 import type { Invoice, PaymentReceived } from '../../types';
 import { Badge } from '../ui/badge';
@@ -31,6 +31,7 @@ interface InvoiceDetailSheetProps {
   getBalance: (invoice: Invoice) => number;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
   formatDate: (date: string) => string;
+  extraActions?: ReactNode;
 }
 
 const statusLabels: Record<string, string> = {
@@ -78,6 +79,7 @@ export function InvoiceDetailSheet({
   getBalance,
   formatAmount,
   formatDate,
+  extraActions,
 }: InvoiceDetailSheetProps) {
   const [activeTab, setActiveTab] = useState('general');
 
@@ -141,6 +143,7 @@ export function InvoiceDetailSheet({
             <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => onOpenInvoice(invoice)}>
               <Eye className="size-4 shrink-0 text-primary" /> Ver factura completa
             </Button>
+            {extraActions}
             {canExport && <PdfDownloadButton onDownload={(format) => onDownloadPdf(invoice, format)} />}
           </section>
 

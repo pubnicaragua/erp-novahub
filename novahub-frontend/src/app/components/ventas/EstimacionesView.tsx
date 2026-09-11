@@ -1222,6 +1222,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           setDetailEstimate(null);
           setEditingId(detailEstimate.id);
         }}
+        extraActions={detailEstimate ? <>
+          <WhatsAppActionButton
+            phone={resolveCustomerPhone(detailEstimate.customerId, detailEstimate.customer, customers)}
+            documentLabel="cotización"
+            onSend={() => handleWhatsApp(detailEstimate)}
+          />
+          {canPerform('SALES_QUOTES', 'approve') && normalizeEstimateStatus(detailEstimate.status) === 'IN_PROCESS' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertToOrder(estimate); }}><ArrowRightCircle className="mr-2 size-4" />Enviar a orden</Button>}
+          {canPerform('SALES_QUOTES', 'delete') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(detailEstimate.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailEstimate(null); setPendingCancelId(detailEstimate.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+        </> : undefined}
         onDownloadPdf={canPerform('SALES_QUOTES', 'export') ? (format) => { if (detailEstimate) void handleExportPDF(detailEstimate, format); } : undefined}
       />
 

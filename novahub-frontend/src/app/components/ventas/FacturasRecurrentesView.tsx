@@ -910,6 +910,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           setDetailRecurring(null);
           setEditingId(detailRecurring.id);
         }}
+        extraActions={detailRecurring ? <>
+          {canPerform('SALES_RECURRING', 'edit') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => toggleStatus(detailRecurring)}>{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar' : 'Reanudar'}</Button>}
+          {canPerform('SALES_RECURRING', 'delete') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailRecurring(null); setPendingDeleteId(detailRecurring.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+        </> : undefined}
         onDownloadPdf={canPerform('SALES_RECURRING', 'export') ? (format) => { if (detailRecurring) void handleExportPDF(detailRecurring, format); } : undefined}
       />
       <ConfirmDialog

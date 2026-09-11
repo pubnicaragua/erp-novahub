@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -55,6 +55,7 @@ interface SupplierDetailDrawerProps {
   supplierId: string | null;
   supplierSnapshot?: Supplier | null;
   canExport?: boolean;
+  extraActions?: ReactNode;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -114,6 +115,7 @@ export function SupplierDetailDrawer({
   supplierId,
   supplierSnapshot,
   canExport = false,
+  extraActions,
   onOpenChange,
 }: SupplierDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
@@ -328,6 +330,7 @@ export function SupplierDetailDrawer({
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2" data-tour="supplier-detail-actions">
+              {extraActions}
               {supplier && canExport && <Button type="button" variant="outline" onClick={openHistoryExportDialog} disabled={exportingHistory} className="max-w-full gap-1.5 rounded-xl text-xs font-bold">
                 <Download className="size-4 shrink-0 text-primary" />
                 <span className="truncate">Exportar historial del proveedor</span>

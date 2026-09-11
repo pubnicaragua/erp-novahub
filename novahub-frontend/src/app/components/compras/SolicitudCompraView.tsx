@@ -708,7 +708,10 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         onClose={() => setDetailOpen(null)}
         extraActions={detailOpen && (() => {
           const management = getActiveManagement(detailOpen);
+          const requestStatus = normalizeRequestStatus(detailOpen.status);
           return <>
+            {requestStatus === 'PENDING_APPROVAL' && canApproveRequests && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleRequestApprove(detailOpen)} disabled={actionLoading === detailOpen.id}><CheckCircle className="size-4" /> Aprobar solicitud</Button>}
+            {requestStatus === 'PENDING_APPROVAL' && canCancelRequests && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => handleRequestCancel(detailOpen)} disabled={actionLoading === detailOpen.id}><X className="size-4" /> Cancelar solicitud</Button>}
             {management && management.status === 'PENDING_APPROVAL' && canApproveManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleApproveManagement(management)} disabled={actionLoading === management.id}><CheckCircle className="size-4" /> Aprobar gestión</Button>}
             {management && management.status === 'PENDING_APPROVAL' && canRejectManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => handleRejectManagement(management)} disabled={actionLoading === management.id}><X className="size-4" /> Rechazar gestión</Button>}
             {management && management.status === 'APPROVED' && canConvertManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-primary" onClick={() => handleConvertToOrder(management)} disabled={actionLoading === management.id}><Send className="size-4" /> Convertir a orden</Button>}

@@ -1572,6 +1572,15 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           setDetailOrder(null);
           setEditingId(detailOrder.id);
         }}
+        extraActions={detailOrder ? <>
+          <WhatsAppActionButton
+            phone={resolveCustomerPhone(detailOrder.customerId, detailOrder.customer, customers)}
+            documentLabel="orden de venta"
+            onSend={() => handleWhatsApp(detailOrder)}
+          />
+          {canPerform('SALES_ORDERS', 'approve') && ['IN_PROCESS', 'APPROVED'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={invoicingOrderId === detailOrder.id} onClick={() => { const order = detailOrder; setDetailOrder(null); void handleInvoiceOrder(order); }}><ArrowRightCircle className="mr-2 size-4" />Enviar a factura</Button>}
+          {canPerform('SALES_ORDERS', 'delete') && ['DRAFT', 'IN_PROCESS'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailOrder(null); setPendingCancelId(detailOrder.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+        </> : undefined}
         onDownloadPdf={canPerform('SALES_ORDERS', 'export') ? (format) => { if (detailOrder) void handleExportPDF(detailOrder, format); } : undefined}
       />
 

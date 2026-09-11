@@ -814,17 +814,21 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
                   <span className="truncate">{activeSelectedTicket?.subject || 'Ticket de soporte'}</span>
                 </SheetDescription>
               </div>
-              {activeSelectedTicket && canInteractWithTicket(activeSelectedTicket) && (
-                isTerminalTicket(activeSelectedTicket) ? (
-                  <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => setReopenDialogOpen(true)}>
-                    <RotateCcw className="mr-1.5 size-3.5" /> Reabrir
-                  </Button>
-                ) : canEditTicket(activeSelectedTicket) ? (
-                  <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl text-[10px] font-black uppercase tracking-widest" onClick={() => { setSelectedTicket(null); handleEdit(activeSelectedTicket); }}>
-                    <Pencil className="mr-1.5 size-3.5" /> Editar
-                  </Button>
-                ) : null
-              )}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {activeSelectedTicket && canChangeTicketStatus(activeSelectedTicket) && <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl text-[10px] font-black uppercase tracking-widest text-blue-600 hover:bg-blue-500/10" onClick={() => openStatusDialog(activeSelectedTicket)}><ArrowRightLeft className="mr-1.5 size-3.5" />Cambiar estado</Button>}
+                {activeSelectedTicket && canInteractWithTicket(activeSelectedTicket) && (
+                  isTerminalTicket(activeSelectedTicket) ? (
+                    <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => setReopenDialogOpen(true)}>
+                      <RotateCcw className="mr-1.5 size-3.5" /> Reabrir
+                    </Button>
+                  ) : canEditTicket(activeSelectedTicket) ? (
+                    <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl text-[10px] font-black uppercase tracking-widest" onClick={() => { setSelectedTicket(null); handleEdit(activeSelectedTicket); }}>
+                      <Pencil className="mr-1.5 size-3.5" /> Editar
+                    </Button>
+                  ) : null
+                )}
+                {activeSelectedTicket && canPerform('TICKETS_LIST', 'delete') && canInteractWithTicket(activeSelectedTicket) && <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl border-rose-500/30 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setSelectedTicket(null); setPendingDeleteTicket(activeSelectedTicket); }}><Trash2 className="mr-1.5 size-3.5" />Eliminar</Button>}
+              </div>
             </div>
           </SheetHeader>
 

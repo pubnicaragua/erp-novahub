@@ -656,7 +656,11 @@ export function FinanceTableView({
           </DialogHeader>
           {detailItem && detailsRenderer?.(detailItem)}
           {detailItem && auditEntity && <AuditHistoryDisclosure entity={auditEntity} entityId={String(detailItem.id)} createdAt={detailItem.createdAt} />}
-          <DialogFooter><Button variant="outline" onClick={() => setDetailItem(null)}>Cerrar</Button></DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
+            {canEdit && <Button type="button" variant="outline" disabled={Boolean(detailItem.isPayment)} onClick={() => { if (detailItem.isPayment) { toast.error('No se puede editar un pago de factura'); return; } setItemBeingEdited({ ...detailItem }); setDetailItem(null); setIsEditModalOpen(true); }}><Edit3 className="mr-1.5 size-4" />Editar</Button>}
+            {canDelete && <Button type="button" variant="outline" className="border-rose-500/30 text-rose-600 hover:bg-rose-500/10" disabled={Boolean(detailItem.isPayment)} onClick={() => { if (!detailItem.isPayment) { setDetailItem(null); setPendingDeleteId(detailItem.id); } }}><Trash2 className="mr-1.5 size-4" />Eliminar</Button>}
+            <Button variant="outline" onClick={() => setDetailItem(null)}>Cerrar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

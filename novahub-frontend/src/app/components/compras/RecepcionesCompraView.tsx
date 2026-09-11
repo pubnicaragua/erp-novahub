@@ -1983,6 +1983,43 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         entity="PURCHASE_RECEIPT"
         open={Boolean(detailReceipt)}
         onClose={() => setDetailReceipt(null)}
+        extraActions={detailReceipt ? (() => {
+          const receiptStatus = getReceiptDisplayStatus(detailReceipt);
+          const canReceiveRow = receiptStatus === 'PENDING'
+            && canPerform('PURCHASES_RECEIPTS', 'approve')
+            && canPerform('PURCHASES_RECEIPTS', 'edit');
+          const isPayableReceipt = ['RECEIVED', 'WITH_INCIDENTS'].includes(receiptStatus);
+          const needsInventorySync = isPayableReceipt
+            && (!detailReceipt.inventoryProcessedAt || (detailReceipt.items || []).some((item: any) =>
+              item.stockApplies !== false
+              && Number(item.quantityReceived || 0) > Number(item.inventoryProcessedQuantity || 0),
+            ));
+          const activeInvoice = isPayableReceipt
+            ? (detailReceipt.supplierInvoices || []).find((invoice: any) => String(invoice.status || '').toUpperCase() !== 'CANCELLED')
+            : undefined;
+          const payableInvoice = activeInvoice && Number(activeInvoice.balance || 0) > 0 ? activeInvoice : undefined;
+          const canAccessCreditAction = isPayableReceipt
+            && canPerform('PURCHASES_RECEIPTS', 'approve')
+            && canPerform('PURCHASES_RETURNS', 'create');
+          const creditBlockedReason = !activeInvoice
+            ? 'Registra primero la factura del proveedor'
+            : needsInventorySync
+              ? 'Procesa primero la entrada en inventario'
+              : '';
+          const canAccessPaymentAction = Boolean(payableInvoice)
+            && canPerform('PURCHASES_PAYMENTS', 'create')
+            && canPerform('PURCHASES_PAYMENTS', 'approve');
+          const canAccessInvoiceAction = isPayableReceipt && !activeInvoice
+            && canPerform('PURCHASES_RECEIPTS', 'edit');
+          return <>
+            {canReceiveRow && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => { setDetailReceipt(null); setEditingId(detailReceipt.id); }}><PackageCheck className="mr-2 size-4" />Recepcionar</Button>}
+            {canAccessInvoiceAction && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt, undefined, true); }}><FileText className="mr-2 size-4" />Registrar compra a crédito</Button>}
+            {canAccessPaymentAction && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt, payableInvoice); }}><Banknote className="mr-2 size-4" />Registrar pago</Button>}
+            {canAccessCreditAction && <Button type="button" variant="outline" className={cn('rounded-xl', creditBlockedReason && 'cursor-not-allowed opacity-50')} disabled={Boolean(creditBlockedReason)} onClick={() => openReceiptCredit(detailReceipt, activeInvoice)}><Send className="mr-2 size-4" />Crear nota de crédito</Button>}
+            {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'approve') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); void handleRepairInventory(detailReceipt); }}><RefreshCw className="mr-2 size-4" />Reintentar inventario</Button>}
+            {canPerform('PURCHASES_RECEIPTS', 'delete') && receiptStatus === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReceipt(null); setPendingCancelId(detailReceipt.id); setCancelReason(''); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          </>;
+        })() : undefined}
         onDownloadPdf={canPerform('PURCHASES_RECEIPTS', 'export') ? (format) => detailReceipt ? void handleDownloadReceiptPdf(detailReceipt, format) : undefined : undefined}
       />
 

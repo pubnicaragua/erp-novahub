@@ -361,9 +361,12 @@ export function ActivosFijosCategoriesTab() {
                       </Badge>
                     )}
                   </div>
-                  <Button type="button" variant="outline" size="icon" className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setSelectedCategoryId(null)} aria-label="Cerrar detalle de categoría" title="Cerrar">
-                    <X className="size-4" />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl px-2 text-[10px]" onClick={() => openEdit(selectedCategory)}><Pencil className="mr-1 size-3.5" />Editar</Button>
+                    <Button type="button" variant="outline" size="icon" className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setSelectedCategoryId(null)} aria-label="Cerrar detalle de categoría" title="Cerrar">
+                      <X className="size-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="min-w-0 max-h-[calc(100dvh-12rem)] space-y-5 overflow-y-auto p-4">

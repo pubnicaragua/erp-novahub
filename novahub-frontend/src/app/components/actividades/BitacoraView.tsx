@@ -221,7 +221,21 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
         />
       </Card>
 
-      <ActivityDetailSheet kind="log" item={selectedLog} onOpenChange={(open) => { if (!open) setSelectedLog(null); }} />
+      <ActivityDetailSheet
+        kind="log"
+        item={selectedLog}
+        onDelete={canPerform('ACTIVITIES_LOGS', 'delete') && selectedLog ? async () => {
+          try {
+            await activityLogsService.delete(String(selectedLog.id));
+            toast.success('Registro eliminado');
+            onRefresh();
+            setSelectedLog(null);
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro');
+          }
+        } : undefined}
+        onOpenChange={(open) => { if (!open) setSelectedLog(null); }}
+      />
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl sm:max-w-xl">

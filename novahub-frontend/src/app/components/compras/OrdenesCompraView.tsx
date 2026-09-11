@@ -2042,6 +2042,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         setPreviewOrder(null);
         setEditingId(String(previewOrder.id));
       }}
+      extraActions={previewOrder ? <>
+        {canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(previewOrder); }}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
+        {canPerform('PURCHASES_ORDERS', 'edit') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setPreviewOrder(null); setEditingId(String(previewOrder.id)); }}><Pencil className="mr-2 size-4" />Editar</Button>}
+        {canPerform('PURCHASES_ORDERS', 'delete') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(previewOrder.id)); setCancelReason(''); }}><Ban className="mr-2 size-4" />Rechazar</Button>}
+      </> : undefined}
       onDownloadPdf={canPerform('PURCHASES_ORDERS', 'export') ? (format) => previewOrder ? void handleDownloadOrderPdf(previewOrder, format) : undefined : undefined}
     />
   );

@@ -780,6 +780,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           extraActions={detailInvoice && (() => {
             const status = String(detailInvoice.status || '').toUpperCase();
             return <>
+              {canPerform('PURCHASES_INVOICES_REC', 'edit') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailInvoice(null); openEditor(detailInvoice.id); }}><Pencil className="size-4" /> Editar</Button>}
               {canPerform('PURCHASES_INVOICES_REC', 'edit') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailInvoice)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
               {canPerform('PURCHASES_INVOICES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailInvoice.id)}><Ban className="size-4" /> Anular</Button>}
             </>;

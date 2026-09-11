@@ -466,7 +466,29 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         />
       </Card>
 
-      <ActivityDetailSheet kind="event" item={selectedEvent} accounts={accountOptions} linkedExpense={eventExpenseQuery.data} linkedIncome={eventIncomeQuery.data} linkedExpenseAccount={eventExpenseAccountQuery.data} linkedIncomeAccount={eventIncomeAccountQuery.data} linkedExpenseJournal={eventExpenseJournalQuery.data?.[0]} linkedIncomeJournal={eventIncomeJournalQuery.data?.[0]} onOpenChange={(open) => { if (!open) setSelectedEvent(null); }} />
+      <ActivityDetailSheet
+        kind="event"
+        item={selectedEvent}
+        accounts={accountOptions}
+        linkedExpense={eventExpenseQuery.data}
+        linkedIncome={eventIncomeQuery.data}
+        linkedExpenseAccount={eventExpenseAccountQuery.data}
+        linkedIncomeAccount={eventIncomeAccountQuery.data}
+        linkedExpenseJournal={eventExpenseJournalQuery.data?.[0]}
+        linkedIncomeJournal={eventIncomeJournalQuery.data?.[0]}
+        extraActions={selectedEvent && !completedEventIds.has(String(selectedEvent.id)) && String(selectedEvent.status || '').toUpperCase() !== 'COMPLETED' && canCompleteEvent ? <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={completingEventId === String(selectedEvent.id)} onClick={() => { const event = selectedEvent; setSelectedEvent(null); void handleCompleteEvent(event); }}><CheckCircle2 className="mr-2 size-4" />Completar evento</Button> : undefined}
+        onDelete={canPerformEventAction('delete') && selectedEvent ? async () => {
+          try {
+            await eventsService.delete(String(selectedEvent.id));
+            toast.success('Evento eliminado');
+            onRefresh();
+            setSelectedEvent(null);
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento');
+          }
+        } : undefined}
+        onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}
+      />
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto !max-w-2xl rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl">

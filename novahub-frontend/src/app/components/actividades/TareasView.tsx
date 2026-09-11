@@ -220,7 +220,22 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
         />
       </Card>
 
-      <ActivityDetailSheet kind="task" item={detailTask} onOpenChange={(open) => { if (!open) setDetailTask(null); }} />
+      <ActivityDetailSheet
+        kind="task"
+        item={detailTask}
+        extraActions={detailTask && String(detailTask.status || '').toUpperCase() !== 'COMPLETED' && canPerform('ACTIVITIES_TASKS', 'approve') ? <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => { setDetailTask(null); setSelectedTask(detailTask); setIsCompleteOpen(true); }}><CheckCircle2 className="mr-2 size-4" />Completar tarea</Button> : undefined}
+        onDelete={canPerform('ACTIVITIES_TASKS', 'delete') && detailTask ? async () => {
+          try {
+            await tasksService.delete(String(detailTask.id));
+            toast.success('Tarea eliminada');
+            onRefresh();
+            setDetailTask(null);
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tarea');
+          }
+        } : undefined}
+        onOpenChange={(open) => { if (!open) setDetailTask(null); }}
+      />
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl sm:max-w-2xl">

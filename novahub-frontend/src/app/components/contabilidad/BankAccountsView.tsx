@@ -406,7 +406,11 @@ export function BankAccountsView() {
               </TableBody>
             </Table>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setDetailAccount(null)}>Cerrar</Button></DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
+            {canEditBankAccount && detailAccount && <Button type="button" variant="outline" onClick={() => { const account = detailAccount; setDetailAccount(null); openEdit(account); }}><Edit2 className="mr-1.5 size-4" />Editar</Button>}
+            {canDeactivateBankAccount && detailAccount && <Button type="button" variant="outline" className="border-rose-500/30 text-rose-600 hover:bg-rose-500/10" onClick={() => { const account = detailAccount; setDetailAccount(null); void handleDelete(account.id); }}><Trash2 className="mr-1.5 size-4" />Desactivar</Button>}
+            <Button variant="outline" onClick={() => setDetailAccount(null)}>Cerrar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

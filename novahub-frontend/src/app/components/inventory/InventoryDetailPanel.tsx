@@ -1,6 +1,7 @@
 "use client"
 
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, Check, Info, Package, Scale, X } from "lucide-react"
+import type { ReactNode } from 'react'
 import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card"
@@ -12,6 +13,7 @@ interface InventoryDetailPanelProps {
   kind: "transfer" | "adjustment"
   data: any
   onClose: () => void
+  extraActions?: ReactNode
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -230,7 +232,7 @@ function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewIn
   );
 }
 
-export function InventoryDetailPanel({ kind, data, onClose }: InventoryDetailPanelProps) {
+export function InventoryDetailPanel({ kind, data, onClose, extraActions }: InventoryDetailPanelProps) {
   const isTransfer = kind === 'transfer';
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_ADJUSTMENTS', 'viewCost');
@@ -246,6 +248,7 @@ export function InventoryDetailPanel({ kind, data, onClose }: InventoryDetailPan
             </div>
             <div className="flex items-center gap-1" data-tour="inventory-detail-actions">
             <InventoryViewTutorial label={isTransfer ? 'Cómo consultar transferencia' : 'Cómo consultar ajuste'} targetPrefix="inventory-detail" stepKeys={['title', 'data']} copy={{ data: { description: isTransfer ? 'Revisa origen, destino, unidades y artículos transferidos.' : 'Revisa almacén, razón, cantidades, costos y diferencias del ajuste.' } }} />
+            {extraActions}
             <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={onClose} aria-label="Cerrar detalle" title="Cerrar">
               <X className="w-3.5 h-3.5" />
             </Button>

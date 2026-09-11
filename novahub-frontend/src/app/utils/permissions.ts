@@ -232,10 +232,10 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
 
   ACCOUNTING_CHART: ['read', 'create', 'edit', 'delete', 'import', 'export'],
   ACCOUNTING_JOURNAL: ['read', 'create', 'edit', 'delete', 'approve'],
-  ACCOUNTING_HR_PAYMENT_REQUESTS: ['read', 'approve'],
+  ACCOUNTING_HR_PAYMENT_REQUESTS: ['read', 'delete', 'approve'],
   ACCOUNTING_LEDGER: ['read'],
   ACCOUNTING_TRIAL_BALANCE: ['read', 'export'],
-  ACCOUNTING_PROFIT_LOSS: ['read'],
+  ACCOUNTING_PROFIT_LOSS: ['read', 'export'],
   ACCOUNTING_BALANCE_SHEET: ['read'],
   ACCOUNTING_CASH_FLOW: ['read'],
   ACCOUNTING_EXCHANGE_DIFFERENCES: ['read', 'create', 'approve'],

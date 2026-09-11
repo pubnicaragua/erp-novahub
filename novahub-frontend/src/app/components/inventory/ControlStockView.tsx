@@ -872,6 +872,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             kind="adjustment"
             data={selectedAdjustment}
             onClose={() => setSelectedAdjustment(null)}
+            extraActions={selectedAdjustment.status === 'DRAFT' && !isAuditGeneratedAdjustment(selectedAdjustment) && canPerform('INVENTORY_ADJUSTMENTS', 'approve') ? <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-success" disabled={approvingId === selectedAdjustment.id} onClick={() => void handleApproveAdjustment(selectedAdjustment.id)}>{approvingId === selectedAdjustment.id ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <CheckCircle className="mr-1.5 size-3.5" />}Aprobar</Button> : undefined}
           />
         )}
       </div>

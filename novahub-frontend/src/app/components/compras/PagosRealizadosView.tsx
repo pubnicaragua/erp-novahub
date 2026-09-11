@@ -976,7 +976,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         entity="PAYMENT_MADE"
         open={Boolean(detailPayment)}
         onClose={() => setDetailPayment(null)}
-        extraActions={detailPayment && canPerform('PURCHASES_PAYMENTS', 'delete') ? <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => { setPendingCancelId(detailPayment.id); setPendingCancelGroup(detailPayment); setCancelReason(''); }}><Ban className="size-4" /> Anular</Button> : undefined}
+        extraActions={detailPayment ? <>
+          {canPerform('PURCHASES_PAYMENTS', 'edit') && !detailPayment.isGroupedPayment && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setDetailPayment(null); setEditingId(detailPayment.id); }}><Pencil className="size-4" /> Editar</Button>}
+          {canPerform('PURCHASES_PAYMENTS', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => { setPendingCancelId(detailPayment.id); setPendingCancelGroup(detailPayment); setCancelReason(''); }}><Ban className="size-4" /> Anular</Button>}
+        </> : undefined}
         onDownloadPdf={canPerform('PURCHASES_PAYMENTS', 'export') ? (format) => detailPayment ? void handleDownloadPaymentPdf(detailPayment, format) : undefined : undefined}
       />
       <ConfirmDialog

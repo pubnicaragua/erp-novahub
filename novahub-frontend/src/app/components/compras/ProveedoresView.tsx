@@ -712,6 +712,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         supplierId={selectedSupplierDetail?.id ?? null}
         supplierSnapshot={selectedSupplierDetail}
         canExport={canPerform('PURCHASES_PROVIDERS', 'export')}
+        extraActions={selectedSupplierDetail ? <>
+          {canPerform('PURCHASES_PROVIDERS', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); handleOpenEdit(selectedSupplierDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
+          {canPerform('PURCHASES_PROVIDERS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); setPendingToggle(selectedSupplierDetail); }}><Ban className="mr-1.5 size-3.5" />{isSupplierInactive(selectedSupplierDetail) ? 'Activar' : 'Inactivar'}</Button>}
+        </> : undefined}
         onOpenChange={(open) => !open && setSelectedSupplierDetail(null)}
       />
     </div>

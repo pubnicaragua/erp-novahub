@@ -85,6 +85,8 @@ interface ProductDetailDrawerProps {
   movements?: any[];
   /** Series/IMEI globales (fallback para tab series). */
   series?: any[];
+  /** Acciones disponibles en la fila del catálogo, reutilizadas dentro del detalle. */
+  extraActions?: ReactNode;
 }
 
 type TabKey = 'general' | 'stock' | 'kardex' | 'series' | 'historial';
@@ -221,6 +223,7 @@ export function ProductDetailDrawer({
   warehouses = [],
   movements = [],
   series = [],
+  extraActions,
 }: ProductDetailDrawerProps) {
   const { baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
@@ -1202,19 +1205,22 @@ export function ProductDetailDrawer({
         </div>
 
         {/* ===== Footer sticky con acción ===== */}
-        <div className="sticky bottom-0 z-10 bg-background border-t px-6 py-3 flex items-center justify-between gap-2" data-tour="inventory-product-detail-actions">
+        <div className="sticky bottom-0 z-10 bg-background border-t px-6 py-3 flex flex-wrap items-center justify-between gap-2" data-tour="inventory-product-detail-actions">
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
             Detalle del producto
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-            className="gap-1.5"
-          >
-            Cerrar
-            <ChevronRight className="size-3" />
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            {extraActions}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="gap-1.5"
+            >
+              Cerrar
+              <ChevronRight className="size-3" />
+            </Button>
+          </div>
         </div>
         </Tabs>
         <ImageViewer

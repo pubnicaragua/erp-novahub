@@ -586,7 +586,10 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     let isParentOrSubmoduleActive = false;
     const isAlwaysAvailableSystemMenu = parentId === 'configuracion' || parentId === 'suscripciones';
     if (parentMod && !isAlwaysAvailableSystemMenu) {
-      if (user.enabledModules.includes(parentMod)) {
+      const hasSalesCashScope = parentId === 'ventas' && user.enabledModules.some((module) =>
+        ['RETAIL_POS', 'RETAIL_CASH_CONTROL', 'SALES_POS', 'CAJA'].includes(module),
+      );
+      if (user.enabledModules.includes(parentMod) || hasSalesCashScope) {
         isParentOrSubmoduleActive = true;
       } else {
         isParentOrSubmoduleActive = user.enabledModules.some(m => m.startsWith(`${parentMod}_`));

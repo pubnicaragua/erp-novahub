@@ -631,6 +631,11 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           setDetailReturn(null);
           startEdit(detailReturn.id);
         }}
+        extraActions={detailReturn ? <>
+          {canPerform('SALES_RETURNS', 'approve') && String(detailReturn.status || '').toUpperCase() === 'PENDING' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleApprove(detailReturn.id)}><ShieldCheck className="mr-2 size-4" />Aprobar</Button>}
+          {canPerform('SALES_RETURNS', 'approve') && String(detailReturn.status || '').toUpperCase() === 'APPROVED' && <Button type="button" className="rounded-xl bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleProcess(detailReturn.id)}><CheckCircle2 className="mr-2 size-4" />Aplicar saldo</Button>}
+          {canPerform('SALES_RETURNS', 'delete') && String(detailReturn.status || '').toUpperCase() === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReturn(null); setPendingDeleteId(detailReturn.id); }}><XCircle className="mr-2 size-4" />Rechazar</Button>}
+        </> : undefined}
         onDownloadPdf={canPerform('SALES_RETURNS', 'export') ? (format) => { if (detailReturn) void handleExportPDF(detailReturn, format); } : undefined}
       />
 

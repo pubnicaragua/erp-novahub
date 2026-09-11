@@ -514,7 +514,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     setEditingCustomer(customer);
     setEditCustomer(customerToDraft(customer, displayCurrency));
     setPortalAccess(null);
-    setPortalEmail(customer.email || '');
+    setPortalEmail('');
     setPortalPassword('');
     setPortalEnabled(true);
     setEditOpen(true);
@@ -522,7 +522,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     customersService.getPortalAccess(customer.id)
       .then((access) => {
         setPortalAccess(access);
-        setPortalEmail(access?.user?.email || customer.email || '');
+        setPortalEmail(access?.user?.email || '');
         setPortalEnabled(access?.user?.isActive !== false);
       })
       .catch(() => setPortalAccess({ enabled: false }))
@@ -948,6 +948,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}
         customerSnapshot={selectedCustomerDetail}
         canExport={canPerform('SALES_CLIENTS', 'export')}
+        extraActions={selectedCustomerDetail ? <>
+          {canPerform('SALES_CLIENTS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedCustomerDetail(null); openEditCustomer(selectedCustomerDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
+          {canPerform('SALES_CLIENTS', 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedCustomerDetail(null); setPendingStatusChange(selectedCustomerDetail); }}><Ban className="mr-1.5 size-3.5" />{String(selectedCustomerDetail.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar' : 'Inactivar'}</Button>}
+        </> : undefined}
       />
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
@@ -1084,7 +1088,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             </section>
             <section className="space-y-4 border-t border-border/40 pt-5">
               <div><h3 className="text-sm font-black uppercase tracking-widest">Acceso del portal del cliente</h3><p className="text-xs leading-5 text-muted-foreground">El cliente entra desde el login principal y verá únicamente sus productos, inventario, ventas y facturas. Este acceso no abre Ventas, Caja ni Contabilidad.</p></div>
-              {portalLoading ? <div className="h-20 animate-pulse rounded-2xl bg-muted/40" /> : <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4"><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo de acceso *</label><Input type="email" value={portalEmail} onChange={(event) => setPortalEmail(event.target.value)} placeholder="marca@correo.com" className="h-11 rounded-xl bg-background" /></div><div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{portalAccess?.enabled ? 'Nueva contraseña' : 'Contraseña *'}</label><Input type="password" value={portalPassword} onChange={(event) => setPortalPassword(event.target.value)} placeholder={portalAccess?.enabled ? 'Dejar en blanco para conservarla' : 'Mínimo 8 caracteres'} className="h-11 rounded-xl bg-background" autoComplete="new-password" /></div></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><label className="flex items-center gap-2 text-xs font-semibold"><Checkbox checked={portalEnabled} onCheckedChange={(checked) => setPortalEnabled(checked === true)} /> Acceso activo</label><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><p className="self-center text-[10px] leading-4 text-muted-foreground sm:max-w-[270px]">Mínimo 8 caracteres, una mayúscula, un número y un carácter especial.</p><Button type="button" onClick={handleSavePortalAccess} disabled={portalSaving || !portalEmail.trim()} className="w-full rounded-xl sm:w-auto">{portalSaving ? 'Guardando...' : portalAccess?.enabled ? 'Actualizar acceso' : 'Crear acceso'}</Button></div></div>{portalAccess?.user?.email && <p className="mt-3 text-[11px] text-muted-foreground">Usuario vinculado: <span className="font-bold text-foreground">{portalAccess.user.email}</span> · {portalAccess.user.isActive ? 'Activo' : 'Inactivo'}</p>}</div>}
+              {portalLoading ? <div className="h-20 animate-pulse rounded-2xl bg-muted/40" /> : <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4"><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo de acceso *</label><Input type="email" value={portalEmail} onChange={(event) => setPortalEmail(event.target.value)} placeholder="acceso@marca.com" className="h-11 rounded-xl bg-background" /><p className="text-[10px] leading-4 text-muted-foreground">Debe ser un correo que no esté registrado en ningún usuario de Nova Hub. Se valida globalmente, no contra otros clientes.</p></div><div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{portalAccess?.enabled ? 'Nueva contraseña' : 'Contraseña *'}</label><Input type="password" value={portalPassword} onChange={(event) => setPortalPassword(event.target.value)} placeholder={portalAccess?.enabled ? 'Dejar en blanco para conservarla' : 'Mínimo 8 caracteres'} className="h-11 rounded-xl bg-background" autoComplete="new-password" /></div></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><label className="flex items-center gap-2 text-xs font-semibold"><Checkbox checked={portalEnabled} onCheckedChange={(checked) => setPortalEnabled(checked === true)} /> Acceso activo</label><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><p className="self-center text-[10px] leading-4 text-muted-foreground sm:max-w-[270px]">Mínimo 8 caracteres, una mayúscula, un número y un carácter especial.</p><Button type="button" onClick={handleSavePortalAccess} disabled={portalSaving || !portalEmail.trim()} className="w-full rounded-xl sm:w-auto">{portalSaving ? 'Guardando...' : portalAccess?.enabled ? 'Actualizar acceso' : 'Crear acceso'}</Button></div></div>{portalAccess?.user?.email && <p className="mt-3 text-[11px] text-muted-foreground">Usuario vinculado: <span className="font-bold text-foreground">{portalAccess.user.email}</span> · {portalAccess.user.isActive ? 'Activo' : 'Inactivo'}</p>}</div>}
             </section>
           </div>
           <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">

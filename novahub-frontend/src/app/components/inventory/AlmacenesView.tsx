@@ -575,14 +575,18 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         {detailWarehouse && (
           <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start">
             <Card className="min-w-0 overflow-hidden">
-              <div className="flex min-w-0 items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <Warehouse className="size-4 text-muted-foreground" />
                   <h4 className="truncate text-sm font-bold">Detalle de Bodega</h4>
                 </div>
-                <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setDetailWarehouse(null)} title="Cerrar" aria-label="Cerrar detalle de bodega">
-                  <X className="size-3.5" />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {canEditWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl px-2 text-[10px]" onClick={() => handleEditRow(detailWarehouse)}><Edit2 className="mr-1 size-3.5" />Editar</Button>}
+                  {canDeactivateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl border-rose-500/30 px-2 text-[10px] text-rose-600 hover:bg-rose-500/10" onClick={() => handleDeleteWarehouse(detailWarehouse.id)}><Trash2 className="mr-1 size-3.5" />Eliminar</Button>}
+                  <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setDetailWarehouse(null)} title="Cerrar" aria-label="Cerrar detalle de bodega">
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
               </div>
               <div className="max-h-[calc(100dvh-6rem)] min-w-0 space-y-5 overflow-y-auto p-4 sm:p-5">
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">

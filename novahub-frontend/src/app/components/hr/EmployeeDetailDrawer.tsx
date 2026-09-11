@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Activity, Award, Banknote, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3, CreditCard, FileText, History, Loader2, Mail, MapPin, Pencil, Phone, ShieldCheck, User } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -18,6 +18,7 @@ type EmployeeDetailDrawerProps = {
   onOpenChange: (open: boolean) => void;
   onEdit?: (employee: any) => void;
   onManageDepartments?: (employee: any) => void;
+  extraActions?: ReactNode;
   canEdit?: boolean;
 };
 
@@ -100,7 +101,7 @@ function EmptyState({ icon: Icon, title, description }: { icon: any; title: stri
   return <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-muted/[0.12] px-6 py-12 text-center"><Icon className="size-8 text-muted-foreground/50" /><p className="mt-3 text-sm font-bold">{title}</p><p className="mt-1 max-w-sm text-xs text-muted-foreground">{description}</p></div>;
 }
 
-export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChange, onEdit, onManageDepartments, canEdit = false }: EmployeeDetailDrawerProps) {
+export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChange, onEdit, onManageDepartments, extraActions, canEdit = false }: EmployeeDetailDrawerProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('general');
   const [detail, setDetail] = useState<any | null>(employeeSnapshot || null);
   const [payrolls, setPayrolls] = useState<any[]>([]);
@@ -167,6 +168,7 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
             <div className="flex flex-wrap gap-2" data-tour="hr-employee-detail-actions">
               {canEdit && employee && <Button type="button" size="sm" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { onOpenChange(false); onEdit?.(employee); }}><Pencil className="size-3.5" /> Editar</Button>}
               {canEdit && employee && <Button type="button" size="sm" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { onOpenChange(false); onManageDepartments?.(employee); }}><Building2 className="size-3.5" /> Departamentos</Button>}
+              {extraActions}
               <HRViewTutorial label="Cómo consultar empleado" targetPrefix="hr-employee-detail" copy={{ data: { description: 'Revisa datos personales, laborales, actividad, nóminas y cambios del expediente.' }, actions: { description: 'Edita el empleado o administra sus departamentos si tienes permisos.' } }} />
             </div>
             <TabsList className="h-9 w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1">
