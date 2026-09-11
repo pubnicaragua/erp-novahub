@@ -136,6 +136,7 @@ const PRODUCT_TABLE_WIDTHS = {
   code: '112px',
   name: '224px',
   brand: '144px',
+  brandCustomer: '176px',
   note: '180px',
   category: '144px',
   unit: '112px',
@@ -954,7 +955,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   // cálculo circular con width: 100% y produzca un scrollbar casi inútil.
   const catalogTableWidth = isServiceView
     ? canViewInventoryCost ? 1444 : 1332
-    : canViewInventoryCost ? 1744 : 1632;
+    : canViewInventoryCost ? 1920 : 1808;
   const [configuredPriceLists, setConfiguredPriceLists] = useState<PriceList[]>([]);
   useEffect(() => {
     const controller = new AbortController();
@@ -2483,6 +2484,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}>
           <span className="block max-w-[144px] truncate text-xs text-muted-foreground" title={(product as any).brand || undefined}>
             {(product as any).brand || '—'}
+          </span>
+        </TableCell>}
+        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.brandCustomer, minWidth: PRODUCT_TABLE_WIDTHS.brandCustomer }}>
+          <span className="block max-w-[176px] truncate text-xs text-muted-foreground" title={(product as any).brandCustomerName || (product as any).brandCustomer?.name || undefined}>
+            {(product as any).brandCustomerName || (product as any).brandCustomer?.name || 'Sin asignar'}
           </span>
         </TableCell>}
         <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>
@@ -4199,7 +4205,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase">{isServiceView ? 'Servicio' : 'Producto'}</Badge>
                   </div>
                   <p className="mt-2 truncate text-xs text-muted-foreground">{product.category?.name || 'Sin categoría'}</p>
-                  {!isServiceView && <div className="mt-1 min-w-0 text-xs text-muted-foreground"><p className="truncate"><span className="font-semibold">Marca:</span> {product.brand || product.details?.brand || '—'}</p><p className="mt-0.5 truncate text-[10px] text-muted-foreground">Cliente propietario de la marca: {product.brandCustomerName || 'Sin asignar'}</p></div>}
+                  {!isServiceView && <>
+                    <p className="mt-1 truncate text-xs text-muted-foreground"><span className="font-semibold">Marca:</span> {product.brand || product.details?.brand || '—'}</p>
+                    <p className="truncate text-xs text-muted-foreground"><span className="font-semibold">Cliente:</span> {(product as any).brandCustomerName || (product as any).brandCustomer?.name || 'Sin asignar'}</p>
+                  </>}
                   <p className="mt-1 max-w-full truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}><span className="font-semibold">Nota:</span> {product.commercialNote || '—'}</p>
                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3 xl:grid-cols-4">
                      {isServiceView && <div>
@@ -4323,6 +4332,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Código' : 'Código/Sku'}<ColumnFilterMenu label={isServiceView ? 'Código' : 'Código/Sku'} sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}><span className="inline-flex items-center gap-1">Marca<ColumnFilterMenu label="Marca" options={brandOptions} selected={colFilters.state.brand?.values || []} onSelect={(values) => colFilters.setValues('brand', values)} sort={colFilters.state.brand?.sort || null} onSort={(sort) => colFilters.setSort('brand', sort)} /></span></TableHead>}
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.brandCustomer, minWidth: PRODUCT_TABLE_WIDTHS.brandCustomer }}>Cliente</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>Nota comercial</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}><span className="inline-flex items-center gap-1">Categoría<ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} /></span></TableHead>
                {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
@@ -4345,7 +4355,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             {/* Existing products */}
             {filteredData.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                 <TableCell colSpan={isServiceView ? (canViewInventoryCost ? 9 : 8) : canViewInventoryCost ? 13 : 12} className="text-center py-12 text-muted-foreground">
+                 <TableCell colSpan={isServiceView ? (canViewInventoryCost ? 9 : 8) : canViewInventoryCost ? 14 : 13} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">{products.length > 0 ? 'No hay coincidencias' : `No hay ${isServiceView ? 'servicios' : 'productos'} registrados`}</p>
                   <p className="text-sm">
@@ -4450,6 +4460,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                         </span>
                         <span className="mt-0.5 block max-w-[144px] truncate text-[10px] text-muted-foreground">{product.brandCustomerName || 'Sin asignar'}</span>
                       </div>
+                    </TableCell>}
+                    {!isServiceView && <TableCell>
+                      {(() => {
+                        const customerName = String((product as any).brandCustomerName || (product as any).brandCustomer?.name || '').trim();
+                        return <span className={`block max-w-[176px] truncate text-xs ${customerName ? 'text-foreground' : 'text-muted-foreground'}`} title={customerName || undefined}>
+                          {customerName || 'Sin asignar'}
+                        </span>;
+                      })()}
                     </TableCell>}
                     <TableCell className="max-w-[180px]">
                       <span className="block max-w-[180px] truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}>

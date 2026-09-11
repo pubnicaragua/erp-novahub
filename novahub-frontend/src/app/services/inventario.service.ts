@@ -38,6 +38,8 @@ export interface SimilarityResolution {
 
 export const inventoryService = {
   // ==================== PRODUCTS ====================
+  getBrandCustomerMappings: (signal?: AbortSignal) => api.get<{ brands: any[]; customers: Array<{ id: string; name: string; code?: string | null }> }>('/inventory/brands/customer-mappings', { signal }),
+  assignBrandCustomer: (brandId: string, customerId: string | null) => api.patch<any>(`/inventory/brands/${brandId}/customer`, { customerId }),
   getProducts: async (filters?: ApiFilters, signal?: AbortSignal) => {
     const products = await api.get<PaginatedResponse<Product>>('/inventory/products', { params: filters as any, signal });
     return resolveStorageReferences(products);

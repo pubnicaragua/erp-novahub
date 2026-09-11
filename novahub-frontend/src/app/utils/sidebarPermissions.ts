@@ -280,6 +280,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   dominio: ['CONFIG_DOMAINS'],
 
   productos: ['INVENTORY_PRODUCTS'],
+  'marcas-clientes': ['INVENTORY_PRODUCTS'],
   servicios: ['INVENTORY_SERVICES'],
   atributos: ['INVENTORY_ATTRIBUTES'],
   almacenes: ['INVENTORY_WAREHOUSES'],
@@ -403,6 +404,7 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'finanzas:perdidas': ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
   'rh:comisiones': ['HR_COMMISSIONS'],
   'inventario:productos': ['INVENTORY_PRODUCTS'],
+  'inventario:marcas-clientes': ['INVENTORY_PRODUCTS'],
   'inventario:servicios': ['INVENTORY_SERVICES'],
   'inventario:atributos': ['INVENTORY_ATTRIBUTES'],
   'inventario:auditorias': ['INVENTORY_AUDITS'],
