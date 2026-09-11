@@ -4,6 +4,7 @@ export type ManagerInventoryView =
   | 'corporateInventory'
   | 'products'
   | 'services'
+  | 'brands'
   | 'warehouses'
   | 'corporateWarehouses'
   | 'transfers'
@@ -19,6 +20,7 @@ export const MANAGER_INVENTORY_VIEWS: Array<{ id: ManagerInventoryView; label: s
   { id: 'corporateInventory', label: 'Inventario corporativo' },
   { id: 'products', label: 'Productos' },
   { id: 'services', label: 'Servicios' },
+  { id: 'brands', label: 'Marcas por cliente' },
   { id: 'warehouses', label: 'Bodegas' },
   { id: 'corporateWarehouses', label: 'Almacenes' },
   { id: 'transfers', label: 'Transferencias' },
