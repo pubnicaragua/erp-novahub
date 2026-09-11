@@ -834,6 +834,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleReset = async () => {
+    if (!canEditBranding) return;
     resetTheme();
     setPrimaryHex('#10b981');
     setSidebarHex('#0c1a12');
@@ -1342,6 +1343,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     {colorPresets.map(preset => (
                       <button key={preset.name} onClick={() => applyPreset(preset)}
                         type="button"
+                        disabled={!canEditBranding}
                         aria-pressed={activePreset === preset.name}
                         className={cn('relative flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all hover:shadow-xl hover:-translate-y-0.5',
                           activePreset === preset.name ? 'border-primary shadow-lg shadow-primary/20 bg-primary/5' : 'border-border/50 hover:border-primary/30')}>
@@ -1373,6 +1375,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                           type="button"
                           role="radio"
                           aria-checked={paletteMode === 'details'}
+                          disabled={!canEditBranding}
                           onClick={() => selectPaletteMode('details')}
                           className={cn(
                             'rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -1388,6 +1391,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                           type="button"
                           role="radio"
                           aria-checked={paletteMode === 'complete'}
+                          disabled={!canEditBranding}
                           onClick={() => selectPaletteMode('complete')}
                           className={cn(
                             'rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -1413,9 +1417,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Colores Principales</p>
-                  <ColorField label="Color Primario" description="Botones, enlaces y elementos activos" hexValue={primaryHex} onHexChange={v => { setPrimaryHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
-                  <ColorField label="Texto sobre Primario" description="Color del texto en botones primarios" hexValue={primaryFgHex} onHexChange={v => { setPrimaryFgHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
-                  <ColorField label="Color de Acento" description="Elementos secundarios y hovers" hexValue={accentHex} onHexChange={v => { setAccentHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
+                  <ColorField label="Color Primario" description="Botones, enlaces y elementos activos" hexValue={primaryHex} readOnly={!canEditBranding} onHexChange={v => { setPrimaryHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
+                  <ColorField label="Texto sobre Primario" description="Color del texto en botones primarios" hexValue={primaryFgHex} readOnly={!canEditBranding} onHexChange={v => { setPrimaryFgHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
+                  <ColorField label="Color de Acento" description="Elementos secundarios y hovers" hexValue={accentHex} readOnly={!canEditBranding} onHexChange={v => { setAccentHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }} />
                   <Separator className="my-2" />
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Colores del Sidebar</p>
                   <ColorField
@@ -1424,7 +1428,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     hexValue={sidebarHex}
                     displayColor={paletteMode === 'details' ? 'var(--sidebar-neutral)' : undefined}
                     displayValue={paletteMode === 'details' ? 'Neutral del tema' : undefined}
-                    readOnly={paletteMode === 'details'}
+                    readOnly={!canEditBranding || paletteMode === 'details'}
                     onHexChange={v => { setSidebarHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }}
                   />
                   <ColorField
@@ -1433,7 +1437,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     hexValue={sidebarFgHex}
                     displayColor={paletteMode === 'details' ? 'var(--sidebar-neutral-foreground)' : undefined}
                     displayValue={paletteMode === 'details' ? 'Neutral del tema' : undefined}
-                    readOnly={paletteMode === 'details'}
+                    readOnly={!canEditBranding || paletteMode === 'details'}
                     onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); themeDraftDirtyRef.current = true; }}
                   />
                   <div className="flex gap-3 pt-2">
@@ -1441,7 +1445,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       {isSavingTheme ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
                       {isSavingTheme ? 'Guardando...' : 'Guardar Tema'}
                     </Button>
-                    <Button variant="outline" onClick={handleReset} className="rounded-xl gap-2">
+                    <Button variant="outline" onClick={handleReset} disabled={!canEditBranding} className="rounded-xl gap-2">
                       <RotateCcw className="size-4" />Restaurar
                     </Button>
                   </div>
@@ -1453,9 +1457,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <CardDescription>Define la paleta del enlace público. El texto secundario se deriva del color de fuente seleccionado.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-6">
-                  <ColorField label="Color principal del portal" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} onHexChange={setPortalPrimaryHex} />
-                  <ColorField label="Color de las tarjetas" description="Fondos del encabezado, datos y documentos" hexValue={portalAccentHex} onHexChange={setPortalAccentHex} />
-                  <ColorField label="Color del texto del portal" description="Texto normal, fechas, etiquetas y variantes derivadas para estados secundarios" hexValue={portalTextHex} onHexChange={setPortalTextHex} />
+                  <ColorField label="Color principal del portal" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} readOnly={!canEditBranding} onHexChange={setPortalPrimaryHex} />
+                  <ColorField label="Color de las tarjetas" description="Fondos del encabezado, datos y documentos" hexValue={portalAccentHex} readOnly={!canEditBranding} onHexChange={setPortalAccentHex} />
+                  <ColorField label="Color del texto del portal" description="Texto normal, fechas, etiquetas y variantes derivadas para estados secundarios" hexValue={portalTextHex} readOnly={!canEditBranding} onHexChange={setPortalTextHex} />
                   <Button onClick={handleSavePortalBranding} disabled={!canEditBranding} className="rounded-xl gap-2 font-bold"><Save className="size-4" />Guardar portal</Button>
                 </CardContent>
               </Card>

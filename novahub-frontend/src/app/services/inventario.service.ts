@@ -54,6 +54,10 @@ export const inventoryService = {
   previewProductStockAccounting: (warehouseIds: string[]) =>
     api.post<{ ready: boolean; errors: string[]; warnings?: string[]; autoGenerationEnabled: boolean; warehouses: any[] }>('/inventory/products/accounting-preflight', { warehouseIds }),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
+  getBrands: (filters?: ApiFilters & { customerId?: string; unassigned?: boolean }, signal?: AbortSignal) =>
+    api.get<PaginatedResponse<any>>('/inventory/brands', { params: filters as any, signal }),
+  updateBrandCustomer: (brandId: string, customerId: string | null) =>
+    api.patch<{ brandId: string; brandName: string; ownerCustomerId: string | null; ownerCustomerName: string | null }>(`/inventory/brands/${brandId}/customer`, { customerId }),
   updateProductStatus: (id: string, isActive: boolean) => api.patch<Product>(`/inventory/products/${id}/status`, { isActive }),
   duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`),
   checkProductCode: (code: string, excludeId?: string) => 

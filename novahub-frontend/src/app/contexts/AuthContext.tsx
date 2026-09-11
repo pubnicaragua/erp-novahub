@@ -10,7 +10,7 @@ import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDE
 import type { UserThemeSettings } from '../services/branding.service';
 
 export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
-export type UserType = 'admin' | 'collaborator' | 'manager';
+export type UserType = 'admin' | 'collaborator' | 'manager' | 'customer_portal';
 
 const SESSION_BRANDING_KEY = 'nh-session-branding';
 
@@ -163,6 +163,8 @@ export interface User {
   tenantId: string;
   /** Canonical tenant id used by the current backend session contract. */
   clientTenantId?: string;
+  /** Cliente propietario asociado a una identidad CUSTOMER_PORTAL. */
+  customerId?: string | null;
   tenantName: string;
   permissions: Permission[];
   enabledModules: string[];
@@ -405,7 +407,9 @@ const createUserObject = (apiPayload: any): User => {
   const apiUser = apiPayload?.user || apiPayload?.data || apiPayload || {};
   
   const normalizedUserType = String(apiUser?.userType || '').toLowerCase();
-  const userType: UserType = normalizedUserType === 'manager'
+  const userType: UserType = normalizedUserType === 'customer_portal'
+    ? 'customer_portal'
+    : normalizedUserType === 'manager'
     ? 'manager'
     : normalizedUserType === 'admin'
       ? 'admin'
@@ -584,6 +588,7 @@ const createUserObject = (apiPayload: any): User => {
     // ningún módulo tenant intente usarlo accidentalmente.
     tenantId: apiUser.clientTenantId || '',
     clientTenantId: apiUser.clientTenantId || undefined,
+    customerId: apiUser.customerId || null,
     tenantName: isPlatformAdmin ? 'NovaHub Platform' : (apiUser.clientTenant?.name || 'Nova Hub'),
     permissions: mergedPermissions,
     enabledModules: apiUser.enabledModules || [],
@@ -724,8 +729,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const me = await api.get<any>('/auth/profile');
           rememberSessionBranding(me);
-          setUser(createUserObject(me));
-          fetchBranches();
+          const restoredUser = createUserObject(me);
+          setUser(restoredUser);
+          if (restoredUser.userType !== 'customer_portal') fetchBranches();
         } catch {
           // Backward compatibility with backends that still use switch-context for session restore.
           const payload = JSON.parse(atob(token.split('.')[1]));
@@ -738,8 +744,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
           storeAuthToken(response.access_token);
           rememberSessionBranding(response.user);
-          setUser(createUserObject(response.user));
-          fetchBranches();
+          const restoredUser = createUserObject(response.user);
+          setUser(restoredUser);
+          if (restoredUser.userType !== 'customer_portal') fetchBranches();
         }
       } catch (error) {
         console.error('Error restoring session:', error);
@@ -928,7 +935,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       || permissions.find((p) => p.module.toUpperCase() === backendModuleName.toUpperCase());
     // Si existe una fila explícita para la vista, esa fila es la autoridad.
     // Así, desactivar un hijo no queda anulado por el permiso del módulo padre.
-    if (directPermission) return directPermission.canView === true;
+    if (directPermission?.canView === true) return true;
+    // La matriz de roles conserva también la fila del padre. En un rol
+    // granular esa fila puede quedar en falso porque solo se habilitó uno de
+    // sus hijos; no debe ocultar el shell que contiene al hijo permitido.
+    // Para una vista hija, en cambio, la fila explícita falsa sigue siendo
+    // una denegación fuerte y no se continúa con la herencia.
+    const isParentModuleRequest = !String(module).includes('_');
+    if (directPermission && !isParentModuleRequest) return false;
 
     const parentAliases = SIDEBAR_PERMISSION_PARENT_ALIASES[backendModuleName] || [];
     if (permissions.some((permission) =>
@@ -1079,8 +1093,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSessionStartVersion((version) => version + 1);
       storeAuthToken(response.access_token);
       rememberSessionBranding(response.user);
-      setUser(createUserObject(response.user));
-      fetchBranches();
+      const loggedInUser = createUserObject(response.user);
+      setUser(loggedInUser);
+      if (loggedInUser.userType !== 'customer_portal') fetchBranches();
     } catch (error: any) {
       throw new Error(error.message || 'Error al iniciar sesión. Verifica tus credenciales.', { cause: error });
     }
@@ -1095,8 +1110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionStartVersion((version) => version + 1);
     storeAuthToken(token);
     rememberSessionBranding(userData);
-    setUser(createUserObject(userData));
-    fetchBranches();
+    const sessionUser = createUserObject(userData);
+    setUser(sessionUser);
+    if (sessionUser.userType !== 'customer_portal') fetchBranches();
   }, [fetchBranches]);
 
   const logout = useCallback(() => {

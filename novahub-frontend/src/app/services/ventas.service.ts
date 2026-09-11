@@ -14,6 +14,10 @@ export const customersService = {
   update: (id: string, data: Partial<Customer>) => api.patch<Customer>(`/sales/customers/${id}`, data),
   setStatus: (id: string, status: Customer['status']) => api.patch<Customer>(`/sales/customers/${id}/status`, { status }),
   delete: (id: string) => api.delete<void>(`/sales/customers/${id}`),
+  getPortalAccess: (id: string) => api.get<any>(`/customer-portal/admin/customers/${id}/access`),
+  savePortalAccess: (id: string, data: { email: string; password?: string; isActive?: boolean }) => api.put<any>(`/customer-portal/admin/customers/${id}/access`, data),
+  setPortalAccessStatus: (id: string, isActive: boolean) => api.patch<any>(`/customer-portal/admin/customers/${id}/access/status`, { isActive }),
+  resetPortalPassword: (id: string, password: string) => api.patch<any>(`/customer-portal/admin/customers/${id}/access/password`, { password }),
 };
 
 export const auditService = {

@@ -49,6 +49,7 @@ import { normalizePurchasePriority, PURCHASE_PRIORITY_OPTIONS } from '../../util
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { formatExchangeRate } from '../../utils/currency';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
+import { customersService } from '../../services/ventas.service';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 
 const WAREHOUSE_TYPES = [
@@ -152,6 +153,7 @@ const PRODUCT_TABLE_WIDTHS = {
 } as const;
 
 const SOLICITUD_PAGE_SIZE = 50;
+const BRAND_PAGE_SIZE = 24;
 
 const normalizeImportHeader = (value: unknown) => String(value ?? '')
   .normalize('NFD')
@@ -1132,6 +1134,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [variantManagerProduct, setVariantManagerProduct] = useState<any | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [labelModalOpen, setLabelModalOpen] = useState(false);
+  const [brandCustomers, setBrandCustomers] = useState<any[]>([]);
+  const [brandRows, setBrandRows] = useState<any[]>([]);
+  const [brandSearch, setBrandSearch] = useState('');
+  const [brandSearchQuery, setBrandSearchQuery] = useState('');
+  const [brandOwnerFilter, setBrandOwnerFilter] = useState('');
+  const [brandPage, setBrandPage] = useState(1);
+  const [brandMeta, setBrandMeta] = useState({ total: 0, totalPages: 1 });
+  const [brandLoading, setBrandLoading] = useState(false);
+  const [brandReloadToken, setBrandReloadToken] = useState(0);
+  const [brandSavingId, setBrandSavingId] = useState<string | null>(null);
 
   useEffect(() => () => {
     if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
@@ -1146,6 +1158,83 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   useEffect(() => {
     if (initialStockFilter) setStockFilter(initialStockFilter);
   }, [initialStockFilter]);
+
+  useEffect(() => {
+    if (isServiceView || !canPerform(catalogPermissionModule, 'edit')) return;
+    const controller = new AbortController();
+    customersService.getAll({ page: 1, pageSize: 500 }, controller.signal)
+      .then((response: any) => setBrandCustomers(Array.isArray(response) ? response : response?.data || []))
+      .catch(() => setBrandCustomers([]));
+    return () => controller.abort();
+  }, [isServiceView, canPerform, catalogPermissionModule]);
+
+  useEffect(() => {
+    if (isServiceView || !canPerform(catalogPermissionModule, 'view')) return;
+    const timer = window.setTimeout(() => setBrandSearchQuery(brandSearch.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [brandSearch, isServiceView, canPerform, catalogPermissionModule]);
+
+  useEffect(() => {
+    if (isServiceView || !canPerform(catalogPermissionModule, 'view')) return;
+    const controller = new AbortController();
+    setBrandLoading(true);
+    const unassigned = brandOwnerFilter === '__unassigned__';
+    inventoryService.getBrands({
+      page: brandPage,
+      pageSize: BRAND_PAGE_SIZE,
+      search: brandSearchQuery || undefined,
+      customerId: !unassigned && brandOwnerFilter ? brandOwnerFilter : undefined,
+      unassigned: unassigned || undefined,
+    }, controller.signal)
+      .then((response: any) => {
+        const rows = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.data)
+            ? response.data
+            : Array.isArray(response?.data?.data)
+              ? response.data.data
+              : [];
+        setBrandRows(rows);
+        const meta = response?.meta || response?.data?.meta || {};
+        setBrandMeta({
+          total: Number(meta.total || rows.length || 0),
+          totalPages: Math.max(1, Number(meta.totalPages || 1)),
+        });
+      })
+      .catch(() => setBrandRows([]))
+      .finally(() => setBrandLoading(false));
+    return () => {
+      controller.abort();
+      setBrandLoading(false);
+    };
+  }, [brandOwnerFilter, brandPage, brandReloadToken, brandSearchQuery, isServiceView, canPerform, catalogPermissionModule]);
+
+  const handleBrandCustomerChange = async (brandIdValue: string, customerId: string) => {
+    const brandId = String(brandIdValue || '').trim();
+    if (!brandId) {
+      toast.error('Esta marca no tiene una relación normalizada para asignar.');
+      return;
+    }
+    const nextCustomerId = customerId === '__unassigned__' ? null : customerId;
+    setBrandSavingId(brandId);
+    try {
+      await inventoryService.updateBrandCustomer(brandId, nextCustomerId);
+      toast.success(nextCustomerId ? 'Cliente propietario de la marca actualizado.' : 'Cliente propietario retirado de la marca.');
+      setBrandRows((current) => current.map((brand) => String(brand.id) === brandId
+        ? {
+            ...brand,
+            customerId: nextCustomerId,
+            customerName: nextCustomerId ? brandCustomers.find((customer) => String(customer.id) === nextCustomerId)?.name || null : null,
+          }
+        : brand));
+      setBrandReloadToken((value) => value + 1);
+      await onRefresh?.();
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo actualizar el cliente propietario de la marca.');
+    } finally {
+      setBrandSavingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!targetProductId) return;
@@ -3768,6 +3857,55 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             />
           ))}
         </div>
+        {!isServiceView && (brandMeta.total > 0 || brandLoading || brandSearch.trim() || brandOwnerFilter) && (
+          <section className="mt-4 min-w-0 rounded-2xl border border-primary/25 bg-primary/[0.04] p-4" aria-labelledby="inventory-brand-owners-title">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h3 id="inventory-brand-owners-title" className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-primary"><Tag className="size-4 shrink-0" /> Marcas y clientes propietarios</h3>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">La asignación se hace una sola vez por marca. Todos sus productos y variantes heredan el mismo cliente propietario.</p>
+              </div>
+              <Badge variant="outline" className="w-fit shrink-0 rounded-full">{brandMeta.total.toLocaleString('es-NI')} marcas</Badge>
+            </div>
+            <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row">
+              <Input value={brandSearch} onChange={(event) => { setBrandSearch(event.target.value); setBrandPage(1); }} placeholder="Buscar marca, producto o cliente..." aria-label="Buscar marcas" className="h-9 min-w-0 rounded-xl border-border/60 bg-background text-xs sm:flex-1" />
+              <Select value={brandOwnerFilter || '__all__'} onValueChange={(value) => { setBrandOwnerFilter(value === '__all__' ? '' : value); setBrandPage(1); }}>
+                <SelectTrigger className="h-9 w-full rounded-xl border-border/60 bg-background text-xs sm:w-56" aria-label="Filtrar marcas por cliente propietario"><SelectValue placeholder="Todos los clientes" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todos los clientes</SelectItem>
+                  <SelectItem value="__unassigned__">Sin propietario</SelectItem>
+                  {brandCustomers.map((customer) => <SelectItem key={customer.id} value={String(customer.id)}>{customer.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {brandLoading && brandRows.length === 0 ? <div className="mt-4 h-24 animate-pulse rounded-2xl bg-muted/40" /> : brandRows.length === 0 ? <p className="mt-4 rounded-2xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">No hay marcas para este filtro.</p> : <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {brandRows.map((brand) => (
+                <div key={String(brand.id)} className="min-w-0 rounded-2xl border border-border/60 bg-background/70 p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-black uppercase tracking-tight" title={brand.name}>{brand.name}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{Number(brand.productCount || 0).toLocaleString('es-NI')} productos · {Number(brand.availableUnits || 0).toLocaleString('es-NI')} disponibles</p>
+                    </div>
+                    <Badge variant={brand.customerId ? 'secondary' : 'outline'} className="shrink-0 rounded-full text-[10px]">{brand.customerId ? 'Asignada' : 'Sin asignar'}</Badge>
+                  </div>
+                  {canPerform(catalogPermissionModule, 'edit') ? (
+                    <Select value={brand.customerId || '__unassigned__'} onValueChange={(value) => void handleBrandCustomerChange(String(brand.id), value)}>
+                      <SelectTrigger className="mt-3 h-9 w-full max-w-full rounded-xl border-primary/20 bg-background text-xs font-semibold" disabled={brandSavingId === String(brand.id)} aria-label={`Cliente propietario de la marca ${brand.name}`}>
+                        <SelectValue placeholder="Sin propietario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__unassigned__">Sin propietario</SelectItem>
+                        {brandCustomers.map((customer) => <SelectItem key={customer.id} value={String(customer.id)}>{customer.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="mt-3 truncate text-xs text-muted-foreground">Cliente propietario: {brand.customerName || 'Sin asignar'}</p>
+                  )}
+                </div>
+              ))}
+            </div>}
+            {brandMeta.totalPages > 1 && <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3 text-xs text-muted-foreground"><span>Página {brandPage} de {brandMeta.totalPages}</span><div className="flex items-center gap-1"><Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => setBrandPage((page) => Math.max(1, page - 1))} disabled={brandPage <= 1 || brandLoading} aria-label="Página anterior de marcas"><ChevronLeft className="size-4" /></Button><Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => setBrandPage((page) => Math.min(brandMeta.totalPages, page + 1))} disabled={brandPage >= brandMeta.totalPages || brandLoading} aria-label="Página siguiente de marcas"><ChevronRight className="size-4" /></Button></div></div>}
+          </section>
+        )}
         {!isServiceView && selectedBranchId && (() => {
           const selectedBranch = (branches || []).find((b: any) => b.id === selectedBranchId) || null;
           const linkedWarehouses = displayWarehouseOptions.filter((w: any) => branchWarehouseIdSet.has(w.id));
@@ -4061,7 +4199,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase">{isServiceView ? 'Servicio' : 'Producto'}</Badge>
                   </div>
                   <p className="mt-2 truncate text-xs text-muted-foreground">{product.category?.name || 'Sin categoría'}</p>
-                  {!isServiceView && <p className="mt-1 truncate text-xs text-muted-foreground"><span className="font-semibold">Marca:</span> {product.brand || product.details?.brand || '—'}</p>}
+                  {!isServiceView && <div className="mt-1 min-w-0 text-xs text-muted-foreground"><p className="truncate"><span className="font-semibold">Marca:</span> {product.brand || product.details?.brand || '—'}</p><p className="mt-0.5 truncate text-[10px] text-muted-foreground">Cliente propietario de la marca: {product.brandCustomerName || 'Sin asignar'}</p></div>}
                   <p className="mt-1 max-w-full truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}><span className="font-semibold">Nota:</span> {product.commercialNote || '—'}</p>
                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3 xl:grid-cols-4">
                      {isServiceView && <div>
@@ -4306,9 +4444,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       </div>
                     </TableCell>
                     {!isServiceView && <TableCell>
-                      <span className="block max-w-[144px] truncate text-xs text-muted-foreground" title={product.brand || product.details?.brand || undefined}>
-                        {product.brand || product.details?.brand || '—'}
-                      </span>
+                      <div className="min-w-0">
+                        <span className="block max-w-[144px] truncate text-xs text-muted-foreground" title={product.brand || product.details?.brand || undefined}>
+                          {product.brand || product.details?.brand || '—'}
+                        </span>
+                        <span className="mt-0.5 block max-w-[144px] truncate text-[10px] text-muted-foreground">{product.brandCustomerName || 'Sin asignar'}</span>
+                      </div>
                     </TableCell>}
                     <TableCell className="max-w-[180px]">
                       <span className="block max-w-[180px] truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}>

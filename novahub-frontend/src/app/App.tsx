@@ -93,6 +93,7 @@ const QaConsoleView = lazyWithChunkRecovery(() => import('./components/qa/QaCons
 const ManagerPage = lazyWithChunkRecovery(() => import('./components/ManagerPage').then(m => ({ default: m.ManagerPage })), 'manager');
 const EnterpriseGroupsAdminView = lazyWithChunkRecovery(() => import('./components/admin/EnterpriseGroupsAdminView').then(m => ({ default: m.EnterpriseGroupsAdminView })), 'enterprise-groups');
 const ImplementationGuideView = lazyWithChunkRecovery(() => import('./components/admin/ImplementationGuideView').then(m => ({ default: m.ImplementationGuideView })), 'implementation-guide');
+const CustomerPortalPage = lazyWithChunkRecovery(() => import('./components/customer-portal/CustomerPortalPage').then(m => ({ default: m.CustomerPortalPage })), 'customer-portal');
 
 function PageLoader() {
   return (
@@ -657,6 +658,12 @@ function AppContent() {
         <Toaster position="top-right" />
       </>
     );
+  }
+
+  // CUSTOMER_PORTAL entra desde el mismo login, pero nunca monta el shell del
+  // ERP. Su única superficie autenticada es la vista de reportes de cliente.
+  if (user?.userType === 'customer_portal') {
+    return <Suspense fallback={<PageLoader />}><CustomerPortalPage /></Suspense>;
   }
 
   if (showingSessionBranding || !isBrandingReady) {

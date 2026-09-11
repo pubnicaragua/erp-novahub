@@ -140,6 +140,8 @@ export interface Customer {
   status: EntityStatus;
   notes?: string;
   priceListId?: string;
+  portalUser?: { id: string; email: string; name?: string; isActive: boolean } | null;
+  portalAccessEnabled?: boolean;
   priceList?: { id: string; code: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
@@ -1197,6 +1199,11 @@ export interface Product {
   imageUrlStorageUri?: string;
   categoryId?: string;
   brand?: string;
+  brandId?: string | null;
+  brandCustomerId?: string | null;
+  brandCustomerName?: string | null;
+  ownerCustomerId?: string | null;
+  ownerCustomerName?: string | null;
   unit?: string;
   price: number;
   cost: number;
