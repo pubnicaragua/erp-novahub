@@ -2337,6 +2337,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                   <div className="min-w-0">
                                     <div className="flex min-w-0 items-center gap-2">
                                       <p className="min-w-0 truncate font-bold">{prod.name}</p>
+                                      {prod.brand && <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">{prod.brand}</span>}
                                       <Badge variant="secondary" className="shrink-0 text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
                                     </div>
                                   </div>
@@ -2438,6 +2439,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                   </div>
                                 </div>
                                 <h4 className="truncate text-sm font-black">{prod.name}</h4>
+                                {prod.brand && <p className="truncate text-[10px] font-bold uppercase tracking-wider text-primary">{prod.brand}{prod.brandCustomerName ? ` · ${prod.brandCustomerName}` : ''}</p>}
                                 <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">
                                   {prod.description || (prod.itemType === 'SERVICE' ? 'Servicio disponible para facturación inmediata.' : 'Producto disponible para facturación inmediata.')}
                                 </p>

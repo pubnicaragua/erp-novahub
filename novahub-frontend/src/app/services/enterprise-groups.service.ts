@@ -207,6 +207,7 @@ export interface ManagerInventoryModuleResponse {
   data: any[];
   meta: { total: number; page: number; pageSize: number; totalPages: number };
   metrics: Record<string, number>;
+  customers?: Array<{ id: string; name: string; code: string; clientTenantId: string }>;
 }
 
 export interface ManagerInventoryImportLocation {
@@ -684,6 +685,8 @@ export const enterpriseGroupsService = {
       `/enterprise-groups/manager/${groupId}/inventory/module`,
       { params, signal },
     ),
+  updateManagerBrandCustomer: (groupId: string, brandId: string, customerId: string | null) =>
+    api.patch<any>(`/enterprise-groups/manager/${groupId}/inventory/brands/${brandId}/customer`, { customerId }),
   getSalesModule: (
     groupId: string,
     params: {

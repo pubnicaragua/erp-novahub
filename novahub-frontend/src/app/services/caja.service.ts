@@ -156,6 +156,10 @@ export interface PosProduct {
   imageUrl?: string | null;
   imageUrlStorageUri?: string;
   itemType?: 'PRODUCT' | 'SERVICE';
+  brand?: string | null;
+  brandId?: string | null;
+  brandCustomerId?: string | null;
+  brandCustomerName?: string | null;
   trackInventory: boolean;
   isActive?: boolean;
   costPrice?: number;

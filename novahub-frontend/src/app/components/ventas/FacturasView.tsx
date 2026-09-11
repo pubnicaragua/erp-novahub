@@ -1818,7 +1818,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <div className="sales-line-product-fields">
                       <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                         <Combobox
-                          options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}`, value: p.id, description: p.commercialNote ? `Nota: ${p.commercialNote}` : undefined }))}
+                          options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}${p.brand ? ` · ${p.brand}` : ''}`, value: p.id, description: p.commercialNote ? `Nota: ${p.commercialNote}` : p.brand ? `Marca: ${p.brand}` : undefined }))}
                           value={item.productId || ''}
                           onChange={(val) => {
                         const newItems = [...(localDoc.items || [])];
