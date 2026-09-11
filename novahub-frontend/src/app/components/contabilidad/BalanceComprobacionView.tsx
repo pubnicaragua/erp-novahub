@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -16,6 +17,7 @@ import { AccountChecklistDialog } from './AccountChecklistDialog';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { DateField } from '../ui/DateField';
 import { generateTrialBalancePDF } from '../../utils/pdfGenerator';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -156,6 +158,33 @@ export function BalanceComprobacionView() {
     }
   };
 
+  const handleExportExcel = () => {
+    if (!canExportTrialBalance) return;
+    const rows = grouped.flatMap((group) => group.rows).map((row) => ({
+      Código: row.codigo,
+      Cuenta: row.cuenta,
+      Tipo: accountTypeLabel(row.tipo),
+      Débitos: row.debitos,
+      Créditos: row.creditos,
+      Saldo: row.saldo,
+    }));
+    const workbook = XLSX.utils.book_new();
+    const detailSheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]);
+    detailSheet['!cols'] = [{ wch: 14 }, { wch: 38 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Balanza');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['Reporte', 'Balance de comprobación'],
+      ['Desde', dateFrom || ''],
+      ['Hasta', dateTo || ''],
+      ['Total débitos', totalDebitos],
+      ['Total créditos', totalCreditos],
+      ['Diferencia', difference],
+      ['Estado', isBalanced ? 'Balanceado' : 'No balanceado'],
+    ]), 'Resumen');
+    XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['balance_comprobacion'], 'xlsx', dateFrom, dateTo));
+    toast.success(`Balance exportado con ${rows.length} cuenta(s)`);
+  };
+
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm">
@@ -183,9 +212,14 @@ export function BalanceComprobacionView() {
             <Input placeholder="Buscar cuenta..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="h-9 w-full pl-9 sm:w-[220px]" />
           </div>
           {canExportTrialBalance && (
-            <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
-              <Download className="size-4" /> Descargar PDF
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9">
+                <Download className="size-4" /> Exportar Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
+                <Download className="size-4" /> Descargar PDF
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración

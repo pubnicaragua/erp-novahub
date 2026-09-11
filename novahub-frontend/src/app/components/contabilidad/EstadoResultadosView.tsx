@@ -1,10 +1,11 @@
 ﻿import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3, Settings2 } from 'lucide-react';
+import { Search, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3, Settings2, Download } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
@@ -13,6 +14,8 @@ import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { ReportSectionsDialog } from './ReportSectionsDialog';
 import { DateField } from '../ui/DateField';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 
 interface PnLAccount {
   accountId: string;
@@ -40,6 +43,8 @@ interface PnLData {
 }
 
 export function EstadoResultadosView() {
+  const { canPerform } = useAuth();
+  const canExportProfitLoss = canPerform('ACCOUNTING_PROFIT_LOSS', 'export');
   const { baseCurrency, formatCurrentAmount } = useCurrency();
   const toLocalDate = (value: Date) => {
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -104,6 +109,41 @@ export function EstadoResultadosView() {
 
   const toggleAccount = (account: PnLAccount) => {
     setExpandedAccountId(current => current === account.accountId ? null : account.accountId);
+  };
+
+  const handleExportExcel = () => {
+    if (!canExportProfitLoss || !data) return;
+    const sections = data.sections && data.sections.length > 0
+      ? data.sections
+      : [
+        { id: 'income', label: 'INGRESOS', sign: 'INCOME' as const, accounts: data.ingresos, total: data.totalIngresos },
+        { id: 'expense', label: 'GASTOS', sign: 'EXPENSE' as const, accounts: data.gastos, total: data.totalGastos },
+      ];
+    const rows = sections.flatMap((section) => [
+      ...section.accounts.map((account) => ({
+        Sección: section.label,
+        Código: account.codigo,
+        Cuenta: account.cuenta,
+        Tipo: section.sign === 'INCOME' ? 'Ingreso' : 'Gasto',
+        'Período actual': account.currentAmount,
+      })),
+      { Sección: `Total ${section.label}`, Código: '', Cuenta: '', Tipo: '', 'Período actual': section.total },
+    ]);
+    const workbook = XLSX.utils.book_new();
+    const detailSheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]);
+    detailSheet['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 38 }, { wch: 14 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Estado de resultados');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['Reporte', 'Estado de resultados'],
+      ['Desde', dateFrom],
+      ['Hasta', dateTo],
+      ['Moneda', baseCurrency],
+      ['Total ingresos', data.totalIngresos],
+      ['Total gastos', data.totalGastos],
+      ['Resultado neto', netIncome],
+    ]), 'Resumen');
+    XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['estado_resultados'], 'xlsx', dateFrom, dateTo));
+    toast.success(`Estado de resultados exportado con ${rows.length} fila(s)`);
   };
 
   const filterAccounts = (accounts: PnLAccount[]) => {
@@ -265,6 +305,11 @@ export function EstadoResultadosView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
+          {canExportProfitLoss && (
+            <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9 gap-1.5" disabled={!data || loading}>
+              <Download className="size-4" /> Exportar Excel
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración
           </Button>

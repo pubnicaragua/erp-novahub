@@ -34,6 +34,7 @@ import { InventoryAuditsView } from './inventory/InventoryAuditsView';
 import { InventoryLossesView } from './inventory/InventoryLossesView';
 import { AtributosView } from './inventory/AtributosView';
 import { LinkedWarehouseProductsView } from './inventory/LinkedWarehouseProductsView';
+import { MarcasClienteView } from './inventory/MarcasClienteView';
 import { api } from '../services/api';
 import { inventoryService } from '../services/inventario.service';
 import { buildDateFilteredDownloadFileName } from '../utils/exportFileNames';
@@ -47,6 +48,7 @@ import { cn } from './ui/utils';
 
 const INVENTORY_SECTIONS = [
   { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
+  { id: 'marcas-clientes', label: 'Marcas por cliente', icon: Tags, requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'servicios',       label: 'Servicios',       icon: BriefcaseBusiness, requiredModules: ['INVENTORY_SERVICES'] },
   { id: 'atributos',       label: 'Atributos y Categoría', icon: Tags, requiredModules: ['INVENTORY_ATTRIBUTES'] },
   { id: 'almacenes',       label: 'Bodegas',         icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
@@ -498,13 +500,14 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         const values = levels.map((level: any) => Number(level?.[field])).filter((value) => Number.isFinite(value));
         return values.length > 0 ? Math.max(...values) : '';
       };
-      const productHeaders = ['Código', 'Nombre', 'Marca', 'Categoría', 'Unidad', 'Nota comercial', 'Stock', 'Stock mínimo', 'Stock máximo', 'Bodegas', 'Precio de venta', ...(canViewInventoryCost ? ['Costo'] : []), 'Estado'];
+      const productHeaders = ['Código', 'Nombre', 'Marca', 'Cliente', 'Categoría', 'Unidad', 'Nota comercial', 'Stock', 'Stock mínimo', 'Stock máximo', 'Bodegas', 'Precio de venta', ...(canViewInventoryCost ? ['Costo'] : []), 'Estado'];
       const productRows = productsToExport.map((product: any) => {
         const levels = getScopedLevels(product);
         return [
           product.code || '',
           product.name || '',
           product.brand || product.details?.brand || '',
+          product.brandCustomerName || product.brandCustomer?.name || '',
           product.category?.name || product.categoryName || '',
           product.unit || product.details?.unit || 'unidad',
           product.commercialNote || '',
@@ -681,6 +684,15 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   </TabsContent>
                 </Tabs>
                 )}
+              </TabsContent>
+              <TabsContent value="marcas-clientes" className="m-0">
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <MarcasClienteView />
+                </motion.div>
               </TabsContent>
               <TabsContent value="servicios" className="m-0" asChild>
                 <motion.div
