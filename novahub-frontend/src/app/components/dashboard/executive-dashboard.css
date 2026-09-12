@@ -85,10 +85,9 @@
 }
 
 .executive-period {
-  min-width: 132px;
+  min-width: 132px; /*Denis*/
   gap: 8px;
-  width: fit-content;
-
+  width: fit-content; /*Denis*/
 }
 
 .executive-toolbar-button {
