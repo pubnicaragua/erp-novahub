@@ -85,8 +85,10 @@
 }
 
 .executive-period {
-  min-width: 168px;
+  min-width: 132px;
   gap: 8px;
+  width: fit-content;
+
 }
 
 .executive-toolbar-button {
@@ -404,7 +406,7 @@
   .executive-dashboard { padding: 20px 14px 32px; }
   .executive-header { align-items: flex-start; flex-direction: column; gap: 16px; }
   .executive-toolbar { justify-content: flex-start; width: 100%; }
-  .executive-period { flex: 1; }
+  .executive-period { flex: 0 0 auto; }
   .executive-meta-row { align-items: flex-start; flex-wrap: wrap; }
   .executive-meta-spacer, .executive-live-dot { display: none; }
   .executive-chart-card, .executive-chart-card-trend { grid-column: span 12; }

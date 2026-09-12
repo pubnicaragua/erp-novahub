@@ -80,6 +80,35 @@ const shortenLabel = (value: unknown, max = 18) => {
   return label.length > max ? `${label.slice(0, max - 1)}…` : label;
 };
 
+const wrapLabel = (value: unknown, budget = 22): string[] => {
+  const tokens = String(value || 'Sin nombre').split(/\s+/).filter(Boolean).flatMap((word) => word.length > budget ? Array.from({ length: Math.ceil(word.length / budget) }, (_, i) => word.slice(i * budget, (i + 1) * budget)) : [word]);
+  const lines: string[] = [];
+  let current = '';
+  for (const token of tokens) {
+    const candidate = current ? `${current} ${token}` : token;
+    if (current && candidate.length > budget) {
+      lines.push(current);
+      current = token;
+      if (lines.length === 2) break;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  const result = lines.slice(0, 2);
+  if (lines.length > 2) result[1] = `${result[1]}…`;
+  return result;
+};
+
+const CategoryTick = ({ x, y, payload }: any) => {
+  const lines = wrapLabel(payload?.value);
+  return (
+    <text x={x} y={y} textAnchor="end" fill="var(--muted-foreground)" fontSize={10}>
+      {lines.map((line, index) => <tspan key={index} x={x} dy={index === 0 ? (lines.length === 1 ? 4 : -3) : 10}>{line}</tspan>)}
+    </text>
+  );
+};
+
 const formatDate = (value: string) => new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: 'short' }).format(new Date(`${value}T12:00:00Z`));
 
 const safeNumber = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -229,15 +258,22 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   }, [storageKey]);
 
   const money = (amount: number) => formatConvertedAmount(safeNumber(amount), data?.baseCurrency || baseCurrency);
+  const compactAxis = (value: number) => {
+    const label = money(value).replace(/\s/g, '');
+    const symbol = label.replace(/[\d.,-]/g, '');
+    const parsed = Number(label.replace(/[^\d.,-]/g, '').replace(/,/g, ''));
+    const compact = new Intl.NumberFormat('es-NI', { notation: 'compact', maximumFractionDigits: 1 }).format(Number.isFinite(parsed) ? parsed : 0);
+    return `${symbol}${compact}`;
+  };
   const rangeLabel = range ? `${formatDate(range.start)} – ${formatDate(range.end)}` : 'Selecciona un rango válido';
   const alertCount = new Set(alerts.map((row: any) => getProductId(row))).size;
   const hasData = Boolean(data && data.kpis);
   const productSalesChart = useMemo(() => (performance.topSelling || []).slice(0, 6).map((item: any) => ({
-    name: shortenLabel(getProductName(item)),
+    name: getProductName(item),
     value: safeNumber(item.totalQty),
   })).reverse(), [performance]);
   const productMarginChart = useMemo(() => (performance.topMargin || []).slice(0, 6).map((item: any) => ({
-    name: shortenLabel(getProductName(item)),
+    name: getProductName(item),
     value: safeNumber(item.profit),
   })).reverse(), [performance]);
   const registerChart = useMemo(() => registers.slice(0, 6).map((item: any) => ({
@@ -428,17 +464,17 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         <div className="executive-chart-wall" aria-label="Gráficas ejecutivas">
           {preferences.blocks.includes('trend') && <section className="executive-panel executive-chart-card executive-chart-card-trend">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Tendencia</span><h2>Ventas y gastos</h2></div><span className="executive-panel-caption">{(range?.days || 0) > 62 ? 'Por mes' : 'Por día'}</span></div>
-            <div className="executive-chart executive-chart-wall-trend"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} /><stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => money(value).replace(/\s/g, '')} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} /><Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} /><Area type="monotone" dataKey="expenses" name="expenses" stroke="#f59e0b" fill="url(#executiveExpenses)" strokeWidth={2} /></AreaChart></ResponsiveContainer></div><div className="executive-legend"><span><i className="legend-dot revenue" /> Ventas</span><span><i className="legend-dot expenses" /> Gastos</span></div>
+            <div className="executive-chart executive-chart-wall-trend"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} /><stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => compactAxis(value)} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} /><Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} /><Area type="monotone" dataKey="expenses" name="expenses" stroke="#f59e0b" fill="url(#executiveExpenses)" strokeWidth={2} /></AreaChart></ResponsiveContainer></div><div className="executive-legend"><span><i className="legend-dot revenue" /> Ventas</span><span><i className="legend-dot expenses" /> Gastos</span></div>
           </section>}
 
           {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-sales">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Volumen</span><h2>Ventas por producto</h2></div><BarChart3 className="executive-chart-heading-icon" /></div>
-            <div className="executive-mini-chart">{productSalesChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productSalesChart} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={112} axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value).toLocaleString('es-NI')} uds.`, 'Unidades']} /><Bar dataKey="value" fill="var(--primary)" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas</div>}</div>
+            <div className="executive-mini-chart">{productSalesChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productSalesChart} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={140} interval={0} axisLine={false} tickLine={false} tick={<CategoryTick />} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value).toLocaleString('es-NI')} uds.`, 'Unidades']} /><Bar dataKey="value" fill="var(--primary)" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas</div>}</div>
           </section>}
 
           {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-margin">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Rentabilidad</span><h2>Utilidad por producto</h2></div><WalletCards className="executive-chart-heading-icon" /></div>
-            <div className="executive-mini-chart">{productMarginChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productMarginChart} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={112} axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Utilidad']} /><Bar dataKey="value" fill="#2563eb" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin datos de utilidad</div>}</div>
+            <div className="executive-mini-chart">{productMarginChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productMarginChart} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={140} interval={0} axisLine={false} tickLine={false} tick={<CategoryTick />} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Utilidad']} /><Bar dataKey="value" fill="#2563eb" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin datos de utilidad</div>}</div>
           </section>}
 
           {preferences.blocks.includes('registers') && <section className="executive-panel executive-chart-card executive-chart-card-registers">
