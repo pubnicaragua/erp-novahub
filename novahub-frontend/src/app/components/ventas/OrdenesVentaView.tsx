@@ -576,7 +576,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
     const total = baseTotal + additionalChargesTotal(nextDoc);
     setLocalDoc({ ...nextDoc, total });
-    void handleUpdate(localDoc.id, { extraCharges: payload, ...legacyFields, total } as Partial<SalesOrder>);
+    // Conserva también las líneas vacías mientras se edita un borrador local.
+    // El backend normaliza y filtra las líneas sin monto/descripción al guardar;
+    // enviar aquí el payload filtrado hacía desaparecer la fila recién creada.
+    void handleUpdate(localDoc.id, { extraCharges: charges, ...legacyFields, total } as Partial<SalesOrder>);
   };
 
   const editExtraChargeDescription = (index: number, description: string) => {

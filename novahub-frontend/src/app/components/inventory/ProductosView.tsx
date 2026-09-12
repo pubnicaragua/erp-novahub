@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode, SlidersHorizontal, Tag } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -914,10 +914,10 @@ function ImportPreviewPage({
       </HorizontalTableScroller>
       </div>
 
-      <section data-import-preview-mobile-section="true" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de productos para revisar">
+      <section data-import-preview-mobile-section="true" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label={`Registros de ${isService ? 'servicios' : 'productos'} para revisar`}>
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un {isService ? 'servicio' : 'producto'} por tarjeta</p></div>
-          <Badge variant="secondary" className="shrink-0 text-[10px]">{importData.length} productos{groupedParents.length ? ` · ${variantCount} variantes` : ''}</Badge>
+          <Badge variant="secondary" className="shrink-0 text-[10px]">{importData.length} {isService ? 'servicios' : 'productos'}{groupedParents.length ? ` · ${variantCount} variantes` : ''}</Badge>
         </div>
         <div className="min-h-0 flex-1">
           {visiblePreviewEntries.length ? <VirtualizedImportList count={visiblePreviewEntries.length} scrollRef={mobileScrollRef} estimateSize={360} overscan={2} className="pt-3 pr-1" renderItem={(entryIndex) => { const entry = visiblePreviewEntries[entryIndex]; return <div className="pb-3">{entry.kind === 'parent' ? renderMobileParent(entry) : entry.kind === 'variant' ? renderMobileVariant(entry) : renderMobileCard(importData[entry.rowIndex], entry.rowIndex)}</div>; }} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
@@ -2205,24 +2205,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       return;
     }
     setPendingStatusChange(product);
-  };
-
-  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
-  const handleDuplicateProduct = async (product: any) => {
-    if (!canPerform(catalogPermissionModule, 'create')) {
-      toast.error(`No tienes permiso para duplicar ${isServiceView ? 'servicios' : 'productos'}`);
-      return;
-    }
-    setDuplicatingId(product.id);
-    try {
-      await inventoryService.duplicateProduct(product.id);
-      toast.success(`"${product.name}" duplicado como copia`);
-      onRefresh();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo duplicar el producto');
-    } finally {
-      setDuplicatingId(null);
-    }
   };
 
   const handleConfirmStatusChange = async () => {
@@ -3722,7 +3704,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         <div className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h2 className="text-xl font-black tracking-tight">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
-            <p className="mt-1 text-xs font-medium text-muted-foreground">{displayWarehouseOptions.length} bodegas visibles</p>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">{isServiceView ? 'Catálogo de servicios' : `${displayWarehouseOptions.length} bodegas visibles`}</p>
           </div>
           <div className="erp-toolbar-primary-group flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
             <ViewLayoutSelect
@@ -3836,7 +3818,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
-              placeholder="Buscar producto o SKU..."
+              placeholder={`Buscar ${isServiceView ? 'servicio' : 'producto'} o SKU...`}
               className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest sm:w-64"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
@@ -3864,15 +3846,17 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </div>
           )}
 
-          <MultiSelectFilter
-            label="Bodegas"
-            placeholder="Buscar bodegas..."
-            searchable
-            options={displayWarehouseOptions.map((w: any) => ({ value: w.id, label: w.name }))}
-            selected={warehouseFilters}
-            onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
-            className="h-10 min-w-[8.5rem] rounded-xl border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest"
-          />
+          {!isServiceView && (
+            <MultiSelectFilter
+              label="Bodegas"
+              placeholder="Buscar bodegas..."
+              searchable
+              options={displayWarehouseOptions.map((w: any) => ({ value: w.id, label: w.name }))}
+              selected={warehouseFilters}
+              onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
+              className="h-10 min-w-[8.5rem] rounded-xl border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest"
+            />
+          )}
 
           {!isServiceView && (
             <Select value={effectiveProductStatusFilter} onValueChange={(value) => { const nextValue = value as ProductStatusFilter; setLocalProductStatusFilter(nextValue); onProductStatusFilterChange?.(nextValue); }}>
@@ -4050,7 +4034,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     if (product.imageUrl) setExpandedProductImage({ src: product.imageUrl, alt: product.name });
                   }}
                   disabled={!product.imageUrl}
-                  aria-label={product.imageUrl ? `Ver imagen de ${product.name}` : `Producto ${product.name} sin imagen`}
+                  aria-label={product.imageUrl ? `Ver imagen de ${product.name}` : `${entityLabelCap} ${product.name} sin imagen`}
                 >
                   <ProductThumbnail src={product.imageUrl} alt={product.name} size="md" />
                 </button>
@@ -4112,20 +4096,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 </div>
               </div>
               <div className="mt-4 flex justify-end gap-1 border-t border-border/40 pt-3">
-                {canPerform(catalogPermissionModule, 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar producto" aria-label="Editar producto" onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
-                {canPerform(catalogPermissionModule, 'create') && product.isActive !== false && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 text-info hover:bg-info hover:text-info-foreground"
-                    title="Duplicar producto"
-                    aria-label="Duplicar producto"
-                    disabled={duplicatingId === product.id}
-                    onClick={(e) => { e.stopPropagation(); handleDuplicateProduct(product); }}
-                  >
-                    {duplicatingId === product.id ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}
-                  </Button>
-                )}
+                {canPerform(catalogPermissionModule, 'edit') && <Button variant="ghost" size="icon" className="size-8" title={`Editar ${entityLabel}`} aria-label={`Editar ${entityLabel}`} onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
                 {product.isVariable && canPerform(catalogPermissionModule, 'edit') && (
                   <Button
                     variant="ghost"
@@ -4142,8 +4113,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                   variant="ghost"
                   size="icon"
                   className={`size-8 ${product.isActive === false ? 'text-success hover:bg-success hover:text-success-foreground' : 'text-warning hover:bg-warning hover:text-warning-foreground hover:text-warning-foreground'}`}
-                  title={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
-                  aria-label={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
+                  title={product.isActive === false ? `Activar ${entityLabel}` : `Inactivar ${entityLabel}`}
+                  aria-label={product.isActive === false ? `Activar ${entityLabel}` : `Inactivar ${entityLabel}`}
                   onClick={(e) => { e.stopPropagation(); handleToggleProductStatus(product); }}
                 ><Ban className="size-3.5" /></Button>}
               </div>
@@ -4379,8 +4350,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                variant="ghost" 
                                size="icon" 
                               className="size-7"
-                              title="Editar producto"
-                              aria-label="Editar producto"
+                              title={`Editar ${entityLabel}`}
+                              aria-label={`Editar ${entityLabel}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setModalProduct(product);
@@ -4388,22 +4359,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             >
                              <Pencil className="size-3.5" />
                            </Button>
-                       )}
-                        {canPerform(catalogPermissionModule, 'create') && product.isActive !== false && (
-                           <Button 
-                             variant="ghost" 
-                             size="icon" 
-                            className="size-7 text-info hover:text-info-foreground hover:bg-info/10"
-                            title="Duplicar producto"
-                            aria-label="Duplicar producto"
-                            disabled={duplicatingId === product.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDuplicateProduct(product);
-                            }}
-                          >
-                            {duplicatingId === product.id ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Copy className="size-3.5" />}
-                          </Button>
                        )}
                         {product.isVariable && canPerform(catalogPermissionModule, 'edit') && (
                           <Button
@@ -4425,8 +4380,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                               variant="ghost" 
                               size="icon" 
                              className={`size-7 ${product.isActive === false ? 'text-success hover:text-success-foreground hover:bg-success' : 'text-warning hover:text-warning-foreground hover:bg-warning'}`}
-                             title={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
-                             aria-label={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
+                             title={product.isActive === false ? `Activar ${entityLabel}` : `Inactivar ${entityLabel}`}
+                             aria-label={product.isActive === false ? `Activar ${entityLabel}` : `Inactivar ${entityLabel}`}
                              onClick={(e) => {
                                e.stopPropagation();
                                 handleToggleProductStatus(product);
@@ -4486,8 +4441,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         onOpenChange={(open) => { if (!open && !statusChanging) setPendingStatusChange(null); }}
         title={pendingStatusChange?.isActive === false ? `¿Activar ${entityLabel}?` : `¿Inactivar ${entityLabel}?`}
         description={pendingStatusChange?.isActive === false
-          ? `${pendingStatusChange?.name || 'El producto'} volverá a estar disponible para nuevas operaciones.`
-          : `${pendingStatusChange?.name || 'El producto'} quedará inactivo y no estará disponible para nuevas operaciones. Sus transacciones históricas se conservarán.`}
+          ? `${pendingStatusChange?.name || `El ${entityLabel}`} volverá a estar disponible para nuevas operaciones.`
+          : `${pendingStatusChange?.name || `El ${entityLabel}`} quedará inactivo y no estará disponible para nuevas operaciones. Sus transacciones históricas se conservarán.`}
         confirmLabel={pendingStatusChange?.isActive === false ? `Activar ${entityLabel}` : `Inactivar ${entityLabel}`}
         variant={pendingStatusChange?.isActive === false ? 'default' : 'destructive'}
         loading={statusChanging}
@@ -4497,8 +4452,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,520px)]">
           <DialogHeader data-tour="inventory-category-title">
             <DialogTitle>Nueva categoría</DialogTitle>
-            <DialogDescription>Crea una categoría para usarla de inmediato en productos.</DialogDescription>
-            <InventoryViewTutorial label="Cómo crear categoría" targetPrefix="inventory-category" copy={{ data: { description: 'Escribe el nombre y una descripción breve para clasificar productos.' }, actions: { description: 'Guarda la categoría para seleccionarla inmediatamente en el catálogo.' } }} />
+            <DialogDescription>Crea una categoría para usarla de inmediato en {isServiceView ? 'servicios' : 'productos'}.</DialogDescription>
+            <InventoryViewTutorial label="Cómo crear categoría" targetPrefix="inventory-category" copy={{ data: { description: `Escribe el nombre y una descripción breve para clasificar ${isServiceView ? 'servicios' : 'productos'}.` }, actions: { description: 'Guarda la categoría para seleccionarla inmediatamente en el catálogo.' } }} />
           </DialogHeader>
           <div className="space-y-3" data-tour="inventory-category-data">
             <div>
@@ -4607,7 +4562,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         series={series}
         extraActions={productDetail ? <>
           {canPerform(catalogPermissionModule, 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setModalProduct(productDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
-          {canPerform(catalogPermissionModule, 'create') && productDetail.isActive !== false && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" disabled={duplicatingId === productDetail.id} onClick={() => void handleDuplicateProduct(productDetail)}><Copy className="mr-1.5 size-3.5" />Duplicar</Button>}
           {productDetail.isVariable && canPerform(catalogPermissionModule, 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setProductDetail(null); setVariantManagerProduct(productDetail); }}><Tag className="mr-1.5 size-3.5" />Variantes</Button>}
           {canPerform(catalogPermissionModule, 'delete') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs text-destructive" onClick={() => { setProductDetail(null); handleToggleProductStatus(productDetail); }}><Ban className="mr-1.5 size-3.5" />{productDetail.isActive === false ? 'Activar' : 'Inactivar'}</Button>}
         </> : undefined}
@@ -5038,10 +4992,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         progress={importProgress}
         title={`Importando ${isServiceView ? 'servicios' : 'productos'}`}
         description={importProgress >= 55 && imageArchiveFileName
-          ? 'Subiendo y vinculando las imágenes con los productos por SKU. No cierres esta ventana.'
+          ? `Subiendo y vinculando las imágenes con los ${isServiceView ? 'servicios' : 'productos'} por SKU. No cierres esta ventana.`
           : 'Estamos guardando el catálogo y sus precios. No cierres esta ventana.'}
       />
-      <ImportProgressOverlay open={bulkImageUploading} progress={bulkImageProgress} title="Actualizando imágenes" description="Subiendo y vinculando las imágenes con los productos por SKU. No cierres esta ventana." />
+      <ImportProgressOverlay open={bulkImageUploading} progress={bulkImageProgress} title="Actualizando imágenes" description={`Subiendo y vinculando las imágenes con los ${isServiceView ? 'servicios' : 'productos'} por SKU. No cierres esta ventana.`} />
 
 
       <Dialog open={importResults !== null} onOpenChange={(open) => { if (!open) setImportResults(null); }}>
@@ -5078,8 +5032,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         open={expandedProductImage !== null}
         onOpenChange={(open) => { if (!open) setExpandedProductImage(null); }}
         src={expandedProductImage?.src}
-        alt={expandedProductImage?.alt || 'Imagen del producto'}
-        title={expandedProductImage?.alt || 'Imagen del producto'}
+        alt={expandedProductImage?.alt || `Imagen del ${entityLabel}`}
+        title={expandedProductImage?.alt || `Imagen del ${entityLabel}`}
       />
 
       <Dialog open={solicitudOpen} onOpenChange={(o) => { if (!o) closeSolicitud(); }}>

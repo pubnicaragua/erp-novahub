@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  AlertCircle, Coins, Settings2, Store, BellRing, RefreshCw, CheckCircle2
+  AlertCircle, Coins, Settings2, Store, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -496,6 +496,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [companyLogo, setCompanyLogo] = useState('');
   const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
   const [cashQueue, setCashQueue] = useState<InvoiceCashQueue[]>([]);
+  const [cashQueueExpanded, setCashQueueExpanded] = useState(true);
   const [cashQueueLoading, setCashQueueLoading] = useState(false);
   const [cashQueueError, setCashQueueError] = useState<string | null>(null);
   const [cashQueueLastSyncAt, setCashQueueLastSyncAt] = useState<Date | null>(null);
@@ -2073,12 +2074,26 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               <Badge className="border-none bg-primary/15 text-primary">{cashQueue.length}</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 rounded-lg"
+                onClick={() => setCashQueueExpanded((expanded) => !expanded)}
+                aria-expanded={cashQueueExpanded}
+                aria-controls="cash-queue-content"
+                aria-label={cashQueueExpanded ? 'Contraer documentos enviados a caja' : 'Expandir documentos enviados a caja'}
+                title={cashQueueExpanded ? 'Contraer documentos enviados a caja' : 'Expandir documentos enviados a caja'}
+              >
+                {cashQueueExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              </Button>
               {canReconcilePosQueue && (['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()} disabled={reconcilingQueue} title="Libera reservas vencidas y marca como procesadas las entradas cuyo documento ya fue pagado" aria-label="Reconciliar cola de caja">{reconcilingQueue ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} {reconcilingQueue ? 'Reconciliando…' : 'Reconciliar'}</Button>}
               <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>
                 <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar
               </Button>
             </div>
           </div>
+          {cashQueueExpanded && <div id="cash-queue-content">
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground" aria-live="polite">
              <span className={cn('inline-flex items-center gap-1.5', cashQueueConnection === 'ERROR' ? 'text-destructive' : 'text-primary')}>
                <span className={cn('size-1.5 rounded-full', cashQueueConnection === 'ERROR' ? 'bg-destructive' : cashQueueConnection === 'RECONNECTING' ? 'bg-primary animate-pulse' : 'bg-primary')} />
@@ -2122,6 +2137,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           ) : cashQueueError ? null : (
             <p className="mt-4 rounded-xl border border-dashed border-border/60 px-3 py-3 text-xs text-muted-foreground">No hay facturas pendientes enviadas a caja.</p>
           )}
+          </div>}
         </CardContent>
       </Card>}
 
@@ -2173,7 +2189,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 </h3>
                 <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} />
                 <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="min-w-0 space-y-2" data-tour="pos-register">
+                  <div className="min-w-0 space-y-3" data-tour="pos-register">
                     <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Caja Operativa</Label>
                     <Select value={selectedRegisterId} onValueChange={handleRegisterChange}>
                       <SelectTrigger className="!h-11 w-full min-w-0 rounded-xl"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
@@ -2188,7 +2204,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="min-w-0 space-y-2" data-tour="pos-warehouse">
+                  <div className="min-w-0 space-y-3" data-tour="pos-warehouse">
                     <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Bodega de salida</Label>
                     <div className="relative">
                       <Store className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-primary" />
@@ -2210,7 +2226,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       </Select>
                     </div>
                   </div>
-                  <div className="min-w-0 space-y-2" data-tour="pos-customer">
+                  <div className="min-w-0 space-y-3" data-tour="pos-customer">
                     <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Cliente / Empresa</Label>
                     <Combobox
                       options={[
@@ -2228,7 +2244,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       Lista de precios: <span className="font-semibold text-foreground">{priceLists.find((list) => sameSalesId(list.id, selectedPriceListId))?.name || 'No configurada'}</span>
                     </p>
                   </div>
-                  <div className="min-w-0 space-y-2" data-tour="pos-date">
+                  <div className="min-w-0 space-y-3" data-tour="pos-date">
                     <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Fecha de Emisión</Label>
                     <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} disabled={isRegisterDisabled} className="!h-11 !w-full !py-0 rounded-xl" />
                   </div>

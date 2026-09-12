@@ -383,6 +383,8 @@ export function ProductDetailDrawer({
 
   const itemType = String(product?.itemType || 'PRODUCT').toUpperCase();
   const isService = itemType === 'SERVICE';
+  const itemLabel = isService ? 'servicio' : 'producto';
+  const itemLabelCap = isService ? 'Servicio' : 'Producto';
   const canViewInventoryCost = canPerform(isService ? 'INVENTORY_SERVICES' : 'INVENTORY_PRODUCTS', 'viewCost');
 
   const costPrice = Number(product?.costPrice ?? product?.cost ?? 0);
@@ -559,12 +561,12 @@ export function ProductDetailDrawer({
                   type="button"
                   className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   onClick={() => setExpandedImageOpen(true)}
-                  aria-label={`Ver imagen de ${product?.name || 'producto'}`}
+                  aria-label={`Ver imagen de ${product?.name || itemLabel}`}
                   title="Ver imagen"
                 >
                   <ProductThumbnail
                     src={product.imageUrl}
-                    alt={product?.name || 'Producto'}
+                    alt={product?.name || itemLabelCap}
                     size="lg"
                     className="ring-1 ring-primary/10"
                   />
@@ -572,7 +574,7 @@ export function ProductDetailDrawer({
               ) : (
                 <ProductThumbnail
                   src={undefined}
-                  alt={product?.name || 'Producto'}
+                  alt={product?.name || itemLabelCap}
                   size="lg"
                   className="ring-1 ring-primary/10"
                  />
@@ -917,7 +919,7 @@ export function ProductDetailDrawer({
                     <EmptyState
                       icon={Warehouse}
                       title="Sin stock distribuido"
-                      description="Aún no hay registros de stock por bodega para este producto."
+                      description={`Aún no hay registros de stock por bodega para este ${itemLabel}.`}
                     />
                   ) : (
                     <Card className="gap-0 overflow-hidden">
@@ -1020,7 +1022,7 @@ export function ProductDetailDrawer({
                     <div>
                       <p className="text-sm font-bold">Kardex de movimientos</p>
                       <p className="text-xs text-muted-foreground">
-                        Entradas, salidas, ajustes y transferencias del producto
+                        Entradas, salidas, ajustes y transferencias del {itemLabel}
                       </p>
                     </div>
                     <Badge variant="outline" className="font-mono">
@@ -1032,7 +1034,7 @@ export function ProductDetailDrawer({
                     <EmptyState
                       icon={History}
                       title="Sin movimientos registrados"
-                      description="Aún no hay entradas, salidas o ajustes para este producto."
+                      description={`Aún no hay entradas, salidas o ajustes para este ${itemLabel}.`}
                     />
                   ) : (
                     <Card className="gap-0 overflow-hidden">
@@ -1123,7 +1125,7 @@ export function ProductDetailDrawer({
                     <div>
                       <p className="text-sm font-bold">IMEI / Números de serie</p>
                       <p className="text-xs text-muted-foreground">
-                        Series físicas asignadas a este producto
+                        Series físicas asignadas a este {itemLabel}
                       </p>
                     </div>
                     <Badge variant="outline" className="font-mono">
@@ -1137,8 +1139,8 @@ export function ProductDetailDrawer({
                       title="Sin series registradas"
                       description={
                         product?.trackSerialNumbers
-                          ? 'Este producto rastrea series, pero aún no hay ninguna registrada.'
-                          : 'Este producto no rastrea series. Activa la opción IMEI en su edición para llevar control por unidad.'
+                          ? `Este ${itemLabel} rastrea series, pero aún no hay ninguna registrada.`
+                          : `Este ${itemLabel} no rastrea series. Activa la opción IMEI en su edición para llevar control por unidad.`
                       }
                     />
                   ) : (
@@ -1185,7 +1187,7 @@ export function ProductDetailDrawer({
                       <div className="min-w-0 space-y-1">
                         <p className="text-sm font-bold">Historial de auditoría</p>
                         <p className="text-xs text-muted-foreground">
-                          Creaciones, ediciones y cambios de estado registrados para este producto.
+                          Creaciones, ediciones y cambios de estado registrados para este {itemLabel}.
                         </p>
                       </div>
                     </div>
@@ -1194,7 +1196,7 @@ export function ProductDetailDrawer({
                       onClose={() => setActiveTab('general')}
                       entity="PRODUCT"
                       entityId={String(product.id || productId)}
-                      title="Historial del producto"
+                      title={`Historial del ${itemLabel}`}
                       presentation="inline"
                     />
                   </Card>
@@ -1207,7 +1209,7 @@ export function ProductDetailDrawer({
         {/* ===== Footer sticky con acción ===== */}
         <div className="sticky bottom-0 z-10 bg-background border-t px-6 py-3 flex flex-wrap items-center justify-between gap-2" data-tour="inventory-product-detail-actions">
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
-            Detalle del producto
+            Detalle del {itemLabel}
           </p>
           <div className="flex flex-wrap justify-end gap-2">
             {extraActions}
@@ -1227,8 +1229,8 @@ export function ProductDetailDrawer({
           open={expandedImageOpen}
           onOpenChange={setExpandedImageOpen}
           src={product?.imageUrl}
-          alt={product?.name || 'Producto'}
-          title={product?.name || 'Imagen del producto'}
+          alt={product?.name || itemLabelCap}
+          title={product?.name || `Imagen del ${itemLabel}`}
         />
       </SheetContent>
     </Sheet>

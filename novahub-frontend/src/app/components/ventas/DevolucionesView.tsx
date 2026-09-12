@@ -288,16 +288,23 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         invoiceId: localDoc.invoiceId,
         date: new Date(localDoc.date).toISOString(),
         reason: localDoc.reason.trim(),
-        items: (localDoc.items || []).map((item: any) => ({
+        items: (localDoc.items || []).map((item: any) => {
+          const quantity = toWholeQuantity(item.quantity || 0);
+          const itemType = resolveItemType(item);
+          const quantityToInventory = itemType === 'SERVICE'
+            ? 0
+            : Math.min(quantity, toWholeQuantity(item.quantityToInventory || 0));
+          const quantityDiscarded = Math.max(0, quantity - quantityToInventory);
+          return {
           invoiceItemId: item.invoiceItemId || undefined,
           productId: item.productId || undefined,
           variantId: item.variantId || undefined,
           description: item.description || '',
           commercialNoteSnapshot: item.commercialNoteSnapshot || null,
-          quantity: toWholeQuantity(item.quantity || 1),
+          quantity,
           originalQuantity: toWholeQuantity(item.originalQuantity || item.quantity || 1),
-          quantityToInventory: toWholeQuantity(item.quantityToInventory || 0),
-          quantityDiscarded: toWholeQuantity(item.quantityDiscarded || 0),
+          quantityToInventory,
+          quantityDiscarded,
           discardReason: item.discardReason || undefined,
           unitPrice: Number(item.unitPrice || 0),
           taxRate: Number(item.taxRate || 0),
@@ -306,7 +313,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           irTaxId: undefined,
           priceListId: item.priceListId || undefined,
           total: Number(item.total || 0),
-        })),
+          };
+        }),
         ...returnTotals,
         status: localDoc.status || 'PENDING',
         currency: localDoc.currency || displayCurrency,
@@ -552,7 +560,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               const sku = item.sku || item.productSku || product?.code || item.productCode || item.code;
               return <div key={item.id || idx} className="grid min-w-0 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 xl:grid-cols-[minmax(210px,1.5fr)_100px_110px_130px_110px_minmax(190px,1fr)_100px] xl:items-end">
                 <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">{itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</p><p className="text-sm font-bold text-foreground">{item.description || 'Sin descripción'}</p>{itemType !== 'SERVICE' && <p className="mt-1 text-[10px] font-semibold text-muted-foreground">SKU: {sku || 'Sin SKU'}</p>}<p className="mt-1 text-[10px] text-muted-foreground">Facturado: {Number(item.originalQuantity || 0)}</p></div>
-                <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Devuelve</p><Input type="number" inputMode="numeric" min="0" max={Math.floor(Number(item.originalQuantity || returned))} step="1" value={returned || ''} onChange={(event) => { const next = toWholeQuantity(event.target.value, Number(item.originalQuantity || returned)); const nextDiscarded = Math.max(0, next - toInventory); const sourceTotal = Number(item.sourceLineTotal ?? item.total ?? 0); const items = [...localDoc.items]; items[idx] = { ...items[idx], quantity: next, quantityDiscarded: nextDiscarded, total: roundMoney(sourceTotal * next / Math.max(1, Number(item.originalQuantity || returned || 1))) }; setLocalDoc({ ...localDoc, items, total: recalcTotal(items) }); }} /></div>
+                <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Devuelve</p><Input type="number" inputMode="numeric" min="0" max={Math.floor(Number(item.originalQuantity || returned))} step="1" value={returned || ''} onChange={(event) => { const next = toWholeQuantity(event.target.value, Number(item.originalQuantity || returned)); const nextToInventory = itemType === 'SERVICE' ? 0 : Math.min(toInventory, next); const nextDiscarded = Math.max(0, next - nextToInventory); const sourceTotal = Number(item.sourceLineTotal ?? item.total ?? 0); const items = [...localDoc.items]; items[idx] = { ...items[idx], quantity: next, quantityToInventory: nextToInventory, quantityDiscarded: nextDiscarded, total: roundMoney(sourceTotal * next / Math.max(1, Number(item.originalQuantity || returned || 1))) }; setLocalDoc({ ...localDoc, items, total: recalcTotal(items) }); }} /></div>
                 <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">A inventario</p><Input type="number" inputMode="numeric" min="0" max={returned} step="1" value={itemType === 'SERVICE' ? 0 : toInventory} disabled={itemType === 'SERVICE'} onChange={(event) => { const next = toWholeQuantity(event.target.value, returned); const items = [...localDoc.items]; items[idx] = { ...items[idx], quantityToInventory: next, quantityDiscarded: Math.max(0, returned - next) }; setLocalDoc({ ...localDoc, items }); }} /></div>
                 <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Se descarta</p><div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-xs font-black text-amber-500">{discarded}</div></div>
                 <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Precio U.</p><div className="rounded-md border border-input bg-muted/20 px-3 py-1.5 text-right"><p className="text-xs font-bold">{formatConvertedAmount(Number(item.unitPrice || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</p><p className="mt-0.5 text-[9px] font-medium text-muted-foreground">Desc. -{formatConvertedAmount(lineDiscountAmount, localDoc?.currency || displayCurrency, localDoc?.exchangeRate)} · IVA {formatConvertedAmount(lineTaxAmount, localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</p></div></div>

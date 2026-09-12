@@ -678,7 +678,9 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   const updateCreditExtraCharges = (charges: SalesExtraChargeLine[]) => {
     if (!localDoc) return;
     const payload = getSalesExtraChargesPayload({ extraCharges: charges });
-    const nextDoc = { ...localDoc, extraCharges: payload, ...getLegacySalesExtraCostFields(payload) };
+    // Conserva las líneas vacías mientras se edita la nota; el payload final
+    // sí filtra las líneas sin monto/descripción al momento de guardar.
+    const nextDoc = { ...localDoc, extraCharges: charges, ...getLegacySalesExtraCostFields(payload) };
     const lineTotal = Number(localDoc.total || 0) - getCreditAdditionalChargesAmount(localDoc);
     setLocalDoc({ ...nextDoc, total: Number((lineTotal + getCreditAdditionalChargesAmount(nextDoc)).toFixed(2)) });
   };
