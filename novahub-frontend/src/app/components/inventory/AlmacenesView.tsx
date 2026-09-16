@@ -582,7 +582,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {canEditWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl px-2 text-[10px]" onClick={() => handleEditRow(detailWarehouse)}><Edit2 className="mr-1 size-3.5" />Editar</Button>}
-                  {canDeactivateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl border-rose-500/30 px-2 text-[10px] text-rose-600 hover:bg-rose-500/10" onClick={() => handleDeleteWarehouse(detailWarehouse.id)}><Trash2 className="mr-1 size-3.5" />Eliminar</Button>}
+                  {canDeactivateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl border-destructive/30 px-2 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => handleDeleteWarehouse(detailWarehouse.id)}><Trash2 className="mr-1 size-3.5" />Eliminar</Button>}
                   <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setDetailWarehouse(null)} title="Cerrar" aria-label="Cerrar detalle de bodega">
                     <X className="size-3.5" />
                   </Button>

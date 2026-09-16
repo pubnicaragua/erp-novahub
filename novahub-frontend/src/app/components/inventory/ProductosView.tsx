@@ -158,6 +158,14 @@ const PRODUCT_TABLE_WIDTHS = {
   actions: '128px',
 } as const;
 
+// Servicios no necesitan el ancho de las columnas operativas de productos;
+// su tabla solo conserva código, descripción, categoría, disponibilidad,
+// precios y acciones.
+const SERVICE_TABLE_MIN_WIDTH = {
+  withoutCost: 1052,
+  withCost: 1164,
+} as const;
+
 const SOLICITUD_PAGE_SIZE = 50;
 
 const normalizeImportHeader = (value: unknown) => String(value ?? '')
@@ -955,10 +963,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
   const catalogTableScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const tableScroller = catalogTableScrollRef.current;
+    if (tableScroller) tableScroller.scrollLeft = 0;
+  }, [isSidebarCollapsed, isServiceView]);
   // El ancho debe ser finito para que el contenedor w-max no entre en un
   // cálculo circular con width: 100% y produzca un scrollbar casi inútil.
   const catalogTableWidth = isServiceView
-    ? canViewInventoryCost ? 1444 : 1332
+    ? canViewInventoryCost ? SERVICE_TABLE_MIN_WIDTH.withCost : SERVICE_TABLE_MIN_WIDTH.withoutCost
     : canViewInventoryCost ? 1920 : 1808;
   const [configuredPriceLists, setConfiguredPriceLists] = useState<PriceList[]>([]);
   useEffect(() => {
@@ -4227,7 +4239,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>Min</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>Max</TableHead>}
-               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Bodegas'}</TableHead>
+               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: isServiceView ? PRODUCT_TABLE_WIDTHS.status : PRODUCT_TABLE_WIDTHS.warehouse, minWidth: isServiceView ? PRODUCT_TABLE_WIDTHS.status : PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Bodegas'}</TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}><span className="inline-flex items-center gap-1">Stock<ColumnFilterMenu label="Stock" sort={colFilters.state.stock?.sort || null} onSort={(sort) => colFilters.setSort('stock', sort)} /></span></TableHead>}
                {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>Precio</TableHead>}
                {isServiceView && canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Costo servicio</TableHead>}

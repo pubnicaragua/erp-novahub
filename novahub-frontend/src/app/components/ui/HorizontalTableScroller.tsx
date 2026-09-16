@@ -22,6 +22,7 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
   const scrollStateFrameRef = useRef<number | null>(null);
   const [scrollState, setScrollState] = useState({ left: false, right: false });
   const [horizontalScrollLeft, setHorizontalScrollLeft] = useState(0);
+  const [horizontalScrollWidth, setHorizontalScrollWidth] = useState(0);
 
   const splitTable = useMemo(() => {
     const onlyChild = Children.toArray(children);
@@ -67,6 +68,7 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
       };
       setScrollState((current) => current.left === nextState.left && current.right === nextState.right ? current : nextState);
       setHorizontalScrollLeft((current) => current === element.scrollLeft ? current : element.scrollLeft);
+      setHorizontalScrollWidth((current) => current === element.scrollWidth ? current : element.scrollWidth);
     });
   }, [scrollRef]);
 
@@ -147,7 +149,7 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
           style={{ top: 'var(--table-sticky-top, 0px)' }}
           data-sticky-table-header="true"
         >
-          <div className="w-max min-w-full" style={{ transform: `translate3d(-${horizontalScrollLeft}px, 0, 0)` }}>
+          <div className="w-max min-w-full" style={{ width: horizontalScrollWidth > 0 ? `${horizontalScrollWidth}px` : undefined, transform: `translate3d(-${horizontalScrollLeft}px, 0, 0)` }}>
             {splitTable.headerTable}
           </div>
         </div>
