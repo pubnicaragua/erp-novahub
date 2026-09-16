@@ -21,13 +21,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
-import { ProductosView, type ProductStatusFilter } from './inventory/ProductosView';
+import { ProductosView, type ProductExportOptions, type ProductStatusFilter } from './inventory/ProductosView';
 import { CrearProductoView } from './inventory/CrearProductoView';
 import { ServiciosView } from './inventory/ServiciosView';
 import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
 import { ControlStockView } from './inventory/ControlStockView';
-import { MovimientosView } from './inventory/MovimientosView';
+import { MovimientosView, type MovementExportOptions } from './inventory/MovimientosView';
 import { MobiliarioEquiposView } from './inventory/MobiliarioEquiposView';
 import { ConfiguracionInventarioView } from './inventory/ConfiguracionInventarioView';
 import { InventoryAuditsView } from './inventory/InventoryAuditsView';
@@ -45,6 +45,7 @@ import { useBranchScope } from '../hooks/useBranchScope';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import type { SalesPageSize, SalesPaginationControls } from '../types';
 import { cn } from './ui/utils';
+import { fetchAllReportPages } from '../hooks/useTenantQuery';
 
 const INVENTORY_SECTIONS = [
   { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
@@ -405,6 +406,28 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const adjustmentsPagination = makePagination('ajustes', adjustmentsQuery);
   const auditsPagination = makePagination('auditorias', auditsQuery);
   const movementsPagination = makePagination('movimientos', movementsQuery);
+  const exportMovements = useCallback(async ({ amount, sortOrder }: MovementExportOptions) => {
+    const filters = {
+      search: searchFor('movimientos'),
+      type: movementFilters.type !== 'all' ? movementFilters.type : undefined,
+      warehouseId: movementFilters.warehouseId !== 'all' ? movementFilters.warehouseId : scopeWarehouseParam,
+      from: movementFilters.from || undefined,
+      to: movementFilters.to || undefined,
+      report: true,
+      includeUsers: true,
+      sortOrder,
+      pageSize: 5000,
+    };
+    if (amount !== 'all' && amount <= 5000) {
+      const response = await inventoryService.getMovements({ ...filters, page: 1, pageSize: amount });
+      return toList(response);
+    }
+    const rows = await fetchAllReportPages(
+      (pageFilters) => inventoryService.getMovements(pageFilters),
+      filters,
+    );
+    return amount === 'all' ? rows : rows.slice(0, amount);
+  }, [debouncedSearchState, movementFilters, scopeWarehouseParam]);
   const loadingQueries = productListIsActive ? [productsQuery] : activeQueries;
   const loading = loadingQueries.some((query) => query.isPending && !query.data);
   const refreshing = activeQueries.some((query) => query.isFetching) && !loading;
@@ -475,13 +498,21 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     if (activeTab !== 'productos') setCreateProductViewOpen(false);
   }, [activeTab]);
 
-  const handleExportData = async () => {
+  const handleExportData = async ({ amount, sortOrder, rows }: ProductExportOptions = { amount: 'all', sortOrder: 'asc', scope: 'all', rows: undefined }) => {
     if (!canExportInventory) return;
     try {
       // La consulta de resumen contiene el catálogo completo dentro del
       // alcance actual; usarla evita exportar únicamente la página visible.
-      const productsToExport = (summaryProducts.length > 0 ? summaryProducts : productItems)
-        .filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE');
+      const sourceProducts = Array.isArray(rows)
+        ? rows
+        : (summaryProducts.length > 0 ? summaryProducts : productItems);
+      const orderedProducts = [...sourceProducts]
+        .filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE')
+        .sort((left: any, right: any) => {
+          const comparison = String(left.code || left.name || '').localeCompare(String(right.code || right.name || ''), 'es', { numeric: true, sensitivity: 'base' });
+          return sortOrder === 'desc' ? -comparison : comparison;
+        });
+      const productsToExport = amount === 'all' ? orderedProducts : orderedProducts.slice(0, amount);
       const exportWarehouseIds = new Set(productScopeWarehouseIds.map((id) => String(id || '').trim()).filter(Boolean));
       const inExportScope = (level: any) => !selectedBranchId
         || exportWarehouseIds.size === 0
@@ -543,7 +574,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         ['Variantes', 'Incluye el SKU, nombre, atributos y costo de cada variante disponible.'],
         ['Alcance', selectedBranchId ? 'Se exportaron los registros disponibles para la sucursal seleccionada.' : 'Se exportaron los registros disponibles para el alcance actual del usuario.'],
       ]);
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_inventario_productos_registrados'], 'xlsx', dateFrom, dateTo));
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_inventario_productos_registrados'], 'xlsx'));
       toast.success(`Archivo Excel descargado con ${productsToExport.length} producto(s)`);
     } catch {
       toast.error('Error al exportar datos');
@@ -652,7 +683,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                         series={data.series}
                         movements={data.movements}
                         onRefresh={() => fetchData('products')}
-                        onExport={canExportInventory ? () => void handleExportData() : undefined}
+                        onExport={canExportInventory ? handleExportData : undefined}
                         isRefreshing={refreshing}
                         onCreateProduct={() => setCreateProductViewOpen(true)}
                         pagination={productsPagination}
@@ -788,10 +819,11 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
-                   <MovimientosView 
+                  <MovimientosView
                     movements={data.movements}
                     warehouses={scopedWarehouses}
                     pagination={movementsPagination}
+                    onExportData={exportMovements}
                     onSearchChange={(value) => updateSearch('movimientos', value)}
                     onTypeChange={(value) => updateMovementFilter('type', value)}
                     onWarehouseChange={(value) => updateMovementFilter('warehouseId', value)}

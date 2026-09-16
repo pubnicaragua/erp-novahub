@@ -4,6 +4,9 @@ import { storageService } from '../services/storage.service';
 const imageCache = new Map<string, { promise: Promise<string | null>; expiresAt: number }>();
 const IMAGE_CACHE_TTL_MS = 30_000;
 const MAX_EMBEDDED_IMAGE_EDGE = 1200;
+const IMAGE_LOAD_TIMEOUT_MS = 1_200;
+const EXCEL_IMAGE_MAX_WIDTH = 600;
+const EXCEL_IMAGE_MAX_HEIGHT = 420;
 
 async function imageBlobAsPng(blob: Blob) {
   if (blob.type && !/^image\//i.test(blob.type)) return '';
@@ -60,16 +63,93 @@ export async function getBase64Image(url: string) {
     }
   })();
   imageCache.set(key, { promise, expiresAt: Date.now() + IMAGE_CACHE_TTL_MS });
-  const result = await promise;
+  const result = await Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), IMAGE_LOAD_TIMEOUT_MS)),
+  ]);
   if (!result) imageCache.delete(key);
   return result;
+}
+
+export function fitExcelImageDimensions(sourceWidth: number, sourceHeight: number, maxWidth = EXCEL_IMAGE_MAX_WIDTH, maxHeight = EXCEL_IMAGE_MAX_HEIGHT) {
+  const width = Math.max(1, Number(sourceWidth) || 1);
+  const height = Math.max(1, Number(sourceHeight) || 1);
+  const scale = Math.min(1, maxWidth / width, maxHeight / height);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+export function excelImageRowSpan(imageHeight: number, rowHeight = 18, gap = 2) {
+  return Math.max(1, Math.ceil((Number(imageHeight) || 1) / rowHeight) + gap);
+}
+
+export function addExcelCanvasImage(
+  workbook: import('exceljs').Workbook,
+  worksheet: import('exceljs').Worksheet,
+  image: { base64: string; width: number; height: number },
+  targetRow: number,
+) {
+  const imageId = workbook.addImage({ base64: image.base64, extension: 'png' });
+  worksheet.addImage(imageId, { tl: { col: 0, row: targetRow }, ext: { width: image.width, height: image.height } });
+  return targetRow + excelImageRowSpan(image.height);
+}
+
+export function prepareExcelKpiColumns(worksheet: import('exceljs').Worksheet, count: number, minWidth = 18) {
+  for (let index = 1; index <= count; index += 1) {
+    const column = worksheet.getColumn(index);
+    column.width = Math.max(Number(column.width) || 0, minWidth);
+  }
+}
+
+export function finalizeExcelKpiRows(worksheet: import('exceljs').Worksheet, count: number, nextRow: number) {
+  const labelRow = worksheet.getRow(Math.max(1, nextRow - 4));
+  const valueRow = worksheet.getRow(Math.max(1, nextRow - 3));
+  const detailRow = worksheet.getRow(Math.max(1, nextRow - 2));
+  labelRow.height = Math.max(Number(labelRow.height) || 0, 30);
+  valueRow.height = Math.max(Number(valueRow.height) || 0, 28);
+  detailRow.height = Math.max(Number(detailRow.height) || 0, 22);
+  for (let index = 1; index <= count; index += 1) {
+    [labelRow, valueRow, detailRow].forEach((row) => {
+      const cell = row.getCell(index);
+      cell.alignment = { ...(cell.alignment || {}), wrapText: true };
+    });
+  }
+}
+
+export function prepareExcelCanvasClone(elementIds: string[], clonedDoc: Document) {
+  elementIds.forEach((elementId) => {
+    const root = clonedDoc.getElementById(elementId);
+    if (!root) return;
+    root.style.setProperty('overflow', 'visible', 'important');
+    root.querySelectorAll<HTMLElement>('.truncate').forEach((element) => {
+      element.style.setProperty('overflow', 'visible', 'important');
+      element.style.setProperty('text-overflow', 'clip', 'important');
+      element.style.setProperty('white-space', 'normal', 'important');
+      element.style.setProperty('overflow-wrap', 'anywhere', 'important');
+    });
+    root.querySelectorAll<HTMLElement>('[data-report-export-text]').forEach((element) => {
+      const fullText = element.getAttribute('data-report-export-text');
+      if (!fullText) return;
+      element.textContent = fullText;
+      element.style.setProperty('white-space', 'normal', 'important');
+      element.style.setProperty('overflow-wrap', 'anywhere', 'important');
+    });
+  });
+}
+
+export function shouldIgnoreExcelCanvasElement(element: Element, target: Element) {
+  if (element === target || element.contains(target) || target.contains(element)) return false;
+  const tagName = element.tagName.toLowerCase();
+  return !['html', 'head', 'body', 'style', 'link', 'meta', 'title'].includes(tagName);
 }
 
 function hasUnsupportedColor(s: string | null | undefined) {
   return s ? /oklch\(|oklab\(|color\(|lch\(|lab\(/i.test(s) : false;
 }
 
-export function sanitizeHtml2CanvasOklch(elementIds: string[], clonedDoc: Document, primaryHex: string) {
+export function sanitizeHtml2CanvasOklch(elementIds: string[], clonedDoc: Document, primaryHex: string, rewriteStyleSheets = true) {
   const safePrimary = /^#[0-9a-f]{6}$/i.test(primaryHex.trim()) ? primaryHex.trim() : '#10b981';
   const primaryForeground = getReadableForeground(safePrimary);
   const styleTag = clonedDoc.createElement('style');
@@ -171,8 +251,7 @@ export function sanitizeHtml2CanvasOklch(elementIds: string[], clonedDoc: Docume
           const stopColor = cloneEl.getAttribute('stop-color');
 
           if (fill && (hasUnsupportedColor(fill) || fill.includes('var('))) {
-            if (cls.includes('recharts-bar-rectangle') || cls.includes('recharts-pie-sector')) {
-            } else {
+            if (!cls.includes('recharts-bar-rectangle') && !cls.includes('recharts-pie-sector')) {
               cloneEl.setAttribute('fill', '#9ca3af');
             }
           }
@@ -202,6 +281,7 @@ export function sanitizeHtml2CanvasOklch(elementIds: string[], clonedDoc: Docume
           }
         }
       } catch {
+        // Un nodo aislado no debe impedir la captura del resto del reporte.
       }
     }
   };
@@ -209,6 +289,8 @@ export function sanitizeHtml2CanvasOklch(elementIds: string[], clonedDoc: Docume
   elementIds.forEach((id) => {
     walkAndFix(document.getElementById(id), clonedDoc.getElementById(id));
   });
+
+  if (!rewriteStyleSheets) return;
 
   try {
     const sheets = clonedDoc.styleSheets;
@@ -225,21 +307,31 @@ export function sanitizeHtml2CanvasOklch(elementIds: string[], clonedDoc: Docume
               sheets[s].deleteRule(r);
               sheets[s].insertRule(newCss, r);
             } catch {
+              // Una regla incompatible se omite; html2canvas continúa con las demás.
             }
           }
         }
       } catch {
+        // Las hojas externas pueden bloquear el acceso a cssRules.
       }
     }
   } catch {
+    // La captura puede continuar aunque una hoja de estilos no sea accesible.
   }
 }
 
 export async function downloadExcelWorkbook(wb: import('exceljs').Workbook, filename: string) {
-  const buffer = await wb.xlsx.writeBuffer();
+  const buffer = await wb.xlsx.writeBuffer({
+    zip: {
+      compression: 'DEFLATE',
+      compressionOptions: { level: 1 },
+    },
+  });
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
+  link.href = url;
   link.download = filename;
   link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

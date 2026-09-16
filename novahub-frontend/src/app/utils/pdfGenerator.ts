@@ -73,27 +73,36 @@ export function drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY,
   valueFontSize?: number;
   detailFontSize?: number;
 }) {
-  const boxWidth = (contentWidth - (columns - 1) * gap) / Math.max(columns, 1);
+  const safeColumns = Math.max(1, Math.min(Math.floor(columns) || 1, kpis.length || 1));
+  const boxWidth = (contentWidth - (safeColumns - 1) * gap) / safeColumns;
+  const rowCount = Math.ceil(kpis.length / safeColumns);
   kpis.forEach((kpi, index) => {
-    const x = marginX + index * (boxWidth + gap);
+    const row = Math.floor(index / safeColumns);
+    const column = index % safeColumns;
+    const itemsInRow = Math.min(safeColumns, kpis.length - row * safeColumns);
+    const rowOffset = itemsInRow < safeColumns
+      ? ((safeColumns - itemsInRow) * (boxWidth + gap)) / 2
+      : 0;
+    const x = marginX + rowOffset + column * (boxWidth + gap);
+    const y = currentY + row * (boxHeight + gap);
     const color = kpi.color;
     doc.setFillColor(color[0] ?? 16, color[1] ?? 185, color[2] ?? 129);
-    doc.roundedRect(x, currentY, boxWidth, boxHeight, 3, 3, 'F');
+    doc.roundedRect(x, y, boxWidth, boxHeight, 3, 3, 'F');
     const textWidth = boxWidth - 5;
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
     const labelLines = reportPdfLines(doc, kpi.label, textWidth, labelFontSize, 2);
-    doc.text(labelLines, x + boxWidth / 2, currentY + 4.5, { align: 'center', lineHeightFactor: 1.05 });
+    doc.text(labelLines, x + boxWidth / 2, y + 4.5, { align: 'center', lineHeightFactor: 1.05 });
 
     const valueLines = reportPdfLines(doc, kpi.value, textWidth, valueFontSize, 1);
-    doc.text(valueLines, x + boxWidth / 2, currentY + 13, { align: 'center', lineHeightFactor: 1 });
+    doc.text(valueLines, x + boxWidth / 2, y + 13, { align: 'center', lineHeightFactor: 1 });
 
     doc.setFont('helvetica', 'normal');
     const detailLines = reportPdfLines(doc, kpi.detail, textWidth, detailFontSize, 2);
-    doc.text(detailLines, x + boxWidth / 2, currentY + boxHeight - (detailLines.length > 1 ? 5.8 : 3.5), { align: 'center', lineHeightFactor: 1.05 });
+    doc.text(detailLines, x + boxWidth / 2, y + boxHeight - (detailLines.length > 1 ? 5.8 : 3.5), { align: 'center', lineHeightFactor: 1.05 });
   });
-  return currentY + boxHeight + 10;
+  return currentY + rowCount * boxHeight + (rowCount - 1) * gap + 10;
 }
 
 /** Dibuja en las salidas nativas la misma información de Marca del canvas. */
@@ -276,9 +285,14 @@ export async function getPdfDesign(targetKey: string) {
   }
 }
 
-export async function getPdfDesignSettings(targetKey: string) {
-  const design = await getPdfDesign(targetKey);
-  return (design?.settings || {}) as Record<string, any>;
+export async function getPdfDesignSettings(targetKey: string, timeoutMs?: number) {
+  const request = getPdfDesign(targetKey).then((design) => (design?.settings || {}) as Record<string, any>);
+  if (!timeoutMs || timeoutMs <= 0) return request;
+  const fallback = (createSystemDefaultPdfDesign(targetKey).settings || {}) as Record<string, any>;
+  return Promise.race([
+    request,
+    new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
+  ]);
 }
 
 /**

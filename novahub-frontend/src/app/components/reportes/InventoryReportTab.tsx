@@ -17,7 +17,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Warehouse, Tag, ShieldAlert, Gauge, Layers, CalendarClock } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -839,7 +839,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportExcel: async () => {
       toast.info("Generando Excel (Inventario)...");
       try {
-        const pdfSettings = await getPdfDesignSettings('reportes.inventory');
+        const pdfSettings = await getPdfDesignSettings('reportes.inventory', 1200);
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Inventario');
         const companyName = themeConfig.tenantName || 'Mi Empresa';
@@ -891,6 +891,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           { label: 'ROTACIÓN DE INVENTARIO', value: rotation.turnover !== null ? `${rotation.turnover.toFixed(1)}x` : 'N/D', detail: rotation.turnover !== null ? `veces · ${rangeLabel}` : 'datos insuficientes', bgColor: 'FF3B82F6' },
           { label: 'VALOR POTENCIAL A PRECIO DE VENTA', value: formatConvertedAmount(potential.totalSaleValue, 'NIO'), detail: 'No representa ingreso ni utilidad', bgColor: 'FFF59E0B' },
         ];
+        prepareExcelKpiColumns(ws, kpiBoxes.length);
 
         ws.getRow(currentRow).height = 18;
         kpiBoxes.forEach((kpi, idx) => {
@@ -919,28 +920,32 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         });
         currentRow += 2;
+        finalizeExcelKpiRows(ws, kpiBoxes.length, currentRow);
 
-        const exportIds = ['inventory-dynamics-chart', 'inventory-distribution-chart'];
-        const captureForExcel = async (elementId: string, targetRow: number) => {
+        const exportImageIds = ['inventory-dynamics-chart', 'inventory-distribution-chart'];
+        const captureCanvas = async (elementId: string) => {
           const el = document.getElementById(elementId);
-          if (!el) return targetRow;
+          if (!el) return null;
           try {
             const canvas = await html2canvas(el, {
               scale: 1,
+              imageTimeout: 1200,
               backgroundColor: '#ffffff',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
+              ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el),
+              onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex, false); prepareExcelCanvasClone([elementId], clonedDoc); },
             });
-            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
-            ws.addImage(imgId, { tl: { col: 0, row: targetRow }, ext: { width: 720, height: 260 } });
-            return targetRow + 18;
+            const { width, height } = fitExcelImageDimensions(canvas.width, canvas.height);
+            return { base64: canvas.toDataURL('image/png'), width, height };
           } catch {
-            return targetRow;
+            return null;
           }
         };
 
         let imgRow = currentRow + 2;
-        imgRow = await captureForExcel('inventory-dynamics-chart', imgRow);
-        imgRow = await captureForExcel('inventory-distribution-chart', imgRow);
+        const capturedImages = await Promise.all(exportImageIds.map(captureCanvas));
+        capturedImages.forEach((image) => {
+          if (image) imgRow = addExcelCanvasImage(wb, ws, image, imgRow);
+        });
 
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;

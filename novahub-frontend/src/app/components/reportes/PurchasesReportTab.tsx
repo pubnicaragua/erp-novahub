@@ -18,7 +18,7 @@ import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTena
 import { cn } from '../ui/utils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
-import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { buildReportDateFilters } from '../../utils/report-date-filters';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
@@ -1107,7 +1107,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportExcel: async () => {
       try {
         toast.info('Generando Excel (Compras)...');
-        const pdfSettings = await getPdfDesignSettings('reportes.purchases');
+        const pdfSettings = await getPdfDesignSettings('reportes.purchases', 1200);
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Compras');
 
@@ -1161,6 +1161,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           { label: 'SALDO PENDIENTE POR PAGAR', value: formatConvertedAmount(totalPending, 'NIO'), detail: `${pendingCount} facturas · ${formatConvertedAmount(vencido, 'NIO')} vencidos`, bgColor: 'FFF43F5E' },
           { label: 'TICKET PROMEDIO DE COMPRA', value: formatConvertedAmount(avgTicket, 'NIO'), detail: `Basado en ${facturasValidas} factura(s)`, bgColor: 'FF3B82F6' },
         ];
+        prepareExcelKpiColumns(ws, kpiBoxes.length);
 
         ws.getRow(currentRow).height = 18;
         kpiBoxes.forEach((kpi, idx) => {
@@ -1189,30 +1190,32 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         });
         currentRow += 2;
+        finalizeExcelKpiRows(ws, kpiBoxes.length, currentRow);
 
-        const exportIds = ['purchases-monthly-chart', 'purchases-dynamics-chart', 'purchases-distribution-chart', 'purchases-pie-chart'];
-        const captureForExcel = async (elementId: string, targetRow: number) => {
+        const exportImageIds = ['purchases-monthly-chart', 'purchases-dynamics-chart', 'purchases-distribution-chart', 'purchases-pie-chart'];
+        const captureCanvas = async (elementId: string) => {
           const el = document.getElementById(elementId);
-          if (!el) return targetRow;
+          if (!el) return null;
           try {
             const canvas = await html2canvas(el, {
-              scale: 2,
+              scale: 1,
+              imageTimeout: 1200,
               backgroundColor: '#ffffff',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
+              ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el),
+              onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex, false); prepareExcelCanvasClone([elementId], clonedDoc); },
             });
-            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
-            ws.addImage(imgId, { tl: { col: 0, row: targetRow }, ext: { width: 720, height: 260 } });
-            return targetRow + 18;
+            const { width, height } = fitExcelImageDimensions(canvas.width, canvas.height);
+            return { base64: canvas.toDataURL('image/png'), width, height };
           } catch {
-            return targetRow;
+            return null;
           }
         };
 
         let imgRow = currentRow + 2;
-        imgRow = await captureForExcel('purchases-monthly-chart', imgRow);
-        imgRow = await captureForExcel('purchases-distribution-chart', imgRow);
-        imgRow = await captureForExcel('purchases-dynamics-chart', imgRow);
-        imgRow = await captureForExcel('purchases-pie-chart', imgRow);
+        const capturedImages = await Promise.all(exportImageIds.map(captureCanvas));
+        capturedImages.forEach((image) => {
+          if (image) imgRow = addExcelCanvasImage(wb, ws, image, imgRow);
+        });
 
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;
@@ -1794,7 +1797,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                           </div>
                         );
                       }} />
-                      <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))', fontSize: 11 }}>{value.length > 18 ? value.substring(0, 17) + '…' : value}</span>} />
+                      <Legend formatter={(value: string) => <span data-report-export-text={value} style={{ color: 'hsl(var(--foreground))', fontSize: 11 }}>{value.length > 18 ? value.substring(0, 17) + '…' : value}</span>} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>

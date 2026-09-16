@@ -12,7 +12,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Users, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, Wallet, ShoppingCart } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -297,7 +297,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportExcel: async () => {
       try {
         toast.info("Generando Excel (Clientes)...");
-        const pdfSettings = await getPdfDesignSettings('reportes.customers');
+        const pdfSettings = await getPdfDesignSettings('reportes.customers', 1200);
         const wb = new ExcelJS.Workbook();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.customers');
@@ -338,6 +338,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           { label: 'RATIO PAGO', value: `${payRatio.toFixed(1)}%`, detail: 'Eficiencia', bgColor: 'FFA855F7' },
           { label: 'VENTA PROMEDIO / CLIENTE', value: formatConvertedAmount(averageSalePerCustomer, baseCurrency), detail: 'Facturación histórica', bgColor: 'FFF59E0B' },
         ];
+        prepareExcelKpiColumns(ws, kpis.length);
 
         ws.getRow(currentRow).height = 18;
         kpis.forEach((kpi, idx) => {
@@ -357,22 +358,23 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           cell.value = kpi.detail; cell.font = { size: 8, color: { argb: 'FFFFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } }; cell.alignment = { horizontal: 'center', vertical: 'middle' };
         }); currentRow += 2;
+        finalizeExcelKpiRows(ws, kpis.length, currentRow);
 
-        const captureAndEmbed = async (elementId: string) => {
-          const el = document.getElementById(elementId); if (!el) return;
+        const captureCanvas = async (elementId: string) => {
+          const el = document.getElementById(elementId); if (!el) return null;
           try {
-            const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([elementId], clonedDoc, `#${primaryHex}`) });
-            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
-            const width = 600; const height = (canvas.height * width) / canvas.width;
-            ws.addImage(imgId, { tl: { col: 0, row: currentRow }, ext: { width, height } });
-            currentRow += Math.ceil(height / 18) + 2;
-          } catch (e: any) { console.warn(e); }
+            const canvas = await html2canvas(el, { scale: 1, imageTimeout: 1200, backgroundColor: '#ffffff', ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el), onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, `#${primaryHex}`, false); prepareExcelCanvasClone([elementId], clonedDoc); } });
+            const { width, height } = fitExcelImageDimensions(canvas.width, canvas.height);
+            return { base64: canvas.toDataURL('image/png'), width, height };
+          } catch (e: any) { console.warn(e); return null; }
         };
 
-        if (document.getElementById('customers-chart-trend')) await captureAndEmbed('customers-chart-trend');
-        if (document.getElementById('customers-health-card')) await captureAndEmbed('customers-health-card');
-        if (document.getElementById('customers-chart-pie')) await captureAndEmbed('customers-chart-pie');
-        if (document.getElementById('customers-products-card')) await captureAndEmbed('customers-products-card');
+        const exportImageIds = ['customers-chart-trend', 'customers-health-card', 'customers-chart-pie', 'customers-products-card']
+          .filter((elementId) => Boolean(document.getElementById(elementId)));
+        const capturedImages = await Promise.all(exportImageIds.map(captureCanvas));
+        capturedImages.forEach((image) => {
+          if (image) currentRow = addExcelCanvasImage(wb, ws, image, currentRow);
+        });
 
         while (ws.rowCount < currentRow) ws.addRow([]); ws.addRow([]);
 
@@ -393,9 +395,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         renderTopTable('Líderes de Facturación', topCustomers, 'FF3B82F6', false);
         renderTopTable('Productos Estrella', topProducts, 'FFF59E0B', true);
 
-        const buffer = await wb.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = buildReportDownloadFileName(['reporte_clientes'], 'xlsx', dateRange); link.click();
+        await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_clientes'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel"); }
     }

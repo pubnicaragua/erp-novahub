@@ -127,6 +127,12 @@ const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 export type ProductStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+export type ProductExportOptions = {
+  amount: number | 'all';
+  sortOrder: 'asc' | 'desc';
+  scope: 'page' | 'custom' | 'all';
+  rows?: any[];
+};
 type InitialImportReimportMode = 'REJECT' | 'MERGE';
 type SimilarityAlertMode = 'preview' | 'confirm';
 
@@ -184,7 +190,7 @@ interface ProductosViewProps {
   series?: any[];
   movements?: any[];
   onRefresh: () => void;
-  onExport?: () => void;
+  onExport?: (options: ProductExportOptions) => Promise<void> | void;
   isRefreshing?: boolean;
   onCreateProduct?: () => void;
   pagination?: SalesPaginationControls;
@@ -1115,6 +1121,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [pendingCategoryRowIndex, setPendingCategoryRowIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedProductMap, setSelectedProductMap] = useState<Map<string, any>>(new Map());
+  const [productExportDialogOpen, setProductExportDialogOpen] = useState(false);
+  const [productExportScope, setProductExportScope] = useState<'page' | 'custom' | 'all'>('page');
+  const [productExportAmount, setProductExportAmount] = useState(String(pagination?.pageSize || 50));
+  const [productExportSortOrder, setProductExportSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [isProductExporting, setIsProductExporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[]; warnings?: string[] } | null>(null);
   const [initialImportCompleted, setInitialImportCompleted] = useState(false);
@@ -1748,6 +1759,52 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const summarySource = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
   const filteredSummaryProducts = colFilters.applyTo(summarySource.filter(matchesProductFilters), filterGetters);
   const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
+  const totalProductsForExport = summaryProducts && summaryProducts.length > 0
+    ? filteredSummaryProducts.length
+    : (pagination?.total ?? filteredProducts.length);
+  const openProductExportDialog = () => {
+    const pageAmount = Math.max(1, Math.min(pagination?.pageSize || filteredData.length || 50, totalProductsForExport || pagination?.pageSize || filteredData.length || 50));
+    setProductExportScope('page');
+    setProductExportAmount(String(pageAmount));
+    setProductExportSortOrder('asc');
+    setProductExportDialogOpen(true);
+  };
+  const handleProductExportAmountChange = (value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    if (!value) {
+      setProductExportAmount('');
+      return;
+    }
+    const nextAmount = Number(value);
+    if (!Number.isSafeInteger(nextAmount)) return;
+    setProductExportAmount(String(Math.min(nextAmount, totalProductsForExport)));
+  };
+  const handleProductExport = async () => {
+    if (!onExport) return;
+    const requestedAmount = Number(productExportAmount);
+    if (productExportScope === 'custom' && (!/^[1-9]\d*$/.test(productExportAmount) || !Number.isSafeInteger(requestedAmount) || requestedAmount > totalProductsForExport)) {
+      toast.error(`Digite una cantidad entera entre 1 y ${totalProductsForExport.toLocaleString('es-NI')} producto(s)`);
+      return;
+    }
+
+    setIsProductExporting(true);
+    try {
+      const sourceRows = productExportScope === 'page'
+        ? filteredData
+        : (summaryProducts && summaryProducts.length > 0 ? filteredSummaryProducts : filteredProducts);
+      await onExport({
+        amount: productExportScope === 'all' ? 'all' : requestedAmount,
+        sortOrder: productExportSortOrder,
+        scope: productExportScope,
+        rows: sourceRows,
+      });
+      setProductExportDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al exportar productos');
+    } finally {
+      setIsProductExporting(false);
+    }
+  };
   const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filteredProducts.filter((p: any) => (p.category?.name || 'Sin categoría') === label).length }));
   const brandOptions = useMemo(() => {
@@ -3730,7 +3787,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={onExport}
+                onClick={openProductExportDialog}
                 className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
                 title="Exportar productos registrados a Excel"
               >
@@ -4423,6 +4480,48 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       </div>
         </>
       )}
+      <Dialog open={productExportDialogOpen} onOpenChange={(open) => { if (!isProductExporting) setProductExportDialogOpen(open); }}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Download className="size-5 text-primary" /> Exportar productos</DialogTitle>
+            <DialogDescription>Hay {totalProductsForExport.toLocaleString('es-NI')} producto(s) disponibles con los filtros actuales.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Cantidad a exportar</label>
+              <Select value={productExportScope} onValueChange={(value) => setProductExportScope(value as 'page' | 'custom' | 'all')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="page">Página actual ({filteredData.length} producto(s))</SelectItem>
+                  <SelectItem value="custom" disabled={totalProductsForExport < 1}>Cantidad personalizada</SelectItem>
+                  <SelectItem value="all">Todos ({totalProductsForExport.toLocaleString('es-NI')})</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {productExportScope === 'custom' && <div className="space-y-1.5">
+              <label htmlFor="product-export-amount" className="text-xs font-black uppercase tracking-wider text-muted-foreground">Número de productos</label>
+              <Input id="product-export-amount" type="number" min={1} max={totalProductsForExport} step={1} inputMode="numeric" value={productExportAmount} onKeyDown={(event) => { if (['-', '+', '.', ',', 'e', 'E'].includes(event.key)) event.preventDefault(); }} onChange={(event) => handleProductExportAmountChange(event.target.value)} placeholder="Ej. 100" />
+              <p className="text-[11px] text-muted-foreground">Puedes indicar hasta {totalProductsForExport.toLocaleString('es-NI')} producto(s).</p>
+            </div>}
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Orden del reporte</label>
+              <Select value={productExportSortOrder} onValueChange={(value) => setProductExportSortOrder(value as 'asc' | 'desc')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">Ascendente: código A-Z</SelectItem>
+                  <SelectItem value="desc">Descendente: código Z-A</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setProductExportDialogOpen(false)} disabled={isProductExporting}>Cancelar</Button>
+            <Button type="button" onClick={handleProductExport} disabled={isProductExporting || !onExport}>
+              {isProductExporting ? <><Loader2 className="size-4 animate-spin" /> Preparando…</> : <><Download className="size-4" /> Exportar Excel</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <EditProductModal
         product={modalProduct}
         categories={categories}

@@ -17,7 +17,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Percent, ArrowUpRight, Activity, Scale, BarChart3, Wallet, TrendingUp, TrendingDown, Receipt, AlertTriangle, Target, CalendarDays, Info, CreditCard, PieChart as PieChartIcon, Layers, FileText, Banknote, ShieldCheck, RefreshCw } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
-import { getBase64Image, sanitizeHtml2CanvasOklch, downloadExcelWorkbook } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 import {
   DAY_MS, endOfDay, fmtRange, getRangeDates, shiftYearClamped, startOfDay, toDate,
@@ -110,7 +110,11 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
+  const canViewSales = canPerform('REPORTS_SALES', 'view');
+  const canViewPurchases = canPerform('REPORTS_PURCHASES', 'view');
   const canViewFinancial = canPerform('REPORTS_FINANCIAL', 'view');
+  const canViewAccounting = canPerform('ACCOUNTING', 'view');
+  const canViewPos = canPerform('RETAIL_POS', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -567,8 +571,10 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         ];
 
         const boxH = 24;
-        checkPage(boxH + 5);
-        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 5, boxHeight: boxH, labelFontSize: 7, valueFontSize: 10, detailFontSize: 6 });
+        const kpiColumns = 4;
+        const kpiRows = Math.ceil(kpis.length / kpiColumns);
+        checkPage(kpiRows * boxH + (kpiRows - 1) * 4 + 5);
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: kpiColumns, boxHeight: boxH, labelFontSize: 7, valueFontSize: 10, detailFontSize: 6 });
 
         const renderTable = (title: string, header: string[], rows: (string | number)[][], color: number[]) => {
           reportSections.push({ title, headers: header, rows });
@@ -662,7 +668,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     exportExcel: async () => {
       try {
         toast.info("Generando Excel financiero...");
-        const pdfSettings = await getPdfDesignSettings('reportes.finance');
+        const pdfSettings = await getPdfDesignSettings('reportes.finance', 1200);
         const wb = new ExcelJS.Workbook();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.finance');
@@ -718,6 +724,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
           { label: 'SALDO DISPONIBLE', value: fmt(cashInfo.total), detail: `${cajaInfo.bancosConciliados} bancos conciliados`, bgColor: 'FF3B82F6' },
           { label: 'COBERTURA DE PAGOS', value: cobertura === null ? 'N/D' : `${cobertura.toFixed(1)}%`, detail: cobertura === null ? 'Sin pagos' : cobertura >= 100 ? 'Excedente' : 'Déficit', bgColor: cobertura === null ? 'FF94A3B8' : cobertura >= 100 ? 'FF10B981' : 'FFF43F5E' },
         ];
+        prepareExcelKpiColumns(ws, 6);
 
         ws.getRow(currentRow).height = 18;
         kpiBoxes.forEach((kpi, idx) => {
@@ -746,25 +753,24 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         });
         currentRow += 2;
+        finalizeExcelKpiRows(ws, kpiBoxes.length, currentRow);
 
-        const exportIds = ['finance-monthly-chart', 'finance-trend-chart', 'finance-income-composition', 'finance-payment-composition', 'finance-position'];
-        const captureForExcel = async (elementId: string, targetRow: number) => {
+        const exportImageIds = ['finance-monthly-chart', 'finance-trend-chart', 'finance-income-composition', 'finance-payment-composition', 'finance-position'];
+        const captureCanvas = async (elementId: string) => {
           const el = document.getElementById(elementId);
-          if (!el) return targetRow;
+          if (!el) return null;
           try {
-            const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex) });
-            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
-            ws.addImage(imgId, { tl: { col: 0, row: targetRow }, ext: { width: 720, height: 260 } });
-            return targetRow + 18;
-          } catch { return targetRow; }
+            const canvas = await html2canvas(el, { scale: 1, imageTimeout: 1200, backgroundColor: '#ffffff', ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el), onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex, false); prepareExcelCanvasClone([elementId], clonedDoc); } });
+            const { width, height } = fitExcelImageDimensions(canvas.width, canvas.height);
+            return { base64: canvas.toDataURL('image/png'), width, height };
+          } catch { return null; }
         };
 
         let imgRow = currentRow + 2;
-        imgRow = await captureForExcel('finance-monthly-chart', imgRow);
-        imgRow = await captureForExcel('finance-trend-chart', imgRow);
-        imgRow = await captureForExcel('finance-income-composition', imgRow);
-        imgRow = await captureForExcel('finance-payment-composition', imgRow);
-        imgRow = await captureForExcel('finance-position', imgRow);
+        const capturedImages = await Promise.all(exportImageIds.map(captureCanvas));
+        capturedImages.forEach((image) => {
+          if (image) imgRow = addExcelCanvasImage(wb, ws, image, imgRow);
+        });
 
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;
