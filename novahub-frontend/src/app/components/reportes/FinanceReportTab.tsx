@@ -110,7 +110,11 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
+  const canViewSales = canPerform('REPORTS_SALES', 'view');
+  const canViewPurchases = canPerform('REPORTS_PURCHASES', 'view');
   const canViewFinancial = canPerform('REPORTS_FINANCIAL', 'view');
+  const canViewAccounting = canPerform('ACCOUNTING', 'view');
+  const canViewPos = canPerform('RETAIL_POS', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);

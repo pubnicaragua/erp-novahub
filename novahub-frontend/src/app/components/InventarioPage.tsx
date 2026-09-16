@@ -543,7 +543,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         ['Variantes', 'Incluye el SKU, nombre, atributos y costo de cada variante disponible.'],
         ['Alcance', selectedBranchId ? 'Se exportaron los registros disponibles para la sucursal seleccionada.' : 'Se exportaron los registros disponibles para el alcance actual del usuario.'],
       ]);
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_inventario_productos_registrados'], 'xlsx', dateFrom, dateTo));
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_inventario_productos_registrados'], 'xlsx'));
       toast.success(`Archivo Excel descargado con ${productsToExport.length} producto(s)`);
     } catch {
       toast.error('Error al exportar datos');
