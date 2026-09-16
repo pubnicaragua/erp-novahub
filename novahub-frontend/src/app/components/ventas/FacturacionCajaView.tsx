@@ -62,7 +62,7 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { playNotificationSound } from '../../utils/notificationSound';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
-import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentTotalBase } from '../../utils/paymentSettlement';
+import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentTotalBase, getPaymentTotalBaseForSettlement } from '../../utils/paymentSettlement';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 
@@ -434,7 +434,7 @@ interface FacturacionCajaViewProps {
 }
 
 export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: FacturacionCajaViewProps) {
-  const { formatConvertedAmount: formatCurrency, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
+  const { formatConvertedAmount: formatCurrency, formatExplicitAmount, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const canCreatePosInvoice = canPerform('RETAIL_POS', 'create');
   const canPayPos = canCreatePosInvoice;
@@ -773,11 +773,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const document = getQueueDocument(queueInvoice);
     if (!document) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0, changeUnsupported: false };
     const invoiceCurrency = document.currency;
-    const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(activeSession.exchangeRateUSD || globalRate || 1);
+    const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(document.exchangeRate || activeSession.exchangeRateUSD || globalRate || 1);
     const totalBase = toBaseAmount(Number(document.balance || 0), invoiceCurrency, invoiceRate);
     const getQueueLineBaseAmount = (payment: PosPaymentLine) => getPaymentLineBase(payment, invoiceCurrency);
-    const paidBase = getPaymentTotalBase(queuePayments, getQueueLineBaseAmount);
-    const changeBase = getPaymentChangeBase(queuePayments, totalBase, getQueueLineBaseAmount);
+    const paidBase = getPaymentTotalBaseForSettlement(
+      queuePayments,
+      totalBase,
+      invoiceCurrency,
+      baseCurrency,
+      convertBetweenCurrencies,
+      getQueueLineBaseAmount,
+    );
+    const changeBase = Math.max(0, paidBase - totalBase);
     return {
       totalBase,
       paidBase,
@@ -1835,12 +1842,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     }
     const documentRate = paymentCurrency === baseCurrency ? 1 : Number(globalRate || activeSession.exchangeRateUSD || 1);
     const totalBase = toBaseAmount(summary.total, paymentCurrency, documentRate);
-    const receivedBase = payments.reduce((sum, payment) => sum + toBaseAmount(
-      Number(payment.amount || 0),
-      payment.currency || paymentCurrency,
-      (payment.currency || paymentCurrency) === baseCurrency ? 1 : Number(payment.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1),
-    ), 0);
-    const changeBase = getPaymentChangeBase(payments, totalBase, (payment) => getPaymentLineBase(payment, paymentCurrency));
+    const getCurrentPaymentBase = (payment: PosPaymentLine) => getPaymentLineBase(payment, paymentCurrency);
+    const receivedBase = getPaymentTotalBaseForSettlement(
+      payments,
+      totalBase,
+      paymentCurrency,
+      baseCurrency,
+      convertBetweenCurrencies,
+      getCurrentPaymentBase,
+    );
+    const changeBase = Math.max(0, receivedBase - totalBase);
     if (changeBase > 0.005 && !cashCoversPaymentChange(payments, totalBase, (payment) => getPaymentLineBase(payment, paymentCurrency), 0.005)) {
       toast.error('No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.');
       return;
@@ -2111,7 +2122,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
             </div>
           )}
           {cashQueue.length > 0 ? (
-            <div className="mt-4 grid gap-2 lg:grid-cols-2">
+            <div className="mt-4 grid max-h-[12rem] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
               {cashQueue.map((queue) => {
                 const document = getQueueDocument(queue);
                 if (!document) return null;
@@ -2992,7 +3003,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       )}
       {showPayment && activeSession && (
         <div className="nh-modal-root fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
-          <div className="nh-modal-surface max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-xl overflow-y-auto rounded-2xl border bg-background p-4 shadow-2xl sm:p-6">
+          <div className="nh-modal-surface max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-3xl overflow-y-auto rounded-2xl border bg-background p-4 shadow-2xl sm:p-6">
             <div className="nh-modal-header mb-5 flex min-w-0 items-start justify-between gap-3 border-b border-border/50 pb-4">
               <div className="min-w-0">
                 <h2 id="payment-modal-title" className="text-lg font-black">Checkout / Pago</h2>
@@ -3027,29 +3038,53 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 ? toBaseAmount(holdTotal, 'NIO', 1)
                 : toBaseAmount(summary.total, paymentCurrency, documentRate);
               const getCurrentPaymentBase = (payment: PosPaymentLine) => getPaymentLineBase(payment, paymentCurrency);
-              const totalPaidBase = getPaymentTotalBase(payments, getCurrentPaymentBase);
+              const totalPaidBase = getPaymentTotalBaseForSettlement(
+                payments,
+                totalToPayBase,
+                paymentCurrency,
+                baseCurrency,
+                convertBetweenCurrencies,
+                getCurrentPaymentBase,
+              );
               const pendingBase = Math.max(0, totalToPayBase - totalPaidBase);
-              const changeLocal = getPaymentChangeBase(payments, totalToPayBase, getCurrentPaymentBase);
+              const changeLocal = Math.max(0, totalPaidBase - totalToPayBase);
               const changeUnsupported = changeLocal > 0.005 && !cashCoversPaymentChange(payments, totalToPayBase, getCurrentPaymentBase, 0.005);
+              const totalToPayDocument = convertBetweenCurrencies(totalToPayBase, baseCurrency, paymentCurrency, 1, documentRate);
+              const totalPaidDocument = convertBetweenCurrencies(totalPaidBase, baseCurrency, paymentCurrency, 1, documentRate);
+              const pendingDocument = convertBetweenCurrencies(pendingBase, baseCurrency, paymentCurrency, 1, documentRate);
+              const changeDocument = convertBetweenCurrencies(changeLocal, baseCurrency, paymentCurrency, 1, documentRate);
+              const paymentCurrencies = [...new Set(payments.map((payment) => payment.currency || paymentCurrency))] as PaymentCurrency[];
+              const indicatorPaymentCurrencies = paymentCurrencies.filter((currency) => currency !== paymentCurrency);
+              const formatIndicatorEquivalent = (amount: number) => indicatorPaymentCurrencies.map((currency) => {
+                const paymentLine = payments.find((payment) => (payment.currency || paymentCurrency) === currency);
+                const paymentRate = currency === baseCurrency
+                  ? 1
+                  : Number(paymentLine?.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1);
+                return formatExplicitAmount(convertBetweenCurrencies(amount, baseCurrency, currency, 1, paymentRate), currency);
+              }).join(' · ');
 
               return (
                 <>
                   <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-xl bg-primary/10 p-3">
                       <span className="text-xs text-primary font-bold">Total a pagar</span>
-                      <div className="text-xl font-black text-primary">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalToPayBase)}</div>
+                      <div className="text-xl font-black text-primary">{formatExplicitAmount(totalToPayDocument, paymentCurrency)}</div>
+                      {indicatorPaymentCurrencies.length > 0 && <div className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatIndicatorEquivalent(totalToPayBase)}</div>}
                     </div>
                     <div className="rounded-xl bg-muted/40 p-3 border border-border/50">
                       <span className="text-xs text-muted-foreground">Pagado</span>
-                      <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalPaidBase)}</div>
+                      <div className="text-xl font-black">{formatExplicitAmount(totalPaidDocument, paymentCurrency)}</div>
+                      {indicatorPaymentCurrencies.length > 0 && <div className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatIndicatorEquivalent(totalPaidBase)}</div>}
                     </div>
                     <div className={cn("rounded-xl p-3 border", pendingBase > 0.005 ? "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400")}>
                       <span className="text-xs font-bold">Pendiente</span>
-                      <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(pendingBase)}</div>
+                      <div className="text-xl font-black">{formatExplicitAmount(pendingDocument, paymentCurrency)}</div>
+                      {indicatorPaymentCurrencies.length > 0 && <div className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatIndicatorEquivalent(pendingBase)}</div>}
                     </div>
                     <div className={cn("rounded-xl p-3 border", changeUnsupported ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400" : changeLocal > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted/20 border-border/30 text-muted-foreground")}>
                       <span className="text-xs font-bold">Cambio</span>
-                      <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(changeLocal)}</div>
+                      <div className="text-xl font-black">{formatExplicitAmount(changeDocument, paymentCurrency)}</div>
+                      {indicatorPaymentCurrencies.length > 0 && <div className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatIndicatorEquivalent(changeLocal)}</div>}
                     </div>
                   </div>
                   {changeUnsupported && <p className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce esos montos o agrega suficiente efectivo para cubrir el excedente.</p>}
@@ -3092,18 +3127,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                             const previousCurrency = item.currency || paymentCurrency;
                             const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1);
                             const nextRate = paymentLineRate(nextCurrency);
-                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
+                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined };
                           }))} />
                           <Input type="number" min="0" step="0.01" placeholder={`Monto (${payment.currency || paymentCurrency})`} value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} />
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                         </div>
+                        {payment.currency && payment.currency !== paymentCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente pendiente: {formatExplicitAmount(convertBetweenCurrencies(pendingBase, baseCurrency, payment.currency, 1, Number(payment.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1)), payment.currency)}</p>}
                         {payment.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatCurrency(selectedPaymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
                         {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
                         {payment.method === 'TRANSFER' && (
                           <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
                         )}
                         {payment.method === 'CHECK' && <Input className="mt-2" placeholder="Número de cheque *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
+                        {isBankPaymentMethod(payment.method, true) && <BankAccountSelect currency={payment.currency} className="mt-2" endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
                         {isCardPaymentMethod(payment.method) && payment.bankAccountId && Number(payment.cardCommissionPercent || 0) > 0 && (
                           <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
                             <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
@@ -3154,7 +3190,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         };
         return (
         <div className="nh-modal-root fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="queue-payment-title">
-          <div className="nh-modal-surface max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6">
+          <div className="nh-modal-surface max-h-[min(90vh,calc(100dvh-2rem))] w-full min-w-0 max-w-3xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-4 shadow-2xl sm:p-6">
             <div className="nh-modal-header flex min-w-0 items-start justify-between gap-4 border-b border-border/50 pb-4">
               <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Cobro desde cola de caja</p><h2 id="queue-payment-title" className="mt-1 text-xl font-black uppercase tracking-tight">{isCreditQueue ? 'Crédito' : 'Factura'} {document.number}</h2><p className="mt-1 break-words text-sm text-muted-foreground">{document.customer?.name || document.customCustomerName || GENERAL_CUSTOMER_NAME}</p></div>
                 <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={() => { if (!queueSubmitting) { setQueueInvoice(null); setQueuePayments([]); setQueueMixedPaymentEnabled(false); setQueuePartialPaymentEnabled(false); } }} aria-label="Cerrar cobro">×</Button>
@@ -3196,26 +3232,38 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => handleQueuePaymentMethodChange(index, value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Efectivo</SelectItem><SelectItem value="CARD">Tarjeta</SelectItem><SelectItem value="TRANSFER">Transferencia</SelectItem><SelectItem value="CHECK">Cheque</SelectItem>{getCustomerFavorBase(document.customerId) > 0.01 && <SelectItem value="CUSTOMER_BALANCE">Saldo a favor</SelectItem>}</SelectContent>
                     </Select>
-                    <CurrencySelector value={payment.currency || document.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} disabled={payment.method === 'CUSTOMER_BALANCE' || queueSubmitting} onChange={(nextCurrency) => setQueuePayments((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const previousCurrency = item.currency || document.currency; const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1); const nextRate = nextCurrency === baseCurrency ? 1 : Number(activeSession?.exchangeRateUSD || globalRate || 1); return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate }; }))} />
+                    <CurrencySelector value={payment.currency || document.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} disabled={payment.method === 'CUSTOMER_BALANCE' || queueSubmitting} onChange={(nextCurrency) => setQueuePayments((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const previousCurrency = item.currency || document.currency; const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1); const nextRate = nextCurrency === baseCurrency ? 1 : Number(activeSession?.exchangeRateUSD || globalRate || 1); return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined }; }))} />
                   <Input type="number" min="0" step="0.01" value={payment.amount || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} placeholder="Monto" />
                     <Button type="button" variant="ghost" disabled={queuePayments.length === 1} onClick={() => setQueuePayments((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</Button>
                   </div>
+                  {payment.currency && payment.currency !== document.currency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente pendiente: {formatExplicitAmount(convertBetweenCurrencies(getQueuePaymentSummary().missingBase, baseCurrency, payment.currency, 1, Number(payment.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1)), payment.currency)}</p>}
                   {payment.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatCurrency(getCustomerFavorBase(document.customerId), baseCurrency)}. Puedes aplicar solo una parte.</p>}
                   {requiresPaymentReference(payment.method) && <Input className="mt-2" placeholder="Referencia obligatoria" value={payment.reference || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                  {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco de destino" />}
+                  {isBankPaymentMethod(payment.method, true) && <BankAccountSelect currency={payment.currency} className="mt-2" endpoint="/bank-accounts/payment-options" value={payment.bankAccountId} onChange={(bankAccountId) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco de destino" />}
                 </div>
               ))}
                {queueMixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => setQueuePayments((current) => [...current, paymentLine('CARD', 0, document.currency)])}>+ Agregar pago mixto</Button>}
              </div>
             {(() => {
               const paymentSummary = getQueuePaymentSummary();
+              const queueDocumentRate = document.currency === baseCurrency ? 1 : Number(document.exchangeRate || globalRate || activeSession?.exchangeRateUSD || 1);
+              const queueAmountInDocument = (amount: number) => convertBetweenCurrencies(amount, baseCurrency, document.currency, 1, queueDocumentRate);
+              const queuePaymentCurrencies = [...new Set(queuePayments.map((payment) => payment.currency || document.currency))] as PaymentCurrency[];
+              const queueIndicatorPaymentCurrencies = queuePaymentCurrencies.filter((currency) => currency !== document.currency);
+              const formatQueueIndicatorEquivalent = (amount: number) => queueIndicatorPaymentCurrencies.map((currency) => {
+                const paymentLine = queuePayments.find((payment) => (payment.currency || document.currency) === currency);
+                const paymentRate = currency === baseCurrency
+                  ? 1
+                  : Number(paymentLine?.exchangeRate || globalRate || activeSession?.exchangeRateUSD || 1);
+                return formatExplicitAmount(convertBetweenCurrencies(amount, baseCurrency, currency, 1, paymentRate), currency);
+              }).join(' · ');
               return (
                 <>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total a pagar</p><p className="mt-1 font-mono text-lg font-black text-primary">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.totalBase)}</p></div>
-                  <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Pagado</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.paidBase)}</p></div>
-                  <div className={cn('rounded-xl border p-3', paymentSummary.missingBase > 0.005 ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300')}><p className="text-[10px] font-black uppercase tracking-widest">Pendiente</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.missingBase)}</p></div>
-                  <div className={cn('rounded-xl border p-3', paymentSummary.changeUnsupported ? 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300' : paymentSummary.changeBase > 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border/50 bg-muted/20 text-muted-foreground')}><p className="text-[10px] font-black uppercase tracking-widest">Cambio / vuelto</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.changeBase)}</p></div>
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total a pagar</p><p className="mt-1 font-mono text-lg font-black text-primary">{formatExplicitAmount(queueAmountInDocument(paymentSummary.totalBase), document.currency)}</p>{queueIndicatorPaymentCurrencies.length > 0 && <p className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatQueueIndicatorEquivalent(paymentSummary.totalBase)}</p>}</div>
+                  <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Pagado</p><p className="mt-1 font-mono text-lg font-black">{formatExplicitAmount(queueAmountInDocument(paymentSummary.paidBase), document.currency)}</p>{queueIndicatorPaymentCurrencies.length > 0 && <p className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatQueueIndicatorEquivalent(paymentSummary.paidBase)}</p>}</div>
+                  <div className={cn('rounded-xl border p-3', paymentSummary.missingBase > 0.005 ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300')}><p className="text-[10px] font-black uppercase tracking-widest">Pendiente</p><p className="mt-1 font-mono text-lg font-black">{formatExplicitAmount(queueAmountInDocument(paymentSummary.missingBase), document.currency)}</p>{queueIndicatorPaymentCurrencies.length > 0 && <p className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatQueueIndicatorEquivalent(paymentSummary.missingBase)}</p>}</div>
+                  <div className={cn('rounded-xl border p-3', paymentSummary.changeUnsupported ? 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300' : paymentSummary.changeBase > 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border/50 bg-muted/20 text-muted-foreground')}><p className="text-[10px] font-black uppercase tracking-widest">Cambio / vuelto</p><p className="mt-1 font-mono text-lg font-black">{formatExplicitAmount(queueAmountInDocument(paymentSummary.changeBase), document.currency)}</p>{queueIndicatorPaymentCurrencies.length > 0 && <p className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatQueueIndicatorEquivalent(paymentSummary.changeBase)}</p>}</div>
                 </div>
                 {paymentSummary.changeUnsupported && <p className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.</p>}
                 </>

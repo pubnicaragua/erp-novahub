@@ -50,6 +50,8 @@ export interface ApiFilters {
   light?: boolean | string;
   /** Incluye ítems inactivos (p. ej. servicios "No disponible") en el listado de inventario. */
   includeInactive?: boolean | string;
+  /** Excluye facturas que ya tienen una devolución activa. */
+  excludeReturned?: boolean | string;
 }
 
 export type SalesPageSize = 50 | 100 | 200;
@@ -466,6 +468,13 @@ export interface PaymentReceived {
 }
 
 // ---- Sales Returns ----
+export interface SelectedSalesReturnCharge {
+  kind: 'EXTRA' | 'DELIVERY';
+  sourceIndex: number;
+  description?: string | null;
+  amount: number;
+}
+
 export interface SalesReturn {
   id: string;
   tenantId: string;
@@ -485,6 +494,7 @@ export interface SalesReturn {
   taxAmount?: number;
   discountAmount?: number;
   total: number;
+  selectedCharges?: SelectedSalesReturnCharge[] | null;
   baseTotal?: number;
   currency?: Currency;
   exchangeRate?: number;

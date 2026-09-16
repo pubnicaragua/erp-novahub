@@ -42,6 +42,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { getInvoicePaymentPresentation, hasPaymentReferenceField, isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, paymentMethodLabel } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
+import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
@@ -1063,6 +1064,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           ...invoiceUpdates,
           items: localDoc.items,
           notes: finalNotes,
+          pricingMode,
         };
         if (action === 'DRAFT') updates.status = 'DRAFT';
         if (action === 'PENDING') updates.status = 'PENDING';
@@ -2513,6 +2515,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                             amount: Number(convertBetweenCurrencies(item.amount, item.currency, nextCurrency, previousRate, nextRate).toFixed(2)),
                             currency: nextCurrency,
                             exchangeRate: nextRate,
+                            bankAccountId: undefined,
+                            cardCommissionPercent: 0,
+                            cardCommissionAmount: 0,
+                            cardCommissionAccountId: undefined,
                           };
                         }))}
                       />
@@ -2520,7 +2526,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} autoFocus={index === 0} placeholder="Monto" className="h-9 text-xs tabular-nums" />
                       </div>
                     </div>
-                    {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
+                    {isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
+                    {paymentInvoice && line.currency !== paymentInvoiceCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatInvoiceAmount(getPaymentLineDocumentAmount(line, paymentInvoiceCurrency, paymentInvoice.exchangeRate, baseCurrency, convertBetweenCurrencies), paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>}
                     {isCardPaymentMethod(line.method) && line.bankAccountId && Number(line.cardCommissionPercent || 0) > 0 && (
                       <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
                         <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
@@ -2551,6 +2558,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 <div className="rounded-xl border border-border/50 bg-background/60 p-3">
                   <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Este pago</p>
                   <p className="mt-1 text-lg font-black text-foreground">{formatInvoiceAmount(paymentTotalInInvoiceCurrency, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
+                  <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente base: {formatConvertedAmount(paymentTotalBase, baseCurrency)}</p>
                 </div>
               </div>
               <div className={cn('rounded-xl border p-3', paymentHasRemaining ? 'border-primary/25 bg-primary/5' : paymentChangeUnsupported ? 'border-rose-500/30 bg-rose-500/5' : paymentHasChange ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-border/50 bg-muted/20')}>
@@ -2560,6 +2568,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <p className={cn('mt-1 text-xl font-black', paymentChangeUnsupported ? 'text-rose-600 dark:text-rose-400' : paymentHasChange ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary')}>
                       {formatInvoiceAmount(paymentSettlementAmount, paymentInvoice.currency, paymentInvoice.exchangeRate)}
                     </p>
+                    <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente base: {formatConvertedAmount(paymentHasRemaining ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</p>
                   </div>
                 </div>
                 {paymentChangeUnsupported && (

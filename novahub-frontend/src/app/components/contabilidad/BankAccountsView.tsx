@@ -16,6 +16,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../ui/utils';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
+import { formatDateEs } from '../../utils/dateFormat';
 
 const ACCOUNT_TYPES = [
   { value: 'CHECKING', label: 'Cuenta Corriente' },
@@ -391,12 +392,13 @@ export function BankAccountsView() {
           </div>
           <div className="max-h-[50vh] overflow-auto rounded-xl border border-border/40">
             <Table>
-              <TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-bold">Fecha</TableHead><TableHead className="text-[10px] font-bold">Origen</TableHead><TableHead className="text-[10px] font-bold">Método</TableHead><TableHead className="text-[10px] font-bold">Referencia</TableHead><TableHead className="text-right text-[10px] font-bold">Monto base</TableHead><TableHead className="text-[10px] font-bold">Estado</TableHead></TableRow></TableHeader>
+              <TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-bold">Fecha contable</TableHead><TableHead className="text-[10px] font-bold">Registrado</TableHead><TableHead className="text-[10px] font-bold">Origen</TableHead><TableHead className="text-[10px] font-bold">Método</TableHead><TableHead className="text-[10px] font-bold">Referencia</TableHead><TableHead className="text-right text-[10px] font-bold">Monto base</TableHead><TableHead className="text-[10px] font-bold">Estado</TableHead></TableRow></TableHeader>
               <TableBody>
-                {movementQuery.isLoading ? <TableRow><TableCell colSpan={6} className="py-8 text-center"><Loader2 className="mx-auto size-5 animate-spin" /></TableCell></TableRow>
-                  : movements.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">Aún no hay pagos vinculados a esta cuenta bancaria.</TableCell></TableRow>
+                {movementQuery.isLoading ? <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="mx-auto size-5 animate-spin" /></TableCell></TableRow>
+                  : movements.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8 text-center text-xs text-muted-foreground">Aún no hay pagos vinculados a esta cuenta bancaria.</TableCell></TableRow>
                     : movements.map((movement: any) => <TableRow key={movement.id}>
                       <TableCell className="whitespace-nowrap text-xs">{movement.date ? new Date(movement.date).toLocaleDateString('es-NI') : '—'}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{movement.createdAt ? formatDateEs(movement.createdAt, true) : '—'}</TableCell>
                       <TableCell className="text-xs font-medium">{movement.sourceNumber || movement.paymentReceived?.number || movement.paymentMade?.number || movement.sourceType || '—'}</TableCell>
                       <TableCell className="text-xs">{paymentMethodLabel(movement.method)}</TableCell>
                       <TableCell className="max-w-40 truncate text-xs text-muted-foreground">{movement.reference || '—'}</TableCell>

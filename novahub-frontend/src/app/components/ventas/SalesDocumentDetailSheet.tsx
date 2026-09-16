@@ -27,6 +27,12 @@ export interface SalesDocumentPanelMeta {
   value: string;
 }
 
+export interface SalesDocumentPanelCharge {
+  id: string;
+  label: string;
+  value: string;
+}
+
 export interface SalesDocumentPanelData {
   id: string;
   number: string;
@@ -40,6 +46,7 @@ export interface SalesDocumentPanelData {
   sourceExchangeRate?: number;
   summaryDetails?: SalesDocumentPanelMeta[];
   metadata?: SalesDocumentPanelMeta[];
+  additionalCharges?: SalesDocumentPanelCharge[];
   lines?: SalesDocumentPanelLine[];
   notes?: string;
   reason?: string;
@@ -217,6 +224,13 @@ export function SalesDocumentDetailSheet({
                   )) : <p className="text-sm text-muted-foreground">No hay líneas de detalle disponibles.</p>}
                 </div>
               </section>
+
+              {!!document.additionalCharges?.length && <section className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+                <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cargos seleccionados</p>
+                <div className="space-y-2 text-sm">
+                  {document.additionalCharges.map((charge) => <div key={charge.id} className="flex min-w-0 justify-between gap-3"><span className="break-words text-muted-foreground">{charge.label}</span><span className="shrink-0 font-black tabular-nums">{charge.value}</span></div>)}
+                </div>
+              </section>}
 
               {(document.notes || document.reason) && (
                 <section className="rounded-2xl border border-border/50 bg-muted/10 p-4">

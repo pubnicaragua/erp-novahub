@@ -1106,7 +1106,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                       <SelectContent>{paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  {isBankPaymentMethod(paymentMethod) && <BankAccountSelect value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Cuenta bancaria que realiza el pago" className="sm:col-span-2" />}
+                  {isBankPaymentMethod(paymentMethod) && <BankAccountSelect currency={paymentExpense.currency} value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Cuenta bancaria que realiza el pago" className="sm:col-span-2" />}
                   {hasPaymentReferenceField(paymentMethod) && <div>
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
                     <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." required={requiresPaymentReference(paymentMethod)} className="h-10 text-xs" />

@@ -60,7 +60,7 @@ export function CustomerPhoneInput({ value, onChange, countryCode, label = 'Tel√
   const { id, disabled, className, labelClassName } = props;
   return <div className="min-w-0 space-y-1.5">
     <Label htmlFor={id} className={labelClassName || 'text-[10px] font-black uppercase tracking-widest text-muted-foreground'}>{label}</Label>
-    <Input id={id} disabled={disabled} type="tel" inputMode="tel" value={display} onChange={(event) => onChange(formatCustomerPhoneInput(event.target.value, countryCode))} placeholder={countryCode === 'NI' ? '8888-8888' : `+${countryOption(countryCode).phoneCode} ...`} className={className || 'h-11 rounded-xl'} />
+    <Input id={id} disabled={disabled} type="tel" inputMode="tel" value={display} onChange={(event) => onChange(formatCustomerPhoneInput(event.target.value, countryCode))} placeholder={`+${countryOption(countryCode).phoneCode} ${countryCode === 'NI' ? '8888-8888' : '...'}`} className={className || 'h-11 rounded-xl'} />
     {hint && <p className="text-[10px] text-muted-foreground" aria-live="polite">{hint}</p>}
   </div>;
 }

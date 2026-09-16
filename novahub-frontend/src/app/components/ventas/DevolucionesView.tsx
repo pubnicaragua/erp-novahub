@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { 
-  FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck
+  FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, ChevronLeft, ShieldCheck
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -8,11 +8,11 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { salesReturnsService } from '../../services/ventas.service';
+import { invoicesService, salesReturnsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { SalesReturn, Customer, Invoice, Product, SalesPaginationControls } from '../../types';
+import type { SalesReturn, Customer, Invoice, Product, SalesPaginationControls, SelectedSalesReturnCharge } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -33,6 +33,7 @@ import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPa
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
 
 const toWholeQuantity = (value: string | number, max?: number) => {
   const parsed = Number(value);
@@ -82,10 +83,6 @@ const buildInvoiceReturnItems = (invoice?: Invoice | null) => {
     sourceIrAmount: irAmounts[index] || 0,
     sourceLineTotal: roundMoney(row.gross - (discounts[index] || 0) + (taxes[index] || 0)),
   }));
-  if (pricedRows.length) {
-    const difference = roundMoney(Number(invoice?.total || 0) - pricedRows.reduce((sum, row) => sum + row.sourceLineTotal, 0));
-    pricedRows[pricedRows.length - 1].sourceLineTotal = roundMoney(pricedRows[pricedRows.length - 1].sourceLineTotal + difference);
-  }
   return pricedRows.map((row) => {
     const itemType = String(row.source.itemType || '').toUpperCase() === 'SERVICE' ? 'SERVICE' : 'PRODUCT';
     return {
@@ -116,7 +113,24 @@ const buildInvoiceReturnItems = (invoice?: Invoice | null) => {
   });
 };
 
-const returnTotalsFor = (items: any[], invoice?: Invoice | null) => {
+const invoiceReturnChargesFor = (invoice?: Invoice | null): SelectedSalesReturnCharge[] => [
+  ...normalizeSalesExtraCharges(invoice)
+    .map((charge, sourceIndex) => ({
+      kind: 'EXTRA' as const,
+      sourceIndex,
+      description: charge.description || `Coste extra ${sourceIndex + 1}`,
+      amount: roundMoney(Math.max(0, Number(charge.amount || 0))),
+    }))
+    .filter((charge) => charge.amount > 0),
+  ...(Number(invoice?.deliveryAmount || 0) > 0 ? [{
+    kind: 'DELIVERY' as const,
+    sourceIndex: 0,
+    description: String(invoice?.deliveryDescription || '').trim() || 'Delivery',
+    amount: roundMoney(Number(invoice?.deliveryAmount || 0)),
+  }] : []),
+];
+
+const returnTotalsFor = (items: any[], invoice?: Invoice | null, selectedCharges: SelectedSalesReturnCharge[] = []) => {
   const rows = items.reduce((acc, item) => ({
     subtotal: roundMoney(acc.subtotal + Number(item.sourceSubtotal || 0) * (Number(item.quantity || 0) / Math.max(1, Number(item.originalQuantity || item.quantity || 1)))),
     discountAmount: roundMoney(acc.discountAmount + Number(item.sourceDiscountAmount || 0) * (Number(item.quantity || 0) / Math.max(1, Number(item.originalQuantity || item.quantity || 1)))),
@@ -127,9 +141,13 @@ const returnTotalsFor = (items: any[], invoice?: Invoice | null) => {
   const isFull = Boolean(invoice?.items?.length)
     && invoice.items.length === items.length
     && items.every((item) => Number(item.quantity || 0) >= Number(item.originalQuantity || item.quantity || 0));
-  return isFull && invoice
-    ? { subtotal: Number(invoice.subtotal || rows.subtotal), discountAmount: Number(invoice.discountAmount || 0), taxAmount: Number(invoice.taxAmount || 0), irAmount: 0, total: Number(invoice.total || 0) }
+  const lineTotals = isFull && invoice
+    ? { subtotal: Number(invoice.subtotal || rows.subtotal), discountAmount: Number(invoice.discountAmount || 0), taxAmount: Number(invoice.taxAmount || 0), irAmount: 0, total: rows.total }
     : rows;
+  return {
+    ...lineTotals,
+    total: roundMoney(lineTotals.total + selectedCharges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0)),
+  };
 };
 
 interface DevolucionesViewProps {
@@ -167,6 +185,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [editorInvoice, setEditorInvoice] = useState<Invoice | null>(null);
   const [detailReturn, setDetailReturn] = useState<SalesReturn | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
@@ -217,6 +236,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const startEdit = (id: string) => {
     const r = data.find(x => x.id === id);
     if (!r) return;
+    setEditorInvoice(null);
     setEditingId(id);
     setIsCreating(false);
     commitLocalDoc(JSON.parse(JSON.stringify(r)));
@@ -227,8 +247,21 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     localDocRef.current = null;
     setEditingId(null);
     setIsCreating(false);
+    setEditorInvoice(null);
     commitLocalDoc(null);
   };
+
+  useEffect(() => {
+    if (!editingId || !localDoc?.invoiceId) {
+      if (isCreating) setEditorInvoice(null);
+      return;
+    }
+    let active = true;
+    invoicesService.getById(localDoc.invoiceId)
+      .then((invoice) => { if (active) setEditorInvoice(invoice); })
+      .catch(() => { if (active) setEditorInvoice(null); });
+    return () => { active = false; };
+  }, [editingId, isCreating, localDoc?.invoiceId]);
 
   const filtered = data.filter(r =>
     (statusFilter === 'ALL' || String(r.status || '').toUpperCase() === statusFilter) &&
@@ -252,12 +285,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     clearSalesEditorDraft(salesDraftStorageKey);
     setIsCreating(true);
     setEditingId(null);
+    setEditorInvoice(null);
     commitLocalDoc({
       customerId: '',
       invoiceId: '',
       date: new Date().toISOString().split('T')[0],
       reason: '',
       items: [],
+      selectedCharges: [],
       total: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
@@ -265,8 +300,10 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     });
   };
 
-  const selectedInvoice = localDoc?.invoiceId ? invoices.find((invoice) => invoice.id === localDoc.invoiceId) : undefined;
-  const recalcTotal = (items: any[], invoice: Invoice | null | undefined = selectedInvoice) => returnTotalsFor(items, invoice).total;
+  const selectedInvoice = localDoc?.invoiceId
+    ? (editorInvoice?.id === localDoc.invoiceId ? editorInvoice : invoices.find((invoice) => invoice.id === localDoc.invoiceId))
+    : undefined;
+  const recalcTotal = (items: any[], invoice: Invoice | null | undefined = selectedInvoice, selectedCharges: SelectedSalesReturnCharge[] = localDoc?.selectedCharges || []) => returnTotalsFor(items, invoice, selectedCharges).total;
   const isReturnPartial = (record: SalesReturn) => Boolean(record.isPartial ?? record.items?.some((item) =>
     Number(item.quantity || 0) + 0.0001 < Number(item.originalQuantity || item.quantity || 0),
   ));
@@ -278,9 +315,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la nota de crédito'); return; }
     if (!localDoc.items?.length) { toast.error('La factura no tiene líneas para devolver'); return; }
     if (!(localDoc.items || []).some((item: any) => toWholeQuantity(item.quantity || 0) > 0)) { toast.error('Selecciona al menos un artículo y devuelve una cantidad mayor que 0'); return; }
-    const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
+    // Solo las líneas con cantidad positiva forman parte de la devolución.
+    // Las demás se conservan en el editor para poder ajustar la selección,
+    // pero no deben bloquear el guardado ni llegar como líneas devueltas.
+    const selectedItems = (localDoc.items || []).filter((item: any) => toWholeQuantity(item.quantity || 0) > 0);
+    const priceMessage = getMissingSalesPriceMessage(selectedItems);
     if (priceMessage) { toast.error(priceMessage); return; }
-    const returnTotals = returnTotalsFor(localDoc.items || [], selectedInvoice);
+    const selectedCharges = Array.isArray(localDoc.selectedCharges) ? localDoc.selectedCharges : [];
+    const returnTotals = returnTotalsFor(selectedItems, selectedInvoice, selectedCharges);
     const saveToastId = toast.loading(isCreating ? 'Creando nota de crédito...' : 'Guardando nota de crédito...');
     try {
       const payload: any = {
@@ -288,7 +330,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         invoiceId: localDoc.invoiceId,
         date: new Date(localDoc.date).toISOString(),
         reason: localDoc.reason.trim(),
-        items: (localDoc.items || []).map((item: any) => {
+        items: selectedItems.map((item: any) => {
           const quantity = toWholeQuantity(item.quantity || 0);
           const itemType = resolveItemType(item);
           const quantityToInventory = itemType === 'SERVICE'
@@ -316,6 +358,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           };
         }),
         ...returnTotals,
+        selectedCharges,
         status: localDoc.status || 'PENDING',
         currency: localDoc.currency || displayCurrency,
         exchangeRate: localDoc.exchangeRate || globalRate,
@@ -364,6 +407,13 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       { label: 'Tipo', value: isReturnPartial(row) ? 'Parcial' : 'Total' },
       { label: 'Moneda', value: row.currency || 'NIO' },
     ],
+    additionalCharges: (row.selectedCharges || [])
+      .filter((charge) => Number(charge.amount || 0) > 0)
+      .map((charge, index) => ({
+        id: `${charge.kind}-${charge.sourceIndex}-${index}`,
+        label: charge.description || (charge.kind === 'DELIVERY' ? 'Delivery' : `Coste extra ${index + 1}`),
+        value: formatConvertedAmount(Number(charge.amount || 0), row.currency, row.exchangeRate),
+      })),
     metadata: [
       { label: 'Fecha', value: formatDateEs(row.date) },
       { label: 'Factura origen', value: row.invoice?.number || 'No disponible' },
@@ -399,8 +449,11 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   };
 
   // Get invoices for selected customer
+  const invoiceCatalog = editorInvoice && !invoices.some((invoice) => invoice.id === editorInvoice.id)
+    ? [...invoices, editorInvoice]
+    : invoices;
   const customerInvoices = localDoc?.customerId
-    ? invoices.filter(i => i.customerId === localDoc.customerId && !['DRAFT', 'CANCELLED', 'VOIDED'].includes(String(i.status || '').toUpperCase()))
+    ? invoiceCatalog.filter(i => i.customerId === localDoc.customerId && !['DRAFT', 'CANCELLED', 'VOIDED'].includes(String(i.status || '').toUpperCase()))
     : [];
 
   const columns: ColumnDef<SalesReturn>[] = [
@@ -439,7 +492,16 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   if ((editingId || isCreating) && localDoc) {
     const statusOpt = statusOptions.find(o => o.value === (localDoc?.status || '').toUpperCase());
     const canApprove = !isCreating && (localDoc?.status || '').toUpperCase() === 'PENDING' && canPerform('SALES_RETURNS', 'approve');
-    const editorTotals = returnTotalsFor(localDoc.items || [], selectedInvoice);
+    const selectedCharges: SelectedSalesReturnCharge[] = Array.isArray(localDoc.selectedCharges) ? localDoc.selectedCharges : [];
+    const invoiceReturnCharges = invoiceReturnChargesFor(selectedInvoice);
+    const editorTotals = returnTotalsFor(localDoc.items || [], selectedInvoice, selectedCharges);
+    const toggleReturnCharge = (charge: SelectedSalesReturnCharge) => {
+      const isSelected = selectedCharges.some((selected) => selected.kind === charge.kind && selected.sourceIndex === charge.sourceIndex);
+      const nextCharges = isSelected
+        ? selectedCharges.filter((selected) => selected.kind !== charge.kind || selected.sourceIndex !== charge.sourceIndex)
+        : [...selectedCharges, charge];
+      setLocalDoc({ ...localDoc, selectedCharges: nextCharges, ...returnTotalsFor(localDoc.items || [], selectedInvoice, nextCharges) });
+    };
     const editorCurrency = localDoc?.currency || displayCurrency;
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
@@ -480,12 +542,12 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
                     value={localDoc?.customerId || ''} 
-                    onChange={(val) => { const customer = customers?.find((entry) => entry.id === val); const priceListId = customer?.priceListId || null; const items = (localDoc?.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: val, priceListId, items, invoiceId: '' }); }}
+                    onChange={(val) => { const customer = customers?.find((entry) => entry.id === val); const priceListId = customer?.priceListId || null; const items = (localDoc?.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: val, priceListId, items, invoiceId: '', selectedCharges: [], total: 0 }); }}
                     placeholder="Seleccionar Cliente" 
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura Origen</p>
                   <Combobox options={customerInvoices.map(i => ({ label: `${i.number} — ${formatConvertedAmount(Number(i.total||0), i.currency, i.exchangeRate)}`, value: i.id }))} value={localDoc?.invoiceId || ''} onChange={(val) => {
-                    const inv = invoices.find(i => i.id === val);
+                    const inv = invoiceCatalog.find(i => i.id === val);
                     const invoiceItems = buildInvoiceReturnItems(inv).map((item: any) => {
                       const product = products.find((candidate) => candidate.id === item.productId);
                       const itemType = product?.itemType === 'SERVICE' ? 'SERVICE' : item.itemType;
@@ -497,7 +559,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                         discardReason: itemType === 'SERVICE' ? 'Servicio no inventariable' : '',
                       };
                     });
-                    const invoiceTotals = returnTotalsFor(invoiceItems, inv);
+                    const invoiceTotals = returnTotalsFor(invoiceItems, inv, []);
                     setLocalDoc({
                       ...localDoc,
                       invoiceId: val,
@@ -505,6 +567,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                       currency: inv?.currency || localDoc?.currency || displayCurrency,
                       exchangeRate: inv?.exchangeRate || localDoc?.exchangeRate || globalRate,
                       items: invoiceItems,
+                      selectedCharges: [],
                       ...invoiceTotals,
                     });
                    }} placeholder="Seleccionar Factura" /></div>
@@ -540,6 +603,10 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 <div className="rounded-lg border border-border/50 bg-muted/10 p-2"><p className="text-muted-foreground">Descuento</p><p className="mt-1 font-black text-rose-500">-{formatConvertedAmount(editorTotals.discountAmount, editorCurrency, localDoc?.exchangeRate)}</p></div>
                 <div className="rounded-lg border border-border/50 bg-muted/10 p-2"><p className="text-muted-foreground">IVA incluido</p><p className="mt-1 font-black">{formatConvertedAmount(editorTotals.taxAmount, editorCurrency, localDoc?.exchangeRate)}</p></div>
               </div>
+              {selectedCharges.length > 0 && <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
+                <p className="font-black uppercase tracking-widest text-primary">Cargos seleccionados</p>
+                {selectedCharges.map((charge, index) => <div key={`${charge.kind}-${charge.sourceIndex}-${index}`} className="mt-1 flex justify-between gap-3 text-muted-foreground"><span>{charge.description || (charge.kind === 'DELIVERY' ? 'Delivery' : `Coste extra ${index + 1}`)}</span><span className="shrink-0 font-black text-foreground">{formatConvertedAmount(Number(charge.amount || 0), editorCurrency, localDoc?.exchangeRate)}</span></div>)}
+              </div>}
               <p className="text-[10px] text-muted-foreground italic">Al aplicar esta nota, el sistema actualiza la factura, el inventario y el saldo del cliente.</p>
             </CardContent>
           </Card>
@@ -568,6 +635,16 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 <div className="text-right"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo a favor</p><p className="text-lg font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</p></div>
               </div>;
             })}{(!localDoc.items || localDoc.items.length === 0) && <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground">Selecciona una factura para cargar sus productos y servicios.</div>}</div>
+            {selectedInvoice && <div className="mt-6 rounded-xl border border-border/50 bg-muted/5 p-4">
+              <div className="mb-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cargos de la factura</p><p className="mt-1 text-[10px] text-muted-foreground">Selecciona los cargos que también deseas devolver. Cada cargo se devuelve por su importe completo.</p></div>
+              {invoiceReturnCharges.length > 0 ? <div className="space-y-2">{invoiceReturnCharges.map((charge) => {
+                const checked = selectedCharges.some((selected) => selected.kind === charge.kind && selected.sourceIndex === charge.sourceIndex);
+                return <label key={`${charge.kind}-${charge.sourceIndex}`} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/60 p-3 text-sm transition-colors hover:border-primary/40">
+                  <span className="flex min-w-0 items-center gap-3"><Input type="checkbox" checked={checked} onChange={() => toggleReturnCharge(charge)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 break-words font-semibold">{charge.description}</span></span>
+                  <span className="shrink-0 font-black text-primary">{formatConvertedAmount(charge.amount, editorCurrency, localDoc?.exchangeRate)}</span>
+                </label>;
+              })}</div> : <p className="text-xs text-muted-foreground">La factura no tiene cargos adicionales para devolver.</p>}
+            </div>}
           </CardContent>
         </Card>
       </div>

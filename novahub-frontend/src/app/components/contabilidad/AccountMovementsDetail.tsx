@@ -6,6 +6,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { referenceTypeLabel } from '../../utils/accountingLabels';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface AccountMovementsDetailProps {
   accountId: string;
@@ -19,6 +20,7 @@ interface AccountMovementsDetailProps {
 interface MovementRow {
   id: string;
   date?: string;
+  createdAt?: string;
   description?: string;
   reference?: string;
   journalNumber?: string | null;
@@ -89,6 +91,7 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
       return accountingList(raw).map((row: any) => ({
         id: String(row.id || `${row.date}-${row.reference}-${row.description}`),
         date: row.date,
+        createdAt: row.createdAt,
         description: normalizeTransferDescription(row.description, row.referenceType),
         reference: row.reference || '—',
         journalNumber: row.journalNumber || null,
@@ -168,10 +171,11 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
         </div>
       ) : (
         <div className="min-w-0 overflow-x-auto rounded-xl border border-border/60 bg-background/60">
-          <Table className="min-w-[980px]">
+          <Table className="min-w-[1080px]">
             <TableHeader className="bg-muted/35">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Fecha</TableHead>
+                <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Fecha contable</TableHead>
+                <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Registrado</TableHead>
                 <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Referencia</TableHead>
                 <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Documento origen</TableHead>
                 <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Descripción</TableHead>
@@ -184,6 +188,7 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
               {rows.map((row) => (
                 <TableRow key={row.id} className="border-border/30 hover:bg-muted/25">
                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDate(row.date)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{row.createdAt ? formatDateEs(row.createdAt, true) : '—'}</TableCell>
                   <TableCell className="whitespace-nowrap font-mono text-xs">{row.journalNumber || row.reference || '—'}</TableCell>
                   <TableCell className="min-w-[13rem] text-xs">
                     {row.referenceType ? (
@@ -206,7 +211,7 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
                 </TableRow>
               ))}
               <TableRow className="border-t-2 border-primary/25 bg-primary/10 font-black">
-                <TableCell colSpan={4} className="text-xs uppercase tracking-widest">
+                <TableCell colSpan={5} className="text-xs uppercase tracking-widest">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Totales</span>
                     {sourceDocuments.length > 0 && (

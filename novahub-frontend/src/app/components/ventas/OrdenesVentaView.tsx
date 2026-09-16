@@ -494,6 +494,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     notes: localDoc?.notes,
     paymentMethod: localDoc?.paymentMethod || null,
     items: localDoc?.items || [],
+    pricingMode,
     status,
   } as Partial<SalesOrder>);
 
@@ -566,6 +567,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const additionalChargesTotal = (doc: any = localDoc) => getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0));
 
+  const calculateGlobalTaxAmount = (items: any[], discountRate: number, taxRate: number) => {
+    const productSubtotal = items
+      .filter((line: any) => resolveItemType(line) !== 'SERVICE')
+      .reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+    const productDiscount = productSubtotal * Math.max(0, Math.min(100, Number(discountRate || 0))) / 100;
+    return Math.max(0, productSubtotal - productDiscount) * Math.max(0, Number(taxRate || 0)) / 100;
+  };
+
   const updateExtraCharges = (charges: SalesExtraChargeLine[]) => {
     if (!localDoc) return;
     const payload = getSalesExtraChargesPayload({ extraCharges: charges });
@@ -606,14 +615,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
       const discount = gross * (Number(line.discount || 0) / 100);
       const taxable = gross - discount;
-      const tax = taxable * (Number(line.taxRate || 0) / 100);
+      const tax = resolveItemType(line) === 'SERVICE' ? 0 : taxable * (Number(line.taxRate || 0) / 100);
       return { ...line, total: taxable + tax };
     });
     const subtotal = pricedItems.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const discountAmount = pricedItems.reduce((sum, line) => sum + (Number(line.quantity || 0) * Number(line.unitPrice || 0) * Number(line.discount || 0) / 100), 0);
     const taxAmount = pricedItems.reduce((sum, line) => {
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
-      return sum + ((gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
+      return sum + (resolveItemType(line) === 'SERVICE' ? 0 : ((gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100));
     }, 0);
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
@@ -623,7 +632,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const subtotal = normalizedItems.reduce((sum: number, line: any) => sum + Number(line.total || 0), 0);
     const discountAmount = subtotal * (Number(localRates.dRate || 0) / 100);
     const base = subtotal - discountAmount;
-    const taxAmount = base * (Number(localRates.tRate || 0) / 100);
+    const taxAmount = calculateGlobalTaxAmount(normalizedItems, localRates.dRate, localRates.tRate);
     return { items: normalizedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount + additionalChargesTotal() };
   };
 
@@ -965,13 +974,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       });
                       const recalculated = pricingMode === 'individual'
                         ? recalculateIndividualPricing(convertedItems)
-                        : (() => {
-                            const subtotal = convertedItems.reduce((sum: number, line: any) => sum + Number(line.total || 0), 0);
-                            const discountAmount = subtotal * (localRates.dRate / 100);
-                            const base = subtotal - discountAmount;
-                            const taxAmount = base * (localRates.tRate / 100);
-                            return { items: convertedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount + additionalChargesTotal() };
-                          })();
+                        : recalculateGlobalPricing(convertedItems);
                       setLocalDoc({ ...localDoc, currency, exchangeRate, ...recalculated } as any);
                       void handleUpdate(localDoc!.id, { currency, exchangeRate, ...recalculated } as any);
                     }}
@@ -1030,7 +1033,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       const newRate = Number(e.target.value);
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
                       const base = Number(localDoc?.subtotal||0) - dAmount;
-                      const tAmount = base * (localRates.tRate / 100);
+                      const tAmount = calculateGlobalTaxAmount(localDoc?.items || [], newRate, localRates.tRate);
                       const newTotal = base + tAmount + additionalChargesTotal();
                       setLocalRates(prev => ({ ...prev, dRate: newRate }));
                       setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
@@ -1038,7 +1041,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       const newRate = Number(e.target.value);
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
                       const base = Number(localDoc?.subtotal||0) - dAmount;
-                      const tAmount = base * (localRates.tRate / 100);
+                      const tAmount = calculateGlobalTaxAmount(localDoc?.items || [], newRate, localRates.tRate);
                       const newTotal = base + tAmount + additionalChargesTotal();
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
@@ -1057,7 +1060,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             const newRate = e.target.checked ? 15 : 0;
                             const dAmount = Number(localDoc?.subtotal || 0) * (localRates.dRate / 100);
                             const base = Number(localDoc?.subtotal || 0) - dAmount;
-                            const tAmount = base * (newRate / 100);
+                            const tAmount = calculateGlobalTaxAmount(localDoc?.items || [], localRates.dRate, newRate);
                             const newTotal = base + tAmount + additionalChargesTotal();
                             setLocalRates(prev => ({ ...prev, tRate: newRate }));
                             setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
@@ -1165,7 +1168,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                             const dAmount = newSubtotal * (localRates.dRate / 100);
                             const base = newSubtotal - dAmount;
-                            const tAmount = base * (localRates.tRate / 100);
+                            const tAmount = calculateGlobalTaxAmount(newItems, localRates.dRate, localRates.tRate);
                             const newTotal = base + tAmount + additionalChargesTotal();
                             setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                             void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
@@ -1335,7 +1338,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
+                        const tAmount = calculateGlobalTaxAmount(newItems, localRates.dRate, localRates.tRate);
                         const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                         void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
@@ -1363,7 +1366,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
+                        const tAmount = calculateGlobalTaxAmount(newItems, localRates.dRate, localRates.tRate);
                         const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
@@ -1391,7 +1394,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
+                        const tAmount = calculateGlobalTaxAmount(newItems, localRates.dRate, localRates.tRate);
                         const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                         void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);

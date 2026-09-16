@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
 import { CalendarDays, ChevronDown, FileDown, FileText, Loader2, LockKeyhole, Printer, ShieldCheck, WalletCards } from 'lucide-react';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
-import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
+import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { formatPdfVariantAttributes } from '../../utils/pdf-line-details';
 import { safeGetItem, safeSetItem, safeRemoveItem } from '../../services/safe-storage';
 import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
@@ -85,12 +85,9 @@ const portalSurfaceColors = (hex: string, preferredText?: string) => {
   }
   return { text, muted: portalBlendColors(text, hex, mutedHigh) };
 };
-const getPublicAdditionalCharges = (document: any) => [
-  ...normalizeSalesExtraCharges(document)
-    .filter((charge) => charge.amount > 0)
-    .map((charge) => ({ label: charge.description || 'Coste extra', amount: charge.amount })),
-  ...(Number(document?.deliveryAmount || 0) > 0 ? [{ label: document.deliveryDescription || 'Delivery', amount: Number(document.deliveryAmount) }] : []),
-];
+const getPublicAdditionalCharges = (document: any) => getSalesAdditionalCharges(document)
+  .filter((charge) => charge.amount > 0)
+  .map((charge) => ({ label: charge.description || 'Coste extra', amount: charge.amount }));
 
 function AdditionalChargesSummary({ document, light = false }: { document: any; light?: boolean }) {
   const charges = getPublicAdditionalCharges(document);

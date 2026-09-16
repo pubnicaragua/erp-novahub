@@ -22,6 +22,7 @@ type BankAccountSelectProps = {
   disabled?: boolean;
   className?: string;
   endpoint?: string;
+  currency?: string;
 };
 
 export function BankAccountSelect({
@@ -34,9 +35,11 @@ export function BankAccountSelect({
   disabled = false,
   className,
   endpoint = '/bank-accounts',
+  currency,
 }: BankAccountSelectProps) {
-  const query = useAccountingQuery<any[]>(['bank-accounts', endpoint, 'payment-options'], async (signal) =>
-    accountingList(await api.get(endpoint, { signal })),
+  const normalizedCurrency = String(currency || '').trim().toUpperCase() || undefined;
+  const query = useAccountingQuery<any[]>(['bank-accounts', endpoint, 'payment-options', normalizedCurrency], async (signal) =>
+    accountingList(await api.get(endpoint, { params: normalizedCurrency ? { currency: normalizedCurrency } : undefined, signal })),
   );
   const accounts = useMemo(() => (query.data || [])
     .filter((account) => account.isActive !== false && account.accountId)
@@ -75,7 +78,7 @@ export function BankAccountSelect({
           })}
           {!query.isLoading && !query.isError && accounts.length === 0 && (
             <SelectItem value="__no_bank_accounts__" disabled>
-              No hay cuentas bancarias activas con cuenta contable hija vinculada.
+              {normalizedCurrency ? `No hay cuentas bancarias activas en ${normalizedCurrency} con cuenta contable hija vinculada.` : 'No hay cuentas bancarias activas con cuenta contable hija vinculada.'}
             </SelectItem>
           )}
         </SelectContent>

@@ -205,8 +205,11 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const returnsPage = pageFor('devoluciones-venta');
   const creditNotesPage = pageFor('notas-credito');
   const isPaymentDocumentCatalog = activeSection === 'pagos-recibidos';
+  const isReturnInvoiceCatalog = activeSection === 'devoluciones-venta';
   const invoiceQueryPage = isPaymentDocumentCatalog
     ? { page: 1, pageSize: 200 }
+    : isReturnInvoiceCatalog
+      ? { page: 1, pageSize: 200 }
     : invoicesPage;
   const creditNotesQueryPage = isPaymentDocumentCatalog
     ? { page: 1, pageSize: 200 }
@@ -247,11 +250,13 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     placeholderData: keepPreviousData,
   });
   const invoicesQuery = useQuery({
-    queryKey: isPaymentDocumentCatalog
-      ? ['sales', 'invoices-payment-catalog', tenantKey, selectedBranchId]
+    queryKey: isPaymentDocumentCatalog || isReturnInvoiceCatalog
+      ? ['sales', isReturnInvoiceCatalog ? 'invoices-return-catalog' : 'invoices-payment-catalog', tenantKey, selectedBranchId]
       : ['sales', 'invoices', tenantKey, invoiceQueryPage.page, invoiceQueryPage.pageSize, searchFor('facturas'), invoicesDates.dateFrom, invoicesDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => isPaymentDocumentCatalog
       ? invoicesService.getAll({ page: 1, pageSize: 200, ...branchFilter }, signal)
+      : isReturnInvoiceCatalog
+        ? invoicesService.getAll({ page: 1, pageSize: 200, excludeReturned: true, ...branchFilter }, signal)
       : invoicesService.getAll({ page: invoiceQueryPage.page, pageSize: invoiceQueryPage.pageSize, search: searchFor('facturas'), ...invoicesDates, ...branchFilter }, signal),
     enabled: canViewSalesSection('facturas') && needsInvoices,
     placeholderData: keepPreviousData,

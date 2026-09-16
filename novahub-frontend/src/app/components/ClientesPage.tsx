@@ -18,7 +18,7 @@ import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { getApiErrorMessage } from '../services/api';
 import { normalizeCurrency } from '../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './ventas/CustomerContactFields';
-import { customerRucRequired, formatCustomerPhoneForDisplay, isCustomerIdentifierValid, isCustomerPhoneValid } from '../utils/customer-data';
+import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, isCustomerIdentifierValid, isCustomerPhoneValid } from '../utils/customer-data';
 
 export function ClientesPage() {
   const { canPerform } = useAuth();
@@ -251,7 +251,7 @@ export function ClientesPage() {
                         <div className="flex flex-col gap-1">
                           <span className="text-sm flex items-center gap-1.5"><UserCircle className="size-3.5 text-muted-foreground" />{c.contactName || 'N/A'}</span>
                           <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Mail className="size-3.5" />{c.email || 'N/A'}</span>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Phone className="size-3.5" />{c.phone ? formatCustomerPhoneForDisplay(c.phone, c.countryCode || 'NI') : 'N/A'}</span>
+                          <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"><Phone className="size-3.5" />{c.phone ? formatCustomerPhoneForDisplay(c.phone, c.countryCode || countryCodeFromLegacy(c.country) || 'NI') : 'N/A'}</span>
                         </div>
                       </TableCell>
                       <TableCell>

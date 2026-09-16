@@ -37,6 +37,7 @@ import { Combobox } from '../ui/Combobox';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface AccountNode {
   id: string;
@@ -1103,8 +1104,16 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
 
                 <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Fecha</p>
-                    <p className="mt-1 text-sm font-semibold">{new Date(selectedTransaction.date).toLocaleString('es-NI', { dateStyle: 'long', timeStyle: 'short' })}</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Fecha contable</p>
+                    <p className="mt-1 text-sm font-semibold">{formatDateEs(selectedTransaction.date) || '—'}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Registrado</p>
+                    <p className="mt-1 text-sm font-semibold">
+                      {selectedTransaction.createdAt
+                        ? new Date(selectedTransaction.createdAt).toLocaleString('es-NI', { dateStyle: 'long', timeStyle: 'short' })
+                        : '—'}
+                    </p>
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Referencia</p>

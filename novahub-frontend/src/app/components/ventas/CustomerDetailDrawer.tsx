@@ -83,7 +83,7 @@ import { formatPdfVariantDetails } from '../../utils/pdf-line-details';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/paymentMethods';
-import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
+import { getSalesAdditionalCharges, normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { normalizeCurrency } from '../../utils/currency';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
@@ -1064,8 +1064,8 @@ interface MovementInlineDetailProps {
 function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, tenantLogo }: MovementInlineDetailProps) {
   const document = transaction.document || {};
   const items = Array.isArray(document.items) ? document.items : [];
-  const additionalCharges = normalizeSalesExtraCharges(document).filter((charge) => charge.amount > 0);
-  const deliveryAmount = Number(document.deliveryAmount || 0);
+  const additionalCharges = getSalesAdditionalCharges(document);
+  const deliveryAmount = Array.isArray(document.selectedCharges) ? 0 : Number(document.deliveryAmount || 0);
   const documentType = transaction.kind === 'Cotización' ? 'estimate' : transaction.kind === 'Orden de venta' ? 'order' : undefined;
   const handleDownloadPdf = async (format: PdfDownloadFormat) => {
     if (!documentType) return;
