@@ -842,10 +842,9 @@ th .column-filter-menu .column-filter-icon,
   overflow-wrap: anywhere;
 }
 
-/* Servicios tiene menos columnas que Productos. En un escritorio amplio,
-   conserva las medidas operativas y reparte el espacio adicional únicamente
-   entre las columnas de texto, para que la tabla llegue al borde del panel sin
-   separar artificialmente Estado, precios y acciones. */
+/* Servicios tiene menos columnas que Productos. Conserva medidas compactas
+   para Estado, precios y acciones, y reparte el espacio adicional entre las
+   columnas de texto para aprovechar resoluciones amplias sin dejar huecos. */
 .inventory-module [data-catalog-table="service"] {
   display: block;
   width: 100%;
@@ -867,12 +866,12 @@ th .column-filter-menu .column-filter-icon,
 .inventory-module [data-catalog-table="service"] > tbody > tr {
   display: grid;
   width: 100%;
-  grid-template-columns: 40px 112px minmax(224px, 1.3fr) minmax(180px, 1.3fr) 144px 180px 112px 112px 128px;
+  grid-template-columns: 40px 112px minmax(224px, 1.6fr) minmax(180px, 1.2fr) 144px 112px 112px 112px 128px;
 }
 
 .inventory-module [data-catalog-table="service"][data-catalog-cost="hidden"] > thead > tr,
 .inventory-module [data-catalog-table="service"][data-catalog-cost="hidden"] > tbody > tr {
-  grid-template-columns: 40px 112px minmax(224px, 1.3fr) minmax(180px, 1.3fr) 144px 180px 112px 128px;
+  grid-template-columns: 40px 112px minmax(224px, 1.6fr) minmax(180px, 1.2fr) 144px 112px 112px 128px;
 }
 
 .inventory-module [data-catalog-table="service"] > thead > tr > th,
