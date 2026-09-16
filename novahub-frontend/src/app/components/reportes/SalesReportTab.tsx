@@ -14,7 +14,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Eye, Clock, DollarSign, Percent, Target, CalendarDays, AlertTriangle, Package, CreditCard, Receipt, Info } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
@@ -738,8 +738,10 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         ];
 
         const boxH = 22;
-        checkPage(boxH + 5);
-        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 5, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5 });
+        const kpiColumns = 4;
+        const kpiRows = Math.ceil(kpis.length / kpiColumns);
+        checkPage(kpiRows * boxH + (kpiRows - 1) * 4 + 5);
+        currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: kpiColumns, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5 });
 
         const renderSection = (title: string, headers: string[], rows: (string | number)[][], colorRGB: number[]) => {
           reportSections.push({ title, headers, rows });
@@ -809,7 +811,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     exportExcel: async () => {
       try {
         toast.info("Generando Excel (Ventas)...");
-        const pdfSettings = await getPdfDesignSettings('reportes.sales');
+        const pdfSettings = await getPdfDesignSettings('reportes.sales', 1200);
         const wb = new ExcelJS.Workbook();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.sales');
@@ -831,15 +833,15 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           }
         }
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:E${currentRow}`);
         const cellName = ws.getCell(`A${currentRow}`); cellName.value = companyName;
         cellName.font = { size: 18, bold: true, color: { argb: `FF${primaryHex}` } }; cellName.alignment = { horizontal: 'center' }; currentRow++;
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:E${currentRow}`);
         const cellTitle = ws.getCell(`A${currentRow}`); cellTitle.value = 'Reporte de Ventas';
         cellTitle.font = { size: 13, bold: true }; cellTitle.alignment = { horizontal: 'center' }; currentRow++;
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:E${currentRow}`);
         const cellCurrency = ws.getCell(`A${currentRow}`);
         cellCurrency.value = `Moneda: ${currencyLabel} (${currencySymbol})  |  Período: ${rangeLabel}  |  ${new Date().toLocaleDateString('es-NI')}`;
         cellCurrency.font = { size: 10, italic: true, color: { argb: 'FF888888' } }; cellCurrency.alignment = { horizontal: 'center' }; currentRow += 2;
@@ -851,6 +853,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           { label: 'MARGEN BRUTO', value: grossMargin === null ? 'N/D' : `${grossMargin.toFixed(1)}%`, detail: costMissing ? 'Sin costos' : 'Real', bgColor: 'FFA855F7' },
           { label: 'SALDO PENDIENTE', value: formatConvertedAmount(totalPending, 'NIO'), detail: `${pendingCount} fact. pend.`, bgColor: 'FFF43F5E' },
         ];
+        prepareExcelKpiColumns(ws, kpis.length);
 
         ws.getRow(currentRow).height = 18;
         kpis.forEach((kpi, idx) => {
@@ -870,23 +873,22 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           cell.value = kpi.detail; cell.font = { size: 8, color: { argb: 'FFFFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } }; cell.alignment = { horizontal: 'center', vertical: 'middle' };
         }); currentRow += 2;
+        finalizeExcelKpiRows(ws, kpis.length, currentRow);
 
-        const captureAndEmbed = async (elementId: string) => {
-          const el = document.getElementById(elementId); if (!el) return;
+        const captureCanvas = async (elementId: string) => {
+          const el = document.getElementById(elementId); if (!el) return null;
           try {
-            const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([elementId], clonedDoc, `#${primaryHex}`) });
-            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
-            const width = 600; const height = (canvas.height * width) / canvas.width;
-            ws.addImage(imgId, { tl: { col: 0, row: currentRow }, ext: { width, height } });
-            currentRow += Math.ceil(height / 18) + 2;
-          } catch (e: any) { console.warn(e); }
+            const canvas = await html2canvas(el, { scale: 1, imageTimeout: 1200, backgroundColor: '#ffffff', ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el), onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, `#${primaryHex}`, false); prepareExcelCanvasClone([elementId], clonedDoc); } });
+            const { width, height } = fitExcelImageDimensions(canvas.width, canvas.height);
+            return { base64: canvas.toDataURL('image/png'), width, height };
+          } catch (e: any) { console.warn(e); return null; }
         };
 
-        await captureAndEmbed('sales-chart-projection');
-        await captureAndEmbed('sales-chart-bar');
-        await captureAndEmbed('sales-chart-pie');
-        await captureAndEmbed('sales-chart-trend');
-        await captureAndEmbed('sales-health-card');
+        const exportImageIds = ['sales-chart-projection', 'sales-chart-bar', 'sales-chart-pie', 'sales-chart-trend', 'sales-health-card'];
+        const capturedImages = await Promise.all(exportImageIds.map(captureCanvas));
+        capturedImages.forEach((image) => {
+          if (image) currentRow = addExcelCanvasImage(wb, ws, image, currentRow);
+        });
 
         while (ws.rowCount < currentRow) ws.addRow([]); ws.addRow([]);
 
@@ -908,9 +910,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         renderTopTable('Principales Clientes por Ventas Netas', topCustomers.list.slice(0, 5), 'FF3B82F6', false);
         renderTopTable('Productos con Mayor Contribución', visibleProducts.slice(0, 5), 'FFA855F7', true);
 
-        const buffer = await wb.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = buildReportDownloadFileName(['reporte_ventas'], 'xlsx', dateRange); link.click();
+        await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_ventas'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel"); }
     }

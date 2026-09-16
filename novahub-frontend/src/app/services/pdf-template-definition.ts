@@ -614,6 +614,17 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   const partySectionLabel = party.sectionLabel;
   const hasLogo = Boolean(settings?.logoUrl);
   const isHistoricalCashReport = target.key === 'ventas.cash-historical-report';
+  const reportKpiCount = target.module === 'reportes'
+    ? ['reportes.hr', 'reportes.finance', 'reportes.sales'].includes(target.key) ? 5 : 4
+    : 0;
+  const reportKpiColumns = reportKpiCount >= 5 ? 4 : reportKpiCount;
+  const reportKpiHeight = 13;
+  const reportKpiRowGap = 1;
+  const reportKpiRows = reportKpiCount > 0 ? Math.ceil(reportKpiCount / reportKpiColumns) : 0;
+  const reportSectionsY = reportKpiCount > 0
+    ? 30 + reportKpiRows * reportKpiHeight + (reportKpiRows - 1) * reportKpiRowGap + 3
+    : 46;
+  const reportSectionsHeight = reportKpiCount > 0 ? Math.max(20, 91 - reportSectionsY) : 45;
 
   if (family === 'label') {
     return {
@@ -726,15 +737,21 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   ];
 
   if (target.module === 'reportes') {
-    const kpiCount = target.key === 'reportes.hr' || target.key === 'reportes.finance' || target.key === 'reportes.sales' ? 5 : 4;
-    const kpiWidth = (90 - (kpiCount - 1) * 2) / kpiCount;
+    const kpiWidth = (90 - (reportKpiColumns - 1) * 2) / reportKpiColumns;
     const kpiColors = [primary, secondary, primary, secondary, primary, secondary];
-    for (let index = 0; index < kpiCount; index += 1) {
-      const x = 5 + index * (kpiWidth + 2);
-      nodes.push(node({ type: 'section', label: '', text: '', x, y: 30, width: kpiWidth, height: 13, backgroundColor: kpiColors[index], borderColor: kpiColors[index], borderRadius: 3, firstPageOnly: true }, `report-kpi-card-${index}`));
-      nodes.push(node({ type: 'field', label: 'Indicador', token: `reportKpis.${index}.label`, x: x + 1, y: 31, width: kpiWidth - 2, height: 3.2, fontSize: 5.2, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-label-${index}`));
-      nodes.push(node({ type: 'field', label: 'Valor', token: `reportKpis.${index}.value`, x: x + 1, y: 34.2, width: kpiWidth - 2, height: 4.5, fontSize: 9, color: '#ffffff', bold: true, align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-value-${index}`));
-      nodes.push(node({ type: 'field', label: 'Detalle', token: `reportKpis.${index}.detail`, x: x + 1, y: 39.4, width: kpiWidth - 2, height: 2.6, fontSize: 4.6, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-detail-${index}`));
+    for (let index = 0; index < reportKpiCount; index += 1) {
+      const row = Math.floor(index / reportKpiColumns);
+      const column = index % reportKpiColumns;
+      const itemsInRow = Math.min(reportKpiColumns, reportKpiCount - row * reportKpiColumns);
+      const rowOffset = itemsInRow < reportKpiColumns
+        ? ((reportKpiColumns - itemsInRow) * (kpiWidth + 2)) / 2
+        : 0;
+      const x = 5 + rowOffset + column * (kpiWidth + 2);
+      const y = 30 + row * (reportKpiHeight + reportKpiRowGap);
+      nodes.push(node({ type: 'section', label: '', text: '', x, y, width: kpiWidth, height: reportKpiHeight, backgroundColor: kpiColors[index], borderColor: kpiColors[index], borderRadius: 3, firstPageOnly: true }, `report-kpi-card-${index}`));
+      nodes.push(node({ type: 'field', label: 'Indicador', token: `reportKpis.${index}.label`, x: x + 1, y: y + 1, width: kpiWidth - 2, height: 3.2, fontSize: 5.2, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-label-${index}`));
+      nodes.push(node({ type: 'field', label: 'Valor', token: `reportKpis.${index}.value`, x: x + 1, y: y + 4.2, width: kpiWidth - 2, height: 4.5, fontSize: 9, color: '#ffffff', bold: true, align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-value-${index}`));
+      nodes.push(node({ type: 'field', label: 'Detalle', token: `reportKpis.${index}.detail`, x: x + 1, y: y + 9.4, width: kpiWidth - 2, height: 2.6, fontSize: 4.6, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-detail-${index}`));
     }
   }
 
@@ -758,7 +775,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
       }, 'cash-report-sections'));
     } else if (target.module === 'reportes') {
       nodes.push(node({
-        type: 'report-sections', label: 'Secciones del reporte', x: 5, y: 46, width: 90, height: 45,
+        type: 'report-sections', label: 'Secciones del reporte', x: 5, y: reportSectionsY, width: 90, height: reportSectionsHeight,
         subsequentY: 31, subsequentHeight: 63, backgroundColor: '#ffffff', borderColor: line, color: text, columns: tableColumns, repeatHeader: true,
       }, 'report-sections'));
     } else {
@@ -931,14 +948,34 @@ function upgradeReportTemplateNodes(nodes: PdfTemplateNode[], targetKey: string,
   }
   if (getPdfTemplateTarget(targetKey).module !== 'reportes') return nodes;
   const fallback = createDefaultTemplateDefinition(targetKey, settings);
-  const companySummaryNode = nodes.find(item => item.id === 'company-summary') || fallback.nodes.find(item => item.id === 'company-summary');
-  if (nodes.some(item => item.type === 'report-sections')) {
-    return nodes.some(item => item.id === 'company-summary') || !companySummaryNode ? nodes : [...nodes, companySummaryNode];
+  const reportKpiCount = ['reportes.hr', 'reportes.finance', 'reportes.sales'].includes(normalizedTarget) ? 5 : 4;
+  const fallbackKpiNodes = fallback.nodes.filter(item => item.id.startsWith('report-kpi-'));
+  const existingKpiCards = nodes.filter(item => /^report-kpi-card-[0-4]$/.test(item.id));
+  const hasLegacyFiveKpiLayout = reportKpiCount === 5
+    && existingKpiCards.length === 5
+    && existingKpiCards.every(item => Math.abs((Number(item.y) || 0) - 30) < 0.5);
+  const normalizedReportNodes = hasLegacyFiveKpiLayout
+    ? nodes.map(item => {
+      const fallbackNode = fallbackKpiNodes.find(candidate => candidate.id === item.id);
+      return fallbackNode
+        ? { ...item, x: fallbackNode.x, y: fallbackNode.y, width: fallbackNode.width, height: fallbackNode.height }
+        : item;
+    })
+    : nodes;
+  const fallbackReportNode = fallback.nodes.find(item => item.id === 'report-sections');
+  const alignedReportNodes = hasLegacyFiveKpiLayout && fallbackReportNode
+    ? normalizedReportNodes.map(item => item.id === 'report-sections'
+      ? { ...item, x: fallbackReportNode.x, y: fallbackReportNode.y, width: fallbackReportNode.width, height: fallbackReportNode.height }
+      : item)
+    : normalizedReportNodes;
+  const companySummaryNode = alignedReportNodes.find(item => item.id === 'company-summary') || fallback.nodes.find(item => item.id === 'company-summary');
+  if (alignedReportNodes.some(item => item.type === 'report-sections')) {
+    return alignedReportNodes.some(item => item.id === 'company-summary') || !companySummaryNode ? alignedReportNodes : [...alignedReportNodes, companySummaryNode];
   }
-  const reportKpiNodes = fallback.nodes.filter(item => item.id.startsWith('report-kpi-'));
+  const reportKpiNodes = fallbackKpiNodes;
   const reportMetaNode = fallback.nodes.find(item => item.id === 'report-meta');
-  const previousTable = nodes.find(item => item.type === 'table');
-  const reportNode = fallback.nodes.find(item => item.id === 'report-sections');
+  const previousTable = alignedReportNodes.find(item => item.type === 'table');
+  const reportNode = fallbackReportNode;
   if (!reportNode || !reportMetaNode) return nodes;
   const migratedReportNode: PdfTemplateNode = {
     ...reportNode,
@@ -947,15 +984,15 @@ function upgradeReportTemplateNodes(nodes: PdfTemplateNode[], targetKey: string,
     type: 'report-sections',
     label: 'Secciones del reporte',
     x: previousTable?.x ?? reportNode.x,
-    y: 46,
+    y: reportNode.y,
     width: previousTable?.width ?? reportNode.width,
-    height: 45,
+    height: reportNode.height,
     subsequentY: 31,
     subsequentHeight: 63,
     columns: reportNode.columns,
   };
   return [
-    ...nodes.filter(item => item.type !== 'table' && !item.id.startsWith('report-kpi-') && !['company-summary', 'document-number', 'document-status', 'document-date', 'report-meta'].includes(item.id)),
+    ...alignedReportNodes.filter(item => item.type !== 'table' && !item.id.startsWith('report-kpi-') && !['company-summary', 'document-number', 'document-status', 'document-date', 'report-meta'].includes(item.id)),
     ...reportKpiNodes,
     ...(companySummaryNode ? [companySummaryNode] : []),
     reportMetaNode,

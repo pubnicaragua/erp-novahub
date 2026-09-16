@@ -12,7 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Users, TrendingUp, Package, Activity, CreditCard, DollarSign } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -294,7 +294,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportExcel: async () => {
       try {
         toast.info('Generando Excel (Proveedores)...');
-        const pdfSettings = await getPdfDesignSettings('reportes.providers');
+        const pdfSettings = await getPdfDesignSettings('reportes.providers', 1200);
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Proveedores');
 
@@ -349,6 +349,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           { label: 'CUENTAS POR PAGAR', value: formatConvertedAmount(totalPurchased - totalPaid, 'NIO'), detail: `${payRatio.toFixed(1)}% de deuda saldada`, bgColor: 'FFF43F5E' },
           { label: 'FLUJO DE PAGO', value: formatConvertedAmount(totalPaid, 'NIO'), detail: 'Total liquidado con terceros', bgColor: 'FF10B981' },
         ];
+        prepareExcelKpiColumns(ws, kpiBoxes.length);
 
         ws.getRow(currentRow).height = 18;
         kpiBoxes.forEach((kpi, idx) => {
@@ -377,28 +378,32 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         });
         currentRow += 2;
+        finalizeExcelKpiRows(ws, kpiBoxes.length, currentRow);
 
-        const exportIds = ['providers-monthly-chart', 'providers-efficiency-chart'];
-        const captureForExcel = async (elementId: string, targetRow: number) => {
+        const exportImageIds = ['providers-monthly-chart', 'providers-efficiency-chart'];
+        const captureCanvas = async (elementId: string) => {
           const el = document.getElementById(elementId);
-          if (!el) return targetRow;
+          if (!el) return null;
           try {
             const canvas = await html2canvas(el, {
-              scale: 2,
+              scale: 1,
+              imageTimeout: 1200,
               backgroundColor: '#ffffff',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
+              ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el),
+              onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex, false); prepareExcelCanvasClone([elementId], clonedDoc); },
             });
-            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
-            ws.addImage(imgId, { tl: { col: 0, row: targetRow }, ext: { width: 720, height: 260 } });
-            return targetRow + 18;
+            const { width, height } = fitExcelImageDimensions(canvas.width, canvas.height);
+            return { base64: canvas.toDataURL('image/png'), width, height };
           } catch {
-            return targetRow;
+            return null;
           }
         };
 
         let imgRow = currentRow + 2;
-        imgRow = await captureForExcel('providers-monthly-chart', imgRow);
-        imgRow = await captureForExcel('providers-efficiency-chart', imgRow);
+        const capturedImages = await Promise.all(exportImageIds.map(captureCanvas));
+        capturedImages.forEach((image) => {
+          if (image) imgRow = addExcelCanvasImage(wb, ws, image, imgRow);
+        });
 
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;

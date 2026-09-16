@@ -16,7 +16,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -1208,7 +1208,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     exportExcel: async () => {
       toast.info("Generando Excel (RRHH)...");
       try {
-        const pdfSettings = await getPdfDesignSettings('reportes.hr');
+        const pdfSettings = await getPdfDesignSettings('reportes.hr', 1200);
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('RRHH');
         const companyName = themeConfig.tenantName || 'Mi Empresa';
@@ -1233,21 +1233,21 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           }
         }
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:F${currentRow}`);
         const cName = ws.getCell(`A${currentRow}`);
         cName.value = companyName;
         cName.font = { size: 18, bold: true, color: { argb: `FF${hexColor}` } };
         cName.alignment = { horizontal: 'center' };
         currentRow++;
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:F${currentRow}`);
         const cTitle = ws.getCell(`A${currentRow}`);
         cTitle.value = 'Reporte de Recursos Humanos';
         cTitle.font = { size: 13, bold: true };
         cTitle.alignment = { horizontal: 'center' };
         currentRow++;
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:F${currentRow}`);
         const cMeta = ws.getCell(`A${currentRow}`);
         cMeta.value = `Moneda: ${displayCurrency} (${currencySymbol})  |  Período: ${dateRange}  |  ${new Date().toLocaleDateString('es-NI')}`;
         cMeta.font = { size: 10, italic: true, color: { argb: 'FF888888' } };
@@ -1262,6 +1262,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           { label: 'ROTACIÓN', value: `${tasaRotacion.toFixed(1)}%`, detail: `${bajasPeriodo.length} bajas · ${plantillaPromedio.toFixed(0)} prom.`, bgColor: 'FFF59E0B' },
           { label: 'ANTIGÜEDAD', value: fmtTenure(antiquity.avgMonths), detail: 'Desde fecha de ingreso', bgColor: 'FF3B82F6' },
         ];
+        prepareExcelKpiColumns(ws, kpiBoxes.length);
 
         ws.getRow(currentRow).height = 16;
         kpiBoxes.forEach((kpi, idx) => {
@@ -1290,29 +1291,32 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         });
         currentRow += 2;
+        finalizeExcelKpiRows(ws, kpiBoxes.length, currentRow);
 
-        const exportIds = ['hr-evolution-chart', 'hr-movements-chart', 'hr-distribution-chart'];
-        const captureForExcel = async (elementId: string, targetRow: number) => {
+        const exportImageIds = ['hr-evolution-chart', 'hr-movements-chart', 'hr-distribution-chart'];
+        const captureCanvas = async (elementId: string) => {
           const el = document.getElementById(elementId);
-          if (!el) return targetRow;
+          if (!el) return null;
           try {
             const canvas = await html2canvas(el, {
-              scale: 2,
+              scale: 1,
+              imageTimeout: 1200,
               backgroundColor: '#09090b',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
+              ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el),
+              onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex, false); prepareExcelCanvasClone([elementId], clonedDoc); },
             });
-            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
-            ws.addImage(imgId, { tl: { col: 0, row: targetRow }, ext: { width: 720, height: 260 } });
-            return targetRow + 18;
+            const { width, height } = fitExcelImageDimensions(canvas.width, canvas.height);
+            return { base64: canvas.toDataURL('image/png'), width, height };
           } catch {
-            return targetRow;
+            return null;
           }
         };
 
         let imgRow = currentRow + 2;
-        imgRow = await captureForExcel('hr-evolution-chart', imgRow);
-        imgRow = await captureForExcel('hr-movements-chart', imgRow);
-        imgRow = await captureForExcel('hr-distribution-chart', imgRow);
+        const capturedImages = await Promise.all(exportImageIds.map(captureCanvas));
+        capturedImages.forEach((image) => {
+          if (image) imgRow = addExcelCanvasImage(wb, ws, image, imgRow);
+        });
 
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;

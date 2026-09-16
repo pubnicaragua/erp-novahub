@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp, Package, X, ArrowRightLeft, CalendarDays, UserRound, Warehouse, Loader2 } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -6,6 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import type { SalesPaginationControls } from '../../types';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
@@ -16,10 +18,16 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 
+export type MovementExportOptions = {
+  amount: number | 'all';
+  sortOrder: 'asc' | 'desc';
+};
+
 interface MovimientosViewProps {
   movements: any[];
   warehouses: any[];
   pagination?: SalesPaginationControls;
+  onExportData?: (options: MovementExportOptions) => Promise<any[]>;
   onSearchChange?: (value: string) => void;
   onTypeChange?: (value: string) => void;
   onWarehouseChange?: (value: string) => void;
@@ -46,6 +54,23 @@ const REFERENCE_TYPE_LABELS: Record<string, string> = {
   STOCK_INITIAL: 'Stock inicial',
   SALES_ORDER: 'Orden de venta',
   SUPPLIER_INVOICE: 'Factura de compra',
+  CATALOG_IMPORT: 'Importación de catálogo',
+  MANAGER_IMPORT: 'Importación de inventario',
+  STOCK_IMPORT: 'Importación de existencias',
+  STOCK_ADJUSTMENT: 'Ajuste de existencias',
+  INVENTORY_LOSS: 'Pérdida de inventario',
+  INITIAL_STOCK: 'Stock inicial',
+  PRODUCT_CREATE: 'Alta de producto',
+  PRODUCT_UPDATE: 'Actualización de producto',
+};
+
+const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  IN: 'Entrada',
+  OUT: 'Salida',
+  TRANSFER: 'Transferencia',
+  TRANSFER_IN: 'Transferencia de entrada',
+  TRANSFER_OUT: 'Transferencia de salida',
+  ADJUSTMENT: 'Ajuste',
 };
 
 export function formatMovementReference(reference: string | null | undefined): { label: string; full: string } {
@@ -60,6 +85,22 @@ export function formatMovementReference(reference: string | null | undefined): {
     return { label: shortId ? `${label} · ${shortId}` : label, full };
   }
   return { label: raw, full };
+}
+
+function formatMovementReferenceForExport(reference: string | null | undefined) {
+  const raw = String(reference || '').trim();
+  if (!raw) return '—';
+  const { label } = formatMovementReference(raw);
+  // Las referencias automáticas contienen UUID y posiciones internas que no
+  // ayudan al usuario final del reporte. Conservamos solo su descripción.
+  if (raw.includes(':')) return label.split(' · ')[0] || '—';
+  return label.length > 80 ? `${label.slice(0, 77).trim()}…` : label;
+}
+
+function formatMovementNumberForExport(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  return Number(number.toFixed(4));
 }
 
 const MOVEMENTS_TOUR_STEPS: GuidedTourStep[] = [
@@ -143,7 +184,7 @@ function MovementDetailsPanel({ movement, onClose, canViewInventoryCost }: { mov
   );
 }
 
-export function MovimientosView({ movements, warehouses, pagination, onSearchChange, onTypeChange, onWarehouseChange, onDateChange }: MovimientosViewProps) {
+export function MovimientosView({ movements, warehouses, pagination, onExportData, onSearchChange, onTypeChange, onWarehouseChange, onDateChange }: MovimientosViewProps) {
   const { canPerform } = useAuth();
   const canExportMovements = canPerform('INVENTORY_MOVEMENTS', 'export');
   const canViewInventoryCost = canPerform('INVENTORY_MOVEMENTS', 'viewCost');
@@ -155,6 +196,11 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedMovement, setSelectedMovement] = useState<any | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportScope, setExportScope] = useState<'page' | 'custom' | 'all'>('page');
+  const [exportAmount, setExportAmount] = useState(String(pagination?.pageSize || 50));
+  const [exportSortOrder, setExportSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isExporting, setIsExporting] = useState(false);
   const openMovement = (movement: any) => startOpening(movement.id, () => setSelectedMovement(movement));
 
   const filteredMovements = movements.filter(m => {
@@ -210,36 +256,92 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
   };
 
   const getTypeLabel = (type: string) => {
-    return TYPE_OPTIONS.find(t => t.value === type)?.label || type;
+    const normalizedType = String(type || '').toUpperCase();
+    return MOVEMENT_TYPE_LABELS[normalizedType] || TYPE_OPTIONS.find(t => t.value === normalizedType)?.label || type || 'Movimiento';
   };
 
-  const handleExport = () => {
+  const totalMovements = pagination?.total ?? filteredMovements.length;
+  const sortMovements = (rows: any[], sortOrder: 'asc' | 'desc') => [...rows].sort((left, right) => {
+    const leftDate = new Date(left.createdAt || left.date || 0).getTime();
+    const rightDate = new Date(right.createdAt || right.date || 0).getTime();
+    const difference = leftDate - rightDate;
+    return sortOrder === 'asc' ? difference : -difference;
+  });
+
+  const downloadXlsx = (rows: any[], sortOrder: 'asc' | 'desc') => {
+    const orderedRows = sortMovements(rows, sortOrder);
+    const excelRows = orderedRows.map(m => ({
+      Fecha: formatDateEs(m.date),
+      'Tipo de movimiento': getTypeLabel(m.type),
+      Código: m.product?.code || '—',
+      Producto: m.product?.name || 'Producto sin nombre',
+      Almacén: m.warehouse?.name || '—',
+      Cantidad: formatMovementNumberForExport(m.quantity),
+      'Stock anterior': formatMovementNumberForExport(m.previousQty),
+      'Stock resultante': formatMovementNumberForExport(m.resultingQty),
+      Usuario: m.user?.name || m.userName || 'Movimiento automático',
+      Referencia: formatMovementReferenceForExport(m.reference),
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(excelRows, {
+      header: ['Fecha', 'Tipo de movimiento', 'Código', 'Producto', 'Almacén', 'Cantidad', 'Stock anterior', 'Stock resultante', 'Usuario', 'Referencia'],
+    });
+    worksheet['!cols'] = [
+      { wch: 13 }, { wch: 26 }, { wch: 16 }, { wch: 34 }, { wch: 26 },
+      { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 24 }, { wch: 30 },
+    ];
+    if (worksheet['!ref']) worksheet['!autofilter'] = { ref: worksheet['!ref'] };
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Movimientos');
+    XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_movimientos_inventario'], 'xlsx', dateFrom, dateTo));
+    return orderedRows.length;
+  };
+
+  const openExportDialog = () => {
+    const pageAmount = Math.max(1, Math.min(pagination?.pageSize || filteredData.length || 50, totalMovements || pagination?.pageSize || filteredData.length || 50));
+    setExportScope('page');
+    setExportAmount(String(pageAmount));
+    setExportSortOrder('desc');
+    setExportDialogOpen(true);
+  };
+
+  const handleExportAmountChange = (value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    if (!value) {
+      setExportAmount('');
+      return;
+    }
+    const nextAmount = Number(value);
+    if (!Number.isSafeInteger(nextAmount)) return;
+    setExportAmount(String(Math.min(nextAmount, totalMovements)));
+  };
+
+  const handleExport = async () => {
     if (!canExportMovements) {
       toast.error('No tienes permiso para exportar movimientos');
       return;
     }
+    const requestedAmount = Number(exportAmount);
+    if (exportScope === 'custom' && (!/^[1-9]\d*$/.test(exportAmount) || !Number.isSafeInteger(requestedAmount) || requestedAmount > totalMovements)) {
+      toast.error(`Digite una cantidad entera entre 1 y ${totalMovements.toLocaleString('es-NI')} movimiento(s)`);
+      return;
+    }
+
+    setIsExporting(true);
     try {
-      const csvContent = [
-        ['Fecha', 'Tipo', 'Producto', 'Almacén', 'Cantidad', 'Usuario', 'Referencia'].join(','),
-        ...filteredData.map(m => [
-          formatDateEs(m.date),
-          m.type,
-          `"${m.product?.name || ''}"`,
-          `"${m.warehouse?.name || ''}"`,
-          m.quantity,
-          `"${m.user?.name || m.userName || ''}"`,
-          `"${m.reference || ''}"`
-        ].join(','))
-      ].join('\n');
-      
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = buildDateFilteredDownloadFileName(['reporte_movimientos_inventario'], 'csv', dateFrom, dateTo);
-      link.click();
-      toast.success('Movimientos exportados');
+      let exportRows = filteredData;
+      if (exportScope !== 'page' && onExportData) {
+        const data = await onExportData({ amount: exportScope === 'all' ? 'all' : requestedAmount, sortOrder: exportSortOrder });
+        exportRows = colFilters.applyTo(Array.isArray(data) ? data : [], filterGetters);
+      } else if (exportScope === 'custom') {
+        exportRows = filteredData.slice(0, requestedAmount);
+      }
+      const exportedCount = downloadXlsx(exportRows, exportSortOrder);
+      setExportDialogOpen(false);
+      toast.success(`${exportedCount} movimiento(s) exportado(s)`);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al exportar');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -295,7 +397,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
             />
           </div>
         </div>
-        <div className="erp-toolbar-primary-group flex w-full gap-2 sm:w-auto"><Button type="button" variant="ghost" size="icon" data-toolbar-role="help" data-tutorial-trigger="true" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo consultar movimientos" title="Cómo consultar movimientos"><CircleHelp className="size-4" /></Button>{canExportMovements && <Button variant="outline" size="sm" data-toolbar-role="print" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button>}</div>
+        <div className="erp-toolbar-primary-group flex w-full gap-2 sm:w-auto"><Button type="button" variant="ghost" size="icon" data-toolbar-role="help" data-tutorial-trigger="true" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo consultar movimientos" title="Cómo consultar movimientos"><CircleHelp className="size-4" /></Button>{canExportMovements && <Button variant="outline" size="sm" data-toolbar-role="print" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={openExportDialog}><Download className="size-4" /> Exportar</Button>}</div>
       </div>
 
       <div className={`grid min-w-0 gap-4 ${selectedMovement ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : 'grid-cols-1'}`}>
@@ -388,6 +490,48 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
         </div>
         {selectedMovement && <MovementDetailsPanel movement={selectedMovement} canViewInventoryCost={canViewInventoryCost} onClose={() => setSelectedMovement(null)} />}
       </div>
+      <Dialog open={exportDialogOpen} onOpenChange={(open) => { if (!isExporting) setExportDialogOpen(open); }}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Download className="size-5 text-primary" /> Exportar movimientos</DialogTitle>
+            <DialogDescription>Hay {totalMovements.toLocaleString('es-NI')} movimiento(s) disponibles con los filtros actuales.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Cantidad a exportar</label>
+              <Select value={exportScope} onValueChange={(value) => setExportScope(value as 'page' | 'custom' | 'all')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="page">Página actual ({filteredData.length} movimiento(s))</SelectItem>
+                  <SelectItem value="custom" disabled={totalMovements < 1}>Cantidad personalizada</SelectItem>
+                  <SelectItem value="all">Todos ({totalMovements.toLocaleString('es-NI')})</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {exportScope === 'custom' && <div className="space-y-1.5">
+              <label htmlFor="movement-export-amount" className="text-xs font-black uppercase tracking-wider text-muted-foreground">Número de movimientos</label>
+              <Input id="movement-export-amount" type="number" min={1} max={totalMovements} step={1} inputMode="numeric" value={exportAmount} onKeyDown={(event) => { if (['-', '+', '.', ',', 'e', 'E'].includes(event.key)) event.preventDefault(); }} onChange={(event) => handleExportAmountChange(event.target.value)} placeholder="Ej. 100" />
+              <p className="text-[11px] text-muted-foreground">Puedes indicar hasta {totalMovements.toLocaleString('es-NI')} movimiento(s).</p>
+            </div>}
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Orden del reporte</label>
+              <Select value={exportSortOrder} onValueChange={(value) => setExportSortOrder(value as 'asc' | 'desc')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Descendente: más recientes primero</SelectItem>
+                  <SelectItem value="asc">Ascendente: más antiguos primero</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setExportDialogOpen(false)} disabled={isExporting}>Cancelar</Button>
+            <Button type="button" onClick={handleExport} disabled={isExporting || (exportScope !== 'page' && !onExportData)}>
+              {isExporting ? <><Loader2 className="size-4 animate-spin" /> Preparando…</> : <><Download className="size-4" /> Exportar reporte</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {showTutorial && <GuidedTour steps={MOVEMENTS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Movimientos de inventario" allowTargetInteraction />}
     </Card>
   );
