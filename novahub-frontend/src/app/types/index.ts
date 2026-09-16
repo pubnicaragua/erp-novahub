@@ -123,6 +123,7 @@ export interface Customer {
   city?: string;
   department?: string;
   country?: string;
+  countryCode?: string;
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;

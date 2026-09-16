@@ -5,6 +5,7 @@ import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { formatPdfVariantAttributes } from '../../utils/pdf-line-details';
 import { safeGetItem, safeSetItem, safeRemoveItem } from '../../services/safe-storage';
+import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 async function publicRequest(path: string, init: RequestInit = {}) { const response = await fetch(`${API}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers || {}) } }); const body = await response.json().catch(() => ({})); if (!response.ok) { const raw = body?.message; const message = typeof raw === 'string' ? raw : raw?.message || raw?.error || body?.error || 'No se pudo abrir el enlace.'; throw new Error(message); } return body; }
@@ -22,6 +23,9 @@ const labelFor = (value: unknown, labels: Record<string, string>, fallback = '�
 };
 const formatDate = (value: unknown) => value ? new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium' }).format(new Date(String(value))) : '—';
 const formatAmount = (value: unknown, currency = 'NIO') => `${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} ${currency}`;
+const readableCustomer = (customer: any) => customer?.phone
+  ? { ...customer, phone: formatCustomerPhoneForDisplay(String(customer.phone), customer.countryCode || 'NI') }
+  : customer;
 const portalPdfTypes: Record<string, 'estimate' | 'order' | 'invoice' | 'recurring' | 'payment' | 'return' | 'credit-note'> = { estimate: 'estimate', 'sales-order': 'order', invoice: 'invoice', 'recurring-invoice': 'recurring', 'payment-received': 'payment', 'sales-return': 'return', 'credit-note': 'credit-note' };
 const portalDesignKeys: Record<string, string> = { estimate: 'ventas.estimate', 'sales-order': 'ventas.order', invoice: 'ventas.invoice', 'recurring-invoice': 'ventas.recurring', 'payment-received': 'ventas.payment', 'sales-return': 'ventas.return', 'credit-note': 'ventas.credit-note' };
 const documentDateKey = (value: unknown) => { if (!value) return ''; const date = new Date(String(value)); return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10); };
@@ -379,5 +383,7 @@ export function PublicAccessPage({ mode }: { mode: 'document' | 'portal' }) {
   if (error) return <AccessShell><div className="rounded-2xl border border-rose-500/30 bg-slate-900 p-8 text-center"><FileText className="mx-auto mb-3 size-9 text-rose-400" /><h1 className="text-xl font-semibold">Enlace no disponible</h1><p className="mt-2 text-slate-400">{error}</p></div></AccessShell>;
   if (gate) return <AccessShell><OtpForm token={token} mode={mode} maskedTarget={gate.maskedTarget} onVerified={async session => { safeSetItem(storageKey, session); if (mode === 'document') { const result = await publicRequest(`/public-access/document/${token}`, { headers: { 'x-public-session': session } }); setData(result); setGate(null); } else { setPortalSession(session); const result = await publicRequest(portalSessionPath(1, 25), { headers: { 'x-public-session': session } }); setData(result); setGate(null); } }} /></AccessShell>;
   if (!data) return <AccessShell><div className="p-12 text-center text-slate-400">Cargando documento…</div></AccessShell>;
-  return mode === 'document' ? <DocumentView data={data.data} permissions={data.permissions} /> : <PortalView data={data} pageLoading={portalPageLoading} onPageChange={loadPortalPage} />;
+  return mode === 'document'
+    ? <DocumentView data={{ ...data.data, customer: readableCustomer(data.data?.customer) }} permissions={data.permissions} />
+    : <PortalView data={{ ...data, customer: readableCustomer(data.customer) }} pageLoading={portalPageLoading} onPageChange={loadPortalPage} />;
 }

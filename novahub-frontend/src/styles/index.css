@@ -1641,6 +1641,85 @@ th .column-filter-menu .column-filter-icon,
   }
 }
 
+/* Quote lines keep mixed simple/variant products aligned in the same desktop
+   row. Simple rows span the unused variant space so the price-list column does
+   not move when another row needs a variant selector. */
+@media (min-width: 1280px) {
+  .sales-quote-line-product-header.sales-quote-line-product-layout--variant-and-price,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(7rem, 0.9fr);
+  }
+
+  .sales-quote-line-product-header.sales-quote-line-product-layout--variant-only,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only,
+  .sales-quote-line-product-header.sales-quote-line-product-layout--price-only,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only {
+    grid-template-columns: minmax(0, 1.45fr) minmax(7rem, 0.9fr);
+  }
+
+  .sales-quote-line-product-header.sales-quote-line-product-layout--product-only,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--product-only {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sales-quote-line-product-header.sales-quote-line-product-layout--variant-and-price > span:first-child {
+    grid-column: 1 / span 2;
+  }
+
+  .sales-quote-line-product-header.sales-quote-line-product-layout--variant-and-price > span:last-child {
+    grid-column: 3;
+  }
+
+  .sales-quote-line-product-header.sales-quote-line-product-layout--variant-only > span:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--product-only {
+    align-items: start;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price > .sales-quote-line-variant-column {
+    grid-column: 2;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price > .sales-quote-line-price-column {
+    grid-column: 3;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only > .sales-quote-line-variant-column,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only > .sales-quote-line-price-column {
+    grid-column: 2;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price > .sales-quote-line-variant-column,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price > .sales-quote-line-price-column,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only > .sales-quote-line-variant-column,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only > .sales-quote-line-price-column {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price .sales-line-variant > span,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price .sales-line-price-list > span,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only .sales-line-variant > span,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only .sales-line-price-list > span {
+    display: none;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price:not(:has(> .sales-line-variant)) > .sales-line-product-picker {
+    grid-column: 1 / span 2;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price:not(:has(> .sales-line-variant)):not(:has(> .sales-line-price-list)) > .sales-line-product-picker,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only:not(:has(> .sales-line-variant)) > .sales-line-product-picker,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--product-only > .sales-line-product-picker {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Compact sales editors use card rows instead of squeezed legacy grids. */
 @media (max-width: 1279px) {
   .sales-item-row > div {
@@ -1817,6 +1896,70 @@ th .column-filter-menu .column-filter-icon,
   .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(2)::before { content: "Cantidad"; }
   .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(3)::before { content: "Precio unitario"; }
   .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(4)::before { content: "Total y acciones"; }
+}
+
+/* Cotizaciones mantienen Producto, Variante y Lista de precios en una sola
+   fila desde tablet; las demás vistas conservan su layout compacto. */
+@media (min-width: 640px) and (max-width: 1279px) {
+  .sales-line-product-fields.sales-quote-line-product-fields {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(7rem, 0.9fr);
+    align-items: start;
+    gap: 0.5rem;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only {
+    grid-template-columns: minmax(0, 1.45fr) minmax(7rem, 0.9fr);
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--product-only {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields > .sales-line-product-picker {
+    grid-column: 1;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price > .sales-line-variant {
+    grid-column: 2;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price > .sales-line-price-list {
+    grid-column: 3;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price:not(:has(> .sales-line-variant)) > .sales-line-product-picker {
+    grid-column: 1 / span 2;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price:not(:has(> .sales-line-variant)):not(:has(> .sales-line-price-list)) > .sales-line-product-picker,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only:not(:has(> .sales-line-variant)) > .sales-line-product-picker,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--product-only > .sales-line-product-picker {
+    grid-column: 1 / -1;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-only > .sales-line-variant,
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--price-only > .sales-line-price-list {
+    grid-column: 2;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields.sales-quote-line-product-layout--variant-and-price:not(:has(> .sales-line-variant)) > .sales-line-price-list {
+    grid-column: 3;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields > .sales-line-product-picker,
+  .sales-line-product-fields.sales-quote-line-product-fields > .sales-line-variant,
+  .sales-line-product-fields.sales-quote-line-product-fields > .sales-line-price-list {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .sales-line-product-fields.sales-quote-line-product-fields .sales-line-variant > span,
+  .sales-line-product-fields.sales-quote-line-product-fields .sales-line-price-list > span {
+    display: none;
+  }
 }
 
 @media (max-width: 639px) {

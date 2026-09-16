@@ -31,6 +31,8 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
+import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -50,10 +52,12 @@ type CustomerDraft = {
   ruc: string;
   email: string;
   phone: string;
+  contactPhone: string;
   address: string;
   city: string;
   department: string;
   country: string;
+  countryCode: string;
   creditLimit: string;
   creditLimitCurrency: SupportedCurrency;
   creditDays: string;
@@ -61,10 +65,10 @@ type CustomerDraft = {
   status: 'ACTIVE' | 'INACTIVE';
 };
 
-const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO'): CustomerDraft => ({
+const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', countryCode = 'NI', country = 'Nicaragua'): CustomerDraft => ({
   name: '', type: 'individual', fiscalRegime: '', priceListId: '',
-  taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '',
-  country: 'Nicaragua', creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
+  taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '',
+  country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE',
 });
 
 const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'status'];
@@ -90,10 +94,12 @@ const customerToDraft = (customer: Customer, fallbackCurrency: SupportedCurrency
   ruc: customer.ruc || '',
   email: customer.email || '',
   phone: customer.phone || '',
+  contactPhone: customer.contactPhone || '',
   address: customer.address || '',
   city: customer.city || '',
   department: customer.department || '',
   country: customer.country || 'Nicaragua',
+    countryCode: customer.countryCode || countryCodeFromLegacy(customer.country) || 'NI',
   creditLimit: customer.creditLimit === undefined || customer.creditLimit === null ? '' : String(customer.creditLimit),
   creditLimitCurrency: normalizeCurrency(customer.creditLimitCurrency, fallbackCurrency),
   creditDays: customer.creditDays === undefined || customer.creditDays === null ? '' : String(customer.creditDays),
@@ -110,7 +116,7 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="customers-columns"]', title: 'Configurar columnas', description: 'Elige qué campos se muestran en la tabla. La vista se ajusta automáticamente a las columnas seleccionadas.', placement: 'bottom' },
   { target: '[data-tour="customers-layout"]', title: 'Lista o tarjetas', description: 'Cambia entre una tabla para revisar muchos registros y tarjetas para consultar cada cliente de forma más visual.', placement: 'bottom' },
   { target: '[data-tour="customers-import"]', title: 'Importar clientes', description: 'Descarga la plantilla, completa los datos sin código de cliente y carga el archivo. La numeración la genera automáticamente el sistema.', tip: 'La importación de clientes puede repetirse. Primero se prepara el archivo y luego puedes abrir una previsualización editable.', placement: 'bottom' },
-  { target: '[data-tour="customers-new"]', title: 'Crear clientes', description: 'Agrega uno o varios clientes desde el formulario. Para empresas el RUC es obligatorio; la cédula y el RUC pueden registrarse juntos.', placement: 'bottom' },
+  { target: '[data-tour="customers-new"]', title: 'Crear clientes', description: 'Agrega uno o varios clientes desde el formulario. Registra el identificador fiscal que corresponda; la cédula y el RUC pueden registrarse juntos.', placement: 'bottom' },
   { target: '[data-tour="customers-table"]', title: 'Consultar y gestionar', description: 'Abre el detalle desde Ver, edita los campos permitidos y cambia el estado con confirmación. Los clientes inactivos no se pueden usar en nuevas operaciones.', placement: 'top' },
   { target: '[data-tour="sales-list-pagination"]', title: 'Paginación', description: 'Elige 50, 100 o 200 clientes por página. El rango muestra qué registros estás viendo del total y las flechas permiten ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
@@ -118,6 +124,7 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
 export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
   const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform, user } = useAuth();
+  const { countries, defaultCountryCode } = useCustomerFormOptions();
   const tenantKey = user?.tenantId || 'anonymous';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
@@ -141,7 +148,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [editCustomer, setEditCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency));
+  const [editCustomer, setEditCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries)));
   const [savingEdit, setSavingEdit] = useState(false);
   const [portalAccess, setPortalAccess] = useState<any>(null);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -153,7 +160,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`sales-clients-columns-${tenantKey}`, DEFAULT_CUSTOMER_COLUMN_KEYS, 24 * 365);
   const [creating, setCreating] = useState(false);
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-clients-layout', 'table', 24 * 365);
-  const [newCustomer, setNewCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency));
+  const [newCustomer, setNewCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries)));
   const [pendingCustomers, setPendingCustomers] = useState<Array<CustomerDraft & { id: string }>>([]);
   const [showTutorial, setShowTutorial] = useState(false);
 
@@ -171,18 +178,22 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     return match ? row[match] : '';
   };
 
-  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '', country: 'Nicaragua', creditLimit: '', creditLimitCurrency: displayCurrency, status: 'ACTIVE', notes: '' });
+  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '', country: countryNameForForm(defaultCountryCode, countries), countryCode: defaultCountryCode, creditLimit: '', creditLimitCurrency: displayCurrency, status: 'ACTIVE', notes: '' });
 
   const validateImportRows = (rows: CustomerImportRow[]) => {
-    const existingTaxIds = new Set(data.flatMap((customer) => [customer.taxId, customer.ruc]).map((value) => String(value || '').trim().toLowerCase()).filter(Boolean));
+    const existingTaxIds = new Set(data.flatMap((customer) => [customer.taxId, customer.ruc]).map(identifierComparisonKey).filter(Boolean));
     const seenTaxIds = new Set<string>();
     return rows.map((row) => {
       const next: CustomerImportRow = { ...row, error: undefined, warning: undefined };
-      const identifiers = [row.taxId, row.ruc].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+      const identifiers = [row.taxId, row.ruc].map(identifierComparisonKey).filter(Boolean);
       const priceListMatch = row.priceListCode && priceLists.some((list) => list.code.toLowerCase() === row.priceListCode.trim().toLowerCase() || list.name.toLowerCase() === row.priceListCode.trim().toLowerCase());
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
+      else if (row.taxId && !isCustomerIdentifierValid(row.taxId, 'taxId', row.countryCode)) next.error = 'Identificación fiscal inválida para el país';
+      else if (row.ruc && !isCustomerIdentifierValid(row.ruc, 'ruc', row.countryCode)) next.error = 'RUC inválido para el país';
+      else if (row.phone && !isCustomerPhoneValid(row.phone, row.countryCode)) next.error = 'Teléfono inválido para el país';
+      else if (row.contactPhone && !isCustomerPhoneValid(row.contactPhone, row.countryCode)) next.error = 'Teléfono de contacto inválido para el país';
       else if (identifiers.some((identifier) => existingTaxIds.has(identifier) || seenTaxIds.has(identifier))) next.error = 'Cédula o RUC duplicado';
-      else if (row.type === 'COMPANY' && !row.ruc.trim()) next.error = 'RUC obligatorio para empresas';
+      else if (customerRucRequired(row.type, row.countryCode) && !row.ruc.trim()) next.error = 'RUC obligatorio para empresas';
       else if (row.creditLimit !== '' && (!Number.isFinite(Number(row.creditLimit)) || Number(row.creditLimit) < 0)) next.error = 'Límite de crédito inválido';
       else if (row.creditLimitCurrencyError || !['NIO', 'USD'].includes(row.creditLimitCurrency)) next.error = 'Moneda del límite inválida';
       if (!next.error && row.priceListCode && !priceListMatch) next.warning = 'Lista no encontrada; se importará sin lista';
@@ -201,8 +212,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       // La plantilla todavía puede generarse con el último catálogo cargado.
     }
     const importablePriceLists = availablePriceLists.filter((list) => list.isActive !== false);
-    const headers = ['Nombre', 'Tipo', 'Cédula', 'RUC', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Régimen fiscal', 'Límite de crédito', 'Moneda límite de crédito', 'Lista de precios', 'Estado', 'Notas'];
-    const example = ['Cliente Ejemplo', 'PARTICULAR', '001-010190-1000A', '', 'cliente@correo.com', '8888-8888', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', 'Nicaragua', 'Régimen general', 0, displayCurrency, importablePriceLists[0]?.code || '', 'ACTIVO', ''];
+    const defaultCountry = countries.find((country) => country.code === defaultCountryCode);
+    const taxIdHeader = defaultCountry?.taxIdLabel || 'Identificación fiscal';
+    const headers = ['Nombre', 'Tipo', taxIdHeader, 'RUC', 'Correo', 'Teléfono', 'Teléfono contacto', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Código país', 'Régimen fiscal', 'Límite de crédito', 'Moneda límite de crédito', 'Lista de precios', 'Estado', 'Notas'];
+    const example = ['Cliente Ejemplo', 'PARTICULAR', defaultCountryCode === 'NI' ? '001-010190-1000A' : '', '', 'cliente@correo.com', defaultCountryCode === 'NI' ? '8888-8888' : '', '', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', countryNameForForm(defaultCountryCode, countries), defaultCountryCode, 'Régimen general', 0, displayCurrency, importablePriceLists[0]?.code || '', 'ACTIVO', ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guideRows: any[][] = [
@@ -210,8 +223,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       ['La importación puede ejecutarse varias veces. Cada cliente válido recibirá un número automático del sistema. No agregues código o número de cliente.'],
       ['Campo', 'Regla'],
       ['Nombre', 'Obligatorio. Identifica a la persona natural o jurídica.'],
-      ['Tipo', 'Usa PARTICULAR para una persona o EMPRESA para una empresa. Si eliges empresa, el RUC es obligatorio.'],
-      ['Cédula y RUC', 'La Cédula identifica a un particular. El RUC es obligatorio para una empresa.'],
+      ['Tipo', 'Usa PARTICULAR para una persona o EMPRESA para una empresa.'],
+      ['Cédula y RUC', 'Completa el identificador fiscal que corresponda al tipo de cliente.'],
       ['Contacto y ubicación', 'Completa correo, teléfono, dirección, ciudad, departamento y país cuando aplique.'],
       ['Régimen fiscal', 'Opcional. Ejemplo: Régimen general, cuota fija o exento.'],
       ['Lista de precios', 'Opcional. Usa el código o nombre de una lista existente. Si no existe, se mostrará un aviso y se importará sin asignación.'],
@@ -256,14 +269,17 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         row.fiscalRegime = String(getCell(source, ['regimenfiscal', 'regimen', 'fiscalregime']) || '').trim();
         const priceListValue = String(getCell(source, ['listadeprecios', 'lista', 'priceList', 'priceListCode']) || '').trim();
         row.priceListCode = priceLists.find((list) => list.code.toLowerCase() === priceListValue.toLowerCase() || list.name.toLowerCase() === priceListValue.toLowerCase())?.code || priceListValue;
-        row.taxId = String(getCell(source, ['cedula', 'identificacionfiscal', 'identificacion', 'taxid']) || '').trim();
+        row.taxId = String(getCell(source, ['cedula', 'rut', 'identificacionfiscal', 'identificacion', 'taxid']) || '').trim();
         row.ruc = String(getCell(source, ['ruc']) || '').trim();
         row.email = String(getCell(source, ['correo', 'email']) || '').trim();
         row.phone = String(getCell(source, ['telefono', 'phone']) || '').trim();
+        row.contactPhone = String(getCell(source, ['telefonocontacto', 'contactphone', 'telefonodelcontacto']) || '').trim();
         row.address = String(getCell(source, ['direccion', 'address']) || '').trim();
         row.city = String(getCell(source, ['ciudad', 'city']) || '').trim();
         row.department = String(getCell(source, ['departamento', 'department']) || '').trim();
-        row.country = String(getCell(source, ['pais', 'country']) || 'Nicaragua').trim();
+        row.country = String(getCell(source, ['pais', 'country']) || countryNameForForm(defaultCountryCode, countries)).trim();
+        const importedCountryCode = getCell(source, ['codigopais', 'countrycode', 'iso', 'iso2']);
+        row.countryCode = countryCodeFromLegacy(importedCountryCode) || countryCodeFromLegacy(row.country) || defaultCountryCode;
         const creditLimit = getCell(source, ['limitedecredito', 'creditlimit', 'limite']);
         row.creditLimit = creditLimit === '' || creditLimit === undefined ? '' : Number(creditLimit);
         const creditLimitCurrency = String(getCell(source, ['monedalimitedecredito', 'creditlimitcurrency', 'monedalimite', 'monedalimit']))
@@ -405,9 +421,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       if (updates.email !== undefined && String(updates.email || '').trim() && !/^\S+@\S+\.\S+$/.test(String(updates.email).trim())) {
         throw new Error('El correo no es válido (ej. cliente@correo.com)');
       }
-      if (updates.phone !== undefined && String(updates.phone || '').trim() && !/^[+\d][\d\s()-]{6,}$/.test(String(updates.phone).trim())) {
-        throw new Error('El teléfono debe contener al menos 7 dígitos (ej. 8888-8888)');
-      }
+      const currentCustomer = data.find((customer) => String(customer.id) === String(id));
+      const countryCode = String(updates.countryCode || currentCustomer?.countryCode || 'NI');
+      if (updates.phone !== undefined && String(updates.phone || '').trim() && !isCustomerPhoneValid(String(updates.phone), countryCode)) throw new Error('El teléfono no es válido para el país seleccionado');
+      if (updates.contactPhone !== undefined && String(updates.contactPhone || '').trim() && !isCustomerPhoneValid(String(updates.contactPhone), countryCode)) throw new Error('El teléfono del contacto no es válido para el país seleccionado');
       if (updates.creditLimit !== undefined) {
         const limit = Number(updates.creditLimit);
         if (!Number.isFinite(limit) || limit < 0) throw new Error('El límite de crédito debe ser un número mayor o igual a cero');
@@ -419,26 +436,24 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         const days = Number(updates.creditDays);
         if (!Number.isFinite(days) || days < 0 || !Number.isInteger(days)) throw new Error('El plazo de crédito debe ser un número entero de días (0 = contado)');
       }
-      if (updates.taxId !== undefined && String(updates.taxId || '').trim() && !/^[A-Za-z0-9-]{8,}$/.test(String(updates.taxId).trim())) {
-        throw new Error('La cédula debe contener entre 8 y 16 caracteres alfanuméricos (ej. 001-010190-1000A)');
-      }
-      const currentCustomer = data.find((customer) => String(customer.id) === String(id));
       const nextType = String(updates.type ?? currentCustomer?.type ?? '').toUpperCase();
       const nextRuc = String(updates.ruc ?? currentCustomer?.ruc ?? '').trim();
+      if (updates.taxId !== undefined && String(updates.taxId || '').trim() && !isCustomerIdentifierValid(String(updates.taxId), 'taxId', countryCode)) throw new Error('La identificación fiscal no es válida para el país seleccionado');
+      if (updates.ruc !== undefined && String(updates.ruc || '').trim() && !isCustomerIdentifierValid(String(updates.ruc), 'ruc', countryCode)) throw new Error('El RUC no es válido para el país seleccionado');
       const nextIdentifiers = [updates.taxId ?? currentCustomer?.taxId, updates.ruc ?? currentCustomer?.ruc]
-        .map((value) => String(value || '').trim().toLowerCase())
+        .map((value) => identifierComparisonKey(String(value || '')))
         .filter(Boolean);
       const duplicateCustomer = data.find((customer) => {
         if (String(customer.id) === String(id)) return false;
         const customerIdentifiers = [customer.taxId, customer.ruc]
-          .map((value) => String(value || '').trim().toLowerCase())
+          .map((value) => identifierComparisonKey(String(value || '')))
           .filter(Boolean);
         return nextIdentifiers.some((identifier) => customerIdentifiers.includes(identifier));
       });
       if (duplicateCustomer) {
         throw new Error(`La cédula o el RUC ya está registrado en el cliente ${duplicateCustomer.name}.`);
       }
-      if (nextType === 'COMPANY' && !nextRuc) {
+      if (customerRucRequired(nextType, countryCode) && !nextRuc) {
         throw new Error('El RUC es obligatorio para una empresa');
       }
       await customersService.update(id.toString(), effectiveUpdates);
@@ -458,11 +473,13 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     taxId: draft.taxId.trim() || undefined,
     ruc: draft.ruc.trim() || undefined,
     email: draft.email.trim() || undefined,
-    phone: draft.phone.trim() || undefined,
+    phone: draft.phone.trim() ? normalizeCustomerPhone(draft.phone, draft.countryCode) || draft.phone.trim() : undefined,
+    contactPhone: draft.contactPhone.trim() ? normalizeCustomerPhone(draft.contactPhone, draft.countryCode) || draft.contactPhone.trim() : undefined,
     address: draft.address.trim() || undefined,
     city: draft.city.trim() || undefined,
     department: draft.department.trim() || undefined,
     country: draft.country.trim() || undefined,
+    countryCode: draft.countryCode,
     creditLimit: draft.creditLimit === '' ? undefined : Number(draft.creditLimit),
     creditLimitCurrency: draft.creditLimitCurrency,
     creditDays: draft.creditDays === '' ? undefined : Number(draft.creditDays),
@@ -479,15 +496,19 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       toast.error('El correo del cliente no es válido');
       return false;
     }
-    if (draft.type === 'company' && !draft.ruc.trim()) {
+    if (customerRucRequired(draft.type, draft.countryCode) && !draft.ruc.trim()) {
       toast.error('El RUC es obligatorio para una empresa');
       return false;
     }
-    const identifiers = [draft.taxId, draft.ruc].map((value) => value.trim().toLowerCase()).filter(Boolean);
+    if (draft.taxId.trim() && !isCustomerIdentifierValid(draft.taxId, 'taxId', draft.countryCode)) { toast.error('La identificación fiscal no es válida para el país seleccionado'); return false; }
+    if (draft.ruc.trim() && !isCustomerIdentifierValid(draft.ruc, 'ruc', draft.countryCode)) { toast.error('El RUC no es válido para el país seleccionado'); return false; }
+    if (draft.phone.trim() && !isCustomerPhoneValid(draft.phone, draft.countryCode)) { toast.error('El teléfono no es válido para el país seleccionado'); return false; }
+    if (draft.contactPhone.trim() && !isCustomerPhoneValid(draft.contactPhone, draft.countryCode)) { toast.error('El teléfono del contacto no es válido para el país seleccionado'); return false; }
+    const identifiers = [draft.taxId, draft.ruc].map((value) => identifierComparisonKey(value)).filter(Boolean);
     const duplicateCustomer = data.find((customer) => {
       if (excludeCustomerId && String(customer.id) === String(excludeCustomerId)) return false;
       const customerIdentifiers = [customer.taxId, customer.ruc]
-        .map((value) => String(value || '').trim().toLowerCase())
+        .map((value) => identifierComparisonKey(String(value || '')))
         .filter(Boolean);
       return identifiers.some((identifier) => customerIdentifiers.includes(identifier));
     });
@@ -569,7 +590,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const handleAddPendingCustomer = () => {
     if (!validateCustomerDraft(newCustomer)) return;
     setPendingCustomers((current) => [...current, { ...newCustomer, id: `draft-${Date.now()}-${current.length}` }]);
-    setNewCustomer(emptyCustomerDraft(displayCurrency));
+    setNewCustomer(emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries)));
     toast.success('Cliente agregado a la lista de espera');
   };
 
@@ -579,7 +600,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     try {
       await customersService.create(buildCustomerPayload(newCustomer));
       toast.success('Nuevo cliente creado');
-      setNewCustomer(emptyCustomerDraft(displayCurrency));
+      setNewCustomer(emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries)));
       if (pendingCustomers.length === 0) setCreateOpen(false);
       if (pagination && pagination.page !== 1) pagination.onPageChange(1);
       await onRefresh();
@@ -601,7 +622,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       if (failed) toast.warning(`${created} clientes guardados y ${failed} no se pudieron guardar`);
       else toast.success(`${created} clientes guardados correctamente`);
       setPendingCustomers([]);
-      setNewCustomer(emptyCustomerDraft(displayCurrency));
+      setNewCustomer(emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries)));
       setCreateOpen(false);
       if (pagination && pagination.page !== 1) pagination.onPageChange(1);
       await onRefresh();
@@ -611,7 +632,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   };
 
   if (importPreviewOpen) {
-    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} defaultCreditLimitCurrency={displayCurrency} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
+    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} defaultCreditLimitCurrency={displayCurrency} countryOptions={countries} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
   }
 
   const renderCustomerAmount = (
@@ -700,7 +721,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       render: (_val, row) => <span className="text-[13px] font-medium text-primary">{row.priceList?.name || 'Sin asignar'}</span>,
     },
     { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit') },
-    { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
+    { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit'), render: (val, row) => <span className="text-[13px] text-muted-foreground">{val ? formatCustomerPhoneForDisplay(String(val), row.countryCode || countryCodeFromLegacy(row.country) || 'NI') : '—'}</span> },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'creditLimit', header: 'Límite de crédito', width: '160px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val, row) => <span className="text-xs font-bold tabular-nums">{formatCurrentAmount(Number(val || 0), normalizeCurrency(row.creditLimitCurrency, baseCurrency))}</span> },
     { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{(val ?? 0) === 0 || val == null ? 'Contado' : `${val} días`}</span> },
@@ -844,7 +865,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             )}
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button 
-                onClick={() => { setNewCustomer(emptyCustomerDraft(displayCurrency)); setCreateOpen(true); }}
+                onClick={() => { setNewCustomer(emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries))); setCreateOpen(true); }}
                 data-toolbar-role="primary"
                 data-tour="customers-new"
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 border border-primary/20"
@@ -996,19 +1017,20 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Nombre del particular o empresa" className="h-11 rounded-xl" autoFocus /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><Select value={newCustomer.type} onValueChange={(value) => setNewCustomer({ ...newCustomer, type: value as CustomerDraft['type'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="individual">Particular</SelectItem><SelectItem value="company">Empresa</SelectItem></SelectContent></Select></div>
-                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cédula</label><Input value={newCustomer.taxId} onChange={(e) => setNewCustomer({ ...newCustomer, taxId: e.target.value })} placeholder="001-010190-1000A" className="h-11 rounded-xl" /></div>
-                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {String(newCustomer.type).toUpperCase() === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={newCustomer.ruc} onChange={(e) => setNewCustomer({ ...newCustomer, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
+                  <CustomerIdentifierInput id="new-customer-tax-id" value={newCustomer.taxId} onChange={(value) => setNewCustomer({ ...newCustomer, taxId: value })} countryCode={newCustomer.countryCode} kind="taxId" className="h-11 rounded-xl" />
+                  <CustomerIdentifierInput id="new-customer-ruc" value={newCustomer.ruc} onChange={(value) => setNewCustomer({ ...newCustomer, ruc: value })} countryCode={newCustomer.countryCode} kind="ruc" required={customerRucRequired(newCustomer.type, newCustomer.countryCode)} className="h-11 rounded-xl" />
                 </div>
               </section>
               <section className="space-y-3 border-t border-border/40 pt-5" data-tour="sales-form-summary">
                 <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto y ubicación</h3><p className="text-xs text-muted-foreground">Completa la información esencial del cliente.</p></div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo</label><Input type="email" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} placeholder="correo@ejemplo.com" className="h-11 rounded-xl" /></div>
-                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label><Input value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} placeholder="8888-8888" className="h-11 rounded-xl" /></div>
+                  <CustomerPhoneInput id="new-customer-phone" value={newCustomer.phone} onChange={(value) => setNewCustomer({ ...newCustomer, phone: value })} countryCode={newCustomer.countryCode} />
+                  <CustomerPhoneInput id="new-customer-contact-phone" label="Teléfono del contacto" value={newCustomer.contactPhone} onChange={(value) => setNewCustomer({ ...newCustomer, contactPhone: value })} countryCode={newCustomer.countryCode} />
                   <div className="space-y-1.5 xl:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={newCustomer.city} onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })} placeholder="Ciudad" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Departamento</label><Input value={newCustomer.department} onChange={(e) => setNewCustomer({ ...newCustomer, department: e.target.value })} placeholder="Departamento" className="h-11 rounded-xl" /></div>
-                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={newCustomer.country} onChange={(e) => setNewCustomer({ ...newCustomer, country: e.target.value })} placeholder="País" className="h-11 rounded-xl" /></div>
+                  <CustomerCountrySelect id="new-customer-country" value={newCustomer.countryCode} countries={countries} onChange={(value) => setNewCustomer({ ...newCustomer, countryCode: value, country: countryNameForForm(value, countries) })} />
                   <div className="space-y-1.5 xl:col-span-3"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</label><textarea value={newCustomer.notes} onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })} placeholder="Observaciones opcionales" className="min-h-20 w-full resize-y rounded-xl border border-foreground/20 bg-background px-3 py-2 text-sm outline-none focus:border-primary" /></div>
                 </div>
               </section>
@@ -1060,8 +1082,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={editCustomer.name} onChange={(e) => setEditCustomer({ ...editCustomer, name: e.target.value })} placeholder="Nombre del particular o empresa" className="h-11 rounded-xl" autoFocus /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><Select value={editCustomer.type} onValueChange={(value) => setEditCustomer({ ...editCustomer, type: value as CustomerDraft['type'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="individual">Particular</SelectItem><SelectItem value="company">Empresa</SelectItem></SelectContent></Select></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cédula</label><Input value={editCustomer.taxId} onChange={(e) => setEditCustomer({ ...editCustomer, taxId: e.target.value })} placeholder="001-010190-1000A" className="h-11 rounded-xl" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {String(editCustomer.type).toUpperCase() === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={editCustomer.ruc} onChange={(e) => setEditCustomer({ ...editCustomer, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
+                <CustomerIdentifierInput id="edit-customer-tax-id" value={editCustomer.taxId} onChange={(value) => setEditCustomer({ ...editCustomer, taxId: value })} countryCode={editCustomer.countryCode} kind="taxId" className="h-11 rounded-xl" />
+                <CustomerIdentifierInput id="edit-customer-ruc" value={editCustomer.ruc} onChange={(value) => setEditCustomer({ ...editCustomer, ruc: value })} countryCode={editCustomer.countryCode} kind="ruc" required={customerRucRequired(editCustomer.type, editCustomer.countryCode)} className="h-11 rounded-xl" />
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><Select value={editCustomer.status} onValueChange={(value) => setEditCustomer({ ...editCustomer, status: value as CustomerDraft['status'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></div>
               </div>
             </section>
@@ -1069,11 +1091,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto y ubicación</h3><p className="text-xs text-muted-foreground">Mantén actualizados los datos de contacto del cliente.</p></div>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo</label><Input type="email" value={editCustomer.email} onChange={(e) => setEditCustomer({ ...editCustomer, email: e.target.value })} placeholder="correo@ejemplo.com" className="h-11 rounded-xl" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label><Input value={editCustomer.phone} onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })} placeholder="8888-8888" className="h-11 rounded-xl" /></div>
+                <CustomerPhoneInput id="edit-customer-phone" value={editCustomer.phone} onChange={(value) => setEditCustomer({ ...editCustomer, phone: value })} countryCode={editCustomer.countryCode} />
+                <CustomerPhoneInput id="edit-customer-contact-phone" label="Teléfono del contacto" value={editCustomer.contactPhone} onChange={(value) => setEditCustomer({ ...editCustomer, contactPhone: value })} countryCode={editCustomer.countryCode} />
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={editCustomer.address} onChange={(e) => setEditCustomer({ ...editCustomer, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={editCustomer.city} onChange={(e) => setEditCustomer({ ...editCustomer, city: e.target.value })} placeholder="Ciudad" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Departamento</label><Input value={editCustomer.department} onChange={(e) => setEditCustomer({ ...editCustomer, department: e.target.value })} placeholder="Departamento" className="h-11 rounded-xl" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={editCustomer.country} onChange={(e) => setEditCustomer({ ...editCustomer, country: e.target.value })} placeholder="País" className="h-11 rounded-xl" /></div>
+                <CustomerCountrySelect id="edit-customer-country" value={editCustomer.countryCode} countries={countries} onChange={(value) => setEditCustomer({ ...editCustomer, countryCode: value, country: countryNameForForm(value, countries) })} />
                 <div className="space-y-1.5 sm:col-span-2 xl:col-span-3"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</label><textarea value={editCustomer.notes} onChange={(e) => setEditCustomer({ ...editCustomer, notes: e.target.value })} placeholder="Observaciones opcionales" className="min-h-20 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary" /></div>
               </div>
             </section>

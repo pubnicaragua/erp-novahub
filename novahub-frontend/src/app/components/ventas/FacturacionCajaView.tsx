@@ -64,6 +64,7 @@ import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentTotalBase } from '../../utils/paymentSettlement';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
+import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -212,7 +213,9 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   const paidLocal = paidDisplay * (currency === 'USD' ? exchangeRate : 1);
   const changeLocal = Math.max(0, paidLocal - Number(invoice.total));
   const customerName = invoice.customer?.name || invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
-  const customerPhone = invoice.customer?.phone;
+  const customerPhone = invoice.customer?.phone
+    ? formatCustomerPhoneForDisplay(invoice.customer.phone, invoice.customer.countryCode || 'NI')
+    : undefined;
   const paymentLabel = (method: PosPaymentLine['method']) => method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'CHECK' ? 'Cheque' : method === 'CUSTOMER_BALANCE' ? 'Saldo a favor' : 'Transferencia';
   const paymentRows = payments.map((payment) => {
     const paymentCurrency = payment.currency || currency;
@@ -2935,7 +2938,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">{createdOperationLabel}</p>
                 <h2 id="invoice-result-title" className="mt-1 text-2xl font-black uppercase italic tracking-tight">{createdInvoice.number}</h2>
-                <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${createdInvoice.customer.phone}` : ''}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${formatCustomerPhoneForDisplay(createdInvoice.customer.phone, createdInvoice.customer.countryCode || 'NI')}` : ''}</p>
                 <p className="mt-1 text-xs font-bold text-primary">Caja: {createdInvoice.register?.code || 'N/D'}</p>
               </div>
               <Button type="button" variant="ghost" className="text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setCreatedInvoice(null)} aria-label="Cerrar detalle de factura" title="Cerrar">✕</Button>

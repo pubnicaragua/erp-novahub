@@ -18,6 +18,7 @@ import { getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { customersService } from '../../services/ventas.service';
+import { buildCustomerWhatsAppUrl } from '../ventas/WhatsAppActionButton';
 import {
   logisticsService,
   type BillingAvailableResult,
@@ -188,10 +189,12 @@ export function Billing() {
       let phone = '';
       try {
         const cust: any = await customersService.getById(lastCustomerId);
-        phone = String(cust?.phone || '').replace(/[^\d]/g, '');
+        phone = String(cust?.phone || '');
       } catch { /* sin teléfono: se abre la lista de chats */ }
       const text = `Hola, te compartimos tu factura ${result.invoice.number} de NovaHub: ${url}`;
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+      const whatsappUrl = buildCustomerWhatsAppUrl(phone, text);
+      if (!whatsappUrl) { toast.error('El cliente no tiene un teléfono E.164 válido para WhatsApp.'); return; }
+      window.open(whatsappUrl, '_blank');
       toast.success('Factura lista para enviar por WhatsApp');
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo generar el enlace de la factura'));

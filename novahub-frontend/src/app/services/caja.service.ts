@@ -176,6 +176,7 @@ export interface PosCustomer {
   taxId?: string;
   email?: string;
   phone?: string;
+  countryCode?: string;
   priceListId?: string | null;
   balance?: number;
   balanceDue?: number;

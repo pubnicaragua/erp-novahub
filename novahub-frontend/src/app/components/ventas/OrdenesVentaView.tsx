@@ -31,7 +31,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
-import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
+import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -171,11 +171,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const showPriceTypeColumn = (localDoc?.items || []).some((item: any) => (
     Boolean(item.productId) && String(resolveItemType(item)).toUpperCase() !== 'SERVICE'
   ));
-  const productHeaderColumnClass = showVariantColumn && showPriceTypeColumn
-    ? undefined
-    : showVariantColumn || showPriceTypeColumn
-      ? 'sales-line-product-header--two-columns'
-      : 'sales-line-product-header--one-column';
+  const productLineLayoutClass = showVariantColumn
+    ? showPriceTypeColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
+    : showPriceTypeColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
   const savingOrderRef = useRef(false);
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
@@ -338,8 +336,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       console.warn('No se pudo generar enlace seguro de la orden, usando modo estándar:', error);
     }
 
-    const digits = phone.replace(/\D/g, '');
-    const phoneWithCode = digits.length === 8 ? `505${digits}` : (digits.startsWith('505') ? digits : `505${digits}`);
     const totalFormatted = `${order.currency === 'USD' ? 'US$' : 'C$'}${formatSalesAmount(order.total)}`;
     let message = `Hola ${customer?.name || ''}, te compartimos la orden de venta ${order.number || ''} por un total de ${totalFormatted}.`;
     if (secureDocumentUrl) {
@@ -351,7 +347,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       message += ' Adjunto encontrarás el documento PDF con todos los detalles.';
     }
 
-    window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(message)}`, '_blank');
+    const whatsappUrl = buildCustomerWhatsAppUrl(phone, message);
+    if (!whatsappUrl) { toast.error('El cliente no tiene un teléfono E.164 válido para WhatsApp.'); return; }
+    window.open(whatsappUrl, '_blank');
     toast.success('¡Se abrió WhatsApp con la orden de venta preparada!', { id: preparingToastId });
   };
 
@@ -1118,10 +1116,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('sales-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5', productHeaderColumnClass)}>
-                  <span>Descripción</span>
-                  {showVariantColumn && <span>Variante</span>}
-                  {showPriceTypeColumn && <span>Tipo de precio</span>}
+                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5', productLineLayoutClass)}>
+                  <span>Producto</span>
+                  {showPriceTypeColumn && <span>Lista de precios</span>}
                 </div>
                 {pricingMode === 'individual' && <div className="col-span-2 grid grid-cols-2 gap-1.5">
                   <div>Aplicar</div>
@@ -1135,7 +1132,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className={cn('sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0', pricingMode === 'individual' && 'pricing-individual')}>
                   <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
-                    <div className="sales-line-product-fields">
+                    <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" data-testid={`sales-order-product-${idx}`} className="sales-line-product-picker min-w-0">
                         <Combobox 
                           options={getLineProductOptions(item)}
@@ -1179,7 +1176,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       </div>
                       {String(resolveItemType(item)).toUpperCase() !== 'SERVICE' && (
                         <SalesVariantSelect
-                          className="sales-line-variant"
+                          className="sales-line-variant sales-quote-line-variant-column"
+                          labelLayout="stacked"
+                          showLabel={false}
+                          placeholder="Seleccionar variante"
                           product={products.find((product) => product.id === item.productId)}
                           value={item.variantId}
                           onChange={(variantId, variant) => setLocalDoc({
@@ -1192,8 +1192,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       )}
                       {item.productId && String(resolveItemType(item)).toUpperCase() !== 'SERVICE' && (
                         <SalesLinePriceListSelect
-                          className="sales-line-price-list"
+                          className="sales-line-price-list sales-quote-line-price-column"
                           labelLayout="stacked"
+                          labelText="Lista de precios"
                           productId={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || item.productId}
                           variantId={item.variantId}
                           productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code}

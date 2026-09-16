@@ -32,6 +32,7 @@ interface ComboboxProps {
   disabled?: boolean
   allowCustomValue?: boolean
   ariaLabel?: string
+  id?: string
 }
 
 export function Combobox({
@@ -47,6 +48,7 @@ export function Combobox({
   disabled = false,
   allowCustomValue = false,
   ariaLabel,
+  id,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -126,6 +128,7 @@ export function Combobox({
     <Popover open={open} onOpenChange={disabled ? undefined : handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}

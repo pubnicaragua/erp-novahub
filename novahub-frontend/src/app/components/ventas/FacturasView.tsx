@@ -34,7 +34,7 @@ import { getSalesInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
-import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
+import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -165,6 +165,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const linkedProduct = products.find((product) => product.id === item.productId);
     return [...catalog, linkedProduct || { id: item.productId, code: '', name: item.description || 'Artículo vinculado', itemType: item.itemType || 'PRODUCT' }];
   };
+  const getActiveVariantCount = (product: any) => (product?.variants || []).filter((variant: any) => variant.isActive !== false).length;
+  const showVariantColumn = (localDoc?.items || []).some((item: any) => (
+    resolveItemType(item) !== 'SERVICE' && getActiveVariantCount(findProductForItem(item)) > 1
+  ));
+  const showPriceListColumn = (localDoc?.items || []).some((item: any) => (
+    Boolean(item.productId) && resolveItemType(item) !== 'SERVICE'
+  ));
+  const productLineLayoutClass = showVariantColumn
+    ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
+    : showPriceListColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
   const getProductStockForWarehouse = (product: any, warehouseId?: string | null, variantId?: string | null) => {
     if (!product) return 0;
     const normalizedWarehouseId = String(warehouseId || '').trim();
@@ -344,8 +354,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       return;
     }
     const whatsappToastId = toast.loading('Preparando factura para WhatsApp...');
-    const digits = phone.replace(/\D/g, '');
-    const phoneWithCode = digits.length === 8 ? '505' + digits : (digits.startsWith('505') ? digits : '505' + digits);
     const customerName = invoice?.customer?.name || customers.find((entry) => entry.id === invoice?.customerId)?.name || '';
     let message = `Hola ${customerName}, te compartimos la factura ${invoice?.number} por un total de ${invoice?.currency === 'USD' ? '$' : 'C$'}${formatSalesAmount(invoice?.total)}.`;
     try {
@@ -363,8 +371,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       console.warn('No se pudo crear el enlace seguro de la factura, se conserva el mensaje actual.', error);
       message += ' Adjunto encontrarás el documento PDF con todos los detalles.';
     }
-    const text = encodeURIComponent(message);
-    window.open(`https://wa.me/${phoneWithCode}?text=${text}`, '_blank');
+    const whatsappUrl = buildCustomerWhatsAppUrl(phone, message);
+    if (!whatsappUrl) { toast.error('El cliente no tiene un teléfono E.164 válido para WhatsApp.', { id: whatsappToastId }); return; }
+    window.open(whatsappUrl, '_blank');
     toast.success('Factura preparada y WhatsApp abierto', { id: whatsappToastId });
   };
 
@@ -1798,10 +1807,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn("sales-line-product-header xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
-                  <span>Descripción</span>
-                  <span>Variante</span>
-                  <span>Tipo de precio</span>
+                <div className={cn("sales-line-product-header sales-quote-line-product-header xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5", productLineLayoutClass)}>
+                  <span>Producto</span>
+                  {showPriceListColumn && <span>Lista de precios</span>}
                 </div>
                 {pricingMode === 'individual' && <div className="col-span-2 grid grid-cols-2 gap-1.5">
                   <div>Aplicar</div>
@@ -1815,7 +1823,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
-                    <div className="sales-line-product-fields">
+                    <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                         <Combobox
                           options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}${p.brand ? ` · ${p.brand}` : ''}`, value: p.id, description: p.commercialNote ? `Nota: ${p.commercialNote}` : p.brand ? `Marca: ${p.brand}` : undefined }))}
@@ -1862,8 +1870,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           disabled={isInvoiceLocked}
                         />
                         </div>
-                      <SalesVariantSelect
-                        className="sales-line-variant"
+                      {resolveItemType(item) !== 'SERVICE' && <SalesVariantSelect
+                        className="sales-line-variant sales-quote-line-variant-column"
+                        labelLayout="stacked"
+                        showLabel={false}
+                        placeholder="Seleccionar variante"
                         product={findProductForItem(item)}
                         value={item.variantId}
                         disabled={isInvoiceLocked}
@@ -1879,10 +1890,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           setLocalDoc({ ...localDoc, items: nextItems });
                           if (!isCreating) void handleUpdate(localDoc!.id, { items: nextItems } as any);
                         }}
-                      />
-                      <SalesLinePriceListSelect
-                        className="sales-line-price-list"
+                      />}
+                      {item.productId && resolveItemType(item) !== 'SERVICE' && <SalesLinePriceListSelect
+                        className="sales-line-price-list sales-quote-line-price-column"
                         labelLayout="stacked"
+                        labelText="Lista de precios"
                         productId={findProductForItem(item)?.id || item.productId}
                         variantId={item.variantId}
                         productCode={findProductForItem(item)?.code || (item as any).productCode || (item as any).code}
@@ -1912,7 +1924,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           setLocalDoc({ ...localDoc, ...calc, priceListId, items: calc.items } as any);
                           if (!isCreating && source !== 'initial') void handleUpdate(localDoc!.id, { ...calc, priceListId, items: calc.items } as any);
                         }}
-                      />
+                      />}
                     </div>
                     {item.productId && (
                       <div className="mt-1 flex items-center gap-2 px-1">

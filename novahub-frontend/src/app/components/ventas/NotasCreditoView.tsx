@@ -277,6 +277,16 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     const linkedProduct = products.find((product) => product.id === item.productId);
     return [...catalog, linkedProduct || { id: item.productId, code: '', name: item.description || 'Artículo vinculado', itemType: item.itemType || 'PRODUCT' }];
   };
+  const getActiveVariantCount = (product: any) => (product?.variants || []).filter((variant: any) => variant.isActive !== false).length;
+  const showVariantColumn = (localDoc?.items || []).some((item: any) => (
+    resolveItemType(item) !== 'SERVICE' && getActiveVariantCount(findProductForItem(item)) > 1
+  ));
+  const showPriceListColumn = (localDoc?.items || []).some((item: any) => (
+    Boolean(item.productId) && resolveItemType(item) !== 'SERVICE'
+  ));
+  const productLineLayoutClass = showVariantColumn
+    ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
+    : showPriceListColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
   const customerName = (row: CreditNote) => row.customer?.name || customerFor(row.customerId)?.name || 'Cliente';
   const sourceInvoiceTotal = (row: CreditNote) => Number(row.invoice?.total ?? row.total ?? 0);
   const sourceInvoicePaid = (row: CreditNote) => {
@@ -755,10 +765,9 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
             </div>
             <div className="space-y-2">
               <div className="hidden px-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground xl:grid xl:grid-cols-12 xl:gap-2">
-                <div className="sales-line-product-header col-span-5">
-                  <span>Descripción</span>
-                  <span>Variante</span>
-                  <span>Tipo de precio</span>
+                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-5', productLineLayoutClass)}>
+                  <span>Producto</span>
+                  {showPriceListColumn && <span>Lista de precios</span>}
                 </div>
                 <div className="col-span-2 grid grid-cols-2 gap-1.5"><div>Aplicar</div><div className="text-right">Desc.</div></div>
                 <div className="text-right">Cant.</div>
@@ -773,7 +782,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                 return (
                   <div key={item.id || index} data-item-layout="standard" data-pricing-mode="individual" className="sales-item-row grid min-w-0 grid-cols-1 items-start gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                     <div data-item-role="product-area" className="min-w-0 xl:col-span-5">
-                      <div className="sales-line-product-fields">
+                      <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                         <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                           <Combobox
                             options={catalog.map((entry) => ({ label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${entry.code || ''} - ${entry.name}`, value: entry.id, description: entry.commercialNote ? `Nota: ${entry.commercialNote}` : undefined }))}
@@ -800,8 +809,11 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                             placeholder={itemType === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                           />
                         </div>
-                        <SalesVariantSelect
-                          className="sales-line-variant"
+                        {itemType !== 'SERVICE' && <SalesVariantSelect
+                          className="sales-line-variant sales-quote-line-variant-column"
+                          labelLayout="stacked"
+                          showLabel={false}
+                          placeholder="Seleccionar variante"
                           product={product}
                           value={item.variantId}
                           onChange={(variantId, variant) => updateItem(index, {
@@ -810,10 +822,11 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                             variantName: variant?.name || null,
                             variantAttributes: variant?.attributes || null,
                           })}
-                        />
-                        <SalesLinePriceListSelect
-                          className="sales-line-price-list"
+                        />}
+                        {itemType !== 'SERVICE' && item.productId && <SalesLinePriceListSelect
+                          className="sales-line-price-list sales-quote-line-price-column"
                           labelLayout="stacked"
+                          labelText="Lista de precios"
                           productId={item.productId}
                           variantId={item.variantId}
                           productCode={product?.code || item.code || item.productCode}
@@ -840,7 +853,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                             const calculated = recalculateItems(nextItems);
                             setLocalDoc({ ...localDoc, ...calculated, priceListId, items: calculated.items });
                           }}
-                        />
+                        />}
                       </div>
                       {item.productId && product && (
                         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 px-1">

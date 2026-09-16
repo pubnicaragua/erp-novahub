@@ -147,6 +147,16 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     const linkedProduct = findProductForItem(item);
     return [...catalog, linkedProduct || { id: item.productId, code: '', name: item.description || 'Artículo vinculado', itemType: item.itemType || 'PRODUCT' }];
   };
+  const getActiveVariantCount = (product: any) => (product?.variants || []).filter((variant: any) => variant.isActive !== false).length;
+  const showVariantColumn = (localDoc?.items || []).some((item: any) => (
+    resolveItemType(item) !== 'SERVICE' && getActiveVariantCount(findProductForItem(item)) > 1
+  ));
+  const showPriceListColumn = (localDoc?.items || []).some((item: any) => (
+    Boolean(item.productId) && resolveItemType(item) !== 'SERVICE'
+  ));
+  const productLineLayoutClass = showVariantColumn
+    ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
+    : showPriceListColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
 
   const handleCatalogItemChange = (idx: number, value: string) => {
     if (!localDoc) return;
@@ -722,10 +732,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('sales-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
-                  <span>Producto / Servicio</span>
-                  <span>Variante</span>
-                  <span>Tipo de precio</span>
+                <div className={cn('sales-line-product-header sales-quote-line-product-header col-span-6', pricingMode === 'individual' && 'xl:col-span-5', productLineLayoutClass)}>
+                  <span>Producto</span>
+                  {showPriceListColumn && <span>Lista de precios</span>}
                 </div>{pricingMode === 'individual' && <div className="col-span-2 flex gap-1.5"><span className="flex-1">Aplicar</span><span className="flex-1 text-right">Desc.</span></div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>{pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}<div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => {
@@ -734,7 +743,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                 return (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
-                    <div className="sales-line-product-fields">
+                    <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
                         <Combobox
                           options={getItemCatalog(item).map((product: any) => ({
@@ -747,8 +756,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                           placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                         />
                       </div>
-                      <SalesVariantSelect
-                        className="sales-line-variant"
+                      {itemType !== 'SERVICE' && <SalesVariantSelect
+                        className="sales-line-variant sales-quote-line-variant-column"
+                        labelLayout="stacked"
+                        showLabel={false}
+                        placeholder="Seleccionar variante"
                         product={product}
                         value={item.variantId}
                         onChange={(variantId, variant) => setLocalDoc({
@@ -757,10 +769,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                             ? { ...line, variantId, variantSku: variant?.sku || null, variantName: variant?.name || null, variantAttributes: variant?.attributes || null }
                             : line),
                         } as any)}
-                      />
-                      <SalesLinePriceListSelect
-                        className="sales-line-price-list"
+                      />}
+                      {itemType !== 'SERVICE' && item.productId && <SalesLinePriceListSelect
+                        className="sales-line-price-list sales-quote-line-price-column"
                         labelLayout="stacked"
+                        labelText="Lista de precios"
                         productId={item.productId}
                         variantId={item.variantId}
                         productCode={findProductForItem(item)?.code || item.code}
@@ -773,7 +786,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                         currency={localDoc?.currency}
                         exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
                         onChange={(priceListId, result) => handlePriceListChange(idx, priceListId, result)}
-                      />
+                      />}
                     </div>
                     {item.productId && product && itemType !== 'SERVICE' && (
                       <SalesWarehouseStockHint

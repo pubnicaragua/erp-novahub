@@ -17,9 +17,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { getApiErrorMessage } from '../services/api';
 import { normalizeCurrency } from '../utils/currency';
+import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './ventas/CustomerContactFields';
+import { customerRucRequired, formatCustomerPhoneForDisplay, isCustomerIdentifierValid, isCustomerPhoneValid } from '../utils/customer-data';
 
 export function ClientesPage() {
   const { canPerform } = useAuth();
+  const { countries, defaultCountryCode } = useCustomerFormOptions();
   const { baseCurrency, exchangeRate, formatConvertedAmount } = useCurrency();
   const [clientesData, setClientesData] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,6 +36,10 @@ export function ClientesPage() {
     contactName: '',
     email: '',
     phone: '',
+    contactPhone: '',
+    taxId: '',
+    countryCode: 'NI',
+    country: 'Nicaragua',
     status: 'active'
   });
 
@@ -66,32 +73,40 @@ export function ClientesPage() {
       setEditingCliente(cliente);
       setFormData({
         name: cliente.name,
-        type: cliente.type,
+        type: String(cliente.type || 'company').toLowerCase() as Customer['type'],
         ruc: cliente.ruc || '',
+        taxId: cliente.taxId || '',
+        countryCode: cliente.countryCode || 'NI',
+        country: cliente.country || countryNameForForm(cliente.countryCode || 'NI', countries),
         dv: cliente.dv || '',
         razonSocial: cliente.razonSocial || '',
         contactName: cliente.contactName,
+        contactPhone: cliente.contactPhone || '',
         email: cliente.email,
         phone: cliente.phone,
         status: cliente.status
       });
     } else {
       setEditingCliente(null);
-      setFormData({ name: '', type: 'company', ruc: '', dv: '', razonSocial: '', contactName: '', email: '', phone: '', status: 'active' });
+      setFormData({ name: '', type: 'company', ruc: '', taxId: '', dv: '', razonSocial: '', contactName: '', email: '', phone: '', contactPhone: '', countryCode: defaultCountryCode, country: countryNameForForm(defaultCountryCode, countries), status: 'active' });
     }
     setIsDialogOpen(true);
   };
 
   const handleSave = async () => {
-    const isCompany = String(formData.type || 'company').toUpperCase() === 'COMPANY';
+    const countryCode = String(formData.countryCode || defaultCountryCode);
     if (!formData.name?.trim()) {
       toast.error('El nombre del cliente es obligatorio');
       return;
     }
-    if (isCompany && !formData.ruc?.trim()) {
+    if (customerRucRequired(formData.type, countryCode) && !formData.ruc?.trim()) {
       toast.error('El RUC es obligatorio para una empresa');
       return;
     }
+    if (formData.taxId && !isCustomerIdentifierValid(formData.taxId, 'taxId', countryCode)) { toast.error('La identificación fiscal no tiene un formato válido para el país seleccionado'); return; }
+    if (formData.ruc && !isCustomerIdentifierValid(formData.ruc, 'ruc', countryCode)) { toast.error('El RUC no tiene un formato válido para el país seleccionado'); return; }
+    if (formData.phone && !isCustomerPhoneValid(formData.phone, countryCode)) { toast.error('El teléfono no es válido para el país seleccionado'); return; }
+    if (formData.contactPhone && !isCustomerPhoneValid(formData.contactPhone, countryCode)) { toast.error('El teléfono del contacto no es válido para el país seleccionado'); return; }
     try {
       if (editingCliente) {
         await customersService.update(editingCliente.id, formData);
@@ -136,7 +151,7 @@ export function ClientesPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Tipo</Label>
-                  <Select value={formData.type?.toUpperCase() || 'COMPANY'} onValueChange={v => setFormData({ ...formData, type: v as any })}>
+                  <Select value={formData.type?.toUpperCase() || 'COMPANY'} onValueChange={v => setFormData({ ...formData, type: v.toLowerCase() as any })}>
                     <SelectTrigger><SelectValue placeholder="Selecciona el tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="COMPANY">Empresa</SelectItem>
@@ -151,10 +166,7 @@ export function ClientesPage() {
                       <Input id="razonSocial" value={formData.razonSocial || ''} onChange={e => setFormData({ ...formData, razonSocial: e.target.value })} />
                     </div>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <div className="grid gap-2 col-span-2">
-                        <Label htmlFor="ruc">RUC {formData.type === 'company' && <span className="text-destructive">*</span>}</Label>
-                        <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} data-testid="customer-ruc" />
-                      </div>
+                      <CustomerIdentifierInput id="ruc" value={formData.ruc || ''} onChange={(value) => setFormData({ ...formData, ruc: value })} countryCode={String(formData.countryCode || defaultCountryCode)} kind="ruc" required={customerRucRequired(formData.type, formData.countryCode || defaultCountryCode)} className="h-11 rounded-xl" />
                       <div className="grid gap-2">
                         <Label htmlFor="dv">DV</Label>
                         <Input id="dv" value={formData.dv || ''} onChange={e => setFormData({ ...formData, dv: e.target.value })} />
@@ -162,6 +174,7 @@ export function ClientesPage() {
                     </div>
                   </>
                 )}
+                {formData.type !== 'company' && <CustomerIdentifierInput id="taxId" value={formData.taxId || ''} onChange={(value) => setFormData({ ...formData, taxId: value })} countryCode={String(formData.countryCode || defaultCountryCode)} kind="taxId" className="h-11 rounded-xl" />}
                 <div className="grid gap-2">
                   <Label htmlFor="contacto">Nombre del Contacto</Label>
                   <Input id="contacto" value={formData.contactName || ''} onChange={e => setFormData({ ...formData, contactName: e.target.value })} />
@@ -170,10 +183,9 @@ export function ClientesPage() {
                   <Label htmlFor="email">Email</Label>
                   <Input id="email" type="email" value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} data-testid="customer-email" />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="telefono">Teléfono</Label>
-                  <Input id="telefono" value={formData.phone || ''} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
-                </div>
+                <CustomerPhoneInput id="telefono" value={formData.phone || ''} onChange={(value) => setFormData({ ...formData, phone: value })} countryCode={String(formData.countryCode || defaultCountryCode)} />
+                <CustomerPhoneInput id="telefono-contacto" label="Teléfono del contacto" value={formData.contactPhone || ''} onChange={(value) => setFormData({ ...formData, contactPhone: value })} countryCode={String(formData.countryCode || defaultCountryCode)} />
+                <CustomerCountrySelect id="country" value={String(formData.countryCode || defaultCountryCode)} countries={countries} onChange={(value) => setFormData({ ...formData, countryCode: value, country: countryNameForForm(value, countries) })} disabled={false} />
                 <div className="grid gap-2">
                   <Label>Estado</Label>
                   <Select value={formData.status?.toUpperCase() || 'ACTIVE'} onValueChange={v => setFormData({ ...formData, status: v as any })}>
@@ -239,7 +251,7 @@ export function ClientesPage() {
                         <div className="flex flex-col gap-1">
                           <span className="text-sm flex items-center gap-1.5"><UserCircle className="size-3.5 text-muted-foreground" />{c.contactName || 'N/A'}</span>
                           <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Mail className="size-3.5" />{c.email || 'N/A'}</span>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Phone className="size-3.5" />{c.phone || 'N/A'}</span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Phone className="size-3.5" />{c.phone ? formatCustomerPhoneForDisplay(c.phone, c.countryCode || 'NI') : 'N/A'}</span>
                         </div>
                       </TableCell>
                       <TableCell>
