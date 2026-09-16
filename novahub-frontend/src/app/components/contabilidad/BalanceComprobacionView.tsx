@@ -586,68 +586,63 @@ export function BalanceComprobacionView() {
 
   return (
     <div className="min-w-0 space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-black text-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
-          <Filter className="size-3.5" /> Filtros
-        </div>
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Desde</label>
-            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde" className="sm:w-[180px]" />
+      <div className="flex flex-wrap items-center bg-muted/30 rounded-2xl border border-border/50 shadow-sm p-2 sm:p-3 gap-y-3">
+        {/* Sección 1: Filtros de Fecha */}
+        <div className="flex flex-wrap items-center gap-3 px-2 2xl:border-r border-border/40 2xl:pr-4">
+          <div className="flex items-center gap-2 text-xs font-black text-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
+            <Filter className="size-3.5" /> Filtros
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Hasta</label>
-            <DateField value={dateTo} onChange={setDateTo} placeholder="Hasta" className="sm:w-[180px]" />
+          <div className="flex items-center gap-2 shrink-0">
+            <label className="text-[10px] font-black text-foreground uppercase tracking-widest">Desde</label>
+            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde" className="w-[130px] sm:w-[140px] shrink-0" />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <label className="text-[10px] font-black text-foreground uppercase tracking-widest">Hasta</label>
+            <DateField value={dateTo} onChange={setDateTo} placeholder="Hasta" className="w-[130px] sm:w-[140px] shrink-0" />
           </div>
           {(dateFrom || dateTo) && (
-            <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">
+            <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="h-9 px-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all shrink-0">
               <X className="size-3" /> Limpiar
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 items-center gap-2 border-t border-border/20 pt-4 lg:ml-auto lg:flex lg:border-t-0 lg:pt-0">
-          <div className="relative col-span-2 sm:col-span-1">
+
+        {/* Sección 2: Búsqueda y Navegación del Árbol */}
+        <div className="flex flex-wrap items-center gap-2 px-2 2xl:border-r border-border/40 2xl:pr-4">
+          <div className="relative w-full sm:w-[220px] shrink-0">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar cuenta o código..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="h-9 w-full pl-9 sm:w-[220px]" />
+            <Input placeholder="Buscar cuenta o código..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="h-9 w-full pl-9" />
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExpandAll}
-            className="h-9 gap-1 text-xs"
-            title="Expandir todas las subcuentas"
-          >
-            <ChevronDown className="size-3.5" /> Expandir todo
+          <Button variant="outline" size="sm" onClick={handleExpandAll} className="h-9 gap-1 text-xs shrink-0" title="Expandir todas las subcuentas">
+            <ChevronDown className="size-3.5" /> Expandir
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCollapseAll}
-            className="h-9 gap-1 text-xs"
-            title="Colapsar a nivel principal"
-          >
-            <ChevronRight className="size-3.5" /> Colapsar todo
+          <Button variant="outline" size="sm" onClick={handleCollapseAll} className="h-9 gap-1 text-xs shrink-0" title="Colapsar a nivel principal">
+            <ChevronRight className="size-3.5" /> Colapsar
           </Button>
+        </div>
+
+        {/* Sección 3: Exportación y Configuración */}
+        <div className="flex flex-wrap items-center gap-2 px-2">
           {canExportTrialBalance && (
             <>
-              <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9">
-                <Download className="size-4" /> Exportar Excel
+              <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9 shrink-0">
+                <Download className="size-4" />Exportar Excel
               </Button>
-              <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
-                <Download className="size-4" /> Descargar PDF
+              <Button variant="outline" size="sm" onClick={handlePrint} className="h-9 shrink-0">
+                <Download className="size-4" />Exportar PDF
               </Button>
             </>
           )}
-          <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5 shrink-0">
             <Settings2 className="size-4" /> Configuración
           </Button>
           {configuredAccountIds && configuredAccountIds.length > 0 && (
             <button
               onClick={() => { setConfiguredAccountIds(null); void contabilidadService.updateConfig({ trialBalanceAccountIds: [] }).then(() => toast.success('Mostrando todas las cuentas')).catch(() => undefined); }}
               title="Se está mostrando solo un subconjunto de cuentas. Haz clic para volver a mostrar todas."
-              className="h-9 gap-1.5 inline-flex items-center rounded-lg border border-primary/30 bg-primary/5 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+              className="h-9 gap-1.5 inline-flex items-center rounded-lg border border-primary/30 bg-primary/5 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 shrink-0"
             >
-              <X className="size-3.5" /> Filtro activo ({configuredAccountIds.length})
+              <X className="size-3.5" /> Filtro ({configuredAccountIds.length})
             </button>
           )}
         </div>
