@@ -124,7 +124,6 @@ const ErrorBoundaryFallback = () => (
 
 function DashboardLayout() {
   const { hasAccess, canPerform, sessionStartVersion, user } = useAuth();
-  useIncomingNotificationAlert();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
     if (sessionStartVersion > 0) return 'overview';
@@ -487,6 +486,11 @@ function DashboardLayout() {
   );
 }
 
+function GlobalNotificationAlert() {
+  useIncomingNotificationAlert();
+  return null;
+}
+
 function AppContent() {
   const { isAuthenticated, login, logout, user, sessionStartVersion } = useAuth();
   const { isBrandingReady } = useTheme();
@@ -681,6 +685,7 @@ function AppContent() {
 
   return (
     <>
+      <GlobalNotificationAlert />
       {(user?.userType === 'manager' || user?.role === 'manager') && !user.isPlatformAdmin && !isImpersonating ? (
         <Suspense fallback={<PageLoader />}><ManagerPage key={`manager-${sessionStartVersion}-${user.id}-${user.clientTenantId || user.tenantId}`} /></Suspense>
       ) : <DashboardLayout key={`dashboard-${sessionStartVersion}-${user?.id || 'anonymous'}-${user?.clientTenantId || user?.tenantId || ''}`} />}
