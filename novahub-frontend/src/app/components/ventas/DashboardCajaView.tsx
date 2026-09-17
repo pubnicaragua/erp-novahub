@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cajaService, type DashboardData } from '../../services/caja.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { normalizeCurrency, type SupportedCurrency } from '../../utils/currency';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onNavigateToFacturacion?: () => void, registerId?: string }) {
   const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatExplicitAmount } = useCurrency();
@@ -32,19 +33,27 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
   const [startDate, setStartDate] = useState(getTodayDateString());
   const [endDate, setEndDate] = useState(getTodayDateString());
 
+  const loadDashboard = useCallback(async (silent = false) => {
+    try {
+      setLoading(true);
+      const res = await cajaService.getDashboard(undefined, registerId, startDate, endDate);
+      setData(res);
+    } catch (e: any) {
+      if (!silent) toast.error(e?.response?.data?.message || e?.message || 'Error al cargar dashboard de caja');
+    } finally {
+      setLoading(false);
+    }
+  }, [endDate, registerId, startDate]);
+
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await cajaService.getDashboard(undefined, registerId, startDate, endDate);
-        setData(res);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || 'Error al cargar dashboard de caja');
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
-  }, [startDate, endDate, registerId]);
+    void loadDashboard();
+  }, [loadDashboard]);
+
+  useNotificationDomainRefresh({
+    module: 'ventas',
+    subModules: ['control-caja'],
+    onRefresh: () => loadDashboard(true),
+  });
 
   if (loading) {
     return (

@@ -19,6 +19,11 @@ export function useNotifications() {
         signal => notificationsService.getAll(signal),
         {
             refetchOnWindowFocus: false,
+            // SSE delivers the notification with low latency. This periodic
+            // catch-up covers missed reconnects and deployments where multiple
+            // API instances do not share their local SSE clients through Redis.
+            refetchInterval: 15_000,
+            refetchIntervalInBackground: true,
         },
     );
 

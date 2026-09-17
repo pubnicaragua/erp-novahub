@@ -12,6 +12,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 interface Attribute {
   id: string;
@@ -78,18 +79,18 @@ export function AtributosView() {
         </TabsList>
 
         <TabsContent value="atributos">
-          <AtributosTab />
+          <AtributosTab active={activeTab === 'atributos'} />
         </TabsContent>
 
         <TabsContent value="categorias">
-          <CategoriasTab />
+          <CategoriasTab active={activeTab === 'categorias'} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function AtributosTab() {
+function AtributosTab({ active }: { active: boolean }) {
   const { canPerform } = useAuth();
   const canCreateAttribute = canPerform('INVENTORY_ATTRIBUTES', 'create');
   const canEditAttribute = canPerform('INVENTORY_ATTRIBUTES', 'edit');
@@ -109,19 +110,28 @@ function AtributosTab() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
-  const loadAttributes = useCallback(async () => {
+  const loadAttributes = useCallback(async (silent = false) => {
     setLoading(true);
     try {
       const res = await inventoryService.getAttributes();
       const data = (res as any)?.data || res || [];
       setAttributes(Array.isArray(data) ? data : []);
     } catch {
-      toast.error('Error al cargar atributos');
-      setAttributes([]);
+      if (!silent) {
+        toast.error('Error al cargar atributos');
+        setAttributes([]);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useNotificationDomainRefresh({
+    module: 'inventario',
+    subModules: ['atributos'],
+    enabled: active,
+    onRefresh: () => loadAttributes(true),
+  });
 
   useEffect(() => {
     void loadAttributes();
@@ -439,7 +449,7 @@ function AtributosTab() {
   );
 }
 
-function CategoriasTab() {
+function CategoriasTab({ active }: { active: boolean }) {
   const { canPerform } = useAuth();
   const canCreateCategory = canPerform('INVENTORY_ATTRIBUTES', 'create');
   const canEditCategory = canPerform('INVENTORY_ATTRIBUTES', 'edit');
@@ -457,19 +467,28 @@ function CategoriasTab() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
-  const loadCategories = useCallback(async () => {
+  const loadCategories = useCallback(async (silent = false) => {
     setLoading(true);
     try {
       const res = await inventoryService.getCategories();
       const data = (res as any)?.data || res || [];
       setCategories(Array.isArray(data) ? data : []);
     } catch {
-      toast.error('Error al cargar categorías');
-      setCategories([]);
+      if (!silent) {
+        toast.error('Error al cargar categorías');
+        setCategories([]);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useNotificationDomainRefresh({
+    module: 'inventario',
+    subModules: ['atributos'],
+    enabled: active,
+    onRefresh: () => loadCategories(true),
+  });
 
   useEffect(() => {
     void loadCategories();

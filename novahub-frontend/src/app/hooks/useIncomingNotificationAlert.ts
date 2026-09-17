@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNotifications } from './useNotifications';
 import { playNotificationSound } from '../utils/notificationSound';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +13,7 @@ import { waitForNotificationActionBarrier, getNotificationSequenceGapMs } from '
 import { isBrowserNotificationsEnabled } from '../utils/browserNotifications';
 import { toast } from 'sonner';
 import { getNotificationNavigation, navigateToNotification } from '../utils/notificationNavigation';
+import { refreshNotificationDomain } from '../services/notification-domain-refresh';
 import type { Notification } from '../types';
 
 const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
@@ -26,6 +28,7 @@ const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout
  */
 export function useIncomingNotificationAlert() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { notifications, isFetched, markAsRead } = useNotifications();
   const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null | undefined;
   const storageKey = `nh-notification-seen:${authUser?.clientTenantId || authUser?.tenantId || 'current'}:${authUser?.id || 'current'}`;
@@ -111,6 +114,11 @@ export function useIncomingNotificationAlert() {
       seenEvents.current.add(key);
       pendingIds.delete(notification.id);
 
+      // The notification is also the low-latency domain-change signal. Query
+      // invalidation is active-only; mounted legacy views receive the same
+      // detail through the local refresh bus.
+      refreshNotificationDomain(notification, queryClient, authUser?.clientTenantId || authUser?.tenantId || 'current');
+
       if (getNotificationActorId(notification) === String(authUser?.id || '')) {
         if (!queuedOwnKeys.current.has(key)) {
           queuedOwnKeys.current.add(key);
@@ -142,7 +150,7 @@ export function useIncomingNotificationAlert() {
         }
       })();
     }
-  }, [authUser?.id, isFetched, markAsRead, notifications, storageKey]);
+  }, [authUser?.clientTenantId, authUser?.id, authUser?.tenantId, isFetched, markAsRead, notifications, queryClient, storageKey]);
 }
 
 async function presentNotification(
