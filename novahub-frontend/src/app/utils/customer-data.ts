@@ -62,18 +62,24 @@ export function countryCodeFromLegacy(value: string | null | undefined): string 
   return CUSTOMER_COUNTRY_CODES.find((countryCode) => normalizeCountryLabel(countryDisplayName(countryCode)) === normalizeCountryLabel(String(value))) || null;
 }
 
+function resolveCustomerCountryCode(value: string | null | undefined): CountryCode {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (CUSTOMER_COUNTRY_CODES.includes(normalized as CountryCode)) return normalized as CountryCode;
+  return (countryCodeFromLegacy(value) || 'NI') as CountryCode;
+}
+
 export function countryName(code: string, options: CustomerCountryOption[] = DEFAULT_CUSTOMER_COUNTRIES) {
-  const normalizedCode = String(code || '').trim().toUpperCase();
+  const normalizedCode = resolveCustomerCountryCode(code);
   return configuredCountryName(options.find((item) => item.code === normalizedCode)?.name, normalizedCode);
 }
 
 export function countryOption(code: string, options: CustomerCountryOption[] = DEFAULT_CUSTOMER_COUNTRIES) {
-  const normalizedCode = String(code || '').trim().toUpperCase();
+  const normalizedCode = resolveCustomerCountryCode(code);
   return options.find((item) => item.code.toUpperCase() === normalizedCode) || DEFAULT_CUSTOMER_COUNTRIES.find((item) => item.code === normalizedCode) || DEFAULT_CUSTOMER_COUNTRIES[0];
 }
 
 function possiblePhoneLengths(countryCode: string): number[] {
-  const metadataCountry = PHONE_METADATA_COUNTRIES[String(countryCode || '').trim().toUpperCase()];
+  const metadataCountry = PHONE_METADATA_COUNTRIES[resolveCustomerCountryCode(countryCode)];
   const lengths = metadataCountry?.[3];
   return Array.isArray(lengths) ? lengths.filter((length): length is number => typeof length === 'number') : [];
 }
@@ -101,14 +107,14 @@ function nationalPhoneDigits(value: string | null | undefined, countryCode: stri
     const callingCode = countryOption(countryCode).phoneCode;
     if (digits.startsWith(callingCode)) return digits.slice(callingCode.length);
   }
-  if (String(countryCode || '').trim().toUpperCase() === 'NI' && digits.startsWith('505') && digits.length > 8) return digits.slice(3);
+  if (resolveCustomerCountryCode(countryCode) === 'NI' && digits.startsWith('505') && digits.length > 8) return digits.slice(3);
   return digits;
 }
 
 function phoneCountryMismatch(value: string | null | undefined, countryCode: string): CountryCode | null {
   const raw = String(value || '').trim();
   if (!raw.startsWith('+')) return null;
-  const region = String(countryCode || '').trim().toUpperCase() as CountryCode;
+  const region = resolveCustomerCountryCode(countryCode);
   const parsed = parsePhoneNumberFromString(raw, region);
   if (parsed?.country && parsed.country !== region) return parsed.country;
 
@@ -132,18 +138,24 @@ function phoneLengthDescription(countryCode: string): string {
 export function formatCustomerPhoneInput(value: string, countryCode: string): string {
   const raw = String(value || '').trim();
   if (!raw) return '';
-  const region = String(countryCode || '').trim().toUpperCase() as CountryCode;
-  const parsed = parsePhoneNumberFromString(raw, region);
-  if (raw.startsWith('+') && (!parsed?.country || parsed.country !== region)) {
-    return formatIncompletePhoneNumber(raw).slice(0, 30);
-  }
+  const region = resolveCustomerCountryCode(countryCode);
+  const rawDigits = raw.replace(/\D/g, '');
+  const callingCode = countryOption(countryCode).phoneCode;
+  const hasDisplayedCountryCode = raw.startsWith('+') && rawDigits.startsWith(callingCode);
+  const inputWithoutDisplayedCountryCode = hasDisplayedCountryCode
+    ? rawDigits.slice(callingCode.length)
+    : raw;
   if (region === 'NI') {
-    let digits = raw.replace(/\D/g, '');
+    let digits = inputWithoutDisplayedCountryCode.replace(/\D/g, '');
     if (digits.startsWith('505') && digits.length > 8) digits = digits.slice(3);
     digits = digits.slice(0, 8);
     return digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits;
   }
-  const limitedRaw = trimPhoneInputToMaximum(raw, countryCode);
+  const parsed = parsePhoneNumberFromString(raw, region);
+  if (raw.startsWith('+') && !hasDisplayedCountryCode && (!parsed?.country || parsed.country !== region)) {
+    return formatIncompletePhoneNumber(raw).slice(0, 30);
+  }
+  const limitedRaw = trimPhoneInputToMaximum(inputWithoutDisplayedCountryCode, countryCode);
   const formatted = formatIncompletePhoneNumber(limitedRaw, region);
   const limitedParsed = parsePhoneNumberFromString(limitedRaw, region);
   if (limitedParsed?.isValid()) return limitedParsed.formatNational().slice(0, 30);
@@ -153,14 +165,16 @@ export function formatCustomerPhoneInput(value: string, countryCode: string): st
 export function formatCustomerPhoneForDisplay(value: string | null | undefined, countryCode: string): string {
   const raw = String(value || '').trim();
   if (!raw) return '';
-  const region = String(countryCode || '').trim().toUpperCase() as CountryCode;
+  const region = resolveCustomerCountryCode(countryCode);
+  if (region === 'NI') {
+    const formatted = formatCustomerPhoneInput(raw, countryCode);
+    return formatted ? `+${countryOption(countryCode).phoneCode} ${formatted}` : '';
+  }
   const parsed = parsePhoneNumberFromString(raw, region);
   if (raw.startsWith('+') && (!parsed?.country || parsed.country !== region)) {
     return formatIncompletePhoneNumber(raw).slice(0, 30);
   }
-  const formatted = region === 'NI'
-    ? formatCustomerPhoneInput(raw, countryCode)
-    : parsed?.formatNational() || formatCustomerPhoneInput(raw, countryCode);
+  const formatted = parsed?.formatNational() || formatCustomerPhoneInput(raw, countryCode);
   if (!formatted || formatted.startsWith('+')) return formatted;
   return `+${countryOption(countryCode).phoneCode} ${formatted}`;
 }
@@ -168,14 +182,14 @@ export function formatCustomerPhoneForDisplay(value: string | null | undefined, 
 export function normalizeCustomerPhone(value: string | null | undefined, countryCode: string): string | null {
   const raw = String(value || '').trim();
   if (!raw) return null;
-  const region = String(countryCode || '').trim().toUpperCase() as CountryCode;
+  const region = resolveCustomerCountryCode(countryCode);
   const parsed = parsePhoneNumberFromString(raw, region);
   return parsed?.isValid() && !phoneCountryMismatch(raw, countryCode) ? parsed.number : null;
 }
 
 export function isCustomerPhoneValid(value: string | null | undefined, countryCode: string): boolean {
   const raw = String(value || '').trim();
-  const region = String(countryCode || '').trim().toUpperCase() as CountryCode;
+  const region = resolveCustomerCountryCode(countryCode);
   return !raw || (isValidPhoneNumber(raw, region) && !phoneCountryMismatch(raw, region));
 }
 
@@ -184,6 +198,15 @@ export function customerRucRequired(type: string | null | undefined, countryCode
 }
 
 export function customerPhoneHint(value: string | null | undefined, countryCode: string): string {
+  const region = resolveCustomerCountryCode(countryCode);
+  if (region === 'NI') {
+    const nationalDigits = nationalPhoneDigits(value, countryCode);
+    if (!nationalDigits) return '';
+    if (nationalDigits.length > 8) return 'Demasiados dígitos · máximo 8 dígitos nacionales';
+    if (nationalDigits.length === 8) return 'Formato completo';
+    const missing = 8 - nationalDigits.length;
+    return missing === 1 ? 'Falta 1 dígito' : `Faltan ${missing} dígitos`;
+  }
   const mismatch = phoneCountryMismatch(value, countryCode);
   if (mismatch) {
     return `El número corresponde a ${countryOption(mismatch).name}; selecciona ese país.`;
@@ -191,7 +214,7 @@ export function customerPhoneHint(value: string | null | undefined, countryCode:
   const nationalDigits = nationalPhoneDigits(value, countryCode);
   if (!nationalDigits) return '';
   const raw = String(value || '').trim();
-  const lengthStatus = validatePhoneNumberLength(raw, countryCode as CountryCode);
+  const lengthStatus = validatePhoneNumberLength(raw, resolveCustomerCountryCode(countryCode));
   if (isCustomerPhoneValid(value, countryCode)) {
     const description = phoneLengthDescription(countryCode);
     return description && description.includes('–')

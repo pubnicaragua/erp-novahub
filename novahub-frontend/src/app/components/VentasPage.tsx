@@ -538,7 +538,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               transition={{ duration: 0.2 }}
             >
               {activeSection === 'clientes' && (
-                <ClientesView data={filteredData.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
+                <ClientesView data={filteredData.clientes} loading={loading} error={customersListQuery.error} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'estimaciones' && (
                 <EstimacionesView data={filteredData.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} warehouses={data.warehouses} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />
