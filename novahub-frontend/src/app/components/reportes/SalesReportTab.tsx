@@ -11,14 +11,14 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Eye, Clock, DollarSign, Percent, Target, CalendarDays, AlertTriangle, Package, CreditCard, Receipt, Info } from 'lucide-react';
+import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Eye, Clock, DollarSign, Percent, CalendarDays, AlertTriangle, Package, CreditCard, Receipt, Info } from 'lucide-react';
+import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
-import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { buildReportDateFilters } from '../../utils/report-date-filters';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -150,6 +150,32 @@ function isValidReturn(status: unknown): boolean {
 function isValidCreditNote(status: unknown): boolean {
   const s = String(status || '').toUpperCase();
   return s === 'ISSUED' || s === 'APPLIED' || s === 'PAID';
+}
+
+function numericCost(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const cost = Number(value);
+  return Number.isFinite(cost) ? Math.max(0, cost) : null;
+}
+
+function getSalesItemCost(item: any): number | null {
+  const directCost = numericCost(item?.costPrice);
+  if (directCost !== null) return directCost;
+
+  const parentCost = numericCost(item?.product?.details?.costPrice ?? item?.product?.costPrice);
+  const variant = item?.variant;
+  if (!variant) return parentCost;
+
+  const variantCost = numericCost(variant.costPrice);
+  if (variantCost !== null) return variantCost;
+
+  const legacyModifier = numericCost(variant.costModifier) ?? 0;
+  return parentCost === null ? null : Math.max(0, parentCost + legacyModifier);
+}
+
+function isInventorySalesItem(item: any): boolean {
+  if (!item?.productId || !item?.product) return false;
+  return String(item.product.type || 'PRODUCT').toUpperCase() !== 'SERVICE';
 }
 
 function bucketKey(d: Date, mode: BucketMode): string {
@@ -337,15 +363,17 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     let missing = 0;
     fInv.forEach((i) => {
       let invCost = Number(i.totalCost || 0);
-      if (!invCost && i.items) {
-        invCost = i.items.reduce((sum: number, item: any) => {
-          const itemCost = Number(item.costPrice || item.product?.costPrice || 0);
-          if (!itemCost) missing++;
-          return sum + itemCost * Number(item.quantity || 1);
+      if (!invCost && Array.isArray(i.items)) {
+        invCost = i.items.filter(isInventorySalesItem).reduce((sum: number, item: any) => {
+          const itemCost = getSalesItemCost(item);
+          if (itemCost === null || itemCost <= 0) missing++;
+          return sum + (itemCost ?? 0) * Number(item.quantity || 1);
         }, 0);
       }
-      if (!invCost && !i.items) missing++;
-      cost += toNioAmt(invCost, i.currency, i.exchangeRate);
+      // Los costos del catálogo están guardados en la moneda base del negocio.
+      // No deben convertirse con la moneda/tasa de la factura, porque eso los
+      // inflaría cuando la venta está expresada en otra moneda.
+      cost += invCost;
     });
     return { totalCost: cost, costMissing: missing };
   }, [fInv, exchangeRate]);
@@ -406,7 +434,9 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   );
   const originalCost = (currency: SupportedCurrency) => originalSum(fInv, (invoice) => {
     let cost = Number(invoice.totalCost || 0);
-    if (!cost && Array.isArray(invoice.items)) cost = invoice.items.reduce((sum: number, item: any) => sum + Number(item.costPrice || item.product?.costPrice || 0) * Number(item.quantity || 1), 0);
+    if (!cost && Array.isArray(invoice.items)) cost = invoice.items
+      .filter(isInventorySalesItem)
+      .reduce((sum: number, item: any) => sum + (getSalesItemCost(item) ?? 0) * Number(item.quantity || 1), 0);
     return cost;
   }, currency);
   const originalCount = (rows: any[], currency: SupportedCurrency) => rows.filter((row) => normalizeCurrency(row.currency || baseCurrency) === currency).length;
@@ -617,9 +647,11 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const name = item.product?.name || item.description || 'Producto';
         const q = Number(item.quantity || 0);
         const unitPrice = Number(item.unitPrice || 0);
-        const unitCost = Number(item.costPrice || item.product?.costPrice || 0);
+        const unitCost = isInventorySalesItem(item) ? (getSalesItemCost(item) ?? 0) : 0;
         const rev = inv.currency === 'USD' ? unitPrice * q * sourceRate(inv.exchangeRate) : unitPrice * q;
-        const cost = inv.currency === 'USD' ? unitCost * q * sourceRate(inv.exchangeRate) : unitCost * q;
+        // El costo unitario ya está en la moneda base; solo la venta viene en
+        // la moneda original de la factura.
+        const cost = unitCost * q;
         const row = map.get(name) || { name, qty: 0, revenue: 0, profit: 0, margin: null, priceAvg: 0, trendPct: null };
         row.qty += q;
         row.revenue += rev;
@@ -654,8 +686,9 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     const map = new Map<string, { name: string; qty: number; revenue: number }>();
     fInv.forEach(inv => {
       (inv.items || []).forEach((item: any) => {
-        const cost = Number(item.costPrice || item.product?.costPrice || 0);
-        if (cost > 0) return;
+        if (!isInventorySalesItem(item)) return;
+        const cost = getSalesItemCost(item);
+        if (cost !== null && cost > 0) return;
         const name = item.product?.name || item.description || 'Producto';
         const row = map.get(name) || { name, qty: 0, revenue: 0 };
         row.qty += Number(item.quantity || 0);
@@ -1275,17 +1308,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-            <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
-              <div className="flex items-center gap-1.5">
-                <Target className="size-3.5 text-primary" />
-                <p className="text-[10px] font-bold text-muted-foreground uppercase">Cumplimiento de Meta</p>
-              </div>
-              <p className="text-xl font-black text-primary">Sin configurar</p>
-              <button onClick={() => toast.info('La configuración de metas de ventas estará disponible próximamente.')} className="mt-1 text-[9px] font-black uppercase tracking-wider text-primary hover:text-primary/80">
-                Configurar meta
-              </button>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/10 cursor-pointer hover:bg-rose-500/10 transition-all" onClick={() => setModal({ type: 'ajustes' })}>
               <div className="flex items-center gap-1.5">
                 <Receipt className="size-3.5 text-rose-500" />

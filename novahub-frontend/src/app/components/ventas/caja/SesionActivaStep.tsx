@@ -137,6 +137,7 @@ export function SesionActivaStep({
 
   const diferencia = totalContadoConverted - totalExpectedConverted;
   const isBlind = closureMode === 'BLIND';
+  const isAutoClosePending = Boolean(session.autoClosePendingAt);
   const hasSubmittedBlindCount = isBlind && countAttempts.length > 0;
   const canRecount = isBlind && countAttempts.length === 1 && !isRecounting;
   const latestCount = countAttempts[countAttempts.length - 1] || null;
@@ -358,6 +359,17 @@ export function SesionActivaStep({
 
   return (
     <div className="flex flex-col gap-6">
+      {isAutoClosePending && (
+        <Card className="border-amber-500/30 bg-amber-500/10 shadow-sm">
+          <CardContent className="flex items-start gap-3 p-4">
+            <Lock className="mt-0.5 size-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">CIERRE AUTOMÁTICO · ARQUEO PENDIENTE</p>
+              <p className="mt-1 text-xs text-amber-700/80 dark:text-amber-200/80">La caja está bloqueada: no se permiten ventas ni movimientos. Completa el conteo físico y el cierre para generar la diferencia y el depósito.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {/* KPI Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {showSystemAmounts ? <>
@@ -446,7 +458,7 @@ export function SesionActivaStep({
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            {canEdit && <Button onClick={() => setModalOpen(true)} variant="outline" className="h-8 text-xs font-bold shadow-sm border-border hover:bg-muted/60">
+            {canEdit && !isAutoClosePending && <Button onClick={() => setModalOpen(true)} variant="outline" className="h-8 text-xs font-bold shadow-sm border-border hover:bg-muted/60">
               <Plus className="size-3 mr-1" /> MOVIMIENTO
             </Button>}
             <Button 
@@ -575,7 +587,7 @@ export function SesionActivaStep({
             </div>
           )}
 
-          {canApprove && isBlind && !hasSubmittedBlindCount ? (
+          {canApprove && isBlind && !hasSubmittedBlindCount && !isAutoClosePending ? (
             <Button onClick={submitBlindCount} className="w-full h-12 mt-4 font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-all rounded-xl">
               <Lock className="size-4 mr-2" /> ENVIAR ARQUEO A CIEGAS
             </Button>
@@ -591,7 +603,7 @@ export function SesionActivaStep({
                 </Button>
               )}
               {canApprove && <Button onClick={handleClose} className="w-full h-12 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all rounded-xl">
-                <Lock className="size-4 mr-2" /> {isBlind ? 'CERRAR CAJA CON ESTE CONTEO' : 'INICIAR CIERRE DE CAJA'}
+                <Lock className="size-4 mr-2" /> {isAutoClosePending ? 'COMPLETAR ARQUEO Y CIERRE' : isBlind ? 'CERRAR CAJA CON ESTE CONTEO' : 'INICIAR CIERRE DE CAJA'}
               </Button>}
             </div>
           )}

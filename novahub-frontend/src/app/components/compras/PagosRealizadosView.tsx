@@ -35,6 +35,7 @@ import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { cn } from '../ui/utils';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
+import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 
 interface Props {
   data: PaymentMade[];
@@ -319,6 +320,14 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     : 0;
   const paymentRemainingBase = selectedInvoice
     ? Math.max(0, selectedInvoiceBalanceBase - paymentTotalBase)
+    : 0;
+  const selectedInvoiceCurrency = selectedInvoice && String((selectedInvoice as any).currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+  const selectedInvoiceRate = Number((selectedInvoice as any)?.exchangeRate || globalRate || 1);
+  const paymentTotalInInvoiceCurrency = selectedInvoice
+    ? convertBetweenCurrencies(paymentTotalBase, baseCurrency, selectedInvoiceCurrency, 1, selectedInvoiceRate)
+    : 0;
+  const paymentRemainingInInvoiceCurrency = selectedInvoice
+    ? convertBetweenCurrencies(paymentRemainingBase, baseCurrency, selectedInvoiceCurrency, 1, selectedInvoiceRate)
     : 0;
   const paymentOverInvoiceBalance = Boolean(selectedInvoice && paymentTotalBase > selectedInvoiceBalanceBase + 0.01);
   const expectedPaymentAmount = (payment: PaymentMade) => {
@@ -762,12 +771,16 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                                 if (itemIndex !== index) return item;
                                 const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                                 const nextRate = paymentLineRate(newCurrency);
-                                return {
-                                  ...item,
-                                  amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, newCurrency, previousRate, nextRate).toFixed(2)),
-                                  currency: newCurrency,
-                                  exchangeRate: nextRate,
-                                };
+                                  return {
+                                    ...item,
+                                    amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, newCurrency, previousRate, nextRate).toFixed(2)),
+                                    currency: newCurrency,
+                                    exchangeRate: nextRate,
+                                    bankAccountId: undefined,
+                                    cardCommissionPercent: 0,
+                                    cardCommissionAmount: 0,
+                                    cardCommissionAccountId: undefined,
+                                  };
                               }))}
                             />
                             <div>
@@ -783,7 +796,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                             </div>
                             <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                           </div>
-                          {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
+                          {selectedInvoice && line.currency !== selectedInvoiceCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatExplicitAmount(getPaymentLineDocumentAmount(line, selectedInvoiceCurrency, selectedInvoiceRate, baseCurrency, convertBetweenCurrencies), selectedInvoiceCurrency)}</p>}
+                          {isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
                           {hasPaymentReferenceField(line.method) && <div className="mt-2">
                             <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
                             <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} />
@@ -804,8 +818,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                     </div>
                     <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo anterior</span><span className="font-bold">{formatConvertedAmount(selectedInvoiceBalanceBase, baseCurrency)}</span></div>
-                      <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Este pago</span><span className="font-bold text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
-                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className={cn('font-bold', paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentRemainingBase, baseCurrency)}</span></div>
+                      <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Este pago</span><span className="font-bold text-emerald-600 dark:text-emerald-400">{formatExplicitAmount(paymentTotalInInvoiceCurrency, selectedInvoiceCurrency)}</span><span className="block text-[10px] text-muted-foreground">Base: {formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
+                       <div><span className="block text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className={cn('font-bold', paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatExplicitAmount(paymentRemainingInInvoiceCurrency, selectedInvoiceCurrency)}</span><span className="block text-[10px] text-muted-foreground">Base: {formatConvertedAmount(paymentRemainingBase, baseCurrency)}</span></div>
                     </div>
                     {paymentOverInvoiceBalance && <p className="mt-2 text-[10px] font-bold text-rose-600">El monto excede el saldo de la factura.</p>}
                   </div>}

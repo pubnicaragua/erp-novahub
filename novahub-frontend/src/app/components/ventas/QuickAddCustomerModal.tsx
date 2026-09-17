@@ -10,6 +10,8 @@ import { Building2, FileText, Loader2, Mail, MapPin, UserPlus } from 'lucide-rea
 import { toast } from 'sonner';
 import { customersService } from '@/app/services/ventas.service';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
+import { customerRucRequired, isCustomerIdentifierValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
 
 interface QuickAddCustomerModalProps {
   open: boolean;
@@ -23,12 +25,14 @@ type QuickCustomerForm = {
   fiscalRegime: string;
   email: string;
   phone: string;
+  contactPhone: string;
   identificationNumber: string;
   ruc: string;
   address: string;
   city: string;
   department: string;
   country: string;
+  countryCode: string;
   notes: string;
 };
 
@@ -38,12 +42,14 @@ const DEFAULT_FORM: QuickCustomerForm = {
   fiscalRegime: '',
   email: '',
   phone: '',
+  contactPhone: '',
   identificationNumber: '',
   ruc: '',
   address: '',
   city: '',
   department: '',
   country: 'Nicaragua',
+  countryCode: 'NI',
   notes: '',
 };
 
@@ -71,6 +77,7 @@ function SectionHeading({ number, icon: Icon, title, description }: { number: st
 export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAddCustomerModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState<QuickCustomerForm>(DEFAULT_FORM);
+  const { countries, defaultCountryCode } = useCustomerFormOptions();
 
   const handleUpdate = (field: keyof QuickCustomerForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -78,7 +85,7 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
 
   const handleClose = () => {
     if (isSaving) return;
-    setForm(DEFAULT_FORM);
+    setForm({ ...DEFAULT_FORM, countryCode: defaultCountryCode, country: countryNameForForm(defaultCountryCode, countries) });
     onOpenChange(false);
   };
 
@@ -92,24 +99,31 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
       toast.error('El nombre del cliente es obligatorio');
       return;
     }
-    if (form.type === 'COMPANY' && !ruc) {
+    if (customerRucRequired(form.type, form.countryCode) && !ruc) {
       toast.error('El RUC es obligatorio cuando el cliente es una empresa');
       return;
     }
+    if (taxId && !isCustomerIdentifierValid(taxId, 'taxId', form.countryCode)) { toast.error('La identificación fiscal no es válida para el país seleccionado'); return; }
+    if (ruc && !isCustomerIdentifierValid(ruc, 'ruc', form.countryCode)) { toast.error('El RUC no es válido para el país seleccionado'); return; }
+    if (form.phone && !isCustomerPhoneValid(form.phone, form.countryCode)) { toast.error('El teléfono no es válido para el país seleccionado'); return; }
+    if (form.contactPhone && !isCustomerPhoneValid(form.contactPhone, form.countryCode)) { toast.error('El teléfono del contacto no es válido para el país seleccionado'); return; }
 
     setIsSaving(true);
     try {
       const { identificationNumber: _identificationNumber, ...customerData } = form;
       await customersService.create({
         ...customerData,
+        type: form.type === 'COMPANY' ? 'company' : 'individual',
         name,
         taxId: taxId || undefined,
         ruc: ruc || undefined,
+        phone: form.phone ? normalizeCustomerPhone(form.phone, form.countryCode) || form.phone : undefined,
+        contactPhone: form.contactPhone ? normalizeCustomerPhone(form.contactPhone, form.countryCode) || form.contactPhone : undefined,
         fiscalRegime: form.fiscalRegime || undefined,
         department: form.department.trim() || undefined,
       });
       toast.success('Cliente registrado exitosamente');
-      setForm(DEFAULT_FORM);
+      setForm({ ...DEFAULT_FORM, countryCode: defaultCountryCode, country: countryNameForForm(defaultCountryCode, countries) });
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
@@ -120,7 +134,7 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
   };
 
   return (
-    <Dialog open={open} onOpenChange={(value) => { if (!isSaving) { if (!value) setForm(DEFAULT_FORM); onOpenChange(value); } }}>
+    <Dialog open={open} onOpenChange={(value) => { if (!isSaving) { if (!value) setForm({ ...DEFAULT_FORM, countryCode: defaultCountryCode, country: countryNameForForm(defaultCountryCode, countries) }); onOpenChange(value); } }}>
       <DialogContent className="!flex !max-h-[92vh] !w-[calc(100vw-1rem)] !max-w-[min(94vw,980px)] !flex-col !gap-0 overflow-hidden rounded-3xl border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur-sm">
         <form onSubmit={handleSave} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="relative shrink-0 overflow-hidden border-b border-border/50 bg-gradient-to-br from-primary/[0.10] via-background to-background px-5 py-5 sm:px-7 sm:py-6" data-tour="sales-form-title">
@@ -167,14 +181,8 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
                     <SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="quick-customer-tax-id" className={labelClass}>Cédula</Label>
-                  <Input id="quick-customer-tax-id" value={form.identificationNumber} onChange={(event) => handleUpdate('identificationNumber', event.target.value)} placeholder="001-010190-1000A" className={fieldClass} disabled={isSaving} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="quick-customer-ruc" className={labelClass}>RUC {form.type === 'COMPANY' && <span className="text-destructive">*</span>}</Label>
-                  <Input id="quick-customer-ruc" value={form.ruc} onChange={(event) => handleUpdate('ruc', event.target.value)} placeholder="J0310000000000" className={fieldClass} required={form.type === 'COMPANY'} disabled={isSaving} />
-                </div>
+                <CustomerIdentifierInput id="quick-customer-tax-id" value={form.identificationNumber} onChange={(value) => handleUpdate('identificationNumber', value)} countryCode={form.countryCode} kind="taxId" disabled={isSaving} className={fieldClass} labelClassName={labelClass} />
+                <CustomerIdentifierInput id="quick-customer-ruc" value={form.ruc} onChange={(value) => handleUpdate('ruc', value)} countryCode={form.countryCode} kind="ruc" required={customerRucRequired(form.type, form.countryCode)} disabled={isSaving} className={fieldClass} labelClassName={labelClass} />
                 <div className="space-y-1.5">
                   <Label htmlFor="quick-customer-fiscal-regime" className={labelClass}>Régimen fiscal</Label>
                   <Select value={form.fiscalRegime || '__none__'} onValueChange={(value) => handleUpdate('fiscalRegime', value === '__none__' ? '' : value)}>
@@ -189,7 +197,8 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
               <SectionHeading number="02" icon={Mail} title="Contacto" description="Agrega los datos que se utilizarán para comunicación y seguimiento." />
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5"><Label htmlFor="quick-customer-email" className={labelClass}>Correo electrónico</Label><Input id="quick-customer-email" type="email" value={form.email} onChange={(event) => handleUpdate('email', event.target.value)} placeholder="correo@ejemplo.com" className={fieldClass} disabled={isSaving} /></div>
-                <div className="space-y-1.5"><Label htmlFor="quick-customer-phone" className={labelClass}>Teléfono / WhatsApp</Label><Input id="quick-customer-phone" value={form.phone} onChange={(event) => handleUpdate('phone', event.target.value)} placeholder="+505 8888-8888" className={fieldClass} disabled={isSaving} /></div>
+                <CustomerPhoneInput id="quick-customer-phone" label="Teléfono / WhatsApp" value={form.phone} onChange={(value) => handleUpdate('phone', value)} countryCode={form.countryCode} disabled={isSaving} className={fieldClass} labelClassName={labelClass} />
+                <CustomerPhoneInput id="quick-customer-contact-phone" label="Teléfono del contacto" value={form.contactPhone} onChange={(value) => handleUpdate('contactPhone', value)} countryCode={form.countryCode} disabled={isSaving} className={fieldClass} labelClassName={labelClass} />
               </div>
             </section>
 
@@ -199,7 +208,7 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
                 <div className="space-y-1.5 sm:col-span-2 lg:col-span-3"><Label htmlFor="quick-customer-address" className={labelClass}>Dirección</Label><Input id="quick-customer-address" value={form.address} onChange={(event) => handleUpdate('address', event.target.value)} placeholder="Calle, número y referencias" className={fieldClass} disabled={isSaving} /></div>
                 <div className="space-y-1.5"><Label htmlFor="quick-customer-city" className={labelClass}>Ciudad</Label><Input id="quick-customer-city" value={form.city} onChange={(event) => handleUpdate('city', event.target.value)} placeholder="Managua" className={fieldClass} disabled={isSaving} /></div>
                 <div className="space-y-1.5"><Label htmlFor="quick-customer-department" className={labelClass}>Departamento</Label><Input id="quick-customer-department" value={form.department} onChange={(event) => handleUpdate('department', event.target.value)} placeholder="Managua" className={fieldClass} disabled={isSaving} /></div>
-                <div className="space-y-1.5"><Label htmlFor="quick-customer-country" className={labelClass}>País</Label><Input id="quick-customer-country" value={form.country} onChange={(event) => handleUpdate('country', event.target.value)} placeholder="Nicaragua" className={fieldClass} disabled={isSaving} /></div>
+                <CustomerCountrySelect id="quick-customer-country" value={form.countryCode || defaultCountryCode} countries={countries} onChange={(value) => setForm((current) => ({ ...current, countryCode: value, country: countryNameForForm(value, countries) }))} disabled={isSaving} />
               </div>
             </section>
 
@@ -216,7 +225,7 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
             <p className="order-2 text-center text-[11px] text-muted-foreground sm:order-1 sm:text-left"><span className="font-bold text-foreground">Consejo:</span> podrás completar o editar estos datos desde Clientes.</p>
             <div className="order-1 flex w-full gap-2 sm:order-2 sm:w-auto">
               <Button type="button" variant="outline" onClick={handleClose} disabled={isSaving} className="h-10 flex-1 rounded-xl sm:flex-none">Cancelar</Button>
-              <Button type="submit" disabled={isSaving || !form.name.trim() || (form.type === 'COMPANY' && !form.ruc.trim())} className="h-10 flex-1 rounded-xl bg-primary font-bold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 sm:flex-none">
+              <Button type="submit" disabled={isSaving || !form.name.trim() || (customerRucRequired(form.type, form.countryCode) && !form.ruc.trim())} className="h-10 flex-1 rounded-xl bg-primary font-bold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 sm:flex-none">
                 {isSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UserPlus className="mr-2 size-4" />}
                 {isSaving ? 'Guardando...' : 'Guardar cliente'}
               </Button>

@@ -11,6 +11,8 @@ import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
+import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput } from './CustomerContactFields';
+import type { CustomerCountryOption } from '../../utils/customer-data';
 
 export type CustomerImportRow = {
   name: string;
@@ -21,10 +23,12 @@ export type CustomerImportRow = {
   ruc: string;
   email: string;
   phone: string;
+  contactPhone: string;
   address: string;
   city: string;
   department: string;
   country: string;
+  countryCode: string;
   creditLimit: number | '';
   creditLimitCurrency: 'NIO' | 'USD';
   creditLimitCurrencyError?: boolean;
@@ -41,6 +45,7 @@ interface CustomerImportPreviewProps {
   fileName: string;
   priceLists: Array<{ id: string; code: string; name: string }>;
   defaultCreditLimitCurrency: 'NIO' | 'USD';
+  countryOptions: CustomerCountryOption[];
   isSidebarCollapsed: boolean;
   importing: boolean;
   progress: number;
@@ -66,12 +71,14 @@ function CustomerImportMobileCard({
   row,
   index,
   priceLists,
+  countries,
   importing,
   onRowUpdate,
 }: {
   row: CustomerImportRow;
   index: number;
   priceLists: Array<{ id: string; code: string; name: string }>;
+  countries: CustomerCountryOption[];
   importing: boolean;
   onRowUpdate: (index: number, field: keyof CustomerImportRow, value: string) => void;
 }) {
@@ -116,14 +123,15 @@ function CustomerImportMobileCard({
             <SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.code}>{list.name}</SelectItem>)}</SelectContent>
           </Select>
         </ImportField>
-        <ImportField label="Cédula"><Input className={fieldClass} value={row.taxId} onChange={(event) => update('taxId', event.target.value)} disabled={importing} /></ImportField>
-        <ImportField label="RUC"><Input className={fieldClass} value={row.ruc} onChange={(event) => update('ruc', event.target.value)} disabled={importing} /></ImportField>
+        <CustomerIdentifierInput id={`import-tax-id-${index}`} value={row.taxId} onChange={(value) => update('taxId', value)} countryCode={row.countryCode} kind="taxId" disabled={importing} className={fieldClass} />
+        <CustomerIdentifierInput id={`import-ruc-${index}`} value={row.ruc} onChange={(value) => update('ruc', value)} countryCode={row.countryCode} kind="ruc" disabled={importing} className={fieldClass} />
         <ImportField label="Correo"><Input className={fieldClass} type="email" value={row.email} onChange={(event) => update('email', event.target.value)} disabled={importing} /></ImportField>
-        <ImportField label="Teléfono"><Input className={fieldClass} value={row.phone} onChange={(event) => update('phone', event.target.value)} disabled={importing} /></ImportField>
+        <CustomerPhoneInput id={`import-phone-${index}`} value={row.phone} onChange={(value) => update('phone', value)} countryCode={row.countryCode} disabled={importing} className={fieldClass} />
+        <CustomerPhoneInput id={`import-contact-phone-${index}`} label="Teléfono contacto" value={row.contactPhone} onChange={(value) => update('contactPhone', value)} countryCode={row.countryCode} disabled={importing} className={fieldClass} />
         <ImportField label="Dirección" className="sm:col-span-2"><Input className={fieldClass} value={row.address} onChange={(event) => update('address', event.target.value)} disabled={importing} /></ImportField>
         <ImportField label="Ciudad"><Input className={fieldClass} value={row.city} onChange={(event) => update('city', event.target.value)} disabled={importing} /></ImportField>
         <ImportField label="Departamento"><Input className={fieldClass} value={row.department} onChange={(event) => update('department', event.target.value)} disabled={importing} /></ImportField>
-        <ImportField label="País"><Input className={fieldClass} value={row.country} onChange={(event) => update('country', event.target.value)} disabled={importing} /></ImportField>
+        <CustomerCountrySelect id={`import-country-${index}`} value={row.countryCode} countries={countries} onChange={(value) => { update('countryCode', value); update('country', countries.find((country) => country.code === value)?.name || value); }} disabled={importing} />
         <ImportField label="Límite de crédito"><Input className={`${fieldClass} text-right`} type="number" min="0" value={row.creditLimit} onChange={(event) => update('creditLimit', event.target.value)} disabled={importing} /></ImportField>
         <ImportField label="Moneda del límite">
           <Select value={row.creditLimitCurrency} onValueChange={(value) => update('creditLimitCurrency', value)} disabled={importing}>
@@ -151,6 +159,7 @@ export function CustomerImportPreview({
   fileName,
   priceLists,
   defaultCreditLimitCurrency,
+  countryOptions,
   isSidebarCollapsed,
   importing,
   progress,
@@ -165,7 +174,7 @@ export function CustomerImportPreview({
   const [confirmText, setConfirmText] = useState('');
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
-  const gridTemplate = '80px 288px 160px 192px 224px 192px 176px 256px 176px 288px 160px 192px 160px 176px 144px 144px 288px';
+  const gridTemplate = '80px 288px 160px 192px 224px 192px 176px 256px 176px 176px 288px 160px 192px 192px 144px 144px 144px 288px';
   const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58);
   const validRows = rows.filter((row) => !row.error).length;
   const errorRows = rows.filter((row) => row.error).length;
@@ -209,6 +218,7 @@ export function CustomerImportPreview({
                 <TableHead className="w-44 min-w-44 whitespace-nowrap">RUC</TableHead>
                 <TableHead className="w-64 min-w-64 whitespace-nowrap">Correo</TableHead>
                 <TableHead className="w-44 min-w-44 whitespace-nowrap">Teléfono</TableHead>
+                <TableHead className="w-44 min-w-44 whitespace-nowrap">Teléfono contacto</TableHead>
                 <TableHead className="w-72 min-w-72 whitespace-nowrap">Dirección</TableHead>
                 <TableHead className="w-40 min-w-40 whitespace-nowrap">Ciudad</TableHead>
                 <TableHead className="w-48 min-w-48 whitespace-nowrap">Departamento</TableHead>
@@ -230,14 +240,15 @@ export function CustomerImportPreview({
                   <TableCell><Select value={row.type} onValueChange={(value) => onRowUpdate(index, 'type', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent></Select></TableCell>
                   <TableCell><Input className={fieldClass} value={row.fiscalRegime} placeholder="General" onChange={(event) => onRowUpdate(index, 'fiscalRegime', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.priceListCode || '__no_price_list__'} onValueChange={(value) => onRowUpdate(index, 'priceListCode', value === '__no_price_list__' ? '' : value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.code}>{list.name}</SelectItem>)}</SelectContent></Select></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.taxId} onChange={(event) => onRowUpdate(index, 'taxId', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.ruc} onChange={(event) => onRowUpdate(index, 'ruc', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><CustomerIdentifierInput id={`import-desktop-tax-id-${index}`} value={row.taxId} onChange={(value) => onRowUpdate(index, 'taxId', value)} countryCode={row.countryCode} kind="taxId" disabled={importing} className={fieldClass} labelClassName="sr-only" /></TableCell>
+                  <TableCell><CustomerIdentifierInput id={`import-desktop-ruc-${index}`} value={row.ruc} onChange={(value) => onRowUpdate(index, 'ruc', value)} countryCode={row.countryCode} kind="ruc" disabled={importing} className={fieldClass} labelClassName="sr-only" /></TableCell>
                   <TableCell><Input className={fieldClass} type="email" value={row.email} onChange={(event) => onRowUpdate(index, 'email', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.phone} onChange={(event) => onRowUpdate(index, 'phone', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><CustomerPhoneInput id={`import-desktop-phone-${index}`} value={row.phone} onChange={(value) => onRowUpdate(index, 'phone', value)} countryCode={row.countryCode} disabled={importing} className={fieldClass} labelClassName="sr-only" /></TableCell>
+                  <TableCell><CustomerPhoneInput id={`import-desktop-contact-phone-${index}`} label="Teléfono contacto" value={row.contactPhone} onChange={(value) => onRowUpdate(index, 'contactPhone', value)} countryCode={row.countryCode} disabled={importing} className={fieldClass} labelClassName="sr-only" /></TableCell>
                   <TableCell><Input className={fieldClass} value={row.address} onChange={(event) => onRowUpdate(index, 'address', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className={fieldClass} value={row.city} onChange={(event) => onRowUpdate(index, 'city', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className={fieldClass} value={row.department} onChange={(event) => onRowUpdate(index, 'department', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.country} onChange={(event) => onRowUpdate(index, 'country', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><CustomerCountrySelect id={`import-desktop-country-${index}`} value={row.countryCode} countries={countryOptions} onChange={(value) => { onRowUpdate(index, 'countryCode', value); onRowUpdate(index, 'country', countryOptions.find((country) => country.code === value)?.name || value); }} disabled={importing} /></TableCell>
                   <TableCell><Input className="h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-right text-xs" type="number" min="0" value={row.creditLimit} onChange={(event) => onRowUpdate(index, 'creditLimit', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.creditLimitCurrency} onValueChange={(value) => onRowUpdate(index, 'creditLimitCurrency', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></TableCell>
                   <TableCell><Select value={row.status} onValueChange={(value) => onRowUpdate(index, 'status', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></TableCell>
@@ -257,7 +268,7 @@ export function CustomerImportPreview({
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
           <div className="flex min-h-0 flex-1 flex-col">
-            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={390} overscan={2} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3"><CustomerImportMobileCard row={rows[index]} index={index} priceLists={priceLists} importing={importing} onRowUpdate={onRowUpdate} /></div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={440} overscan={2} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3"><CustomerImportMobileCard row={rows[index]} index={index} priceLists={priceLists} countries={countryOptions} importing={importing} onRowUpdate={onRowUpdate} /></div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
         </section>
 

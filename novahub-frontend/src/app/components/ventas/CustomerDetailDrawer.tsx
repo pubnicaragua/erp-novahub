@@ -83,7 +83,7 @@ import { formatPdfVariantDetails } from '../../utils/pdf-line-details';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/paymentMethods';
-import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
+import { getSalesAdditionalCharges, normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { normalizeCurrency } from '../../utils/currency';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
@@ -91,6 +91,7 @@ import { toast } from 'sonner';
 import type { Customer, Estimate, Invoice } from '../../types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
+import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 
 interface CustomerDetailDrawerProps {
   customerId: string | null;
@@ -355,6 +356,9 @@ export function CustomerDetailDrawer({
   }, [customerId]);
 
   const customer = detail ?? customerSnapshot ?? null;
+  const customerCountryCode = String(customer?.countryCode || countryCodeFromLegacy(customer?.country) || 'NI');
+  const customerTaxLabel = customerCountryCode === 'NI' ? 'Cédula' : customerCountryCode === 'CL' ? 'RUT' : 'Identificación fiscal';
+  const customerRucLabel = customerCountryCode === 'CL' ? 'RUT / identificación' : customerCountryCode === 'PE' ? 'RUC' : 'RUC';
   const isOpen = Boolean(customerId);
   const selectedInvoice = invoices.find((invoice) => invoice.id === selectedInvoiceId) || null;
 
@@ -659,11 +663,12 @@ export function CustomerDetailDrawer({
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <InfoField label="Correo Electrónico" value={customer?.email || 'Sin correo'} icon={Mail} muted={!customer?.email} />
-                    <InfoField label="Teléfono" value={customer?.phone || 'Sin teléfono'} icon={Phone} mono muted={!customer?.phone} />
+                    <InfoField label="Teléfono" value={customer?.phone ? formatCustomerPhoneForDisplay(customer.phone, customerCountryCode) : 'Sin teléfono'} icon={Phone} mono muted={!customer?.phone} />
+                    <InfoField label="Teléfono del contacto" value={customer?.contactPhone ? formatCustomerPhoneForDisplay(customer.contactPhone, customerCountryCode) : 'Sin teléfono de contacto'} icon={Phone} mono muted={!customer?.contactPhone} />
                     <InfoField label="Dirección" value={customer?.address || 'Sin dirección'} icon={MapPin} muted={!customer?.address} />
                     <InfoField label="Ciudad" value={customer?.city || 'Sin ciudad'} icon={MapPin} muted={!customer?.city} />
                     <InfoField label="Departamento" value={customer?.department || 'Sin departamento'} icon={MapPin} muted={!customer?.department} />
-                    <InfoField label="País" value={customer?.country || 'Sin país'} icon={MapPin} muted={!customer?.country} />
+                    <InfoField label="País" value={customer?.country ? `${customer.country} (${customerCountryCode})` : 'Sin país'} icon={MapPin} muted={!customer?.country} />
                   </div>
                   <GoogleMap
                     query={buildMapQuery([customer?.address, customer?.city, customer?.department, customer?.country])}
@@ -688,8 +693,8 @@ export function CustomerDetailDrawer({
                     <Building2 className="size-4 text-primary" /> Datos Fiscales y Financieros
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <InfoField label="RUC" value={customer?.ruc || '—'} icon={Hash} mono muted={!customer?.ruc} />
-                    <InfoField label="Identificación Fiscal" value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
+                    <InfoField label={customerRucLabel} value={customer?.ruc || '—'} icon={Hash} mono muted={!customer?.ruc} />
+                    <InfoField label={customerTaxLabel} value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
                     <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
                     <InfoField label={`Límite de Crédito Concedido (${creditLimitCurrency})`} value={formatConvertedAmount(creditLimit, creditLimitCurrency, exchangeRate)} icon={DollarSign} mono />
@@ -1059,8 +1064,8 @@ interface MovementInlineDetailProps {
 function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, tenantLogo }: MovementInlineDetailProps) {
   const document = transaction.document || {};
   const items = Array.isArray(document.items) ? document.items : [];
-  const additionalCharges = normalizeSalesExtraCharges(document).filter((charge) => charge.amount > 0);
-  const deliveryAmount = Number(document.deliveryAmount || 0);
+  const additionalCharges = getSalesAdditionalCharges(document);
+  const deliveryAmount = Array.isArray(document.selectedCharges) ? 0 : Number(document.deliveryAmount || 0);
   const documentType = transaction.kind === 'Cotización' ? 'estimate' : transaction.kind === 'Orden de venta' ? 'order' : undefined;
   const handleDownloadPdf = async (format: PdfDownloadFormat) => {
     if (!documentType) return;

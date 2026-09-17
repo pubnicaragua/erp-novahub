@@ -50,6 +50,7 @@ import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { formatExchangeRate } from '../../utils/currency';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -156,6 +157,14 @@ const PRODUCT_TABLE_WIDTHS = {
   cost: '112px',
   status: '112px',
   actions: '128px',
+} as const;
+
+// Servicios no necesitan el ancho de las columnas operativas de productos;
+// su tabla solo conserva código, descripción, categoría, disponibilidad,
+// precios y acciones.
+const SERVICE_TABLE_MIN_WIDTH = {
+  withoutCost: 1052,
+  withCost: 1164,
 } as const;
 
 const SOLICITUD_PAGE_SIZE = 50;
@@ -955,10 +964,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
   const catalogTableScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const tableScroller = catalogTableScrollRef.current;
+    if (tableScroller) tableScroller.scrollLeft = 0;
+  }, [isSidebarCollapsed, isServiceView]);
   // El ancho debe ser finito para que el contenedor w-max no entre en un
   // cálculo circular con width: 100% y produzca un scrollbar casi inútil.
   const catalogTableWidth = isServiceView
-    ? canViewInventoryCost ? 1444 : 1332
+    ? canViewInventoryCost ? SERVICE_TABLE_MIN_WIDTH.withCost : SERVICE_TABLE_MIN_WIDTH.withoutCost
     : canViewInventoryCost ? 1920 : 1808;
   const [configuredPriceLists, setConfiguredPriceLists] = useState<PriceList[]>([]);
   useEffect(() => {
@@ -1547,6 +1560,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     if (solicitudProducts.length === 0) { toast.error('No hay productos en la solicitud'); return; }
     if (!solicitudWarehouseId) { toast.error('Selecciona una bodega'); return; }
     setSolicitudCreating(true);
+    let actionToken: string | null = null;
     try {
       if (!solicitudEmployeeId) { setSolicitudCreating(false); toast.error('Selecciona el empleado solicitante'); return; }
       const invalidAllocation = solicitudProducts.find((item) => !getSolicitudVariantAllocation(item).complete);
@@ -1595,6 +1609,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           minStock: Number(snapshot.minStock ?? 0),
         }];
       });
+      actionToken = beginNotificationAction();
       await purchaseRequestsService.create({
         status: 'PENDING_APPROVAL',
         priority: normalizePurchasePriority(solicitudPriority),
@@ -1606,11 +1621,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         items,
       } as any);
       toast.success(`Solicitud creada con ${items.length} producto(s). Revisa Compras > Solicitudes.`);
+      completeNotificationAction(actionToken);
       setSolicitudOpen(false);
       clearSelectedProducts();
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'Error al crear solicitud');
+      failNotificationAction(actionToken);
     } finally {
       setSolicitudCreating(false);
     }
@@ -2139,6 +2156,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
 
     setSavingIds((current) => new Set(current).add(id));
+    const actionToken = beginNotificationAction();
     let uploadedImageUri: string | undefined;
     try {
       if (product.imageFile) {
@@ -2237,6 +2255,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
         toast.success(`${entityLabelCap} actualizado`);
       }
+      completeNotificationAction(actionToken);
       if (!product.isNew && product.imageStorageUri && product.imageStorageUri !== uploadedImageUri && (uploadedImageUri || product.removeImage)) {
         storageService.deleteFile(product.imageStorageUri).catch((error) => {
           console.warn('No se pudo eliminar la imagen anterior del producto', error);
@@ -2247,6 +2266,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     } catch (e: any) {
       if (uploadedImageUri) storageService.deleteFile(uploadedImageUri).catch(() => undefined);
       toast.error(e.message || 'Error al guardar');
+      failNotificationAction(actionToken);
     } finally {
       setSavingIds((current) => {
         const next = new Set(current);
@@ -2272,13 +2292,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
     const nextIsActive = pendingStatusChange.isActive === false;
     setStatusChanging(true);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.updateProductStatus(pendingStatusChange.id, nextIsActive);
       toast.success(nextIsActive ? `${entityLabelCap} activado` : `${entityLabelCap} inactivado`);
+      completeNotificationAction(actionToken);
       setPendingStatusChange(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo actualizar el estado');
+      failNotificationAction(actionToken);
     } finally {
       setStatusChanging(false);
     }
@@ -2287,6 +2310,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) return toast.error('El nombre de la categoría es requerido');
     setCreatingCategory(true);
+    const actionToken = beginNotificationAction();
     try {
       const response = await inventoryService.createCategory({
         name: newCategoryName.trim(),
@@ -2309,6 +2333,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         });
       }
       toast.success('Categoría creada');
+      completeNotificationAction(actionToken);
       setCategoryModalOpen(false);
       setNewCategoryName('');
       setNewCategoryDescription('');
@@ -2341,6 +2366,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       } else {
         toast.error(error?.message || 'Error al crear categoría');
       }
+      failNotificationAction(actionToken);
     } finally {
       setCreatingCategory(false);
     }
@@ -3434,6 +3460,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
     setImporting(true);
     setImportProgress(10);
+    const actionToken = beginNotificationAction();
     try {
       const categoryByName = new Map(importCategoryOptions.map((category: any) => [String(category.name || '').trim().toLowerCase(), category]));
        const warehouseByName = new Map(importWarehouseOptions.map((warehouse: any) => [String(warehouse.name || '').trim().toLowerCase(), warehouse]));
@@ -3537,6 +3564,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setImportProgress(55);
       await uploadInitialImportImages(valid, setImportProgress);
       setImportProgress(100);
+      toast.success(`Importación completada: ${valid.length} registro(s) procesado(s)`);
+      completeNotificationAction(actionToken);
       setImportResults({ success: (results.success || 0) + (results.updatedProductCount || 0) + (results.updatedServiceCount || 0), skipped: (importData.length - valid.length) + (results.skipped || 0), failed: results.errors?.length || 0, errors: results.errors || [], warnings: results.warnings || [] });
       setImportModalOpen(false);
        setInitialImportConfirmOpen(false);
@@ -3566,6 +3595,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       } else {
         toast.error('Error durante la importación: ' + (e.message || 'Error'));
       }
+      failNotificationAction(actionToken);
     } finally {
       setImporting(false);
       setImportProgress(0);
@@ -4227,7 +4257,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>Min</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>Max</TableHead>}
-               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Bodegas'}</TableHead>
+               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: isServiceView ? PRODUCT_TABLE_WIDTHS.status : PRODUCT_TABLE_WIDTHS.warehouse, minWidth: isServiceView ? PRODUCT_TABLE_WIDTHS.status : PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Bodegas'}</TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}><span className="inline-flex items-center gap-1">Stock<ColumnFilterMenu label="Stock" sort={colFilters.state.stock?.sort || null} onSort={(sort) => colFilters.setSort('stock', sort)} /></span></TableHead>}
                {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>Precio</TableHead>}
                {isServiceView && canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Costo servicio</TableHead>}

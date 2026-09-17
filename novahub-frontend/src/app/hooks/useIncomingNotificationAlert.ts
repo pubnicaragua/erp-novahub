@@ -2,48 +2,97 @@ import { useEffect, useRef } from 'react';
 import { useNotifications } from './useNotifications';
 import { playNotificationSound } from '../utils/notificationSound';
 import { useAuth } from '../contexts/AuthContext';
-import { dedupeNotificationRecords, notificationEventKey } from '../services/notifications.service';
+import {
+  dedupeNotificationRecords,
+  getNotificationActorId,
+  notificationEventKey,
+  subscribeToNotificationEvents,
+} from '../services/notifications.service';
+import { waitForNotificationActionBarrier, getNotificationSequenceGapMs } from '../services/notification-action-coordinator';
 import { isBrowserNotificationsEnabled } from '../utils/browserNotifications';
 import { toast } from 'sonner';
 import { getNotificationNavigation, navigateToNotification } from '../utils/notificationNavigation';
+import type { Notification } from '../types';
+
+const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 /**
- * Detecta notificaciones entrantes entregadas por el stream SSE global y:
- * - Reproduce un sonido corto.
- * - Si la pestaña está en segundo plano, dispara una Notification del navegador.
- * Montar una sola vez (p.ej. en DashboardLayout).
+ * Global notification presentation.
+ *
+ * The inbox remains the source of truth. SSE only invalidates it and provides
+ * a low-latency hint; dedupe keys make reconnects and repeated invalidations
+ * harmless. Events caused by the current actor wait for the local operation
+ * toast, while events caused by another actor are presented immediately.
  */
 export function useIncomingNotificationAlert() {
   const { user } = useAuth();
   const { notifications, isFetched, markAsRead } = useNotifications();
   const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null | undefined;
   const storageKey = `nh-notification-seen:${authUser?.clientTenantId || authUser?.tenantId || 'current'}:${authUser?.id || 'current'}`;
-  // Guardamos ids y claves de evento. El id cambia si un scheduler reintenta
-  // crear la misma alerta, pero la clave de negocio debe sonar una sola vez.
   const seenEvents = useRef<Set<string>>(new Set());
+  const pendingLiveNotificationIds = useRef<Set<string>>(new Set());
+  const queuedOwnNotifications = useRef<Notification[]>([]);
+  const queuedOwnKeys = useRef<Set<string>>(new Set());
+  const processingOwnQueue = useRef(false);
   const initialized = useRef(false);
+  const alertSessionStartedAt = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     initialized.current = false;
     seenEvents.current = new Set();
+    pendingLiveNotificationIds.current = new Set();
+    queuedOwnNotifications.current = [];
+    queuedOwnKeys.current = new Set();
+    processingOwnQueue.current = false;
+    alertSessionStartedAt.current = Date.now();
     try {
       const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
       if (Array.isArray(stored)) seenEvents.current = new Set(stored.map(String));
-    } catch { /* notification history is optional */ }
+    } catch {
+      // Notification history is optional.
+    }
   }, [storageKey]);
 
   useEffect(() => {
-    if (!isFetched || initialized.current) return;
+    if (!authUser?.id) return undefined;
+    const streamIdentity = `${authUser.clientTenantId || authUser.tenantId || 'current'}:${authUser.id}`;
+    return subscribeToNotificationEvents(streamIdentity, (event) => {
+      if (event.reason !== 'created') return;
+      (event.notificationIds || []).forEach((id) => {
+        const normalizedId = String(id || '').trim();
+        if (normalizedId) pendingLiveNotificationIds.current.add(normalizedId);
+      });
+    });
+  }, [authUser?.clientTenantId, authUser?.id, authUser?.tenantId]);
+
+  useEffect(() => {
+    if (!isFetched) return;
+    const isInitialFetch = !initialized.current;
     initialized.current = true;
 
-    // The first response is the existing history, not an incoming event.
-    // Seed it so a remount/F5 does not replay dozens of old notifications.
-    if (seenEvents.current.size === 0 && notifications.length > 0) {
-      notifications.forEach(notification => {
+    // The first response is existing history, not a live event. Seed it so a
+    // remount/F5 does not replay old notifications.
+    const pendingIds = pendingLiveNotificationIds.current;
+    const hasPendingNotificationInResponse = notifications.some((notification) => pendingIds.has(notification.id));
+    const sessionStartedAt = alertSessionStartedAt.current ?? Date.now();
+    const hasRecentNotificationInResponse = notifications.some((notification) => (
+      new Date(notification.timestamp).getTime() >= sessionStartedAt - 1_000
+    ));
+
+    if (
+      isInitialFetch
+      && seenEvents.current.size === 0
+      && notifications.length > 0
+      && !hasPendingNotificationInResponse
+      && !hasRecentNotificationInResponse
+    ) {
+      notifications.forEach((notification) => {
         seenEvents.current.add(notification.id);
         seenEvents.current.add(notificationEventKey(notification));
       });
-      try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1000))); } catch { /* optional history */ }
+      try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1_000))); } catch {
+        // Optional history.
+      }
       return;
     }
 
@@ -53,50 +102,88 @@ export function useIncomingNotificationAlert() {
         && !seenEvents.current.has(notification.id)
         && !seenEvents.current.has(notificationEventKey(notification))
       )),
-    );
+    ).sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime());
     if (fresh.length === 0) return;
 
-    const freshKeys = new Set(fresh.map(notificationEventKey));
-    notifications
-      .filter(notification => freshKeys.has(notificationEventKey(notification)))
-      .forEach(notification => {
-        seenEvents.current.add(notification.id);
-        seenEvents.current.add(notificationEventKey(notification));
-      });
-    try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1000))); } catch { /* optional history */ }
+    fresh.forEach((notification) => {
+      const key = notificationEventKey(notification);
+      seenEvents.current.add(notification.id);
+      seenEvents.current.add(key);
+      pendingIds.delete(notification.id);
 
-    const newest = [...fresh].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] || fresh[0];
-    const navigation = getNotificationNavigation(newest);
-    playNotificationSound();
-    toast.info(newest.title || 'Nueva notificación', {
-      description: newest.message || 'Tienes una novedad pendiente de revisar.',
-      duration: 6000,
-      position: 'top-right',
-      action: {
-        label: navigation.module === 'tickets' ? 'Abrir ticket' : 'Abrir',
-        onClick: () => {
-          void markAsRead(newest.id);
-          navigateToNotification(newest);
-        },
-      },
+      if (getNotificationActorId(notification) === String(authUser?.id || '')) {
+        if (!queuedOwnKeys.current.has(key)) {
+          queuedOwnKeys.current.add(key);
+          queuedOwnNotifications.current.push(notification);
+        }
+        return;
+      }
+
+      // A different user's action, scheduler event, or legacy event without
+      // actorId must not wait for a local operation toast.
+      void presentNotification(notification, markAsRead);
     });
 
-    if (document.hidden && isBrowserNotificationsEnabled()) {
-      try {
-        const notification = new Notification(newest.title || 'Nueva notificación', {
-          body: newest.message || '',
-          tag: notificationEventKey(newest),
-          icon: '/novahub-isotipo.png',
-        });
-        notification.onclick = () => {
-          window.focus();
-          void markAsRead(newest.id);
-          navigateToNotification(newest);
-          notification.close();
-        };
-      } catch {
-        // Algunos navegadores bloquean la construcción; la campana interna sigue funcionando.
-      }
+    try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1_000))); } catch {
+      // Optional history.
     }
-  }, [isFetched, notifications, storageKey]);
+
+    if (!processingOwnQueue.current && queuedOwnNotifications.current.length > 0) {
+      processingOwnQueue.current = true;
+      void (async () => {
+        try {
+          while (queuedOwnNotifications.current.length > 0) {
+            const notification = queuedOwnNotifications.current.shift();
+            if (!notification) continue;
+            await presentNotification(notification, markAsRead, true);
+          }
+        } finally {
+          processingOwnQueue.current = false;
+        }
+      })();
+    }
+  }, [authUser?.id, isFetched, markAsRead, notifications, storageKey]);
+}
+
+async function presentNotification(
+  notification: Notification,
+  markAsRead: (id: string) => Promise<void>,
+  waitForAction = false,
+): Promise<void> {
+  if (waitForAction) await waitForNotificationActionBarrier();
+
+  const navigation = getNotificationNavigation(notification);
+  playNotificationSound();
+  toast.info(notification.title || 'Nueva notificación', {
+    description: notification.message || 'Tienes una novedad pendiente de revisar.',
+    duration: 6_000,
+    position: 'top-right',
+    action: {
+      label: navigation.module === 'tickets' ? 'Abrir ticket' : 'Abrir',
+      onClick: () => {
+        void markAsRead(notification.id);
+        navigateToNotification(notification);
+      },
+    },
+  });
+
+  if (typeof document !== 'undefined' && document.hidden && typeof Notification !== 'undefined' && isBrowserNotificationsEnabled()) {
+    try {
+      const browserNotification = new Notification(notification.title || 'Nueva notificación', {
+        body: notification.message || '',
+        tag: notificationEventKey(notification),
+        icon: '/novahub-isotipo.png',
+      });
+      browserNotification.onclick = () => {
+        window.focus();
+        void markAsRead(notification.id);
+        navigateToNotification(notification);
+        browserNotification.close();
+      };
+    } catch {
+      // The in-app toast and bell remain available when browser notifications fail.
+    }
+  }
+
+  await wait(getNotificationSequenceGapMs());
 }

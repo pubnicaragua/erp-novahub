@@ -1,5 +1,5 @@
 import { useAuth, type Module } from '../contexts/AuthContext';
-import { AdminOverview } from './AdminOverview';
+import { MasterConsolePage } from './master-console/MasterConsolePage';
 import { PartnerDashboard } from './PartnerDashboard';
 import { ExecutiveTenantOverview } from './ExecutiveTenantOverview';
 import { Loader2 } from 'lucide-react';
@@ -27,7 +27,7 @@ export function OverviewDashboard({ onNavigate }: OverviewDashboardProps) {
     if (role === 'partner') {
       return <PartnerDashboard onNavigate={onNavigate} />;
     }
-    return <AdminOverview />;
+    return <MasterConsolePage />;
   }
 
   // --- TENANT ROLE (Default for admin, manager, employee, viewer) ---

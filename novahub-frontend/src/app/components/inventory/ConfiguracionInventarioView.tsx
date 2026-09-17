@@ -28,6 +28,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { AlmacenesView } from './AlmacenesView'
 import { cn } from '../ui/utils'
 import { InventoryViewTutorial } from './InventoryViewTutorial'
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator'
 
 type AccountInfo = {
   id: string
@@ -357,6 +358,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       return
     }
     setConfigSaving(true)
+    const actionToken = beginNotificationAction()
     try {
       if (configMode === 'existing') {
         if (!existingAccountId) {
@@ -369,11 +371,13 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         await inventoryService.autoCreateAccountingLink(configTarget.id)
         toast.success('Cuenta de la bodega creada y vinculada. Revisa Contabilidad → Plan de Cuentas')
       }
+      completeNotificationAction(actionToken)
       setConfigTarget(null)
       setConfigBranch(null)
       await refresh()
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al configurar la bodega'))
+      failNotificationAction(actionToken)
     } finally {
       setConfigSaving(false)
     }
@@ -386,13 +390,16 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       return
     }
     setUnlinkSaving(true)
+    const actionToken = beginNotificationAction()
     try {
       await inventoryService.updateWarehouse(unlinkTarget.wh.id, { inventoryAccountId: null })
       toast.success('Cuenta contable desvinculada de la bodega')
+      completeNotificationAction(actionToken)
       setUnlinkTarget(null)
       await refresh()
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al desvincular la cuenta contable'))
+      failNotificationAction(actionToken)
       throw e
     } finally {
       setUnlinkSaving(false)

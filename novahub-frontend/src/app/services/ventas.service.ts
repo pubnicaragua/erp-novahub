@@ -7,6 +7,7 @@ import type {
 
 // ---- Customers ----
 export const customersService = {
+  getFormOptions: () => api.get<{ defaultCountryCode: string; countries: Array<{ code: string; name: string; phoneCode: string; taxIdLabel: string; rucLabel: string; strictIdentifiers: boolean; phoneNationalDigits?: number }> }>('/sales/customers/formats'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Customer>>('/sales/customers', { params: filters as any, signal }),
   getById: (id: string) => api.get<Customer>(`/sales/customers/${id}`),
   create: (data: Partial<Customer>) => api.post<Customer>('/sales/customers', data),

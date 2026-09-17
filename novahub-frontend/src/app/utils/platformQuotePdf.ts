@@ -53,6 +53,18 @@ function amountOf(item: PlatformQuote['items'][number]) {
   return Math.max(0, Number(item.quantity || 0)) * Math.max(0, Number(item.unitPrice || 0));
 }
 
+function discountAmountOf(item: PlatformQuote['items'][number]) {
+  const amount = amountOf(item);
+  const value = Math.max(0, Number(item.discountValue || 0));
+  return item.discountType === 'PERCENT' ? amount * Math.min(100, value) / 100 : Math.min(amount, value);
+}
+
+function discountLabelOf(item: PlatformQuote['items'][number], currency: PlatformQuote['currency']) {
+  const value = Math.max(0, Number(item.discountValue || 0));
+  if (!value || !amountOf(item)) return '-';
+  return item.discountType === 'PERCENT' ? `-${value}%` : `-${money(discountAmountOf(item), currency)}`;
+}
+
 function isIncludedItem(item: PlatformQuote['items'][number]) {
   const detail = String(item.detail || '').toLowerCase();
   return Number(item.unitPrice || 0) <= 0 && (!item.isOptional || /incluido|valor agregado|sin costo/.test(detail));
@@ -70,7 +82,8 @@ export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
   const displaySubtotal = Math.max(0, Number(quote.displaySubtotal ?? gross));
   const displayInitialTotal = Math.max(0, Number(quote.displayInitialTotal ?? initialTotal));
   const displayMonthlyTotal = Math.max(0, Number(quote.displayMonthlyTotal ?? monthlyTotal));
-  const discount = Math.min(displaySubtotal, Math.max(0, Number(quote.discountAmount || 0)));
+  const lineDiscount = charged.reduce((sum, item) => sum + discountAmountOf(item), 0);
+  const discount = Math.min(displaySubtotal, lineDiscount > 0 ? lineDiscount : Math.max(0, Number(quote.discountAmount || 0)));
   const taxable = Math.max(0, displaySubtotal - discount);
   const taxAmount = taxable * Math.max(0, Number(quote.taxRate || 0)) / 100;
   return { subtotal, optionalSubtotal, referenceTotal: gross, displaySubtotal, initialTotal, monthlyTotal, displayInitialTotal, displayMonthlyTotal, discount, commercialSubtotal: taxable, taxAmount, total: taxable + taxAmount, visibility: { showInitialTotal: quote.showInitialTotal !== false, showSubtotal: quote.showSubtotal !== false, showDiscount: quote.showDiscount !== false, showMonthlyTotal: quote.showMonthlyTotal !== false, showTax: quote.showTax !== false, showTotal: quote.showTotal !== false } };
@@ -231,6 +244,8 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   const includedCount = items.filter(isIncludedItem).length;
   const rows: RowInput[] = [];
   const discountRowIndex = items.findIndex((item) => !isIncludedItem(item) && amountOf(item) > 0);
+  const showDiscount = totals.visibility.showDiscount;
+  const lineDiscount = items.filter((item) => !isIncludedItem(item)).reduce((sum, item) => sum + discountAmountOf(item), 0);
   let currentSection = '';
   let lineNumber = 0;
   for (const item of items) {
@@ -239,27 +254,28 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       rows.push([
         {
           content: currentSection,
-          colSpan: 7,
+          colSpan: showDiscount ? 7 : 6,
           styles: { fillColor: [225, 245, 233], textColor: forest, fontStyle: 'bold', fontSize: 7.5 },
         },
       ]);
     }
     lineNumber += 1;
-    rows.push([
+    const row: RowInput = [
       String(lineNumber),
       item.description || 'Concepto',
       quantity(item.quantity),
       itemPriceLabel(item, quote.currency),
-      lineNumber - 1 === discountRowIndex && totals.discount > 0 ? `-${money(totals.discount, quote.currency)}` : '-',
       itemBillingLabel(item),
       item.detail?.trim() || (isIncludedItem(item) ? 'Valor agregado incluido sin costo adicional.' : '-'),
-    ]);
+    ];
+    if (showDiscount) row.splice(4, 0, lineDiscount > 0 ? discountLabelOf(item, quote.currency) : lineNumber - 1 === discountRowIndex && totals.discount > 0 ? `-${money(totals.discount, quote.currency)}` : '-');
+    rows.push(row);
   }
 
   autoTable(doc, {
     startY: y,
     margin: { top: 39, left: margin, right: margin, bottom: 22 },
-    head: [['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Descuento', 'Cobro', 'Descripción / alcance']],
+    head: [showDiscount ? ['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: {
@@ -280,19 +296,15 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
       cellPadding: 2.25,
       fontSize: 6.9,
     },
-    columnStyles: {
-      0: { cellWidth: 8, halign: 'center' },
-      1: { cellWidth: 35 },
-      2: { cellWidth: 17, halign: 'center' },
-      3: { cellWidth: 27, halign: 'right' },
-      4: { cellWidth: 24, halign: 'right' },
-      5: { cellWidth: 28, halign: 'center' },
-      6: { cellWidth: 'auto' },
-    },
+    columnStyles: showDiscount
+      ? { 0: { cellWidth: 8, halign: 'center' }, 1: { cellWidth: 35 }, 2: { cellWidth: 17, halign: 'center' }, 3: { cellWidth: 27, halign: 'right' }, 4: { cellWidth: 24, halign: 'right' }, 5: { cellWidth: 28, halign: 'center' }, 6: { cellWidth: 'auto' } }
+      : { 0: { cellWidth: 8, halign: 'center' }, 1: { cellWidth: 39 }, 2: { cellWidth: 17, halign: 'center' }, 3: { cellWidth: 29, halign: 'right' }, 4: { cellWidth: 29, halign: 'center' }, 5: { cellWidth: 'auto' } },
     didParseCell: (data) => {
       const sectionRow = Array.isArray(data.row.raw) && data.row.raw.length === 1;
       if (sectionRow) return;
-      if (data.section === 'body' && data.column.index === 5) {
+      const billingColumn = showDiscount ? 5 : 4;
+      const discountColumn = showDiscount ? 4 : -1;
+      if (data.section === 'body' && data.column.index === billingColumn) {
         const value = String(data.cell.raw || '').toLowerCase();
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.textColor = value.includes('valor')
@@ -310,7 +322,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
               ? [235, 242, 255]
               : [248, 250, 252];
       }
-      if (data.section === 'body' && data.column.index === 4 && String(data.cell.raw || '').startsWith('-')) {
+      if (data.section === 'body' && data.column.index === discountColumn && String(data.cell.raw || '').startsWith('-')) {
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.textColor = [220, 38, 38];
       }

@@ -25,6 +25,7 @@ export interface CreateSubscriptionRequestDto {
   requestedModule: string;
   customPrice?: number;
   notes?: string;
+  requestedPlan?: string;
 }
 
 export interface UpdateSubscriptionStatusDto {
@@ -36,6 +37,7 @@ export interface ToggleModuleStatusDto {
   module: string;
   isActive: boolean;
   notes?: string;
+  price?: number;
 }
 
 export const subscriptionsService = {

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface Attribute {
   id: string;
@@ -199,6 +200,7 @@ function AtributosTab() {
       return;
     }
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       const payload = {
         name: formName.trim(),
@@ -212,10 +214,12 @@ function AtributosTab() {
         await inventoryService.createAttribute(payload);
         toast.success('Atributo creado');
       }
+      completeNotificationAction(actionToken);
       setModalOpen(false);
       void loadAttributes();
     } catch (e: any) {
       showCatalogSaveError(e, 'No se pudo guardar el atributo');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -228,13 +232,16 @@ function AtributosTab() {
       return;
     }
     setDeleting(true);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.deleteAttribute(deleteId);
       toast.success('Atributo eliminado');
+      completeNotificationAction(actionToken);
       setDeleteId(null);
       void loadAttributes();
     } catch (e: any) {
       toast.error(e?.message || 'Error al eliminar atributo');
+      failNotificationAction(actionToken);
     } finally {
       setDeleting(false);
     }
@@ -511,6 +518,7 @@ function CategoriasTab() {
       return;
     }
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       const payload = {
         name: formName.trim(),
@@ -523,10 +531,12 @@ function CategoriasTab() {
         await inventoryService.createCategory(payload);
         toast.success('Categoría creada');
       }
+      completeNotificationAction(actionToken);
       setModalOpen(false);
       void loadCategories();
     } catch (e: any) {
       showCatalogSaveError(e, 'No se pudo guardar la categoría');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -539,13 +549,16 @@ function CategoriasTab() {
       return;
     }
     setDeleting(true);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.deleteCategory(deleteId);
       toast.success('Categoría eliminada');
+      completeNotificationAction(actionToken);
       setDeleteId(null);
       void loadCategories();
     } catch (e: any) {
       toast.error(e?.message || 'Error al eliminar categoría');
+      failNotificationAction(actionToken);
     } finally {
       setDeleting(false);
     }

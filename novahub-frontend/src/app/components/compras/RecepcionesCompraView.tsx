@@ -29,6 +29,7 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlerts
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { formatExchangeRate } from '../../utils/currency';
+import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
@@ -286,7 +287,7 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
 }
 
 function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any> }) {
-  const { displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount, formatConvertedAmount, formatExplicitAmount } = useCurrency();
   const [paymentLines, setPaymentLines] = useState<ReceiptPaymentLine[]>([]);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
   const [notes, setNotes] = useState('');
@@ -433,6 +434,8 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
     ? Number(toBaseAmount(Number(draft.amount || 0), draft.currency, Number(draft.exchangeRate || globalRate || 1)).toFixed(2))
     : 0;
   const paymentExceedsDraftBalance = paymentBaseAmount > draftBaseAmount + 0.01;
+  const draftCurrency = draft ? getReceiptCurrencyMeta(draft.currency).code : baseCurrency;
+  const draftRate = Number(draft?.exchangeRate || globalRate || 1);
 
   return (
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) onClose(); }}>
@@ -504,18 +507,19 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                             if (itemIndex !== index) return item;
                             const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                             const nextRate = paymentLineRate(nextCurrency);
-                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
+                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined };
                           }))} />
                           <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" value={formatDecimalInput(line.amount) || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))} disabled={saving} className="h-10 font-black tabular-nums" /></div>
                           <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || saving} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
-                        </div>
-                        {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
+                          </div>
+                        {draft && line.currency !== draftCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatExplicitAmount(getPaymentLineDocumentAmount(line, draftCurrency, draftRate, baseCurrency, convertBetweenCurrencies), draftCurrency)}</p>}
+                        {isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
                         {hasPaymentReferenceField(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} disabled={saving} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-10 font-mono" /></div>}
                       </div>
                     ))}
                     <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0, currency: displayCurrency === 'USD' ? 'USD' : 'NIO', exchangeRate: paymentLineRate(displayCurrency === 'USD' ? 'USD' : 'NIO') }])} disabled={saving}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>
                   </div>
-                  <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0), baseCurrency)}</span></div>
+                  <div className="mt-3 border-t border-border/50 pt-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><div className="flex items-center justify-between"><span>Total aplicado (base)</span><span className="text-primary">{formatConvertedAmount(paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0), baseCurrency)}</span></div>{draft && <div className="mt-1 flex items-center justify-between"><span>Equivalente factura</span><span className="text-primary">{formatExplicitAmount(convertBetweenCurrencies(paymentBaseAmount, baseCurrency, draftCurrency, 1, draftRate), draftCurrency)}</span></div>}</div>
                   <p className="mt-1 text-[10px] text-muted-foreground">Máximo: {formatReceiptAmount(Number(draft.amount), draft.currency)} · Efectivo no requiere referencia.</p>
                 </div>
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imágenes originales hasta 10 MB; se optimizan. Documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>

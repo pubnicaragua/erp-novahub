@@ -59,17 +59,20 @@ export function useCajaSession(selectedRegister: string) {
     load();
   }, [loadSessionData, selectedRegister]);
 
-  const expectedNIO = session
+  const calculatedExpectedNIO = session
     ? Number(session.initialAmountNIO || 0) +
       logs.filter(l => (l.type === 'SALE' || l.type === 'ENTRY') && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountNIO || 0), 0) -
       logs.filter(l => l.type === 'EXIT' && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountNIO || 0), 0)
     : 0;
 
-  const expectedUSD = session
+  const calculatedExpectedUSD = session
     ? Number(session.initialAmountUSD || 0) +
       logs.filter(l => (l.type === 'SALE' || l.type === 'ENTRY') && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountUSD || 0), 0) -
       logs.filter(l => l.type === 'EXIT' && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountUSD || 0), 0)
     : 0;
+
+  const expectedNIO = session?.expectedAmountNIO != null ? Number(session.expectedAmountNIO) : calculatedExpectedNIO;
+  const expectedUSD = session?.expectedAmountUSD != null ? Number(session.expectedAmountUSD) : calculatedExpectedUSD;
 
   const resolvedExpectedNIO = closureMode === 'BLIND' && countAttempts.length > 0
     ? Number(countAttempts[countAttempts.length - 1].expectedAmountNIO || 0)

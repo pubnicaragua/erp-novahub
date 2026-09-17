@@ -34,6 +34,15 @@ export const getSalesExtraChargesAmount = (doc: any): number => (
 );
 
 export const getSalesAdditionalCharges = (doc: any): SalesExtraChargeLine[] => {
+  if (Array.isArray(doc?.selectedCharges)) {
+    return doc.selectedCharges
+      .map((charge: any, index: number) => ({
+        id: `${String(charge?.kind || 'charge').toLowerCase()}-${Number.isInteger(Number(charge?.sourceIndex)) ? charge.sourceIndex : index}`,
+        description: String(charge?.description || '').trim() || (String(charge?.kind || '').toUpperCase() === 'DELIVERY' ? 'Delivery' : `Coste extra ${index + 1}`),
+        amount: Math.max(0, Number(charge?.amount || 0)),
+      }))
+      .filter((charge: SalesExtraChargeLine) => charge.amount > 0);
+  }
   const charges = normalizeSalesExtraCharges(doc)
     .filter((charge) => charge.amount > 0)
     .map((charge, index) => ({

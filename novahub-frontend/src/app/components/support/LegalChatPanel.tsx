@@ -8,6 +8,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
+import { buildCustomerWhatsAppUrl } from '../ventas/WhatsAppActionButton';
 import { toast } from 'sonner';
 import { legalService, type LegalMessage } from '../../services/legal.service';
 import { storageService } from '../../services/storage.service';
@@ -18,15 +19,6 @@ interface LegalChatPanelProps {
   caseId: string;
   caseNumber: string;
   onBack: () => void;
-}
-
-function formatPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length === 8) return '505' + digits;
-  if (digits.length === 10 && digits.startsWith('505')) return digits;
-  if (digits.length === 11 && digits.startsWith('505')) return digits;
-  if (digits.length > 8 && !digits.startsWith('505')) return '505' + digits;
-  return digits;
 }
 
 export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelProps) {
@@ -52,7 +44,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
     if (!newText.trim() && !uploading) return;
     setSending(true);
     try {
-      const res: any = await legalService.addMessage(caseId, {
+      await legalService.addMessage(caseId, {
         content: newText.trim(),
         sender: 'lawyer',
         senderName: user?.name || 'Abogado',
@@ -79,7 +71,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
     setUploading(true);
     try {
       const uploaded = await storageService.uploadFile('legal-documents', file, { folder: `case-${caseId}` });
-      const res: any = await legalService.addMessage(caseId, {
+      await legalService.addMessage(caseId, {
         sender: 'lawyer',
         senderName: user?.name || 'Abogado',
         fileUrl: uploaded.uri,
@@ -102,9 +94,12 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
       toast.error('Ingresá el número de teléfono del cliente');
       return;
     }
-    const phone = formatPhone(customerPhone);
-    const text = encodeURIComponent(`Hola, te escribimos de NovaHub con respecto al caso ${caseNumber}.`);
-    window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+    const whatsappUrl = buildCustomerWhatsAppUrl(customerPhone, `Hola, te escribimos de NovaHub con respecto al caso ${caseNumber}.`);
+    if (!whatsappUrl) {
+      toast.error('El teléfono del cliente no está normalizado en E.164.');
+      return;
+    }
+    window.open(whatsappUrl, '_blank');
   };
 
   return (

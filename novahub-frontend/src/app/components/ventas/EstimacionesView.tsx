@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, SquareKanban
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,7 +14,7 @@ import { estimatesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { Estimate, Customer, Product, SalesPaginationControls } from '../../types';
+import type { Estimate, EstimateItem, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -29,7 +29,7 @@ import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceLis
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
-import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
+import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -162,6 +162,21 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
   const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
+  const getProductForItem = (item: Pick<EstimateItem, 'productId'> | null | undefined) => products.find((product) => product.id === item?.productId);
+  const getActiveVariantCount = (item: Pick<EstimateItem, 'productId'> | null | undefined) => (getProductForItem(item)?.variants || [])
+    .filter((variant) => (variant as { isActive?: boolean }).isActive !== false)
+    .length;
+  const showVariantColumn = (localDoc?.items || []).some((item: EstimateItem) => (
+    Boolean(item.productId)
+      && String(resolveItemType(item)).toUpperCase() !== 'SERVICE'
+      && getActiveVariantCount(item) > 1
+  ));
+  const showPriceListColumn = (localDoc?.items || []).some((item: EstimateItem) => (
+    Boolean(item.productId) && String(resolveItemType(item)).toUpperCase() !== 'SERVICE'
+  ));
+  const quoteLineProductLayoutClass = showVariantColumn
+    ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
+    : showPriceListColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
 
   const handleConvertToOrder = async (estimate: Estimate) => {
     if (!canPerform('SALES_QUOTES', 'approve')) {
@@ -269,6 +284,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       ...item,
       productCode: item.productCode || item.code || products.find((product) => product.id === item.productId)?.code,
     })),
+    pricingMode,
     status,
   } as Partial<Estimate>);
 
@@ -358,8 +374,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       }
     }
 
-    const digits = phone.replace(/\D/g, '');
-    const phoneWithCode = digits.length === 8 ? '505' + digits : (digits.startsWith('505') ? digits : '505' + digits);
     const customerName = estimate?.customer?.name || customers.find((c) => c.id === estimate?.customerId)?.name || '';
     const totalFormatted = `${estimate?.currency === 'USD' ? 'US$' : 'C$'}${formatSalesAmount(estimate?.total)}`;
 
@@ -373,8 +387,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       message += ` Adjunto encontrarás el documento PDF con todos los detalles.`;
     }
 
-    const text = encodeURIComponent(message);
-    window.open(`https://wa.me/${phoneWithCode}?text=${text}`, '_blank');
+    const whatsappUrl = buildCustomerWhatsAppUrl(phone, message);
+    if (!whatsappUrl) { toast.error('El cliente no tiene un teléfono E.164 válido para WhatsApp.'); return; }
+    window.open(whatsappUrl, '_blank');
 
     if (publicPdfUrl) {
       toast.success('¡Enlace público del PDF generado e incluido en el mensaje de WhatsApp!', preparingToastId ? { id: preparingToastId } : undefined);
@@ -479,6 +494,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
   const additionalChargesTotal = (doc: any = localDoc) => getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0));
 
+  const calculateGlobalTaxAmount = (items: any[], discountRate: number, taxRate: number) => {
+    const productSubtotal = items
+      .filter((line: any) => resolveItemType(line) !== 'SERVICE')
+      .reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+    const productDiscount = productSubtotal * Math.max(0, Math.min(100, Number(discountRate || 0))) / 100;
+    return Math.max(0, productSubtotal - productDiscount) * Math.max(0, Number(taxRate || 0)) / 100;
+  };
+
   const updateExtraCharges = (charges: SalesExtraChargeLine[]) => {
     if (!localDoc) return;
     const payload = getSalesExtraChargesPayload({ extraCharges: charges });
@@ -520,14 +543,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
       const discount = gross * Number(line.discount || 0) / 100;
       const taxable = gross - discount;
-      const tax = taxable * Number(line.taxRate || 0) / 100;
+      const tax = resolveItemType(line) === 'SERVICE' ? 0 : taxable * Number(line.taxRate || 0) / 100;
       return { ...line, irRate: 0, irTaxId: null, irAmount: 0, total: taxable + tax };
     });
     const subtotal = pricedItems.reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const discountAmount = pricedItems.reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0) * Number(line.discount || 0) / 100, 0);
     const taxAmount = pricedItems.reduce((sum: number, line: any) => {
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
-      return sum + (gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100;
+      return sum + (resolveItemType(line) === 'SERVICE' ? 0 : (gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
     }, 0);
     return { items: pricedItems, subtotal, discountAmount, taxAmount, irAmount: 0, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
@@ -536,7 +559,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     const subtotal = normalizedItems.reduce((sum: number, line: any) => sum + Number(line.total || 0), 0);
     const discountAmount = subtotal * Math.max(0, Math.min(100, Number(dRate || 0))) / 100;
     const base = subtotal - discountAmount;
-    const taxAmount = base * Math.max(0, Number(tRate || 0)) / 100;
+    const taxAmount = calculateGlobalTaxAmount(normalizedItems, dRate, tRate);
     return { items: normalizedItems, subtotal, discountAmount, taxAmount, irAmount: 0, total: base + taxAmount + additionalChargesTotal() };
   };
   useEffect(() => {
@@ -783,7 +806,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       const newRate = Number(e.target.value);
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
                       const base = Number(localDoc?.subtotal||0) - dAmount;
-                      const tAmount = base * (localRates.tRate / 100);
+                      const tAmount = calculateGlobalTaxAmount(localDoc?.items || [], newRate, localRates.tRate);
                       const newTotal = base + tAmount + additionalChargesTotal();
                       setLocalRates(prev => ({ ...prev, dRate: newRate }));
                       setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
@@ -791,7 +814,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       const newRate = Number(e.target.value);
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
                       const base = Number(localDoc?.subtotal||0) - dAmount;
-                      const tAmount = base * (localRates.tRate / 100);
+                      const tAmount = calculateGlobalTaxAmount(localDoc?.items || [], newRate, localRates.tRate);
                       const newTotal = base + tAmount + additionalChargesTotal();
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
@@ -806,7 +829,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const newRate = e.target.checked ? 15 : 0;
                         const dAmount = Number(localDoc?.subtotal || 0) * (localRates.dRate / 100);
                         const base = Number(localDoc?.subtotal || 0) - dAmount;
-                        const tAmount = base * (newRate / 100);
+                        const tAmount = calculateGlobalTaxAmount(localDoc?.items || [], localRates.dRate, newRate);
                         setLocalRates(prev => ({ ...prev, tRate: newRate }));
                         setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount + additionalChargesTotal() } as any);
                         void handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount + additionalChargesTotal() } as any);
@@ -860,11 +883,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               </div>
             </div>
             <div className="space-y-2">
-              <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn("sales-line-product-header xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
-                  <span>Descripción</span>
-                  <span>Variante</span>
-                  <span>Tipo de precio</span>
+                <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+                <div className={cn(
+                  'sales-line-product-header sales-quote-line-product-header',
+                  quoteLineProductLayoutClass,
+                  'xl:col-span-6',
+                  pricingMode === 'individual' && 'xl:col-span-5',
+                )}>
+                  <span>Producto</span>
+                  {showPriceListColumn && <span>Lista de precios</span>}
                 </div>
                 {pricingMode === 'individual' && <div className="col-span-2 grid grid-cols-2 gap-1.5">
                   <div>Aplicar</div>
@@ -875,15 +902,19 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 {pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}
                 <div className="col-span-2 text-right">Total</div>
               </div>
-              {(localDoc.items || []).map((item: any, idx: number) => (
+              {(localDoc.items || []).map((item: any, idx: number) => {
+                const itemProduct = getProductForItem(item);
+                const activeVariantCount = getActiveVariantCount(item);
+                const itemType = String(resolveItemType(item)).toUpperCase();
+                return (
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
-                      <div className="sales-line-product-fields">
+                      <div className={cn('sales-line-product-fields sales-quote-line-product-fields', quoteLineProductLayoutClass)}>
                         <div data-item-role="product-picker" className="sales-line-product-picker min-w-0"><Combobox
                       options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({
-                        label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`,
+                        label: p.name,
                         value: p.id,
-                        description: p.commercialNote ? `Nota: ${p.commercialNote}` : undefined,
+                        description: `Código: ${p.code}${p.commercialNote ? ` · Nota: ${p.commercialNote}` : ''}`,
                       }))}
                       value={item.productId || ''}
                       onChange={(val) => {
@@ -915,7 +946,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
+                        const tAmount = calculateGlobalTaxAmount(newItems, localRates.dRate, localRates.tRate);
                         const newTotal = base + tAmount + additionalChargesTotal();
                         const nextDoc = { ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any;
                          commitLocalDoc(nextDoc);
@@ -929,24 +960,47 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       }}
                       placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                       disabled={!localDoc?.customerId}
-                     /></div><SalesVariantSelect
-                       className="sales-line-variant"
-                      product={products.find((product) => product.id === item.productId)}
-                      value={item.variantId}
-                      onChange={(variantId, variant) => {
-                        const nextItems = [...(localDoc.items || [])] as any[];
-                        nextItems[idx] = {
-                          ...nextItems[idx],
-                          variantId,
-                          variantSku: variant?.sku || null,
-                          variantName: variant?.name || null,
-                          variantAttributes: variant?.attributes || null,
-                        };
-                        commitLocalDoc({ ...localDoc, items: nextItems } as Estimate);
-                      }}
-                     /><SalesLinePriceListSelect
-                       className="sales-line-price-list"
+                      ariaLabel={itemType === 'SERVICE' ? 'Seleccionar servicio' : 'Seleccionar producto'}
+                     />
+                     {itemProduct && (
+                       <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1">
+                         <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">Código {itemProduct.code}</span>
+                         {itemType === 'SERVICE' ? (
+                           <Badge variant="outline" className="h-4 border-none bg-muted/20 px-1.5 text-[9px] font-black text-muted-foreground">Servicio</Badge>
+                         ) : (
+                           <Badge variant="outline" className="h-4 border-none bg-muted/30 px-1.5 text-[9px] font-black text-muted-foreground">
+                             {activeVariantCount > 1 ? 'Producto con variantes' : 'Producto simple · sin variantes'}
+                           </Badge>
+                         )}
+                       </div>
+                     )}
+                     </div>
+                     {showVariantColumn && itemType !== 'SERVICE' && activeVariantCount > 1 && (
+                         <SalesVariantSelect
+                           className="sales-line-variant sales-quote-line-variant-column"
+                           labelLayout="stacked"
+                           showLabel={false}
+                           placeholder="Seleccionar variante"
+                           product={itemProduct}
+                           value={item.variantId}
+                           onChange={(variantId, variant) => {
+                             const nextItems = [...(localDoc.items || [])] as any[];
+                             nextItems[idx] = {
+                               ...nextItems[idx],
+                               variantId,
+                               variantSku: variant?.sku || null,
+                               variantName: variant?.name || null,
+                               variantAttributes: variant?.attributes || null,
+                             };
+                              commitLocalDoc({ ...localDoc, items: nextItems } as Estimate);
+                            }}
+                          />
+                             )}
+                     {showPriceListColumn && (
+                       itemType !== 'SERVICE' && item.productId ? <SalesLinePriceListSelect
+                       className="sales-line-price-list sales-quote-line-price-column"
                        labelLayout="stacked"
+                       labelText="Lista de precios"
                       productId={(products.find((product) => product.id === item.productId) || products.find((product) => String(product.name).trim().toLowerCase() === String(item.description || '').trim().toLowerCase()))?.id || item.productId}
                       variantId={item.variantId}
                       productCode={(products.find((product) => product.id === item.productId) || products.find((product) => String(product.name).trim().toLowerCase() === String(item.description || '').trim().toLowerCase()))?.code || item.productCode || item.code}
@@ -958,7 +1012,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       lineIndex={idx}
                       currency={localDoc?.currency}
                       exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
-                      onChange={(priceListId, result, source) => {
+                       onChange={(priceListId, result, source) => {
                       const nextItems = [...(localDoc.items || [])] as any[];
                       const matchedProduct = products.find((product) => product.id === nextItems[idx].productId)
                         || products.find((product) => String(product.name).trim().toLowerCase() === String(nextItems[idx].description || '').trim().toLowerCase());
@@ -966,9 +1020,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       const calculated = pricingMode === 'individual' ? recalcIndividualTotals(nextItems) : recalcGlobalTotals(nextItems, localRates.dRate, localRates.tRate, localRates.irRate);
                        commitLocalDoc({ ...localDoc, ...calculated, priceListId } as Estimate);
                       if (source !== 'initial') void handleUpdate(localDoc!.id, { ...calculated, priceListId, items: calculated.items } as any);
-                      }}
-                     /></div>
-                    {item.productId && resolveItemType(item) !== 'SERVICE' && (
+                       }}
+                       /> : null
+                     )}
+                     </div>
+                     {item.productId && resolveItemType(item) !== 'SERVICE' && (
                       <SalesWarehouseStockHint
                         product={products.find((product) => product.id === item.productId)}
                         warehouses={warehouses}
@@ -1018,7 +1074,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
+                        const tAmount = calculateGlobalTaxAmount(newItems, localRates.dRate, localRates.tRate);
                         const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
@@ -1040,7 +1096,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
+                        const tAmount = calculateGlobalTaxAmount(newItems, localRates.dRate, localRates.tRate);
                         const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
@@ -1071,7 +1127,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                     </Button>
                   </div>
                 </div>
-              ))}
+              );
+              })}
               {(!localDoc.items || localDoc.items.length === 0) && (
                 <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">
                   No hay productos o servicios asignados a esta cotización. Haz clic en "Agregar Item".

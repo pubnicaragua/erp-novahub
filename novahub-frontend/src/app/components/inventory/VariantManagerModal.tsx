@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { ProductVariant } from '../../types/variants';
 import { useAuth } from '../../contexts/AuthContext';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface VariantManagerModalProps {
   open: boolean;
@@ -92,6 +93,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
     }
 
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       const data = {
         sku: formSku.trim().toUpperCase(),
@@ -108,6 +110,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
         await inventoryService.createVariant(product.id, data);
         toast.success('Variante creada');
       }
+      completeNotificationAction(actionToken);
 
       setShowCreate(false);
       setEditingId(null);
@@ -116,6 +119,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al guardar variante');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -124,14 +128,17 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   const handleDelete = async () => {
     if (!pendingDeleteId) return;
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.deleteVariant(pendingDeleteId);
       toast.success('Variante eliminada');
+      completeNotificationAction(actionToken);
       setPendingDeleteId(null);
       loadVariants();
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al eliminar variante');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -140,13 +147,16 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   const handleRegenerate = async () => {
     if (!product) return;
     setRegenerating(true);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.regenerateVariants(product.id);
       toast.success('Variantes regeneradas desde atributos');
+      completeNotificationAction(actionToken);
       loadVariants();
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al regenerar variantes');
+      failNotificationAction(actionToken);
     } finally {
       setRegenerating(false);
     }

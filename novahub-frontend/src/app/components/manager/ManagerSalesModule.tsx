@@ -37,6 +37,8 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { managerStatusLabel } from '../../utils/managerLabels';
+import { buildCustomerWhatsAppUrl } from '../ventas/WhatsAppActionButton';
+import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -377,7 +379,9 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
   const openSalesDocumentWhatsApp = async () => {
     const selected = salesDocumentDetail?.document || selectedSalesDocument?.row;
     if (!selected) return;
-    const phone = String(selected.customerPhone || selected.customer?.phone || selected.customCustomerPhone || '').replace(/\D/g, '');
+    const persistedPhone = selected.customerPhone || selected.customer?.phone;
+    const customPhone = selected.customCustomerPhone;
+    const phone = buildCustomerWhatsAppUrl(persistedPhone || customPhone);
     if (!phone) {
       toast.error('El cliente no tiene un teléfono registrado para WhatsApp.');
       return;
@@ -400,8 +404,9 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     } catch {
       message += '\n\nPodés consultar el detalle desde este mensaje.';
     }
-    const phoneWithCode = phone.length === 8 ? `505${phone}` : (phone.startsWith('505') ? phone : `505${phone}`);
-    window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    const whatsappUrl = buildCustomerWhatsAppUrl(persistedPhone || customPhone, message);
+    if (!whatsappUrl) { toast.error('El teléfono del documento no está normalizado en E.164.'); return; }
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
     toast.success('WhatsApp quedó preparado con el documento', { id: preparingToastId });
   };
 
@@ -498,7 +503,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
         onWhatsApp={openSalesDocumentWhatsApp}
         hasWhatsApp={Boolean(salesDocumentDetail?.document?.customerPhone || selectedSalesDocument?.row?.customerPhone || selectedSalesDocument?.row?.customer?.phone || selectedSalesDocument?.row?.customCustomerPhone)}
       />
-      <ManagerSalesDeliverySheet open={Boolean(selectedDelivery)} onOpenChange={(open) => { if (!open) { setSelectedDelivery(null); setDeliveryDetail(null); } }} loading={deliveryDetailLoading} delivery={deliveryDetail?.delivery || selectedDelivery} history={deliveryDetail?.history} reportCurrency={activeReportCurrency} onDownload={canExport && deliveryDetail?.delivery ? () => { void exportManagerSalesPdf({ rows: [exportRow('deliveries', deliveryDetail.delivery, activeReportCurrency, displayMode)], tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: 'Detalle de entrega', fileBase: `detalle_entrega_${deliveryDetail.delivery.number || 'sin_numero'}`, reportCurrency: activeReportCurrency, metrics, pdfDesign: deliveryDetail.delivery.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} onWhatsApp={deliveryDetail?.delivery?.customerPhone ? () => { const phone = String(deliveryDetail.delivery.customerPhone).replace(/\D/g, ''); const phoneWithCode = phone.length === 8 ? `505${phone}` : (phone.startsWith('505') ? phone : `505${phone}`); window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(`Hola ${deliveryDetail?.delivery?.customerName || 'cliente'}, te compartimos la información de tu entrega ${deliveryDetail?.delivery?.number || ''}.`)}`, '_blank', 'noopener,noreferrer'); } : undefined} />
+      <ManagerSalesDeliverySheet open={Boolean(selectedDelivery)} onOpenChange={(open) => { if (!open) { setSelectedDelivery(null); setDeliveryDetail(null); } }} loading={deliveryDetailLoading} delivery={deliveryDetail?.delivery || selectedDelivery} history={deliveryDetail?.history} reportCurrency={activeReportCurrency} onDownload={canExport && deliveryDetail?.delivery ? () => { void exportManagerSalesPdf({ rows: [exportRow('deliveries', deliveryDetail.delivery, activeReportCurrency, displayMode)], tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: 'Detalle de entrega', fileBase: `detalle_entrega_${deliveryDetail.delivery.number || 'sin_numero'}`, reportCurrency: activeReportCurrency, metrics, pdfDesign: deliveryDetail.delivery.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} onWhatsApp={deliveryDetail?.delivery?.customerPhone ? () => { const whatsappUrl = buildCustomerWhatsAppUrl(deliveryDetail.delivery.customerPhone, `Hola ${deliveryDetail?.delivery?.customerName || 'cliente'}, te compartimos la información de tu entrega ${deliveryDetail?.delivery?.number || ''}.`); if (!whatsappUrl) { toast.error('El teléfono de la entrega no está normalizado en E.164.'); return; } window.open(whatsappUrl, '_blank', 'noopener,noreferrer'); } : undefined} />
       <ManagerSalesCashSheet open={Boolean(selectedCashSession)} onOpenChange={(open) => { if (!open) { setSelectedCashSession(null); setCashSessionDetail(null); } }} loading={cashSessionDetailLoading} session={cashSessionDetail?.session || selectedCashSession} invoices={cashSessionDetail?.invoices} log={cashSessionDetail?.log} reportCurrency={activeReportCurrency} onDownload={canExport && cashSessionDetail?.session ? () => { void exportManagerSalesPdf({ rows: [exportRow('cash', cashSessionDetail.session, activeReportCurrency, displayMode)], tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: 'Detalle de sesión de caja', fileBase: `detalle_sesion_caja_${cashSessionDetail.session.register?.code || 'sin_caja'}`, reportCurrency: activeReportCurrency, metrics, pdfDesign: cashSessionDetail.session.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} />
       <ManagerSalesPriceListSheet open={Boolean(selectedPriceList)} onOpenChange={(open) => { if (!open) { setSelectedPriceList(null); setPriceListDetail(null); } }} loading={priceListDetailLoading} priceList={priceListDetail?.priceList || selectedPriceList} items={priceListDetail?.items} reportCurrency={activeReportCurrency} onDownload={canExport && priceListDetail?.priceList ? () => { void exportManagerSalesPdf({ rows: (priceListDetail.items || []).map((item: any) => exportRow('pricelists', { ...item, priceListId: priceListDetail.priceList.id, branchName: priceListDetail.priceList.branchName }, activeReportCurrency, displayMode)), tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa', tenantLogo: themeConfig?.logo, primaryColor: themeConfig?.colors?.primary, title: `Lista ${priceListDetail.priceList.name}`, fileBase: `lista_de_precios_${priceListDetail.priceList.code || priceListDetail.priceList.name || 'sin_codigo'}`, reportCurrency: activeReportCurrency, filterSummary: quoteFilterSummary, metrics, pdfDesign: priceListDetail.priceList.pdfDesign }); } : undefined} onGoToBranch={onEnterBranch && canEnterBranch ? (targetBranchId) => { void onEnterBranch(groupId, targetBranchId); } : undefined} />
     </>}
@@ -656,6 +661,10 @@ const customerStatusInfo = (status: unknown) => String(status || '').toUpperCase
   ? { label: 'Activo', className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' }
   : { label: 'Inactivo', className: 'border-muted-foreground/20 bg-muted/30 text-muted-foreground' };
 const customerValue = (value: unknown, fallback = 'No registrado') => String(value ?? '').trim() || fallback;
+const customerPhoneValue = (row: any, field: 'phone' | 'contactPhone' = 'phone') => {
+  const value = row?.[field];
+  return value ? formatCustomerPhoneForDisplay(String(value), String(row?.countryCode || countryCodeFromLegacy(row?.country) || 'NI')) : 'No registrado';
+};
 const dateSortValue = (value: unknown) => value ? new Date(String(value)).getTime() : 0;
 const quoteRateText = (row: any) => row.reportRateLabel || `1 ${row.reportCurrency || 'NIO'} = 1 ${row.baseCurrency || row.currency || 'NIO'}`;
 const quoteRateSourceLabel = (value: unknown) => ({ HISTORICAL: 'Tasa histórica', CURRENT_CONFIGURATION: 'Tasa vigente de configuración', SAME_CURRENCY: 'Misma moneda', TRANSACTION: 'Tasa registrada en la operación' } as Record<string, string>)[String(value || '').toUpperCase()] || String(value || 'Tasa de la operación');
@@ -685,7 +694,7 @@ function tableColumns(view: ManagerSalesView, showBranch: boolean, reportCurrenc
     { label: 'RUC', sortKey: 'ruc', sortType: 'text', render: (row) => <span className={cn(!row.ruc && 'text-muted-foreground')}>{customerValue(row.ruc)}</span> },
     { label: 'Régimen fiscal', sortKey: 'fiscalRegime', sortType: 'text', render: (row) => customerValue(row.fiscalRegime) },
     { label: 'Correo', sortKey: 'email', sortType: 'text', render: (row) => <span className="break-words">{customerValue(row.email)}</span> },
-    { label: 'Teléfono', sortKey: 'phone', sortType: 'text', render: (row) => customerValue(row.phone) },
+    { label: 'Teléfono', sortKey: 'phone', sortType: 'text', render: (row) => customerPhoneValue(row) },
     { label: 'Departamento', sortKey: 'department', sortType: 'text', render: (row) => customerValue(row.department) },
     { label: 'Estado', sortKey: 'status', sortType: 'text', render: (row) => { const info = customerStatusInfo(row.status); return <Badge variant="outline" className={cn('font-black', info.className)}>{info.label}</Badge>; } },
   ]);
@@ -867,7 +876,7 @@ function CustomerCard({ customer, onDetail, openingId }: { customer: any; onDeta
         <CompactValue label="Régimen fiscal" value={customerValue(customer.fiscalRegime)} />
         <CompactValue label="Departamento" value={customerValue(customer.department)} />
         <CompactValue label="Correo" value={customerValue(customer.email)} className="col-span-2" />
-        <CompactValue label="Teléfono" value={customerValue(customer.phone)} />
+        <CompactValue label="Teléfono" value={customerPhoneValue(customer)} />
       </div>
       {onDetail && <p className="border-t border-border/50 pt-3 text-[10px] font-black uppercase tracking-widest text-primary">Abrir detalle del cliente</p>}
     </CardContent>
@@ -949,7 +958,7 @@ function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenC
             <TabsContent value="general" className="mt-0 space-y-5 outline-none">
               <Card className="rounded-2xl border-primary/20 bg-primary/5 p-5 shadow-sm"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><InfoField label="Código automático" value={customerValue(record?.code, record?.id?.slice(0, 8) || '—')} icon={FileText} mono /><InfoField label="Sucursal de origen" value={customerValue(record?.branchName)} icon={Building2} /><InfoField label="Tipo de cliente" value={customerTypeLabel(record?.type)} icon={record?.type === 'INDIVIDUAL' ? UserRound : Building2} /><InfoField label="Registrado" value={formatDate(record?.createdAt)} icon={Calendar} /></div></Card>
               <DetailSection title="Identificación y régimen fiscal" icon={FileText}><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><InfoField label="Cédula" value={customerValue(record?.taxId)} icon={FileText} mono muted={!record?.taxId} /><InfoField label="RUC" value={customerValue(record?.ruc)} icon={FileText} mono muted={!record?.ruc} /><InfoField label="DV del RUC" value={customerValue(record?.dv)} icon={FileText} mono muted={!record?.dv} /><InfoField label="Régimen fiscal" value={customerValue(record?.fiscalRegime)} icon={FileText} muted={!record?.fiscalRegime} /><InfoField label="Razón social" value={customerValue(record?.razonSocial)} icon={Building2} muted={!record?.razonSocial} /></div></DetailSection>
-              <DetailSection title="Contacto" icon={Mail}><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><InfoField label="Correo electrónico" value={customerValue(record?.email)} icon={Mail} muted={!record?.email} /><InfoField label="Teléfono" value={customerValue(record?.phone)} icon={Phone} muted={!record?.phone} /><InfoField label="Persona de contacto" value={customerValue(record?.contactName)} icon={UserRound} muted={!record?.contactName} /><InfoField label="Correo del contacto" value={customerValue(record?.contactEmail)} icon={Mail} muted={!record?.contactEmail} /><InfoField label="Teléfono del contacto" value={customerValue(record?.contactPhone)} icon={Phone} muted={!record?.contactPhone} /></div></DetailSection>
+              <DetailSection title="Contacto" icon={Mail}><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><InfoField label="Correo electrónico" value={customerValue(record?.email)} icon={Mail} muted={!record?.email} /><InfoField label="Teléfono" value={customerPhoneValue(record)} icon={Phone} muted={!record?.phone} /><InfoField label="Persona de contacto" value={customerValue(record?.contactName)} icon={UserRound} muted={!record?.contactName} /><InfoField label="Correo del contacto" value={customerValue(record?.contactEmail)} icon={Mail} muted={!record?.contactEmail} /><InfoField label="Teléfono del contacto" value={customerPhoneValue(record, 'contactPhone')} icon={Phone} muted={!record?.contactPhone} /></div></DetailSection>
               <DetailSection title="Ubicación" icon={MapPin}><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><InfoField label="Departamento" value={customerValue(record?.department)} icon={MapPin} muted={!record?.department} /><InfoField label="Ciudad" value={customerValue(record?.city)} icon={MapPin} muted={!record?.city} /><InfoField label="Dirección" value={customerValue(record?.address)} icon={MapPin} muted={!record?.address} /><InfoField label="País" value={customerValue(record?.country)} icon={MapPin} muted={!record?.country} /></div></DetailSection>
               {record?.notes && <Card className="rounded-2xl border-border/60 p-5 shadow-sm"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="mt-2 break-words text-sm leading-6 text-muted-foreground">{record.notes}</p></Card>}
               <DuplicateCustomerSection matches={duplicateCustomers} loading={loading} hasIdentifiers={Boolean(record?.taxId || record?.ruc)} />

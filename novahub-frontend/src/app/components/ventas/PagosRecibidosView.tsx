@@ -37,7 +37,7 @@ import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, wr
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
-import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase, getPaymentTotalBase } from '../../utils/paymentSettlement';
+import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentTotalBase, getPaymentTotalBaseForSettlement } from '../../utils/paymentSettlement';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -270,7 +270,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     line.currency,
     line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
   );
-  const paymentTotalBase = getPaymentTotalBase(paymentLines, getPaymentLineBase);
+  const rawPaymentTotalBase = getPaymentTotalBase(paymentLines, getPaymentLineBase);
   const paymentCustomerFavorBase = getCustomerFavorAmount(
     customers.find((customer) => customer.id === localDoc?.customerId),
   );
@@ -294,12 +294,33 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       Number((linkedPaymentDocument as any).exchangeRate || globalRate),
     )
     : 0;
+  const linkedDocumentCurrency = linkedPaymentDocument && String((linkedPaymentDocument as any).currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+  const linkedDocumentRate = Number((linkedPaymentDocument as any)?.exchangeRate || globalRate || 1);
+  const paymentTotalBase = linkedPaymentDocument
+    ? getPaymentTotalBaseForSettlement(
+      paymentLines,
+      linkedDocumentBalanceBase,
+      linkedDocumentCurrency,
+      baseCurrency,
+      convertBetweenCurrencies,
+      getPaymentLineBase,
+    )
+    : rawPaymentTotalBase;
+  const paymentTotalInDocumentCurrency = linkedPaymentDocument
+    ? convertBetweenCurrencies(paymentTotalBase, baseCurrency, linkedDocumentCurrency, 1, linkedDocumentRate)
+    : paymentTotalBase;
   const paymentChangeBase = linkedPaymentDocument
-    ? getPaymentChangeBase(paymentLines, linkedDocumentBalanceBase, getPaymentLineBase)
+    ? Math.max(0, paymentTotalBase - linkedDocumentBalanceBase)
     : 0;
   const paymentCashBase = getPaymentCashBase(paymentLines, getPaymentLineBase);
   const paymentChangeUnsupported = paymentChangeBase > 0.01 && !cashCoversPaymentChange(paymentLines, linkedDocumentBalanceBase, getPaymentLineBase);
   const paymentRemainingBase = Math.max(0, linkedDocumentBalanceBase - paymentTotalBase);
+  const paymentRemainingInDocumentCurrency = linkedPaymentDocument
+    ? convertBetweenCurrencies(paymentRemainingBase, baseCurrency, linkedDocumentCurrency, 1, linkedDocumentRate)
+    : 0;
+  const paymentChangeInDocumentCurrency = linkedPaymentDocument
+    ? convertBetweenCurrencies(paymentChangeBase, baseCurrency, linkedDocumentCurrency, 1, linkedDocumentRate)
+    : 0;
   const paymentHasActiveCredit = Boolean(
     localDoc?.invoiceId
       && (linkedPaymentDocument as any)?.creditNotes?.some((credit: any) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status || '').toUpperCase())),
@@ -443,7 +464,16 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         },
       )
       : effectiveLines;
-    const appliedBase = linkedDocument ? getPaymentTotalBase(submittedLines, getPaymentLineBase) : 0;
+    const appliedBase = linkedDocument
+      ? getPaymentTotalBaseForSettlement(
+        submittedLines,
+        documentBalanceBase,
+        String((linkedDocument as any).currency || baseCurrency).toUpperCase(),
+        baseCurrency,
+        convertBetweenCurrencies,
+        getPaymentLineBase,
+      )
+      : 0;
     const remainingToApplyBase = linkedDocument ? Math.max(0, documentBalanceBase - appliedBase) : 0;
     if (linkedDocument && !submittedLines.length) {
       toast.error('El documento seleccionado no tiene saldo pendiente.');
@@ -787,13 +817,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                           const nextRate = paymentLineRate(nextCurrency);
-                          return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
+                          return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined, cardCommissionPercent: 0, cardCommissionAmount: 0, cardCommissionAccountId: undefined };
                         }))} />
                         <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} className="h-9 text-xs tabular-nums" /></div>
                         <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar medio de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                       </div>
+                      {linkedPaymentDocument && line.currency !== linkedDocumentCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente pendiente: {formatExplicitAmount(convertBetweenCurrencies(paymentRemainingBase, baseCurrency, line.currency, 1, Number(line.exchangeRate || globalRate || 1)), line.currency)}</p>}
                       {line.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
-                      {isBankPaymentMethod(line.method, true) && <BankAccountSelect endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" className="mt-2" />}
+                      {isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" className="mt-2" />}
                       {isCardPaymentMethod(line.method) && line.bankAccountId && Number(line.cardCommissionPercent || 0) > 0 && (
                         <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
                           <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
@@ -808,7 +839,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
                   <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
+                  {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Aplicado en documento</span><span className="font-black text-primary">{formatExplicitAmount(paymentTotalInDocumentCurrency, linkedDocumentCurrency)}</span></div>}
                    {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className={cn("font-black uppercase tracking-widest", paymentSettlementLabel === 'Pendiente' ? 'text-amber-600' : 'text-muted-foreground')}>{paymentSettlementLabel}</span><span className={cn("font-black", paymentSettlementLabel === 'Pendiente' ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentSettlementLabel === 'Pendiente' ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</span></div>}
+                  {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Equivalente en documento</span><span className="font-black">{formatExplicitAmount(paymentRemainingBase > 0.01 ? paymentRemainingInDocumentCurrency : paymentChangeInDocumentCurrency, linkedDocumentCurrency)}</span></div>}
                   {!linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Destino</span><span className="font-black text-muted-foreground">Anticipo de cliente</span></div>}
                    {paymentChangeBase > 0.01 && <p className={cn("rounded-lg px-3 py-2 text-[10px] font-bold", paymentChangeUnsupported ? 'bg-rose-500/10 text-rose-600' : 'bg-emerald-500/10 text-emerald-600')}>{paymentChangeUnsupported ? 'No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe ser efectivo.' : `Vuelto por dar: ${formatConvertedAmount(paymentChangeBase, baseCurrency)} · efectivo disponible: ${formatConvertedAmount(paymentCashBase, baseCurrency)}`}</p>}
                 </div>

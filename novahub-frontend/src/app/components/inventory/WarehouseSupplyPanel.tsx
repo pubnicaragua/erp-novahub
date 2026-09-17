@@ -10,6 +10,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 type SupplyWarehouse = {
   id: string;
@@ -127,6 +128,7 @@ export function WarehouseSupplyPanel() {
       return;
     }
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       await api.idempotentPost('/inventory/warehouse-supply-requests', {
         sourceWarehouseId,
@@ -135,12 +137,14 @@ export function WarehouseSupplyPanel() {
         notes: notes.trim() || undefined,
       });
       toast.success('Solicitud de abastecimiento creada');
+      completeNotificationAction(actionToken);
       setLevelId('');
       setQuantity('1');
       setNotes('');
       await loadData();
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo crear la solicitud'));
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }

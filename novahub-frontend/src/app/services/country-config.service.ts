@@ -18,6 +18,7 @@ export interface CountryConfig {
   ufName?: string;
   usesCentavos: boolean;
   dateFormat: string;
+  timeZone?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

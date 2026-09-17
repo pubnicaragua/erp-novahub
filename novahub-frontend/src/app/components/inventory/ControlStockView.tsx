@@ -19,6 +19,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import type { SalesPaginationControls } from '../../types';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface ControlStockViewProps {
   adjustments: any[];
@@ -384,6 +385,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     }
     
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.createAdjustment({
         warehouseId: newAdjustment.warehouseId,
@@ -398,11 +400,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         }],
       });
       toast.success('Ajuste creado exitosamente');
+      completeNotificationAction(actionToken);
       setIsCreating(false);
       setNewAdjustment({ warehouseId: '', reason: 'DISCREPANCY', productId: '', variantId: '', currentStock: 0, actualStock: 0, unitCost: 0, currency: baseCurrency });
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al crear ajuste');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -410,12 +414,15 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
   const handleApproveAdjustment = async (id: string) => {
     setApprovingId(id);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.approveAdjustment(id);
       toast.success('Ajuste aprobado y aplicado');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al aprobar');
+      failNotificationAction(actionToken);
     } finally {
       setApprovingId(null);
     }
@@ -433,6 +440,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   const confirmCreateAdjustmentFromAudit = async () => {
     const audit = auditConfirmation;
     if (!audit) return;
+    const actionToken = beginNotificationAction();
     try {
       setAuditAdjustingId(audit.id);
       const result = await inventoryService.createAdjustmentFromAudit(audit.id);
@@ -441,11 +449,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       } else {
         toast.success(`Auditoría ${audit.number} revisada: no se generó ajuste porque no había diferencias.`);
       }
+      completeNotificationAction(actionToken);
       setAuditConfirmation(null);
       setAuditPickerOpen(false);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo generar el ajuste desde la auditoría');
+      failNotificationAction(actionToken);
       throw e;
     } finally {
       setAuditAdjustingId(null);
@@ -512,6 +522,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
     setSaving(true);
     const reference = `REC-${Date.now().toString().slice(-8)}`;
+    const actionToken = beginNotificationAction();
 
     try {
       await Promise.all(
@@ -541,11 +552,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       }
 
       toast.success(`Recepción registrada: ${newReception.totalQuantity} unidades${imeiList.length ? ` + ${imeiList.length} IMEI/series` : ''}`);
+      completeNotificationAction(actionToken);
       setIsReceptionOpen(false);
       resetReception();
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al registrar recepción');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -575,6 +588,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
     setSaving(true);
     const reference = `AJUSTE-IMEI-${Date.now().toString().slice(-8)}${serialAdjustment.notes ? ` - ${serialAdjustment.notes}` : ''}`;
+    const actionToken = beginNotificationAction();
     try {
       if (serialAdjustment.action === 'ADD') {
         await inventoryService.createSeries({
@@ -604,11 +618,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       }
 
       toast.success(serialAdjustment.action === 'ADD' ? 'IMEI/serie agregado' : 'IMEI/serie ajustado');
+      completeNotificationAction(actionToken);
       setIsSerialAdjustOpen(false);
       setSerialAdjustment({ action: 'ADD', productId: '', variantId: '', warehouseId: '', serialNumber: '', notes: '' });
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al ajustar IMEI/serie');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -642,6 +658,16 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               <Button type="button" variant="ghost" size="icon" onClick={() => setShowTutorial(true)} className="size-8 shrink-0 rounded-lg text-muted-foreground" aria-label="Cómo ajustar inventario" title="Cómo ajustar inventario">
                 <CircleHelp className="size-4" />
               </Button>
+              {isCreating && (
+                <div className="hidden items-center gap-1 lg:flex">
+                  <Button type="button" size="icon" variant="ghost" className="size-8 text-success" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">
+                    {saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}
+                  </Button>
+                  <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste">
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -699,14 +725,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         <Table className="min-w-[1160px]">
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28"><span className="inline-flex items-center gap-1">Número<ColumnFilterMenu label="Número" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} /></span></TableHead>
+              <TableHead className="w-40 min-w-40 font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Número<ColumnFilterMenu label="Número" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Almacén<ColumnFilterMenu label="Almacén" options={warehouseOptions} selected={colFilters.state.warehouse?.values || []} onSelect={(values) => colFilters.setValues('warehouse', values)} sort={colFilters.state.warehouse?.sort || null} onSort={(sort) => colFilters.setSort('warehouse', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Razón<ColumnFilterMenu label="Razón" options={reasonOptions} selected={colFilters.state.reason?.values || []} onSelect={(values) => colFilters.setValues('reason', values)} sort={colFilters.state.reason?.sort || null} onSort={(sort) => colFilters.setSort('reason', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Producto<ColumnFilterMenu label="Producto" sort={colFilters.state.product?.sort || null} onSort={(sort) => colFilters.setSort('product', sort)} /></span></TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">Cant. Ajuste</TableHead>
+              <TableHead className="w-24 min-w-24 text-center font-black text-[10px] uppercase tracking-widest">Cant. Ajuste</TableHead>
               {canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right">Costo Ref.</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-24"><span className="inline-flex items-center gap-1">Estado<ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} /></span></TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -757,7 +782,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       min={0}
                       value={newAdjustment.actualStock} 
                       onChange={(e) => setNewAdjustment({ ...newAdjustment, actualStock: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                      className="h-8 text-xs w-32 text-right tabular-nums"
+                      className="h-8 w-24 text-right text-xs tabular-nums"
                     />
                   </div>
                 </TableCell>
@@ -782,16 +807,6 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                   </div>
                 </TableCell>}
                 <TableCell className="text-xs">Borrador</TableCell>
-                <TableCell>
-                  <div className="flex gap-1 justify-end" data-tour="inventory-adjustment-form-actions">
-                    <Button size="icon" variant="ghost" className="size-7 text-success" onClick={handleCreateAdjustment} disabled={saving}>
-                      {saving ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Check className="size-4" />}
-                    </Button>
-                    <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => setIsCreating(false)} disabled={saving}>
-                      <X className="size-4" />
-                    </Button>
-                  </div>
-                </TableCell>
               </TableRow>
             )}
             
@@ -827,25 +842,25 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       )}
                     </TableCell>}
                     <TableCell>
-                      <Badge className={`text-[10px] ${getStatusBadge(adj.status)}`}>
-                        {adj.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {adj.status === 'DRAFT' && isAuditGeneratedAdjustment(adj) ? (
-                        <span className="text-[9px] font-bold uppercase tracking-wide text-warning">Manager global</span>
-                      ) : adj.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && (
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="h-7 text-xs text-success hover:bg-success/10 gap-1"
-                          onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adj.id); }}
-                          disabled={isApproving}
-                        >
-                          {isApproving ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="size-3" />}
-                          Aprobar
-                        </Button>
-                      )}
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge className={`text-[10px] ${getStatusBadge(adj.status)}`}>
+                          {adj.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}
+                        </Badge>
+                        {adj.status === 'DRAFT' && isAuditGeneratedAdjustment(adj) ? (
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-warning">Manager global</span>
+                        ) : adj.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 gap-1 text-xs text-success hover:bg-success/10"
+                            onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adj.id); }}
+                            disabled={isApproving}
+                          >
+                            {isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3" />}
+                            Aprobar
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

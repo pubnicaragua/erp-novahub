@@ -205,8 +205,11 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const returnsPage = pageFor('devoluciones-venta');
   const creditNotesPage = pageFor('notas-credito');
   const isPaymentDocumentCatalog = activeSection === 'pagos-recibidos';
+  const isReturnInvoiceCatalog = activeSection === 'devoluciones-venta';
   const invoiceQueryPage = isPaymentDocumentCatalog
     ? { page: 1, pageSize: 200 }
+    : isReturnInvoiceCatalog
+      ? { page: 1, pageSize: 200 }
     : invoicesPage;
   const creditNotesQueryPage = isPaymentDocumentCatalog
     ? { page: 1, pageSize: 200 }
@@ -247,11 +250,13 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     placeholderData: keepPreviousData,
   });
   const invoicesQuery = useQuery({
-    queryKey: isPaymentDocumentCatalog
-      ? ['sales', 'invoices-payment-catalog', tenantKey, selectedBranchId]
+    queryKey: isPaymentDocumentCatalog || isReturnInvoiceCatalog
+      ? ['sales', isReturnInvoiceCatalog ? 'invoices-return-catalog' : 'invoices-payment-catalog', tenantKey, selectedBranchId]
       : ['sales', 'invoices', tenantKey, invoiceQueryPage.page, invoiceQueryPage.pageSize, searchFor('facturas'), invoicesDates.dateFrom, invoicesDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => isPaymentDocumentCatalog
       ? invoicesService.getAll({ page: 1, pageSize: 200, ...branchFilter }, signal)
+      : isReturnInvoiceCatalog
+        ? invoicesService.getAll({ page: 1, pageSize: 200, excludeReturned: true, ...branchFilter }, signal)
       : invoicesService.getAll({ page: invoiceQueryPage.page, pageSize: invoiceQueryPage.pageSize, search: searchFor('facturas'), ...invoicesDates, ...branchFilter }, signal),
     enabled: canViewSalesSection('facturas') && needsInvoices,
     placeholderData: keepPreviousData,
@@ -533,7 +538,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               transition={{ duration: 0.2 }}
             >
               {activeSection === 'clientes' && (
-                <ClientesView data={filteredData.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
+                <ClientesView data={filteredData.clientes} loading={loading} error={customersListQuery.error} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'estimaciones' && (
                 <EstimacionesView data={filteredData.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} warehouses={data.warehouses} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />

@@ -16,10 +16,24 @@ export function resolveCustomerPhone(
   customers: Customer[] = [],
 ) {
   const documentPhone = String(customer?.phone || '').trim();
-  if (documentPhone) return documentPhone;
+  if (documentPhone) return normalizeWhatsAppPhone(documentPhone);
 
   const catalogPhone = String(customers.find((entry) => entry.id === customerId)?.phone || '').trim();
-  return catalogPhone || null;
+  return normalizeWhatsAppPhone(catalogPhone);
+}
+
+/** WhatsApp solo recibe el teléfono persistido en E.164; nunca se adivina un país. */
+export function normalizeWhatsAppPhone(value: string | null | undefined): string | null {
+  const raw = String(value || '').trim();
+  if (!raw.startsWith('+')) return null;
+  const digits = raw.replace(/\D/g, '');
+  return /^\d{7,15}$/.test(digits) ? digits : null;
+}
+
+export function buildCustomerWhatsAppUrl(phone: string | null | undefined, message?: string): string | null {
+  const normalized = normalizeWhatsAppPhone(phone);
+  if (!normalized) return null;
+  return `https://wa.me/${normalized}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
 }
 
 export function WhatsAppActionButton({ phone, documentLabel, onSend }: WhatsAppActionButtonProps) {
