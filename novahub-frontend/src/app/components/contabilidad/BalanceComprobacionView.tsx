@@ -376,13 +376,12 @@ export function BalanceComprobacionView() {
     if (query.error) toast.error(query.error.message || 'Error al cargar balance de comprobación');
   }, [query.error]);
 
-  // Filtro de búsqueda que mantiene visibles y expande todos los ancestros de los nodos coincidentes
-  const { filteredTree, searchAncestorIds } = useMemo(() => {
+  // Filtro de búsqueda que mantiene las cuentas y sus subárboles coincidentes
+  const filteredTree = useMemo(() => {
     if (!searchTerm.trim()) {
-      return { filteredTree: treeData.tree, searchAncestorIds: new Set<string>() };
+      return treeData.tree;
     }
     const q = searchTerm.toLowerCase().trim();
-    const ancestors = new Set<string>();
 
     const filterNodes = (nodes: TrialBalanceTreeNode[]): TrialBalanceTreeNode[] => {
       const res: TrialBalanceTreeNode[] = [];
@@ -391,19 +390,16 @@ export function BalanceComprobacionView() {
         const matchedChildren = filterNodes(node.children);
 
         if (matchSelf || matchedChildren.length > 0) {
-          if (matchedChildren.length > 0) {
-            ancestors.add(node.id);
-          }
           res.push({
             ...node,
-            children: matchedChildren,
+            children: matchedChildren.length > 0 ? matchedChildren : (matchSelf ? node.children : []),
           });
         }
       }
       return res;
     };
 
-    return { filteredTree: filterNodes(treeData.tree), searchAncestorIds: ancestors };
+    return filterNodes(treeData.tree);
   }, [treeData.tree, searchTerm]);
 
   const toggleNodeExpansion = (id: string) => {
@@ -440,20 +436,16 @@ export function BalanceComprobacionView() {
     setExpandedAccountId((current) => (current === accountId ? null : accountId));
   };
 
-  const isSearching = Boolean(searchTerm.trim());
-
-  // Aplanar filas visibles respetando el estado de expansión de cada nivel
+  // Aplanar filas visibles respetando el estado de expansión de cada nivel (opcional/manual)
   const getVisibleRowsForType = (
     typeRoots: TrialBalanceTreeNode[],
-    expandedIds: Set<string>,
-    ancestors: Set<string>,
-    searching: boolean
+    expandedIds: Set<string>
   ): TrialBalanceTreeNode[] => {
     const result: TrialBalanceTreeNode[] = [];
     const walkVisible = (nodes: TrialBalanceTreeNode[]) => {
       for (const n of nodes) {
         result.push(n);
-        const isExpanded = expandedIds.has(n.id) || (searching && ancestors.has(n.id));
+        const isExpanded = expandedIds.has(n.id);
         if (!n.isLeaf && isExpanded) {
           walkVisible(n.children);
         }
@@ -466,7 +458,7 @@ export function BalanceComprobacionView() {
   const grouped = useMemo(() => {
     return ACCOUNT_TYPE_ORDER.map((type) => {
       const typeRoots = filteredTree.filter((r) => r.tipo === type);
-      const visibleRows = getVisibleRowsForType(typeRoots, expandedNodeIds, searchAncestorIds, isSearching);
+      const visibleRows = getVisibleRowsForType(typeRoots, expandedNodeIds);
 
       let leafCount = 0;
       const countLeaves = (nodes: TrialBalanceTreeNode[]) => {
@@ -485,7 +477,7 @@ export function BalanceComprobacionView() {
         leafCount,
       };
     }).filter((g) => g.roots.length > 0);
-  }, [filteredTree, expandedNodeIds, searchAncestorIds, isSearching]);
+  }, [filteredTree, expandedNodeIds]);
 
   // Totales globales: calculados estrictamente sobre las cuentas hoja para evitar doble conteo
   const totalDebitos = useMemo(() => {
@@ -586,65 +578,117 @@ export function BalanceComprobacionView() {
 
   return (
     <div className="min-w-0 space-y-6">
-      <div className="flex flex-wrap items-center bg-muted/30 rounded-2xl border border-border/50 shadow-sm p-2 sm:p-3 gap-y-3">
-        {/* Sección 1: Filtros de Fecha */}
-        <div className="flex flex-wrap items-center gap-3 px-2 2xl:border-r border-border/40 2xl:pr-4">
-          <div className="flex items-center gap-2 text-xs font-black text-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
-            <Filter className="size-3.5" /> Filtros
+      <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+            <span className="flex items-center gap-2 rounded-lg border border-border/30 bg-background/50 px-3 py-1.5 text-foreground">
+              <Filter className="size-3.5" /> Filtros
+            </span>
+            <span className="hidden text-[10px] font-medium normal-case tracking-normal text-muted-foreground/70 sm:inline">
+              Filtra y personaliza el balance de comprobación
+            </span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <label className="text-[10px] font-black text-foreground uppercase tracking-widest">Desde</label>
-            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde" className="w-[130px] sm:w-[140px] shrink-0" />
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <label className="text-[10px] font-black text-foreground uppercase tracking-widest">Hasta</label>
-            <DateField value={dateTo} onChange={setDateTo} placeholder="Hasta" className="w-[130px] sm:w-[140px] shrink-0" />
-          </div>
-          {(dateFrom || dateTo) && (
-            <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="h-9 px-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all shrink-0">
-              <X className="size-3" /> Limpiar
-            </button>
-          )}
         </div>
 
-        {/* Sección 2: Búsqueda y Navegación del Árbol */}
-        <div className="flex flex-wrap items-center gap-2 px-2 2xl:border-r border-border/40 2xl:pr-4">
-          <div className="relative w-full sm:w-[220px] shrink-0">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar cuenta o código..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="h-9 w-full pl-9" />
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12">
+          {/* Buscar cuenta o código */}
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-6">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              Buscar cuenta o código
+            </label>
+            <div className="relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre de cuenta o código..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="h-9 w-full pl-9"
+              />
+            </div>
           </div>
-          <Button variant="outline" size="sm" onClick={handleExpandAll} className="h-9 gap-1 text-xs shrink-0" title="Expandir todas las subcuentas">
-            <ChevronDown className="size-3.5" /> Expandir
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleCollapseAll} className="h-9 gap-1 text-xs shrink-0" title="Colapsar a nivel principal">
-            <ChevronRight className="size-3.5" /> Colapsar
-          </Button>
+
+          {/* Fecha Desde */}
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              Desde
+            </label>
+            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Fecha inicial" className="w-full" />
+          </div>
+
+          {/* Fecha Hasta */}
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+              Hasta
+            </label>
+            <DateField value={dateTo} onChange={setDateTo} placeholder="Fecha final" className="w-full" />
+          </div>
         </div>
 
-        {/* Sección 3: Exportación y Configuración */}
-        <div className="flex flex-wrap items-center gap-2 px-2">
-          {canExportTrialBalance && (
-            <>
-              <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9 shrink-0">
-                <Download className="size-4" />Exportar Excel
-              </Button>
-              <Button variant="outline" size="sm" onClick={handlePrint} className="h-9 shrink-0">
-                <Download className="size-4" />Exportar PDF
-              </Button>
-            </>
-          )}
-          <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5 shrink-0">
-            <Settings2 className="size-4" /> Configuración
-          </Button>
-          {configuredAccountIds && configuredAccountIds.length > 0 && (
-            <button
-              onClick={() => { setConfiguredAccountIds(null); void contabilidadService.updateConfig({ trialBalanceAccountIds: [] }).then(() => toast.success('Mostrando todas las cuentas')).catch(() => undefined); }}
-              title="Se está mostrando solo un subconjunto de cuentas. Haz clic para volver a mostrar todas."
-              className="h-9 gap-1.5 inline-flex items-center rounded-lg border border-primary/30 bg-primary/5 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 shrink-0"
+        {/* Barra de acciones inferior */}
+        <div className="flex min-w-0 flex-col gap-3 border-t border-border/30 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          {/* Grupo 1: Árbol (Expandir / Colapsar) */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExpandAll}
+              className="h-9 w-full sm:w-auto gap-1 text-xs"
+              title="Expandir todas las subcuentas"
             >
-              <X className="size-3.5" /> Filtro ({configuredAccountIds.length})
-            </button>
-          )}
+              <ChevronDown className="size-3.5" /> Expandir
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCollapseAll}
+              className="h-9 w-full sm:w-auto gap-1 text-xs"
+              title="Colapsar a nivel principal"
+            >
+              <ChevronRight className="size-3.5" /> Colapsar
+            </Button>
+          </div>
+
+          {/* Grupo 2: Exportaciones y Configuración */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            {canExportTrialBalance && (
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9 w-full sm:w-auto text-xs">
+                  <Download className="size-4" /> Exportar Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={handlePrint} className="h-9 w-full sm:w-auto text-xs">
+                  <Download className="size-4" /> Exportar PDF
+                </Button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 w-full sm:w-auto gap-1.5 text-xs">
+                <Settings2 className="size-4" /> Configuración
+              </Button>
+
+              {(dateFrom || dateTo) && (
+                <button
+                  onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  className="flex h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground transition-all hover:bg-rose-500/5 hover:text-rose-500 hover:border-rose-500/40"
+                >
+                  <X className="size-3.5" /> Limpiar
+                </button>
+              )}
+            </div>
+
+            {configuredAccountIds && configuredAccountIds.length > 0 && (
+              <button
+                onClick={() => {
+                  setConfiguredAccountIds(null);
+                  void contabilidadService.updateConfig({ trialBalanceAccountIds: [] }).then(() => toast.success('Mostrando todas las cuentas')).catch(() => undefined);
+                }}
+                title="Se está mostrando solo un subconjunto de cuentas. Haz clic para volver a mostrar todas."
+                className="inline-flex h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+              >
+                <X className="size-3.5" /> Filtro ({configuredAccountIds.length})
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -710,7 +754,7 @@ export function BalanceComprobacionView() {
                   </TableRow>,
                   ...group.visibleRows.flatMap((row) => {
                     const isMovementExpanded = expandedAccountId === row.id;
-                    const isNodeExpanded = expandedNodeIds.has(row.id) || (isSearching && searchAncestorIds.has(row.id));
+                    const isNodeExpanded = expandedNodeIds.has(row.id);
                     const isParent = !row.isLeaf;
 
                     return [
@@ -830,7 +874,7 @@ export function BalanceComprobacionView() {
                 </div>
                 {group.visibleRows.map((row) => {
                   const isMovementExpanded = expandedAccountId === row.id;
-                  const isNodeExpanded = expandedNodeIds.has(row.id) || (isSearching && searchAncestorIds.has(row.id));
+                  const isNodeExpanded = expandedNodeIds.has(row.id);
                   const isParent = !row.isLeaf;
 
                   return (
