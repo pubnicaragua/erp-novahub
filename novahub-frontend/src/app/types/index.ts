@@ -34,6 +34,8 @@ export interface ApiFilters {
   supplierId?: string;
   supplierInvoiceId?: string;
   status?: string;
+  customerId?: string;
+  supplierId?: string;
   dateFrom?: string;
   dateTo?: string;
   from?: string;
@@ -157,7 +159,7 @@ export interface Estimate {
   id: string;
   tenantId: string;
   number: string;
-  customerId: string;
+  customerId?: string;
   customer?: Customer;
   priceListId?: string;
   irRate?: number;
@@ -181,6 +183,9 @@ export interface Estimate {
   baseTotal?: number;
   status: DocumentStatus;
   notes?: string;
+  customCustomerName?: string;
+  customCustomerEmail?: string;
+  customCustomerPhone?: string;
   items: EstimateItem[];
   createdAt: string;
   updatedAt: string;
