@@ -21,6 +21,8 @@ export interface CashRegister {
   warehouseId?: string | null;
   warehouse?: any;
   hasActiveSession?: boolean;
+  activeSessionStatus?: 'OPEN' | 'COUNTING' | null;
+  autoClosePendingAt?: string | null;
   resolvedWarehouseId?: string | null;
   closureMode?: CashClosureMode;
 }
@@ -36,7 +38,7 @@ export interface SessionDenomination {
 
 export interface SessionLog {
   id: string;
-  type: 'OPEN' | 'SALE' | 'REFUND' | 'COUNT' | 'CLOSE' | 'ENTRY' | 'EXIT';
+  type: 'OPEN' | 'SALE' | 'REFUND' | 'COUNT' | 'CLOSE' | 'ENTRY' | 'EXIT' | 'AUTO_CLOSE_PENDING';
   description: string;
   amountNIO?: number;
   amountUSD?: number;
@@ -51,6 +53,7 @@ export interface CashRegisterSession {
   status: 'OPEN' | 'COUNTING' | 'CLOSED';
   openedAt: string;
   closedAt?: string;
+  autoClosePendingAt?: string | null;
   exchangeRateUSD: number;
   initialAmountNIO: number;
   initialAmountUSD: number;

@@ -263,10 +263,10 @@ export function ControlDashboardCajaView({
           </Tabs>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           {session && (
-            <Badge variant={session.status === 'COUNTING' ? 'secondary' : 'default'} className="font-bold text-xs h-9 px-3 flex items-center shadow-none pointer-events-none">
-              {session.status === 'COUNTING' ? 'EN ARQUEO' : 'ABIERTA'}
+            <Badge variant={session.status === 'COUNTING' ? 'secondary' : 'default'} className="max-w-full whitespace-normal text-center leading-3 font-bold text-xs min-h-9 h-auto px-3 py-1 flex items-center shadow-none pointer-events-none">
+              {session.autoClosePendingAt ? 'CIERRE AUTOMÁTICO · ARQUEO PENDIENTE' : session.status === 'COUNTING' ? 'EN ARQUEO' : 'ABIERTA'}
             </Badge>
           )}
           <Select value={selectedRegister} onValueChange={setSelectedRegister}>
@@ -417,7 +417,8 @@ export function ControlDashboardCajaView({
                     const initialNIO = Number(h.initialAmountNIO || 0);
                     const initialUSD = Number(h.initialAmountUSD || 0);
                     const rate = h.exchangeRateUSD || globalRate;
-                    const isBlindBeforeCount = h.closureMode === 'BLIND' && h.status === 'OPEN' && !(h.countAttempts?.length);
+                    const isBlindBeforeCount = h.closureMode === 'BLIND' && (h.status === 'OPEN' || h.autoClosePendingAt) && !(h.countAttempts?.length);
+                    const isAutoClosePending = Boolean(h.autoClosePendingAt);
                     const initialConverted = isUSD ? (initialUSD + initialNIO / rate) : (initialNIO + initialUSD * rate);
 
                     const diffNIO = Number(h.differenceNIO || 0);
@@ -453,8 +454,8 @@ export function ControlDashboardCajaView({
                     <AccordionItem key={h.id} value={h.id} className="border border-border/50 rounded-lg bg-card/50 px-4">
                       <AccordionTrigger className="py-4 hover:no-underline">
                         <div className="flex w-full min-w-0 flex-wrap items-center gap-3 text-sm">
-                          <Badge className="w-24 shrink-0 justify-center pointer-events-none bg-primary text-primary-foreground shadow-none">
-                            {h.status === 'CLOSED' ? 'CERRADA' : h.status === 'COUNTING' ? 'EN ARQUEO' : 'ABIERTA'}
+                          <Badge className="w-auto max-w-full shrink-0 justify-center pointer-events-none bg-primary text-primary-foreground shadow-none">
+                            {isAutoClosePending ? 'CIERRE AUTOMÁTICO · PENDIENTE' : h.status === 'CLOSED' ? 'CERRADA' : h.status === 'COUNTING' ? 'EN ARQUEO' : 'ABIERTA'}
                           </Badge>
                           <div className="min-w-0 flex-1 text-left">
                             <p className="break-words font-bold leading-5">{new Date(h.openedAt).toLocaleString()}</p>
@@ -472,7 +473,11 @@ export function ControlDashboardCajaView({
                               <p className="text-[9px] text-muted-foreground mt-0.5 font-normal">C$ {formatSalesAmount(initialNIO)} | $ {formatSalesAmount(initialUSD)}</p>
                             </>}
                           </div>
-                          {h.status === 'CLOSED' && (
+                          {isAutoClosePending ? (
+                            <div className="ml-0 flex w-full min-w-0 items-center justify-between border-t border-border/30 pt-2 text-left sm:ml-4 sm:w-auto sm:border-t-0 sm:pt-0 sm:text-right">
+                              <p className="text-xs font-bold text-amber-600">Diferencia y depósito pendientes</p>
+                            </div>
+                          ) : h.status === 'CLOSED' && (
                             <div className="ml-0 flex w-full min-w-0 items-center justify-between border-t border-border/30 pt-2 text-left sm:ml-4 sm:w-auto sm:flex-col sm:items-end sm:justify-start sm:border-t-0 sm:pt-0 sm:text-right">
                               <p className="text-xs text-muted-foreground">Diferencia</p>
                               <p className={`font-mono font-bold ${diffConverted < 0 ? 'text-red-500' : diffConverted > 0 ? 'text-green-500' : 'text-emerald-500'}`}>

@@ -1185,7 +1185,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     setActiveSession(null);
     cajaService.getActiveSession(selectedRegisterId)
       .then((session) => {
-        if (!cancelled) setActiveSession(session?.status === 'OPEN' ? session : null);
+        if (!cancelled) setActiveSession(session || null);
       })
       .catch(() => {
         if (!cancelled) setActiveSession(null);
@@ -2003,7 +2003,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     );
   }
 
-  const isRegisterDisabled = selectedRegister ? !selectedRegister.hasActiveSession : false;
+  const isAutoClosePending = activeSession?.status === 'COUNTING' && Boolean(activeSession.autoClosePendingAt);
+  const isRegisterDisabled = Boolean(selectedRegister) && activeSession?.status !== 'OPEN';
 
   if (registers.length === 0) {
     const availabilityMessage = (() => {
@@ -2160,10 +2161,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           <div className="size-24 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
             <AlertCircle className="size-12 text-destructive" />
           </div>
-          <h2 className="text-3xl font-black tracking-tight text-foreground mb-3 uppercase">Caja Cerrada</h2>
+          <h2 className="text-3xl font-black tracking-tight text-foreground mb-3 uppercase">
+            {isAutoClosePending ? 'Arqueo pendiente de cierre automático' : activeSession?.status === 'COUNTING' ? 'Caja en arqueo manual' : 'Caja Cerrada'}
+          </h2>
           <p className="text-muted-foreground max-w-lg mb-8 text-sm">
-            Esta caja no tiene una sesión activa o ya fue cerrada. El módulo de facturación (POS) está bloqueado por seguridad.
-            Debe aperturar la caja para poder agregar productos y emitir facturas.
+            {isAutoClosePending
+              ? 'Esta caja está bloqueada por el cierre automático. Completa el arqueo y cierre desde Control de Caja para volver a facturar.'
+              : activeSession?.status === 'COUNTING'
+                ? 'Esta caja está en proceso de arqueo y no puede emitir facturas hasta completar o resolver el cierre.'
+                : 'Esta caja no tiene una sesión activa o ya fue cerrada. Debe aperturar la caja para poder agregar productos y emitir facturas.'}
           </p>
 
           <div className="flex flex-col items-center gap-6 w-full max-w-sm">
@@ -2175,7 +2181,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   {registers.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
                       <span className={!r.hasActiveSession ? 'text-muted-foreground' : ''}>
-                        {r.code} - {r.name}{!r.hasActiveSession && ' (sin sesión)'}
+                        {r.code} - {r.name}{r.activeSessionStatus === 'COUNTING' ? (r.autoClosePendingAt ? ' (cierre automático pendiente)' : ' (en arqueo)') : !r.hasActiveSession && ' (sin sesión)'}
                       </span>
                     </SelectItem>
                   ))}
@@ -2189,7 +2195,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest"
             >
               <Coins className="mr-2 size-5" />
-              Ir a Control de Caja para Abrir
+              {isAutoClosePending ? 'Ir a Control de Caja para completar' : 'Ir a Control de Caja para Abrir'}
             </Button>
           </div>
         </div>
@@ -2211,7 +2217,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                         {registers.map((r) => (
                           <SelectItem key={r.id} value={r.id}>
                             <span className={!r.hasActiveSession ? 'text-muted-foreground' : ''}>
-                              {r.code} - {r.name}{!r.hasActiveSession && ' (sin sesión)'}
+                              {r.code} - {r.name}{r.activeSessionStatus === 'COUNTING' ? (r.autoClosePendingAt ? ' (cierre automático pendiente)' : ' (en arqueo)') : !r.hasActiveSession && ' (sin sesión)'}
                             </span>
                           </SelectItem>
                         ))}

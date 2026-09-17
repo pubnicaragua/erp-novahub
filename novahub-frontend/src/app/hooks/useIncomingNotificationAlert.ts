@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNotifications } from './useNotifications';
 import { playNotificationSound } from '../utils/notificationSound';
 import { useAuth } from '../contexts/AuthContext';
-import { dedupeNotificationRecords, notificationEventKey } from '../services/notifications.service';
+import { dedupeNotificationRecords, notificationEventKey, subscribeToNotificationEvents } from '../services/notifications.service';
 import { isBrowserNotificationsEnabled } from '../utils/browserNotifications';
 import { toast } from 'sonner';
 import { getNotificationNavigation, navigateToNotification } from '../utils/notificationNavigation';
@@ -21,11 +21,15 @@ export function useIncomingNotificationAlert() {
   // Guardamos ids y claves de evento. El id cambia si un scheduler reintenta
   // crear la misma alerta, pero la clave de negocio debe sonar una sola vez.
   const seenEvents = useRef<Set<string>>(new Set());
+  const pendingLiveNotificationIds = useRef<Set<string>>(new Set());
+  const alertSessionStartedAt = useRef<number | undefined>(undefined);
   const initialized = useRef(false);
 
   useEffect(() => {
     initialized.current = false;
     seenEvents.current = new Set();
+    pendingLiveNotificationIds.current = new Set();
+    alertSessionStartedAt.current = Date.now();
     try {
       const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
       if (Array.isArray(stored)) seenEvents.current = new Set(stored.map(String));
@@ -33,13 +37,33 @@ export function useIncomingNotificationAlert() {
   }, [storageKey]);
 
   useEffect(() => {
-    if (!isFetched || initialized.current) return;
+    if (!authUser?.id) return undefined;
+    const streamIdentity = `${authUser?.clientTenantId || authUser?.tenantId || 'current'}:${authUser.id}`;
+    return subscribeToNotificationEvents(streamIdentity, (event) => {
+      if (event.reason !== 'created') return;
+      (event.notificationIds || []).forEach((id) => {
+        const normalizedId = String(id || '').trim();
+        if (normalizedId) pendingLiveNotificationIds.current.add(normalizedId);
+      });
+    });
+  }, [authUser?.clientTenantId, authUser?.id, authUser?.tenantId, storageKey]);
+
+  useEffect(() => {
+    if (!isFetched) return;
+    const isInitialFetch = !initialized.current;
     initialized.current = true;
 
     // The first response is the existing history, not an incoming event.
     // Seed it so a remount/F5 does not replay dozens of old notifications.
-    if (seenEvents.current.size === 0 && notifications.length > 0) {
-      notifications.forEach(notification => {
+    const pendingIds = pendingLiveNotificationIds.current;
+    const hasPendingNotificationInResponse = notifications.some((notification) => pendingIds.has(notification.id));
+    const sessionStartedAt = alertSessionStartedAt.current ?? Date.now();
+    const hasRecentNotificationInResponse = notifications.some((notification) => (
+      new Date(notification.timestamp).getTime() >= sessionStartedAt - 1000
+    ));
+
+    if (isInitialFetch && seenEvents.current.size === 0 && notifications.length > 0 && !hasPendingNotificationInResponse && !hasRecentNotificationInResponse) {
+      notifications.forEach((notification) => {
         seenEvents.current.add(notification.id);
         seenEvents.current.add(notificationEventKey(notification));
       });
@@ -62,6 +86,7 @@ export function useIncomingNotificationAlert() {
       .forEach(notification => {
         seenEvents.current.add(notification.id);
         seenEvents.current.add(notificationEventKey(notification));
+        pendingIds.delete(notification.id);
       });
     try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1000))); } catch { /* optional history */ }
 
@@ -98,5 +123,5 @@ export function useIncomingNotificationAlert() {
         // Algunos navegadores bloquean la construcción; la campana interna sigue funcionando.
       }
     }
-  }, [isFetched, notifications, storageKey]);
+  }, [isFetched, notifications, storageKey, markAsRead]);
 }

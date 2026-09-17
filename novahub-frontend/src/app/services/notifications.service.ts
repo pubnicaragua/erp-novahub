@@ -6,6 +6,7 @@ export interface NotificationStreamEvent {
   eventId: string;
   reason?: 'created' | 'updated' | 'deleted';
   occurredAt?: string;
+  notificationIds?: string[];
 }
 
 export class NotificationStreamError extends Error {

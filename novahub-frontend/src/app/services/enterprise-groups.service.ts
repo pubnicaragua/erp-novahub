@@ -455,6 +455,8 @@ export interface PlatformQuoteItem {
   quantity: number;
   unitPrice: number;
   amount?: number;
+  discountType?: 'AMOUNT' | 'PERCENT';
+  discountValue?: number;
   isOptional: boolean;
   sortOrder?: number;
 }

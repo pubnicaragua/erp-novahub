@@ -1,6 +1,7 @@
 export interface NotificationNavigation {
   module: string;
   subModule?: string;
+  section?: 'dashboard' | 'session' | 'history';
   filter?: string;
   targetId?: string;
   number?: string;
@@ -13,6 +14,7 @@ export interface NotificationNavigation {
   requestId?: string;
   queueId?: string;
   sessionId?: string;
+  registerId?: string;
   productId?: string;
   productCode?: string;
   expenseId?: string;
@@ -46,7 +48,16 @@ const normalizeNavigation = (value: unknown): NotificationNavigation | null => {
   if (!module) return null;
   const subModule = String(navigation.subModule || '').trim();
   const filter = navigation.filter ? String(navigation.filter) : undefined;
-  return { module, subModule: subModule || undefined, filter };
+  const section = ['dashboard', 'session', 'history'].includes(String(navigation.section || '').trim())
+    ? String(navigation.section).trim() as NotificationNavigation['section']
+    : undefined;
+  return {
+    module,
+    subModule: subModule || undefined,
+    filter,
+    section,
+    registerId: firstValue(navigation, ['registerId', 'cashRegisterId']),
+  };
 };
 
 const firstValue = (metadata: Record<string, any>, keys: string[]) => {
@@ -71,6 +82,8 @@ const extractTarget = (metadata: Record<string, any>): Partial<NotificationNavig
     'requestId',
     'queueId',
     'sessionId',
+    'cashRegisterId',
+    'registerId',
     'holdId',
     'expenseId',
     'productId',
@@ -97,6 +110,7 @@ const extractTarget = (metadata: Record<string, any>): Partial<NotificationNavig
     requestId: firstValue(metadata, ['requestId']),
     queueId: firstValue(metadata, ['queueId']),
     sessionId: firstValue(metadata, ['sessionId']),
+    registerId: firstValue(metadata, ['registerId', 'cashRegisterId']),
     productId: firstValue(metadata, ['productId']),
     productCode: firstValue(metadata, ['productCode']),
     expenseId: firstValue(metadata, ['expenseId']),
