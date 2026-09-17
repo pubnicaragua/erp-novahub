@@ -18,6 +18,7 @@ import { ProductThumbnail } from '../ui/ProductImage';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../ui/utils';
 import { buildPdfFileName } from '../../utils/exportFileNames';
@@ -1117,14 +1118,29 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     }
   }, [branchId, posDraftStorageKey]);
 
-  const loadRecentInvoices = useCallback(async (registerId: string) => {
+  const loadRecentInvoices = useCallback(async (registerId: string, silent = false) => {
     try {
       setRecentInvoices(await cajaService.getRecentInvoices(registerId));
     } catch (error: unknown) {
-      setRecentInvoices([]);
-      toast.error(getErrorMessage(error, 'Error al cargar historial de caja'));
+      if (!silent) {
+        setRecentInvoices([]);
+        toast.error(getErrorMessage(error, 'Error al cargar historial de caja'));
+      }
     }
   }, []);
+
+  const refreshCashViewFromNotification = useCallback(async () => {
+    await Promise.all([
+      loadCashQueue(),
+      selectedRegisterId ? loadRecentInvoices(selectedRegisterId, true) : Promise.resolve(),
+    ]);
+  }, [loadCashQueue, loadRecentInvoices, selectedRegisterId]);
+
+  useNotificationDomainRefresh({
+    module: 'ventas',
+    subModules: ['facturacion-caja'],
+    onRefresh: refreshCashViewFromNotification,
+  });
 
   useEffect(() => {
     void loadInitialData();

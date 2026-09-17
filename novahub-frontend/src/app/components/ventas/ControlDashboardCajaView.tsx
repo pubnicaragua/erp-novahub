@@ -23,6 +23,7 @@ import { formatSalesAmount } from '../../utils/salesPriceList';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { HistoricalCashReport } from './caja/HistoricalCashReport';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 type SectionType = 'dashboard' | 'session' | 'history' | 'report' | 'normas' | 'deficits';
 
@@ -92,9 +93,10 @@ export function ControlDashboardCajaView({
     openSession,
     addMovement,
     closeSession,
+    refreshSession,
   } = useCajaSession(selectedRegister);
 
-  const loadRegisters = useCallback(async () => {
+  const loadRegisters = useCallback(async (silent = false) => {
     try {
       const res = await cajaService.getRegisters();
       const registersData = Array.isArray(res) ? res : ((res as any)?.data || []);
@@ -106,20 +108,20 @@ export function ControlDashboardCajaView({
           : (openRegister ? openRegister.id : registersData[0].id));
       }
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Error al cargar cajas'));
+      if (!silent) toast.error(getApiErrorMessage(err, 'Error al cargar cajas'));
     }
   }, []);
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (silent = false) => {
     try {
       const data = await cajaService.getSessionHistory(selectedRegister === 'ALL' ? undefined : selectedRegister);
       setHistoryItems(data.items || []);
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Error al cargar historial de caja'));
+      if (!silent) toast.error(getApiErrorMessage(err, 'Error al cargar historial de caja'));
     }
   }, [selectedRegister]);
 
-  const loadDeficits = useCallback(async () => {
+  const loadDeficits = useCallback(async (silent = false) => {
     try {
       setDeficitsLoading(true);
       const charges = await cajaService.getDeficitCharges();
@@ -133,11 +135,29 @@ export function ControlDashboardCajaView({
       }
       setResponsibleDrafts(nextDrafts);
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Error al cargar faltantes de caja'));
+      if (!silent) toast.error(getApiErrorMessage(err, 'Error al cargar faltantes de caja'));
     } finally {
       setDeficitsLoading(false);
     }
   }, [canReadTeamUsers]);
+
+  const refreshActiveCashSection = useCallback(async () => {
+    if (activeSection === 'history') {
+      await loadHistory(true);
+      return;
+    }
+    if (activeSection === 'deficits') {
+      await loadDeficits(true);
+      return;
+    }
+    await Promise.all([loadRegisters(true), refreshSession(true)]);
+  }, [activeSection, loadDeficits, loadHistory, loadRegisters, refreshSession]);
+
+  useNotificationDomainRefresh({
+    module: 'ventas',
+    subModules: ['control-caja'],
+    onRefresh: refreshActiveCashSection,
+  });
 
   useEffect(() => {
     if (activeSection !== 'deficits') return;

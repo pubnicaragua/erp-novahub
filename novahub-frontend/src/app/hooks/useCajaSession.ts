@@ -13,15 +13,17 @@ export function useCajaSession(selectedRegister: string) {
   const [closureMode, setClosureMode] = useState<CashClosureMode>('NORMAL');
   const [countAttempts, setCountAttempts] = useState<CashRegisterCount[]>([]);
 
-  const loadSessionData = useCallback(async () => {
+  const loadSessionData = useCallback(async (silent = false) => {
     if (!selectedRegister) return;
 
     setLoading(true);
-    setSession(null);
-    setLogs([]);
-    setSessionStep('idle');
-    setClosureMode('NORMAL');
-    setCountAttempts([]);
+    if (!silent) {
+      setSession(null);
+      setLogs([]);
+      setSessionStep('idle');
+      setClosureMode('NORMAL');
+      setCountAttempts([]);
+    }
 
     try {
       const active = await cajaService.getActiveSession(selectedRegister);
@@ -44,7 +46,7 @@ export function useCajaSession(selectedRegister: string) {
       }
     } catch (err) {
       console.error(err);
-      toast.error(getApiErrorMessage(err, 'Error al cargar la sesion de caja'));
+      if (!silent) toast.error(getApiErrorMessage(err, 'Error al cargar la sesion de caja'));
     } finally {
       setLoading(false);
     }

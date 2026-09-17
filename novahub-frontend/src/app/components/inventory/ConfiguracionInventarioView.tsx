@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh'
 import { inventoryService } from '../../services/inventario.service'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { tenantsService } from '../../services/tenants.service'
@@ -164,7 +165,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   const isManufacturing = tenantIndustry === 'MANUFACTURING'
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (silent = false) => {
     try {
       setLoading(true)
       const [whRes, branchRes, accRes, cfgRes] = await Promise.all([
@@ -189,13 +190,19 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         } catch { /* ignorar */ }
       }
     } catch (e: any) {
-      toast.error(getApiErrorMessage(e, 'Error al cargar la configuración'))
+      if (!silent) toast.error(getApiErrorMessage(e, 'Error al cargar la configuración'))
     } finally {
       setLoading(false)
     }
   }, [user?.tenantId, canViewInventory, canViewAccounting, canViewCompany])
 
   useEffect(() => { void fetchAll() }, [fetchAll])
+
+  useNotificationDomainRefresh({
+    module: 'inventario',
+    subModules: ['configuracion'],
+    onRefresh: () => fetchAll(true),
+  })
 
   useEffect(() => {
     if (!isManufacturing || !canViewAccounting) return

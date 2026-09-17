@@ -19,6 +19,15 @@ export interface NotificationNavigation {
   productCode?: string;
   expenseId?: string;
   holdId?: string;
+  attributeId?: string;
+  categoryId?: string;
+  brandId?: string;
+  warehouseId?: string;
+  transferId?: string;
+  adjustmentId?: string;
+  auditId?: string;
+  movementId?: string;
+  assetId?: string;
 }
 
 type NotificationLike = {
@@ -29,8 +38,8 @@ type NotificationLike = {
   metadata?: unknown;
 };
 
-const asRecord = (value: unknown): Record<string, any> => {
-  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>;
+const asRecord = (value: unknown): Record<string, unknown> => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value);
@@ -42,11 +51,20 @@ const asRecord = (value: unknown): Record<string, any> => {
   return {};
 };
 
+const canonicalSubModule = (module: string, subModule: string) => {
+  if (module === 'ventas' && subModule === 'cotizaciones') return 'estimaciones';
+  if (module === 'compras' && subModule === 'solicitudes-compra') return 'solicitudes';
+  if (module === 'compras' && subModule === 'ordenes-compra') return 'ordenes';
+  if (module === 'compras' && subModule === 'gastos-recurrentes') return 'gastos-rec';
+  if (module === 'compras' && subModule === 'facturas-recurrentes') return 'facturas-rec';
+  return subModule;
+};
+
 const normalizeNavigation = (value: unknown): NotificationNavigation | null => {
   const navigation = asRecord(value);
   const module = String(navigation.module || '').trim();
   if (!module) return null;
-  const subModule = String(navigation.subModule || '').trim();
+  const subModule = canonicalSubModule(module.toLowerCase(), String(navigation.subModule || '').trim().toLowerCase());
   const filter = navigation.filter ? String(navigation.filter) : undefined;
   const section = ['dashboard', 'session', 'history'].includes(String(navigation.section || '').trim())
     ? String(navigation.section).trim() as NotificationNavigation['section']
@@ -56,11 +74,63 @@ const normalizeNavigation = (value: unknown): NotificationNavigation | null => {
     subModule: subModule || undefined,
     filter,
     section,
+    targetId: firstValue(navigation, [
+      'targetId',
+      'entityId',
+      'invoiceId',
+      'orderId',
+      'creditNoteId',
+      'requestId',
+      'queueId',
+      'sessionId',
+      'registerId',
+      'cashRegisterId',
+      'expenseId',
+      'productId',
+      'attributeId',
+      'categoryId',
+      'brandId',
+      'warehouseId',
+      'transferId',
+      'adjustmentId',
+      'auditId',
+      'movementId',
+      'assetId',
+    ]),
+    number: firstValue(navigation, [
+      'number',
+      'entityNumber',
+      'invoiceNumber',
+      'orderNumber',
+      'creditNumber',
+      'documentNumber',
+      'productCode',
+      'code',
+    ]),
+    invoiceId: firstValue(navigation, ['invoiceId']),
+    orderId: firstValue(navigation, ['orderId']),
+    creditNoteId: firstValue(navigation, ['creditNoteId']),
+    requestId: firstValue(navigation, ['requestId']),
+    queueId: firstValue(navigation, ['queueId']),
+    sessionId: firstValue(navigation, ['sessionId']),
     registerId: firstValue(navigation, ['registerId', 'cashRegisterId']),
+    productId: firstValue(navigation, ['productId']),
+    productCode: firstValue(navigation, ['productCode']),
+    expenseId: firstValue(navigation, ['expenseId']),
+    holdId: firstValue(navigation, ['holdId']),
+    attributeId: firstValue(navigation, ['attributeId']),
+    categoryId: firstValue(navigation, ['categoryId']),
+    brandId: firstValue(navigation, ['brandId']),
+    warehouseId: firstValue(navigation, ['warehouseId']),
+    transferId: firstValue(navigation, ['transferId']),
+    adjustmentId: firstValue(navigation, ['adjustmentId']),
+    auditId: firstValue(navigation, ['auditId']),
+    movementId: firstValue(navigation, ['movementId']),
+    assetId: firstValue(navigation, ['assetId']),
   };
 };
 
-const firstValue = (metadata: Record<string, any>, keys: string[]) => {
+const firstValue = (metadata: Record<string, unknown>, keys: string[]) => {
   for (const key of keys) {
     const value = String(metadata[key] ?? '').trim();
     if (value) return value;
@@ -68,7 +138,7 @@ const firstValue = (metadata: Record<string, any>, keys: string[]) => {
   return undefined;
 };
 
-const extractTarget = (metadata: Record<string, any>): Partial<NotificationNavigation> => {
+const extractTarget = (metadata: Record<string, unknown>): Partial<NotificationNavigation> => {
   const targetId = firstValue(metadata, [
     'targetId',
     'entityId',
@@ -87,11 +157,21 @@ const extractTarget = (metadata: Record<string, any>): Partial<NotificationNavig
     'holdId',
     'expenseId',
     'productId',
+    'attributeId',
+    'categoryId',
+    'brandId',
+    'warehouseId',
+    'transferId',
+    'adjustmentId',
+    'auditId',
+    'movementId',
+    'assetId',
   ]);
   const number = firstValue(metadata, [
     'invoiceNumber',
     'orderNumber',
     'creditNumber',
+    'entityNumber',
     'documentNumber',
     'number',
     'productCode',
@@ -115,6 +195,15 @@ const extractTarget = (metadata: Record<string, any>): Partial<NotificationNavig
     productCode: firstValue(metadata, ['productCode']),
     expenseId: firstValue(metadata, ['expenseId']),
     holdId: firstValue(metadata, ['holdId']),
+    attributeId: firstValue(metadata, ['attributeId']),
+    categoryId: firstValue(metadata, ['categoryId']),
+    brandId: firstValue(metadata, ['brandId']),
+    warehouseId: firstValue(metadata, ['warehouseId']),
+    transferId: firstValue(metadata, ['transferId']),
+    adjustmentId: firstValue(metadata, ['adjustmentId']),
+    auditId: firstValue(metadata, ['auditId']),
+    movementId: firstValue(metadata, ['movementId']),
+    assetId: firstValue(metadata, ['assetId']),
   };
 };
 

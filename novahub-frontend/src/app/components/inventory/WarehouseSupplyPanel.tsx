@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ClipboardList, Loader2, PackageSearch, Send, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, getApiErrorMessage } from '../../services/api';
@@ -11,6 +11,7 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 type SupplyWarehouse = {
   id: string;
@@ -87,7 +88,7 @@ export function WarehouseSupplyPanel() {
     [levels, sourceWarehouseId],
   );
 
-  const loadData = async () => {
+  const loadData = useCallback(async (silent = false) => {
     setLoading(true);
     try {
       const [optionsResponse, inventoryResponse, requestsResponse] = await Promise.all([
@@ -103,15 +104,22 @@ export function WarehouseSupplyPanel() {
       setDestinationWarehouseId((current) => current || nextOptions.destinations?.[0]?.id || '');
       setSourceWarehouseId((current) => current || nextOptions.sources?.[0]?.id || '');
     } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error, 'No se pudo cargar el abastecimiento'));
+      if (!silent) toast.error(getApiErrorMessage(error, 'No se pudo cargar el abastecimiento'));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (open) void loadData();
-  }, [open]);
+  }, [loadData, open]);
+
+  useNotificationDomainRefresh({
+    module: 'inventario',
+    subModules: ['almacenes'],
+    enabled: open,
+    onRefresh: () => loadData(true),
+  });
 
   useEffect(() => {
     if (levelId && !sourceLevels.some((level) => level.id === levelId)) setLevelId('');
