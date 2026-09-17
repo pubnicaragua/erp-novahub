@@ -20,6 +20,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { useAuth } from '../../contexts/AuthContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { WarehouseSupplyPanel } from './WarehouseSupplyPanel';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 interface AlmacenesViewProps {
   warehouses: any[];
   onRefresh: () => void;
@@ -233,6 +234,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     }
 
     setSavingIds(new Set(savingIds.add(id)));
+    const actionToken = beginNotificationAction();
     try {
       if (warehouse.isNew) {
         await inventoryService.createWarehouse({
@@ -249,10 +251,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         } as any);
         toast.success('Bodega actualizada');
       }
+      completeNotificationAction(actionToken);
       handleCancelEdit(id);
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al guardar');
+      failNotificationAction(actionToken);
     } finally {
       const newSet = new Set(savingIds);
       newSet.delete(id);
@@ -269,13 +273,16 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     if (!pendingDeleteId) return;
     if (!canDeactivateWarehouse) return;
     setDeleteLoading(true);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.deleteWarehouse(pendingDeleteId);
       toast.success('Bodega eliminada');
+      completeNotificationAction(actionToken);
       setPendingDeleteId(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al eliminar');
+      failNotificationAction(actionToken);
     } finally {
       setDeleteLoading(false);
     }

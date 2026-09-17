@@ -19,6 +19,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import type { SalesPaginationControls } from '../../types';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface ControlStockViewProps {
   adjustments: any[];
@@ -384,6 +385,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     }
     
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.createAdjustment({
         warehouseId: newAdjustment.warehouseId,
@@ -398,11 +400,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         }],
       });
       toast.success('Ajuste creado exitosamente');
+      completeNotificationAction(actionToken);
       setIsCreating(false);
       setNewAdjustment({ warehouseId: '', reason: 'DISCREPANCY', productId: '', variantId: '', currentStock: 0, actualStock: 0, unitCost: 0, currency: baseCurrency });
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al crear ajuste');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -410,12 +414,15 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
   const handleApproveAdjustment = async (id: string) => {
     setApprovingId(id);
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.approveAdjustment(id);
       toast.success('Ajuste aprobado y aplicado');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al aprobar');
+      failNotificationAction(actionToken);
     } finally {
       setApprovingId(null);
     }
@@ -433,6 +440,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   const confirmCreateAdjustmentFromAudit = async () => {
     const audit = auditConfirmation;
     if (!audit) return;
+    const actionToken = beginNotificationAction();
     try {
       setAuditAdjustingId(audit.id);
       const result = await inventoryService.createAdjustmentFromAudit(audit.id);
@@ -441,11 +449,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       } else {
         toast.success(`Auditoría ${audit.number} revisada: no se generó ajuste porque no había diferencias.`);
       }
+      completeNotificationAction(actionToken);
       setAuditConfirmation(null);
       setAuditPickerOpen(false);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo generar el ajuste desde la auditoría');
+      failNotificationAction(actionToken);
       throw e;
     } finally {
       setAuditAdjustingId(null);
@@ -512,6 +522,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
     setSaving(true);
     const reference = `REC-${Date.now().toString().slice(-8)}`;
+    const actionToken = beginNotificationAction();
 
     try {
       await Promise.all(
@@ -541,11 +552,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       }
 
       toast.success(`Recepción registrada: ${newReception.totalQuantity} unidades${imeiList.length ? ` + ${imeiList.length} IMEI/series` : ''}`);
+      completeNotificationAction(actionToken);
       setIsReceptionOpen(false);
       resetReception();
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al registrar recepción');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -575,6 +588,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
     setSaving(true);
     const reference = `AJUSTE-IMEI-${Date.now().toString().slice(-8)}${serialAdjustment.notes ? ` - ${serialAdjustment.notes}` : ''}`;
+    const actionToken = beginNotificationAction();
     try {
       if (serialAdjustment.action === 'ADD') {
         await inventoryService.createSeries({
@@ -604,11 +618,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       }
 
       toast.success(serialAdjustment.action === 'ADD' ? 'IMEI/serie agregado' : 'IMEI/serie ajustado');
+      completeNotificationAction(actionToken);
       setIsSerialAdjustOpen(false);
       setSerialAdjustment({ action: 'ADD', productId: '', variantId: '', warehouseId: '', serialNumber: '', notes: '' });
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al ajustar IMEI/serie');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }

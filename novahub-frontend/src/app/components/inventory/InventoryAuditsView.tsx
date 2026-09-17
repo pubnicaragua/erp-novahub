@@ -21,6 +21,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { SalesPaginationControls } from '../../types';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { MultiSelectFilter } from './MultiSelectFilter';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface InventoryAuditsViewProps {
   audits: any[];
@@ -807,6 +808,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       return;
     }
 
+    const actionToken = beginNotificationAction();
     try {
       setWorkflowLoading(audit.id);
       if (targetStatus === 'APPROVED') {
@@ -815,9 +817,11 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         await inventoryService.changeAuditStatus(audit.id, targetStatus);
       }
       toast.success(`Acta ${audit.number}: ${label} exitoso`);
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || `No se pudo ${label}`);
+      failNotificationAction(actionToken);
     } finally {
       setWorkflowLoading(null);
     }
@@ -830,6 +834,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       return;
     }
     const adjustmentItems = getComparisonAdjustmentItems();
+    const actionToken = beginNotificationAction();
     try {
       setWorkflowLoading(comparisonAudit.id);
       // When the dialog was opened from IN_PROGRESS, close first. If the act
@@ -840,6 +845,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       // Then approve
       await inventoryService.approveAudit(comparisonAudit.id, adjustmentItems);
       toast.success(`Acta ${comparisonAudit.number}: ajuste generado como borrador; debe aprobarse desde el panel autorizado`);
+      completeNotificationAction(actionToken);
       setComparisonAudit(null);
       setComparisonReasons({});
       setTheoreticalItems([]);
@@ -847,6 +853,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo aprobar las diferencias');
+      failNotificationAction(actionToken);
     } finally {
       setWorkflowLoading(null);
     }
@@ -859,12 +866,14 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       return;
     }
     const adjustmentItems = getComparisonAdjustmentItems();
+    const actionToken = beginNotificationAction();
     try {
       setWorkflowLoading(comparisonAudit.id);
       if (comparisonAudit.status !== 'CLOSED') {
         await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED', adjustmentItems);
       }
       toast.success(`Acta ${comparisonAudit.number}: conteo cerrado`);
+      completeNotificationAction(actionToken);
       setComparisonAudit(null);
       setComparisonReasons({});
       setTheoreticalItems([]);
@@ -872,6 +881,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo cerrar el conteo');
+      failNotificationAction(actionToken);
     } finally {
       setWorkflowLoading(null);
     }
@@ -966,6 +976,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     if (actaFile && !new RegExp(`\\.(pdf|xlsx|xls|png|jpe?g|webp)$`, 'i').test(actaFile.name)) {
       toast.error('El acta debe ser pdf, xlsx o una imagen'); return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setSaving(true);
       let actaUri: string | null = null;
@@ -1013,11 +1024,13 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         }),
       });
       toast.success('Acta registrada como pendiente. Genera el ajuste desde el tab Ajustes.');
+      completeNotificationAction(actionToken);
       setIsCreating(false);
       resetForm();
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo registrar el acta de inspección');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -1026,14 +1039,17 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const handleDelete = async (audit: any) => {
     if (!canDeleteAudits) return;
     if (!window.confirm(`¿Eliminar el acta ${audit.number}? El archivo adjunto también se eliminará del almacenamiento.`)) return;
+    const actionToken = beginNotificationAction();
     try {
       setDeletingId(audit.id);
       const result = await inventoryService.deleteAudit(audit.id);
       (result?.fileUris || []).forEach((uri: string) => storageService.deleteFile(uri).catch(() => undefined));
       toast.success('Acta eliminada');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo eliminar el acta');
+      failNotificationAction(actionToken);
     } finally {
       setDeletingId(null);
     }

@@ -14,6 +14,7 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import { inventoryService } from '@/app/services/inventario.service';
 import { storageService } from '@/app/services/storage.service';
 import { toast } from 'sonner';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { ProductSimilarityAlert } from './ProductSimilarityAlert';
 import type { SimilarProductGroup, SimilarProductMatch } from '@/app/services/inventario.service';
@@ -365,6 +366,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       return;
     }
     setCreatingCategory(true);
+    const actionToken = beginNotificationAction();
     try {
       const created = await inventoryService.createCategory({
         name: newCategoryName.trim(),
@@ -378,6 +380,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       setNewCategoryDesc('');
       setNewCategoryOpen(false);
       toast.success('Categoría creada');
+      completeNotificationAction(actionToken);
     } catch (e: any) {
       const existingCategory = (e?.data as any)?.category;
       const isDuplicate = e?.code === 'CATEGORY_DUPLICATE'
@@ -400,6 +403,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       } else {
         toast.error(e?.message || 'Error al crear categoría');
       }
+      failNotificationAction(actionToken);
     } finally {
       setCreatingCategory(false);
     }
@@ -566,6 +570,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const persistProducts = async (listToSave: any[]) => {
     setIsSaving(true);
     let successCount = 0;
+    const actionToken = beginNotificationAction();
 
     try {
       for (const product of listToSave) {
@@ -648,6 +653,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         successCount++;
       }
       toast.success(`${successCount} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'} guardado(s) correctamente`);
+      completeNotificationAction(actionToken);
       setProductsList([]);
       setDraftProduct({ ...defaultDraft, id: `draft-${Date.now()}`, categoryId: effectiveCategories[0]?.id || '' });
       setSkuError('');
@@ -661,6 +667,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       } else {
         toast.error(error?.message || `Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
       }
+      failNotificationAction(actionToken);
     } finally {
       setIsSaving(false);
     }

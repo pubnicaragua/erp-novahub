@@ -9,6 +9,7 @@ import { Search, RefreshCw, Tags, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { inventoryService } from '../../services/inventario.service';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 type BrandMapping = {
   id: string;
@@ -45,11 +46,16 @@ export function MarcasClienteView() {
   });
   const assignMutation = useMutation({
     mutationFn: ({ brandId, customerId }: { brandId: string; customerId: string | null }) => inventoryService.assignBrandCustomer(brandId, customerId),
-    onSuccess: async () => {
+    onMutate: () => ({ actionToken: beginNotificationAction() }),
+    onSuccess: async (_data, _variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ['inventory', 'brand-customer-mappings'] });
       toast.success('Cliente de la marca actualizado');
+      completeNotificationAction(context?.actionToken);
     },
-    onError: (error: any) => toast.error(error?.message || 'No se pudo actualizar la marca'),
+    onError: (error: any, _variables, context) => {
+      toast.error(error?.message || 'No se pudo actualizar la marca');
+      failNotificationAction(context?.actionToken);
+    },
   });
 
   const filteredBrands = useMemo(() => {

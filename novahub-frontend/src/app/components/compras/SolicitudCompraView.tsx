@@ -32,6 +32,7 @@ import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { getPurchasePriorityOption } from '../../utils/purchasePriority';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
+import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-primary/10 text-primary',
@@ -95,7 +96,7 @@ interface SolicitudCompraViewProps {
   selectedBranchId?: string;
 }
 
-export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog, supplierCatalog = [], productCatalog = [], selectedBranchId = '' }: SolicitudCompraViewProps) {
+export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog: _warehouseCatalog, supplierCatalog = [], productCatalog = [], selectedBranchId = '' }: SolicitudCompraViewProps) {
   const { user, canPerform } = useAuth();
   const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
   const canApproveRequests = canPerform('PURCHASES_REQUESTS', 'approve');
@@ -314,10 +315,11 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     if (!pendingApproveManagement) return;
     const mgmt = pendingApproveManagement;
     setActionLoading(mgmt.id);
+    const actionToken = beginNotificationAction();
     const approveToastId = toast.loading('Aprobando gestión de compra...');
     try { await purchaseManagementService.approve(mgmt.id); toast.success('Gestión aprobada', { id: approveToastId }); setPendingApproveManagement(null); onRefresh(); }
     catch (e: any) { toast.error(e?.message || 'Error al aprobar', { id: approveToastId }); }
-    finally { setActionLoading(null); }
+    finally { completeNotificationAction(actionToken); setActionLoading(null); }
   };
 
   const handleRejectManagement = async (mgmt: PurchaseManagement) => {
@@ -330,10 +332,11 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     if (!pendingRejectManagement) return;
     const mgmt = pendingRejectManagement;
     setActionLoading(mgmt.id);
+    const actionToken = beginNotificationAction();
     const rejectToastId = toast.loading('Rechazando gestión de compra...');
     try { await purchaseManagementService.reject(mgmt.id, rejectReason || undefined); toast.success('Gestión rechazada', { id: rejectToastId }); setPendingRejectManagement(null); onRefresh(); }
     catch (e: any) { toast.error(e?.message || 'Error al rechazar', { id: rejectToastId }); }
-    finally { setActionLoading(null); }
+    finally { completeNotificationAction(actionToken); setActionLoading(null); }
   };
 
   const handleConvertToOrder = async (mgmt: PurchaseManagement) => {
@@ -346,6 +349,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     if (!pendingConvertManagement) return;
     const mgmt = pendingConvertManagement;
     setActionLoading(mgmt.id);
+    const actionToken = beginNotificationAction();
     const convertToastId = toast.loading('Generando orden de compra desde la gestión...');
     try {
       const order = await purchaseManagementService.convertToOrder(mgmt.id);
@@ -353,7 +357,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       setPendingConvertManagement(null);
       onRefresh();
     } catch (e: any) { toast.error(e?.message || 'Error al convertir', { id: convertToastId }); }
-    finally { setActionLoading(null); }
+    finally { completeNotificationAction(actionToken); setActionLoading(null); }
   };
 
   const handleRequestApprove = (req: PurchaseRequest) => {
@@ -477,6 +481,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       return;
     }
     setActionLoading(req.id);
+    const actionToken = beginNotificationAction();
     const requestToastId = toast.loading(action === 'approve' ? 'Aprobando solicitud y generando orden de compra...' : 'Anulando solicitud de compra...');
     try {
       if (action === 'approve') {
@@ -492,7 +497,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || `Error al ${action === 'approve' ? 'aprobar y enviar' : 'anular'} la solicitud`, { id: requestToastId });
     }
-    finally { setActionLoading(null); }
+    finally { completeNotificationAction(actionToken); setActionLoading(null); }
   };
 
   const formatRequestAmount = (amount: number | string | undefined | null, currency?: string, rate?: number) =>

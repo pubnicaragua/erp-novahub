@@ -23,6 +23,7 @@ import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const CATEGORIES = [
   { value: 'BUILDING', label: 'Edificios' },
@@ -377,6 +378,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     }
     if (!form.name.trim()) { toast.error('El nombre es obligatorio'); return; }
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       const payload: Record<string, any> = {
         code: form.code.trim() || undefined,
@@ -394,11 +396,13 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       if (editing) await mobiliarioService.updateAsset(editing.id, payload);
       else await mobiliarioService.createAsset(payload);
       toast.success(editing ? 'Activo actualizado' : 'Activo registrado');
+      completeNotificationAction(actionToken);
       setFormOpen(false);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       listQuery.refetch();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo guardar el activo');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -411,14 +415,17 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       return;
     }
     setDeleting(true);
+    const actionToken = beginNotificationAction();
     try {
       await mobiliarioService.deleteAsset(deleteTarget.id);
       toast.success('Activo eliminado');
+      completeNotificationAction(actionToken);
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       listQuery.refetch();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo eliminar el activo');
+      failNotificationAction(actionToken);
     } finally {
       setDeleting(false);
     }
@@ -516,6 +523,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     }
     setImporting(true);
     setImportProgress(10);
+    const actionToken = beginNotificationAction();
     try {
       const cutoff = lastDayOfMonth(importMonth);
       const y = cutoff.getFullYear();
@@ -528,11 +536,13 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       setImportProgress(90);
       setImportResult(res);
       toast.success(`Importación completada: ${res?.createdCount ?? 0} activos y ${res?.fixedAssetCount ?? 0} registros en Activos Fijos`);
+      completeNotificationAction(actionToken);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       listQuery.refetch();
       setImportProgress(100);
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo importar');
+      failNotificationAction(actionToken);
     } finally {
       setImporting(false);
       setImportProgress(0);
@@ -545,6 +555,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       toast.error('Para sincronizar Activos Fijos se requiere el permiso Ver costo en Inventario.');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       const result = await mobiliarioService.syncFixedAssets();
       setImportResult((previous: any) => ({
@@ -554,10 +565,12 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
         fixedAssetSkipped: (result?.skipped || []).map((item: any) => ({ row: item.code, error: item.error })),
       }));
       toast.success(`${result?.createdCount ?? 0} activo(s) sincronizado(s) con Activos Fijos`);
+      completeNotificationAction(actionToken);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       listQuery.refetch();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudieron sincronizar los Activos Fijos');
+      failNotificationAction(actionToken);
     }
   };
 

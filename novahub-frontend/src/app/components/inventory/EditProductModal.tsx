@@ -10,6 +10,7 @@ import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
 import { Package, Check, Tag, X } from 'lucide-react';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface EditProductModalProps {
   product: any | null;
@@ -171,6 +172,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
     }
 
     setIsSaving(true);
+    const actionToken = beginNotificationAction();
     let uploadedImageUri: string | undefined;
     try {
       if (draft.imageFile) {
@@ -204,11 +206,13 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', on
       }
 
       toast.success(`${isService ? 'Servicio' : 'Producto'} actualizado`);
+      completeNotificationAction(actionToken);
       onRefresh();
       onClose();
     } catch (e: any) {
       if (uploadedImageUri) storageService.deleteFile(uploadedImageUri).catch(() => {});
       toast.error(e.message || 'Error al actualizar');
+      failNotificationAction(actionToken);
     } finally {
       setIsSaving(false);
     }

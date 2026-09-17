@@ -19,6 +19,7 @@ import type { SalesPaginationControls } from '../../types';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { SalesVariantSelect } from '../ventas/SalesVariantSelect';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface TransferenciasViewProps {
   transfers: any[];
@@ -581,6 +582,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     }
 
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       // El backend valida stock y alcance de forma atómica. No usamos el stock
       // cacheado de la sucursal actual porque no contiene almacenes corporativos
@@ -618,6 +620,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
 
       const totalUnits = checks.reduce((sum, c) => sum + c.quantity, 0);
       toast.success(`Transferencia creada con ${checks.length} ${checks.length === 1 ? 'producto' : 'productos'} (${totalUnits} unidades)`);
+      completeNotificationAction(actionToken);
       setIsCreating(false);
       setSerialPickerItemKey(null);
       setSerialSearch('');
@@ -631,6 +634,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al crear transferencia');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }

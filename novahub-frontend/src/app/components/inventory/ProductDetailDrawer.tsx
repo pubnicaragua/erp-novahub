@@ -64,6 +64,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ProductThumbnail } from '../ui/ProductImage';
 import { toast } from 'sonner';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
@@ -280,6 +281,7 @@ export function ProductDetailDrawer({
       return;
     }
     setSavingLevelId(String(item.warehouseId));
+    const actionToken = beginNotificationAction();
     try {
       await inventoryService.updateStockLevel({
         productId: String(detail?.id || productId),
@@ -296,8 +298,10 @@ export function ProductDetailDrawer({
         ),
       }));
       toast.success('Mínimo y máximo actualizados');
+      completeNotificationAction(actionToken);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudieron actualizar los niveles');
+      failNotificationAction(actionToken);
     } finally {
       setSavingLevelId(null);
     }

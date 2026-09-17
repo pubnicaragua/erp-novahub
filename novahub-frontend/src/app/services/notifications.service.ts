@@ -170,8 +170,10 @@ const mapNotificationType = (type: InboxNotificationDto['type']): Notification['
   return 'info';
 };
 
-const metadataObject = (value: unknown): Record<string, any> => {
-  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>;
+export type NotificationMetadata = Record<string, unknown>;
+
+export const notificationMetadataObject = (value: unknown): NotificationMetadata => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as NotificationMetadata;
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value);
@@ -199,6 +201,12 @@ export type NotificationRecordLike = {
   dedupeKey?: string | null;
 };
 
+/** Returns the user that originated the domain event, when the event has one. */
+export function getNotificationActorId(item: Pick<NotificationRecordLike, 'metadata'>): string | null {
+  const actorId = String(notificationMetadataObject(item.metadata).actorId || '').trim();
+  return actorId || null;
+}
+
 const stableJson = (value: unknown): string => {
   const normalize = (input: unknown): unknown => {
     if (Array.isArray(input)) return input.map(normalize);
@@ -222,7 +230,7 @@ const stableJson = (value: unknown): string => {
 
 /** Defensive client-side collapse for old rows and concurrent API responses. */
 export function notificationEventKey(item: NotificationRecordLike): string {
-  const metadata = metadataObject(item.metadata);
+  const metadata = notificationMetadataObject(item.metadata);
   const explicit = String(item.dedupeKey || metadata.dedupeKey || '').trim();
   if (explicit) return `key:${explicit}`;
 
@@ -282,7 +290,7 @@ const notificationDetail = (item: InboxNotificationDto): string => {
     .find(Boolean);
   if (explicit) return explicit;
 
-  const metadata = metadataObject(item.metadata);
+  const metadata = notificationMetadataObject(item.metadata);
   const metadataDetail = [metadata.detail, metadata.description, metadata.message, metadata.reason, metadata.summary]
     .map((value) => String(value ?? '').trim())
     .find(Boolean);
@@ -292,7 +300,10 @@ const notificationDetail = (item: InboxNotificationDto): string => {
   const kind = String(metadata.kind || '').toUpperCase();
   const invoiceNumber = String(metadata.invoiceNumber || '').trim();
   const creditNumber = String(metadata.creditNumber || '').trim();
-  const destination = String(metadata.navigation?.subModule || '').trim();
+  const navigation = metadata.navigation && typeof metadata.navigation === 'object'
+    ? metadata.navigation as NotificationMetadata
+    : {};
+  const destination = String(navigation.subModule || '').trim();
   const destinationLabels: Record<string, string> = {
     'cuentas-cobrar': 'Cuentas por cobrar',
     facturas: 'Facturas',
