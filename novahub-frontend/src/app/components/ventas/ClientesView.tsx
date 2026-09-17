@@ -37,6 +37,7 @@ import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDispl
 interface ClientesViewProps {
   data: Customer[];
   loading: boolean;
+  error?: unknown;
   onRefresh: () => Promise<void> | void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
@@ -121,7 +122,7 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="sales-list-pagination"]', title: 'Paginación', description: 'Elige 50, 100 o 200 clientes por página. El rango muestra qué registros estás viendo del total y las flechas permiten ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
 
-export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
+export function ClientesView({ data, loading, error, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
   const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform, user } = useAuth();
   const { countries, defaultCountryCode } = useCustomerFormOptions();
@@ -405,6 +406,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     type: (row: Customer) => String(row.type || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
+  const loadError = error instanceof Error ? error.message : error ? 'No se pudo cargar la información de clientes.' : '';
   const typeOptions = [
     { value: 'INDIVIDUAL', label: 'Particular', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'INDIVIDUAL').length },
     { value: 'COMPANY', label: 'Empresa', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'COMPANY').length },
@@ -808,6 +810,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
         {dueKpis.map((kpi) => <SalesKpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={CreditCard} color="text-primary" bg="bg-primary/10" />)}
       </div>
+
+      {loadError && !loading && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          No se pudo cargar la lista de clientes: {loadError}
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
