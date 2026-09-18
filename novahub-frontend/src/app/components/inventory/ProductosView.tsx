@@ -51,6 +51,7 @@ import { formatExchangeRate } from '../../utils/currency';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { resolveInventoryValuation } from '../../utils/inventory-valuation';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -1705,6 +1706,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const productMinimum = Number(product.minStock ?? product.details?.minStock ?? 0);
     return productMinimum > 0 ? productMinimum : 10;
   };
+
+  const getProductInventoryValuation = (product: any) => resolveInventoryValuation(product, stockWarehouseIdSet);
 
   const colFilters = useColumnFilters();
   const filterGetters = {
@@ -4098,7 +4101,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         ) : paginatedProducts.map((product) => {
           const status = getStockStatus(product);
           const warehousesForProduct = warehouseNamesForProduct(product);
-          const costPrice = Number(product.costPrice || 0);
+          const costPrice = getProductInventoryValuation(product).costPrice;
           const maxStock = getProductMaxStock(product);
           return (
             <Card key={product.id} aria-busy={String(openingId) === String(product.id) || undefined} data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined} className={`min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm ${selectedIds.has(String(product.id)) ? 'border-primary/50 bg-primary/[0.05]' : ''} ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-primary/60' : ''}`} onClick={() => openProductDetail(product)}>
@@ -4429,7 +4432,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     </TableCell>}
                      {isServiceView && <TableCell className="text-right"><CurrencyValuationAmount {...getServicePricePresentation(product)} className="font-medium" /></TableCell>}
                      {isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={baseCurrency} sourceExchangeRate={1} className="font-medium" /></TableCell>}
-                      {!isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
+                      {!isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={getProductInventoryValuation(product).costPrice} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
                      <TableCell data-actions-column="compact" className="text-right">
                          <div data-action-group="true" className="flex min-w-max items-center justify-end gap-1">
                          {canPerform(catalogPermissionModule, 'edit') && (

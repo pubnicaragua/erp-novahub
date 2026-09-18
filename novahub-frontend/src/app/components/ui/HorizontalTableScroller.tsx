@@ -12,10 +12,11 @@ interface HorizontalTableScrollerProps {
   scrollRef?: RefObject<HTMLDivElement | null>;
   scrollBehavior?: ScrollBehavior;
   verticalWheelBehavior?: 'container' | 'page';
+  compact?: boolean;
 }
 
 /** Scroll container shared by import previews and other wide tables. */
-export function HorizontalTableScroller({ children, label = 'Desplazamiento horizontal', className, tableClassName, scrollRef: externalScrollRef, scrollBehavior = 'smooth', verticalWheelBehavior = 'container' }: HorizontalTableScrollerProps) {
+export function HorizontalTableScroller({ children, label = 'Desplazamiento horizontal', className, tableClassName, scrollRef: externalScrollRef, scrollBehavior = 'smooth', verticalWheelBehavior = 'container', compact = false }: HorizontalTableScrollerProps) {
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = externalScrollRef || internalScrollRef;
   const pointerInside = useRef(false);
@@ -136,16 +137,16 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
 
   return (
     <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-2xl border bg-card shadow-sm', className)} onMouseEnter={() => { pointerInside.current = true; }} onMouseLeave={() => { pointerInside.current = false; }}>
-      <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-muted/10 px-3 py-2">
+      <div className={cn('flex items-center justify-between gap-3 border-b border-border/40 bg-muted/10 px-3', compact ? 'py-1' : 'py-2')}>
         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{label}</span>
         <div className="flex items-center gap-1">
-          <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollByColumn('left')} disabled={!scrollState.left} aria-label="Desplazar una columna a la izquierda"><ChevronLeft className="size-4" /></Button>
-          <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollByColumn('right')} disabled={!scrollState.right} aria-label="Desplazar una columna a la derecha"><ChevronRight className="size-4" /></Button>
+          <Button type="button" variant="outline" size="icon" className={cn('rounded-lg', compact ? 'size-7' : 'size-8')} onClick={() => scrollByColumn('left')} disabled={!scrollState.left} aria-label="Desplazar una columna a la izquierda"><ChevronLeft className="size-4" /></Button>
+          <Button type="button" variant="outline" size="icon" className={cn('rounded-lg', compact ? 'size-7' : 'size-8')} onClick={() => scrollByColumn('right')} disabled={!scrollState.right} aria-label="Desplazar una columna a la derecha"><ChevronRight className="size-4" /></Button>
         </div>
       </div>
       {splitTable && (
         <div
-          className="sticky z-20 min-w-0 overflow-hidden border-b border-border/50 bg-card"
+          className="sticky z-20 min-w-0 overflow-hidden border-b border-border/50 !bg-white dark:!bg-black"
           style={{ top: 'var(--table-sticky-top, 0px)' }}
           data-sticky-table-header="true"
         >
