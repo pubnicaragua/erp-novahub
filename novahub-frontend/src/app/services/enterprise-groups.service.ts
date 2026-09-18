@@ -539,6 +539,8 @@ export const enterpriseGroupsService = {
     ),
   getPlatformUsers: (signal?: AbortSignal) =>
     api.get<PlatformUser[]>('/enterprise-groups/platform/users', { signal }),
+  updatePlatformUserStatus: (id: string, isActive: boolean) =>
+    api.idempotentPatch<PlatformUser>(`/enterprise-groups/platform/users/${id}/status`, { isActive }),
   createPlatformUser: (body: { name: string; email: string; password: string; platformPermissions: string[] }) =>
     api.idempotentPost<PlatformUser>('/enterprise-groups/platform/users', body),
   getPlatformGroup: (groupId: string, signal?: AbortSignal) =>

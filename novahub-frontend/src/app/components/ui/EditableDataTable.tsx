@@ -448,7 +448,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       )}
       style={verticalScroll ? { backgroundColor: 'var(--card)' } : undefined}
     >
-      <TableRow className="hover:bg-transparent border-none">
+      <TableRow
+        className="hover:bg-transparent border-none"
+        style={verticalScroll ? { backgroundColor: 'var(--card)' } : undefined}
+      >
         {showSelection && (
           <TableHead
             className={cn('h-12 w-12 text-center text-[13px] font-semibold', verticalScroll && 'sticky top-0 z-30 bg-card')}
@@ -572,10 +575,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           onKeyDownCapture={handleTableKeyDown}
           onMouseDown={() => tableScrollRef.current?.focus({ preventScroll: true })}
           aria-label="Tabla navegable. Usa las flechas para moverte entre filas y columnas."
+          style={verticalScroll ? { overscrollBehaviorY: 'auto' } : undefined}
           className={cn(
             'w-full min-w-0 max-w-full overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
             verticalScroll
-              ? 'min-h-[36rem] max-h-[44rem] overflow-y-auto overscroll-contain scrollbar-overlay'
+              ? 'min-h-[36rem] max-h-[44rem] overflow-y-auto overscroll-y-auto scrollbar-overlay'
               : 'overflow-y-clip',
           )}
         >
@@ -725,7 +729,13 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       </TableCell>
                     );
                   })}
-                  <TableCell data-actions-column="true" className={cn('h-14 min-w-0 max-w-full overflow-hidden whitespace-nowrap pr-2 text-right align-middle transition-colors pointer-events-auto', actionsWidth)}>
+                  <TableCell
+                    data-actions-column="true"
+                    className={cn(
+                      'h-14 min-w-0 max-w-full overflow-hidden whitespace-nowrap pr-2 text-right align-middle transition-colors pointer-events-auto',
+                      actionsWidth,
+                    )}
+                  >
                     <div data-action-group="true" className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
                       {isOpening && <span role="status" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary" title="Abriendo detalle">
                         <Loader2 className="size-3 animate-spin" /> <span className="hidden 2xl:inline">Abriendo…</span>
