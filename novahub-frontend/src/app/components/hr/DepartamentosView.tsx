@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { BriefcaseBusiness, Building2, Check, Edit2, Plus, Search, Trash2, UsersRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BriefcaseBusiness, Building2, Check, Edit2, Plus, Search, Trash2, UsersRound, Save, RotateCcw } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { Badge } from '../ui/badge';
@@ -48,6 +48,8 @@ const employeeDepartmentIds = (employee: any, validDepartmentIds?: Set<string>) 
 };
 
 const sameIds = (left: string[], right: string[]) => left.length === right.length && left.every((id) => right.includes(id));
+type CommissionRuleRow = { minAmount: number | string; maxAmount: number | string; rate: number | string };
+const emptyCommissionRule = (): CommissionRuleRow => ({ minAmount: 0, maxAmount: '', rate: 0 });
 
 export function DepartamentosView({ departments = [], employees = [], positions = [], onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -60,6 +62,15 @@ export function DepartamentosView({ departments = [], employees = [], positions 
   const [saving, setSaving] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [commissionConfig, setCommissionConfig] = useState<any>(null);
+  const [commissionConfigLoading, setCommissionConfigLoading] = useState(false);
+  const [commissionConfigError, setCommissionConfigError] = useState<string | null>(null);
+  const [commissionScope, setCommissionScope] = useState<'GLOBAL' | 'SELLER'>('GLOBAL');
+  const [commissionSellerId, setCommissionSellerId] = useState('');
+  const [commissionCurrency, setCommissionCurrency] = useState<'NIO' | 'USD'>('NIO');
+  const [commissionRules, setCommissionRules] = useState<CommissionRuleRow[]>([emptyCommissionRule()]);
+  const [commissionPreviewAmount, setCommissionPreviewAmount] = useState('');
+  const [commissionSaving, setCommissionSaving] = useState(false);
 
   const canCreate = canPerform('HR_EMPLOYEES', 'create');
   const canEdit = canPerform('HR_EMPLOYEES', 'edit');
@@ -68,6 +79,12 @@ export function DepartamentosView({ departments = [], employees = [], positions 
     () => new Set<string>(departments.filter((department: any) => department?.status !== 'INACTIVE').map((department: any) => department.id)),
     [departments],
   );
+  const sellerDepartment = useMemo(
+    () => departments.find((department: any) => department?.isSellerDepartment === true && department?.status !== 'INACTIVE') || null,
+    [departments],
+  );
+  const canReadCommissionConfig = canPerform('HR_DEPARTMENTS', 'view') || canPerform('CONFIG_DEPARTMENTS', 'view');
+  const canEditCommissionConfig = canPerform('HR_DEPARTMENTS', 'edit') || canPerform('CONFIG_DEPARTMENTS', 'edit');
   const activeEmployees = useMemo(
     () => employees.filter((employee: any) => employee?.employmentStatus === 'ACTIVE' || !employee?.employmentStatus),
     [employees],
@@ -85,6 +102,142 @@ export function DepartamentosView({ departments = [], employees = [], positions 
     () => filteredEmployees.filter((employee: any) => !form.employeeIds.includes(employee.id)),
     [filteredEmployees, form.employeeIds],
   );
+  const commissionEmployees = useMemo(
+    () => activeEmployees.filter((employee: any) => employee?.isSeller === true && employeeDepartmentIds(employee, validDepartmentIds).includes(sellerDepartment?.id || '')),
+    [activeEmployees, sellerDepartment?.id, validDepartmentIds],
+  );
+
+  useEffect(() => {
+    if (!sellerDepartment?.id || !canReadCommissionConfig) {
+      setCommissionConfig(null);
+      setCommissionConfigError(null);
+      return;
+    }
+    let mounted = true;
+    setCommissionConfigLoading(true);
+    hrService.getCommissionConfiguration(sellerDepartment.id)
+      .then((response: any) => {
+        if (mounted) {
+          setCommissionConfig(response);
+          setCommissionConfigError(null);
+        }
+      })
+      .catch((error: any) => {
+        if (mounted) setCommissionConfigError(error?.response?.data?.message || error?.message || 'No se pudo cargar la escala de comisiones.');
+      })
+      .finally(() => { if (mounted) setCommissionConfigLoading(false); });
+    return () => { mounted = false; };
+  }, [sellerDepartment?.id, canReadCommissionConfig]);
+
+  const selectedCommissionPlan = commissionScope === 'GLOBAL'
+    ? commissionConfig?.global
+    : (commissionConfig?.sellerPlans || []).find((plan: any) => plan.sellerEmployeeId === commissionSellerId);
+
+  useEffect(() => {
+    const plan = selectedCommissionPlan;
+    setCommissionCurrency(plan?.currency === 'USD' ? 'USD' : 'NIO');
+    setCommissionRules(plan?.rules?.length
+      ? plan.rules.map((rule: any) => ({ minAmount: rule.minAmount, maxAmount: rule.maxAmount ?? '', rate: rule.rate }))
+      : [emptyCommissionRule()]);
+  }, [commissionScope, commissionSellerId, commissionConfig, selectedCommissionPlan]);
+
+  const validateCommissionRules = () => {
+    if (!commissionRules.length) return 'Agrega al menos un tramo.';
+    const parsed = commissionRules.map((rule, index) => ({
+      minAmount: Number(rule.minAmount),
+      maxAmount: rule.maxAmount === '' || rule.maxAmount === null ? null : Number(rule.maxAmount),
+      rate: Number(rule.rate),
+      index,
+    }));
+    if (parsed.some((rule) => !Number.isFinite(rule.minAmount) || !Number.isFinite(rule.rate) || (rule.maxAmount !== null && !Number.isFinite(rule.maxAmount)))) return 'Completa todos los límites y porcentajes con valores válidos.';
+    if (Math.round(parsed[0].minAmount * 100) !== 0) return 'El primer tramo debe comenzar en 0.';
+    for (let index = 0; index < parsed.length; index += 1) {
+      const current = parsed[index];
+      const isLast = index === parsed.length - 1;
+      if (current.minAmount < 0 || current.rate < 0 || current.rate > 100) return `Revisa el tramo ${index + 1}.`;
+      if (current.maxAmount !== null && current.maxAmount < current.minAmount) return `El máximo del tramo ${index + 1} debe ser mayor o igual al mínimo.`;
+      if (isLast && current.maxAmount !== null) return 'El último tramo debe quedar abierto.';
+      if (!isLast && current.maxAmount === null) return 'Solo el último tramo puede quedar abierto.';
+      const next = parsed[index + 1];
+      if (next && current.maxAmount !== null && Math.round(next.minAmount * 100) !== Math.round(current.maxAmount * 100) + 1) return `Los tramos ${index + 1} y ${index + 2} deben ser consecutivos, sin huecos ni solapamientos.`;
+    }
+    return null;
+  };
+
+  const saveCommissionConfiguration = async () => {
+    if (!sellerDepartment?.id || !canEditCommissionConfig) return;
+    if (commissionScope === 'SELLER' && !commissionSellerId) {
+      toast.error('Selecciona un vendedor para guardar una escala particular.');
+      return;
+    }
+    const validationError = validateCommissionRules();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    try {
+      setCommissionSaving(true);
+      await hrService.saveCommissionConfiguration(sellerDepartment.id, {
+        scope: commissionScope,
+        sellerEmployeeId: commissionScope === 'SELLER' ? commissionSellerId : null,
+        currency: commissionCurrency,
+        rules: commissionRules.map((rule) => ({ minAmount: Number(rule.minAmount), maxAmount: rule.maxAmount === '' ? null : Number(rule.maxAmount), rate: Number(rule.rate) })),
+      });
+      const refreshed = await hrService.getCommissionConfiguration(sellerDepartment.id);
+      setCommissionConfig(refreshed);
+      toast.success('Escala de comisiones guardada');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo guardar la escala.');
+    } finally {
+      setCommissionSaving(false);
+    }
+  };
+
+  const resetCommissionConfiguration = async () => {
+    if (!sellerDepartment?.id || !canEditCommissionConfig) return;
+    if (commissionScope === 'SELLER' && !commissionSellerId) {
+      toast.error('Selecciona un vendedor para restablecer su escala.');
+      return;
+    }
+    try {
+      setCommissionSaving(true);
+      await hrService.resetCommissionConfiguration(sellerDepartment.id, {
+        scope: commissionScope,
+        sellerEmployeeId: commissionScope === 'SELLER' ? commissionSellerId : null,
+      });
+      const refreshed = await hrService.getCommissionConfiguration(sellerDepartment.id);
+      setCommissionConfig(refreshed);
+      toast.success(commissionScope === 'SELLER' ? 'El vendedor volverá a usar la escala global.' : 'Escala global restablecida.');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo restablecer la escala.');
+    } finally {
+      setCommissionSaving(false);
+    }
+  };
+
+  const updateCommissionRule = (index: number, field: keyof CommissionRuleRow, value: string) => {
+    setCommissionRules((current) => current.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, [field]: value } : rule));
+  };
+
+  const addCommissionRule = () => {
+    setCommissionRules((current) => {
+      const last = current[current.length - 1];
+      if (!last) return [emptyCommissionRule()];
+      const start = Math.max(0, Number(last.minAmount) || 0);
+      const nextMin = last.maxAmount === '' ? start + 1000 : Number(last.maxAmount) + 0.01;
+      const next = last.maxAmount === '' ? { ...last, maxAmount: Number((nextMin - 0.01).toFixed(2)) } : last;
+      return [...current.slice(0, -1), next, { minAmount: Number(nextMin.toFixed(2)), maxAmount: '', rate: last.rate }];
+    });
+  };
+
+  const commissionPreview = useMemo(() => {
+    const amount = Number(commissionPreviewAmount);
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    const row = commissionRules.find((rule) => amount >= Number(rule.minAmount || 0) && (rule.maxAmount === '' || amount <= Number(rule.maxAmount)));
+    if (!row) return null;
+    const rate = Number(row.rate || 0);
+    return { rate, amount: amount * rate / 100 };
+  }, [commissionPreviewAmount, commissionRules]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -260,6 +413,32 @@ export function DepartamentosView({ departments = [], employees = [], positions 
           );
         })}
       </div>
+
+      {sellerDepartment && canReadCommissionConfig && <Card className="overflow-hidden rounded-2xl border-primary/25 shadow-sm" data-tour="hr-commission-config">
+        <CardHeader className="border-b border-border/40 bg-primary/[0.04] pb-4">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <div className="min-w-0"><CardTitle className="flex items-center gap-2 text-base font-black"><BriefcaseBusiness className="size-5 text-primary" /> Escala de comisiones de ventas</CardTitle><p className="mt-1 text-xs text-muted-foreground">Departamento: <span className="font-semibold text-foreground">{sellerDepartment.name}</span>. La escala se aplica al subtotal neto antes de IVA y cargos.</p></div>
+            <Badge variant="outline" className="w-fit shrink-0 border-primary/25 text-primary">Tramo total</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5 p-4 sm:p-6">
+          {commissionConfigLoading ? <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/60 px-4 py-6 text-sm text-muted-foreground"><RotateCcw className="size-4 animate-spin" /> Cargando configuración...</div> : commissionConfigError ? <div className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between"><span>{commissionConfigError}</span><Button type="button" variant="outline" size="sm" onClick={() => { if (sellerDepartment?.id) { setCommissionConfigLoading(true); hrService.getCommissionConfiguration(sellerDepartment.id).then(setCommissionConfig).catch(() => setCommissionConfigError('No se pudo cargar la configuración.')).finally(() => setCommissionConfigLoading(false)); } }}>Reintentar</Button></div> : <>
+            <div className="grid min-w-0 gap-4 md:grid-cols-3">
+              <div className="space-y-2"><Label htmlFor="commission-scope">Alcance</Label><select id="commission-scope" value={commissionScope} onChange={(event) => setCommissionScope(event.target.value as 'GLOBAL' | 'SELLER')} className="h-10 w-full max-w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"><option value="GLOBAL">Escala global</option><option value="SELLER">Escala particular por vendedor</option></select></div>
+              <div className="space-y-2"><Label htmlFor="commission-seller">Vendedor</Label><select id="commission-seller" value={commissionSellerId || '__none__'} onChange={(event) => setCommissionSellerId(event.target.value === '__none__' ? '' : event.target.value)} disabled={commissionScope !== 'SELLER'} className="h-10 w-full max-w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-primary"><option value="__none__">Seleccionar vendedor</option>{commissionEmployees.map((employee: any) => <option key={employee.id} value={employee.id}>{employeeName(employee)}</option>)}</select></div>
+              <div className="space-y-2"><Label htmlFor="commission-currency">Moneda de los tramos</Label><select id="commission-currency" value={commissionCurrency} onChange={(event) => setCommissionCurrency(event.target.value as 'NIO' | 'USD')} className="h-10 w-full max-w-full rounded-xl border border-border/60 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"><option value="NIO">Córdobas (NIO)</option><option value="USD">Dólares (USD)</option></select></div>
+            </div>
+            {commissionScope === 'SELLER' && !commissionSellerId && <p className="rounded-xl border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">Selecciona un vendedor para consultar o editar su escala. Sin escala particular usará la global.</p>}
+            <div className="overflow-x-auto rounded-xl border border-border/60">
+              <table className="w-full min-w-[620px] text-sm"><thead className="bg-muted/30 text-left text-[10px] font-black uppercase tracking-wider text-muted-foreground"><tr><th className="px-3 py-3">Desde</th><th className="px-3 py-3">Hasta (inclusive)</th><th className="px-3 py-3">Porcentaje</th><th className="px-3 py-3 text-right">Acción</th></tr></thead><tbody>{commissionRules.map((rule, index) => <tr key={`commission-rule-${index}`} className="border-t border-border/50"><td className="p-2"><Input type="number" min="0" step="0.01" value={rule.minAmount} onChange={(event) => updateCommissionRule(index, 'minAmount', event.target.value)} className="h-9" aria-label={`Mínimo tramo ${index + 1}`} /></td><td className="p-2"><Input type="number" min="0" step="0.01" value={rule.maxAmount} onChange={(event) => updateCommissionRule(index, 'maxAmount', event.target.value)} placeholder={index === commissionRules.length - 1 ? 'Sin límite' : 'Máximo'} className="h-9" aria-label={`Máximo tramo ${index + 1}`} /></td><td className="p-2"><div className="relative"><Input type="number" min="0" max="100" step="0.01" value={rule.rate} onChange={(event) => updateCommissionRule(index, 'rate', event.target.value)} className="h-9 pr-8" aria-label={`Porcentaje tramo ${index + 1}`} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span></div></td><td className="p-2 text-right"><Button type="button" variant="ghost" size="icon" aria-label={`Eliminar tramo ${index + 1}`} disabled={commissionRules.length === 1 || !canEditCommissionConfig || commissionSaving} onClick={() => setCommissionRules((current) => current.filter((_, ruleIndex) => ruleIndex !== index))}><Trash2 className="size-4 text-destructive" /></Button></td></tr>)}</tbody></table>
+            </div>
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><p className="text-xs text-muted-foreground">El primer tramo inicia en 0, los límites son inclusivos y el último debe quedar abierto.</p><Button type="button" variant="outline" size="sm" onClick={addCommissionRule} disabled={!canEditCommissionConfig || commissionSaving} className="w-fit gap-2"><Plus className="size-4" /> Agregar tramo</Button></div>
+            <div className="grid gap-4 rounded-xl border border-border/60 bg-muted/10 p-4 md:grid-cols-[1fr_auto_1fr] md:items-end"><div className="space-y-2"><Label htmlFor="commission-preview-amount">Vista previa en {commissionCurrency}</Label><Input id="commission-preview-amount" type="number" min="0" step="0.01" value={commissionPreviewAmount} onChange={(event) => setCommissionPreviewAmount(event.target.value)} placeholder="Ej. 5000" /></div><div className="text-center text-xs font-black text-muted-foreground">→</div><div className="rounded-xl border border-primary/20 bg-primary/[0.05] px-4 py-3 text-sm">{commissionPreview ? <><span className="font-black text-primary">{commissionPreview.rate.toFixed(2)}%</span><span className="mx-2 text-muted-foreground">=</span><span className="font-black">{commissionPreview.amount.toFixed(2)} {commissionCurrency}</span></> : <span className="text-muted-foreground">Ingresa un monto que esté dentro de un tramo válido.</span>}</div></div>
+            {!selectedCommissionPlan && commissionScope === 'SELLER' && <p className="text-xs text-muted-foreground">Este vendedor todavía no tiene escala particular; al guardar se creará y reemplazará la global.</p>}
+            <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row"><Button type="button" variant="outline" onClick={() => void resetCommissionConfiguration()} disabled={!canEditCommissionConfig || commissionSaving || (commissionScope === 'SELLER' && !commissionSellerId)} className="gap-2"><RotateCcw className="size-4" /> Restablecer</Button><Button type="button" onClick={() => void saveCommissionConfiguration()} disabled={!canEditCommissionConfig || commissionSaving || (commissionScope === 'SELLER' && !commissionSellerId)} className="gap-2"><Save className="size-4" /> {commissionSaving ? 'Guardando...' : 'Guardar escala'}</Button></div>
+          </>}
+        </CardContent>
+      </Card>}
 
       {!departments.length && <Card className="rounded-2xl border-dashed border-border/70"><CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center"><div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Building2 className="size-7" /></div><p className="font-black">Aún no hay departamentos</p><p className="max-w-md text-sm text-muted-foreground">Crea el primer departamento de Recursos Humanos y vincula sus empleados.</p>{canCreate && <Button type="button" onClick={openCreate} className="mt-2 rounded-xl"><Plus className="size-4" /> Crear departamento</Button>}</CardContent></Card>}
 

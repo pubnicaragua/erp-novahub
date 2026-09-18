@@ -18,7 +18,7 @@ import {
   Search,
   Sparkles
 } from 'lucide-react';
-import { inboxService } from '../../services/notificaciones.service';
+import { notificationsService as inboxService } from '../../services/notifications.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
@@ -35,7 +35,7 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
 
   const handleMarkRead = async (id: string) => {
     try {
-      await inboxService.markRead(id);
+      await inboxService.markAsRead(id);
       onRefresh();
     } catch {
       toast.error('Error al marcar como leída');
@@ -54,7 +54,7 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
 
   const handleReadAll = async () => {
     try {
-      await inboxService.readAll();
+      await inboxService.markAllAsRead();
       toast.success('Todas marcadas como leídas');
       onRefresh();
     } catch {

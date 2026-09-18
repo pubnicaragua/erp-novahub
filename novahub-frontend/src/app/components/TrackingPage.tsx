@@ -355,7 +355,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     s.providerWeight != null ? `${s.providerWeight} ${(s.weightUnit || '').trim()}`.trim() : undefined;
 
   return (
-    <>
+    <div className="tracking-module flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-3 sm:px-6">
         {visibleTabs.map((t) => (
           <button
@@ -663,6 +663,6 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       ) : (
         <LogisticsConfig />
       )}
-    </>
+    </div>
   );
 }

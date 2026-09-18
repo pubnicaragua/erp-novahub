@@ -15,6 +15,7 @@ import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { Checkbox } from '../ui/checkbox';
+import { Label } from '../ui/label';
 import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
@@ -3593,7 +3594,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         setSimilarImportGroups(responseData.matches);
         setSimilarImportAlertMode('confirm');
         setSimilarImportAlertOpen(true);
-        setSimilarImportConfirmOpen(false);
+        setInitialImportConfirmOpen(false);
         toast.warning('La validación detectó otra coincidencia. Revisa la alerta antes de continuar.');
       } else {
         toast.error('Error durante la importación: ' + (e.message || 'Error'));

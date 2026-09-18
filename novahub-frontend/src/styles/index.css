@@ -1168,21 +1168,54 @@ th .column-filter-menu .column-filter-icon,
 :where(
   [class~="overflow-x-auto"]:has(> table),
   [class~="overflow-x-auto"]:has(table)
-):not([class~="overflow-y-auto"]):not([class~="overflow-y-scroll"]):not([class~="overflow-auto"]):not([data-import-preview-horizontal-scroller="true"]) {
+):not([class~="overflow-y-auto"]):not([class~="overflow-y-scroll"]):not([class~="overflow-auto"]):not([data-import-preview-horizontal-scroller="true"]):not([data-table-viewport-scroll="true"]) {
   overflow-y: clip;
 }
 
-/* Action controls keep their own space instead of being squeezed into the
-   previous column when a table gets narrow. */
-[data-actions-column="true"],
-.sales-module [data-actions-column="true"],
-.purchases-module [data-actions-column="true"],
-.finance-module [data-actions-column="true"] {
-  width: 15rem !important;
-  min-width: 15rem !important;
-  max-width: 15rem !important;
+/* Shared table viewport. The scroll owner is the only element that gets a
+   vertical height; pagination and surrounding page content remain outside it. */
+[data-table-viewport="true"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-table-viewport-scroll="true"] {
+  min-width: 0;
+  max-width: 100%;
+  overscroll-behavior-y: auto;
+  scrollbar-gutter: stable;
+}
+
+[data-table-viewport-scroll="true"] [data-slot="table-header"],
+[data-table-viewport-scroll="true"] > table > thead {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--card) !important;
+  background-color: var(--card) !important;
+  background-clip: padding-box;
+}
+
+[data-table-viewport-scroll="true"] [data-slot="table-head"] {
+  background: var(--card) !important;
+  background-color: var(--card) !important;
+}
+
+/* The actual width belongs to the table's colgroup or the view-specific
+   actionsWidth. Never reserve a module-wide 15rem that creates an empty gap. */
+[data-actions-column="true"] {
   white-space: nowrap !important;
   overflow: visible;
+}
+
+/* Las tablas de Ventas ya declaran su reserva según las acciones reales de
+   cada vista. No deben heredar la reserva amplia de listados con acciones
+   textuales, porque eso deja espacio vacío entre la última columna y los
+   controles. El colgroup de EditableDataTable conserva el ancho configurado. */
+.sales-module [data-actions-column="true"] {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
 }
 
 [data-actions-column="compact"] {
@@ -1197,6 +1230,14 @@ th .column-filter-menu .column-filter-icon,
   min-width: max-content;
   max-width: none;
   white-space: nowrap;
+}
+
+/* Órdenes de venta: cuatro acciones iconográficas caben en 10rem; no necesita
+   la reserva amplia usada por listados con acciones textuales. */
+.sales-module .sales-orders-table [data-actions-column="true"] {
+  width: 10rem !important;
+  min-width: 10rem !important;
+  max-width: 10rem !important;
 }
 
 /* Todas las acciones de registro comparten un tratamiento neutro. Las
@@ -1681,6 +1722,129 @@ th .column-filter-menu .column-filter-icon,
   overflow-x: auto;
   overflow-y: clip;
   scrollbar-gutter: stable;
+}
+
+/* Operational native tables use the same viewport contract as
+   EditableDataTable. The :not(td ...) guard leaves expanded/detail tables
+   inside a row contextual instead of turning them into nested listports. */
+:where(
+  .purchases-module,
+  .inventory-module,
+  .finance-module,
+  .accounting-module,
+  .hr-module,
+  .projects-module,
+  .tracking-module,
+  .documents-module,
+  .activities-module,
+  .tickets-module,
+  .notifications-module,
+  .subscriptions-module,
+  .reports-module,
+  .manager-shell
+) [data-slot="table-container"]:not(td [data-slot="table-container"]):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *),
+:where(
+  .purchases-module,
+  .inventory-module,
+  .finance-module,
+  .accounting-module,
+  .hr-module,
+  .projects-module,
+  .tracking-module,
+  .documents-module,
+  .activities-module,
+  .tickets-module,
+  .notifications-module,
+  .subscriptions-module,
+  .reports-module,
+  .manager-shell
+) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]) {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36rem;
+  max-height: 44rem;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+:where(
+  .purchases-module,
+  .inventory-module,
+  .finance-module,
+  .accounting-module,
+  .hr-module,
+  .projects-module,
+  .tracking-module,
+  .documents-module,
+  .activities-module,
+  .tickets-module,
+  .notifications-module,
+  .subscriptions-module,
+  .reports-module,
+  .manager-shell
+) [data-slot="table-container"]:not(td [data-slot="table-container"]):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *) [data-slot="table-header"],
+:where(
+  .purchases-module,
+  .inventory-module,
+  .finance-module,
+  .accounting-module,
+  .hr-module,
+  .projects-module,
+  .tracking-module,
+  .documents-module,
+  .activities-module,
+  .tickets-module,
+  .notifications-module,
+  .subscriptions-module,
+  .reports-module,
+  .manager-shell
+) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]) > table > thead {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--card) !important;
+  background-color: var(--card) !important;
+  background-clip: padding-box;
+}
+
+:where(
+  .purchases-module,
+  .inventory-module,
+  .finance-module,
+  .accounting-module,
+  .hr-module,
+  .projects-module,
+  .tracking-module,
+  .documents-module,
+  .activities-module,
+  .tickets-module,
+  .notifications-module,
+  .subscriptions-module,
+  .reports-module,
+  .manager-shell
+) [data-slot="table-container"]:not(td [data-slot="table-container"]):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *) [data-slot="table-head"],
+:where(
+  .purchases-module,
+  .inventory-module,
+  .finance-module,
+  .accounting-module,
+  .hr-module,
+  .projects-module,
+  .tracking-module,
+  .documents-module,
+  .activities-module,
+  .tickets-module,
+  .notifications-module,
+  .subscriptions-module,
+  .reports-module,
+  .manager-shell
+) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]) > table > thead > tr > th {
+  background: var(--card) !important;
+  background-color: var(--card) !important;
 }
 
 .responsive-data-table {

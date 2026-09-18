@@ -6,6 +6,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
@@ -1044,9 +1045,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
           sellerEmployeeId: localDoc.sellerEmployeeId || undefined,
-          commissionType: localDoc.commissionType || 'PERCENTAGE',
-          commissionRate: localDoc.commissionRate || undefined,
-          commissionAmount: localDoc.commissionAmount || undefined,
         } as any);
         toast.success(
           action === 'DRAFT' ? 'Factura guardada como borrador'
@@ -1056,7 +1054,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           { id: saveToastId },
         );
       } else {
-        const invoiceUpdates = { ...localDoc };
+        const { commissionType: _commissionType, commissionRate: _commissionRate, commissionAmount: _commissionAmount, ...invoiceUpdates } = { ...localDoc };
         delete invoiceUpdates.paymentMethod;
         delete invoiceUpdates.paymentDetails;
         delete invoiceUpdates.status;
@@ -1666,50 +1664,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     disabled={isInvoiceLocked}
                   />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Tipo de comisión</p>
-                  <Select
-                    value={localDoc?.commissionType || 'PERCENTAGE'}
-                     disabled={isInvoiceLocked || !localDoc?.sellerEmployeeId}
-                    onValueChange={(commissionType) => {
-                      const nextType = commissionType as 'PERCENTAGE' | 'FIXED';
-                      const updates = nextType === 'FIXED'
-                        ? { commissionType: nextType, commissionRate: 0 }
-                        : { commissionType: nextType, commissionAmount: 0 };
-                      setLocalDoc({ ...localDoc, ...updates } as any);
-                      if (!isCreating) void handleUpdate(localDoc!.id, updates as any);
-                    }}
-                  >
-                    <SelectTrigger className={cn("h-8 text-xs", !localDoc?.sellerEmployeeId && "opacity-50 cursor-not-allowed bg-muted/20")}><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PERCENTAGE">Porcentaje</SelectItem>
-                      <SelectItem value="FIXED">Monto fijo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">{localDoc?.commissionType === 'FIXED' ? 'Monto de comisión' : '% Comisión'}</p>
-                  <Input
-                    type="number"
-                    min="0"
-                    max={localDoc?.commissionType === 'FIXED' ? undefined : 100}
-                    value={localDoc?.commissionType === 'FIXED' ? (localDoc?.commissionAmount || '') : (localDoc?.commissionRate || '')}
-                    placeholder="0"
-                     disabled={isInvoiceLocked || !localDoc?.sellerEmployeeId}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      setLocalDoc({ ...localDoc, ...(localDoc?.commissionType === 'FIXED' ? { commissionAmount: value } : { commissionRate: value }) } as any);
-                    }}
-                    onBlur={() => {
-                      if (isCreating || !localDoc?.sellerEmployeeId) return;
-                      const updates = localDoc.commissionType === 'FIXED'
-                        ? { commissionAmount: Number(localDoc.commissionAmount || 0), commissionRate: 0 }
-                        : { commissionRate: Number(localDoc.commissionRate || 0), commissionAmount: 0 };
-                      void handleUpdate(localDoc.id, updates as any);
-                    }}
-                    className={cn("h-8 text-xs", !localDoc?.sellerEmployeeId && "opacity-50 cursor-not-allowed bg-muted/20")}
-                  />
-                  {!localDoc?.sellerEmployeeId && <p className="text-[9px] text-muted-foreground/60 mt-0.5 italic">Selecciona un empleado primero</p>}
+                <div className="space-y-2 md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Comisión configurada</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? `${Number(localDoc?.commissionRate || 0).toFixed(2)}%` : '—'} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? Number(localDoc?.commissionAmount || 0).toFixed(2) : '—'} className="h-8 bg-muted/20 text-xs" /></div>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground">Se aplica automáticamente al subtotal neto; no se puede editar en la venta.</p>
                 </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Moneda de la transacción</p>
@@ -2205,6 +2166,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         actionsWidth="w-44"
         fitContent
           layoutMode={layoutMode}
+          verticalScroll
           highlightedRowId={highlightedAlertId}
           showSelection={canPerform('SALES_INVOICES', 'delete')}
           isRowSelectable={(invoice) => canPerform('SALES_INVOICES', 'delete') && isInvoiceCancellableFromList(invoice)}

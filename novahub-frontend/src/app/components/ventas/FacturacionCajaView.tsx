@@ -430,11 +430,13 @@ function getInvoiceCustomerName(invoice: PosInvoice) {
 interface FacturacionCajaViewProps {
   onNavigateToControlCaja?: (registerId?: string) => void;
   branchId?: string;
+  employees?: Array<{ id: string; name?: string; firstName?: string; lastName?: string }>;
 }
 
-export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: FacturacionCajaViewProps) {
+export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employees = [] }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency, formatExplicitAmount, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const loggedInSellerId = getLoggedInSellerEmployeeId(user);
   const canCreatePosInvoice = canPerform('RETAIL_POS', 'create');
   const canPayPos = canCreatePosInvoice;
   const canApprovePosQueue = canPerform('RETAIL_POS', 'approve');
@@ -463,6 +465,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
+  const [selectedSellerEmployeeId, setSelectedSellerEmployeeId] = useState<string>(loggedInSellerId || '');
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [priceListItems, setPriceListItems] = useState<Array<{ priceListId: string; productId: string; variantId?: string | null; price: number; currency: string; exchangeRate: number; basePrice: number }>>([]);
   const [selectedPriceListId, setSelectedPriceListId] = useState('');
@@ -525,6 +528,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     () => getPosDraftStorageKey(user?.id, user?.tenantId),
     [user?.id, user?.tenantId],
   );
+
+  useEffect(() => {
+    if (loggedInSellerId && !selectedSellerEmployeeId) setSelectedSellerEmployeeId(loggedInSellerId);
+  }, [loggedInSellerId, selectedSellerEmployeeId]);
 
   useEffect(() => {
     selectedRegisterIdRef.current = selectedRegisterId;
@@ -1577,7 +1584,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       registerId: selectedRegisterId,
       sessionId: activeSession.id,
       customerId: selectedCustomerId,
-      sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined,
+      sellerEmployeeId: selectedSellerEmployeeId || undefined,
       date: emitDate,
       discountPercent: pricingMode === 'global' ? discountPercent || undefined : undefined,
       extraCostDescription: legacyExtraCostFields.extraCostDescription,
@@ -1904,7 +1911,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         registerId: selectedRegisterId,
         sessionId: activeSession.id,
         customerId: selectedCustomerId,
-        sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined,
+        sellerEmployeeId: selectedSellerEmployeeId || undefined,
         customCustomerName: selectedCustomerId ? undefined : GENERAL_CUSTOMER_NAME,
         date: emitDate,
         discountPercent: discountPercent || undefined,
@@ -2220,7 +2227,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   <Receipt className="size-4 text-primary" /> Configuración de Emisión
                 </h3>
                 <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} />
-                <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
                   <div className="min-w-0 space-y-3" data-tour="pos-register">
                     <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Caja Operativa</Label>
                     <Select value={selectedRegisterId} onValueChange={handleRegisterChange}>
@@ -2275,6 +2282,21 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     <p className="text-[10px] text-muted-foreground">
                       Lista de precios: <span className="font-semibold text-foreground">{priceLists.find((list) => sameSalesId(list.id, selectedPriceListId))?.name || 'No configurada'}</span>
                     </p>
+                  </div>
+                  <div className="min-w-0 space-y-3" data-tour="pos-seller">
+                    <Label htmlFor="pos-seller" className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Vendedor</Label>
+                    <Select value={selectedSellerEmployeeId || '__none__'} onValueChange={(value) => setSelectedSellerEmployeeId(value === '__none__' ? '' : value)} disabled={isRegisterDisabled}>
+                      <SelectTrigger id="pos-seller" className="!h-11 w-full min-w-0 rounded-xl"><SelectValue placeholder="Seleccionar vendedor" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sin vendedor</SelectItem>
+                        {employees.map((employee) => (
+                          <SelectItem key={employee.id} value={employee.id}>
+                            {employee.name || `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground">La comisión se toma automáticamente de la escala configurada.</p>
                   </div>
                   <div className="min-w-0 space-y-3" data-tour="pos-date">
                     <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Fecha de Emisión</Label>

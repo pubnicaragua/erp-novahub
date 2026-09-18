@@ -872,9 +872,15 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         <Badge variant="outline" className="shrink-0">{selectedCount} seleccionados</Badge>
       </CardHeader>
       <CardContent className="min-w-0 p-3 sm:p-6">
-        <div className="hidden overflow-x-auto rounded-xl border lg:block">
-          <Table className="min-w-[980px]">
-            <TableHeader>
+        <div
+          className="hidden max-h-[44rem] overflow-x-auto overflow-y-auto overscroll-y-auto rounded-xl border scrollbar-overlay lg:block"
+          style={{ overscrollBehaviorY: 'auto' }}
+        >
+          <Table containerClassName="contents" className="min-w-[980px]">
+            <TableHeader
+              className="sticky top-0 z-50 bg-card shadow-sm"
+              style={{ position: 'sticky', top: 0, zIndex: 50, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' }}
+            >
               <TableRow>
                 <TableHead className="w-10">
                   <button type="button" onClick={() => toggleAll(displayedProductIds)} className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60" aria-label="Seleccionar productos visibles">
@@ -885,7 +891,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                 <TableHead>Producto</TableHead>
                 <TableHead>Categoría</TableHead>
                 {visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right">{list.name}</TableHead>)}
-                <TableHead className="w-24 text-right">Acciones</TableHead>
+                <TableHead className="w-24 text-right" style={{ position: 'sticky', top: 0, zIndex: 60, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' }}>Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

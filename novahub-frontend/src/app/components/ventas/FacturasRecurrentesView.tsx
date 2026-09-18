@@ -894,6 +894,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           onBulkDelete={canPerform('SALES_RECURRING', 'delete') ? async (ids) => { const cancelToastId = toast.loading(`Cancelando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.cancel(id as string); } toast.success('Facturas recurrentes canceladas', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron cancelar', { id: cancelToastId }); } } : undefined}
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailRecurring(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
+          verticalScroll
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>

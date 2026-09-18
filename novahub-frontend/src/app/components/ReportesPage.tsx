@@ -112,7 +112,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
+    <div className="reports-module mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:px-10 md:pb-20 md:pt-4">
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <Select value={dateRange} onValueChange={setDateRange}>
             <SelectTrigger className="w-full max-w-full bg-background sm:w-[180px]">

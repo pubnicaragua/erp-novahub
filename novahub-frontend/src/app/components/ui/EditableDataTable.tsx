@@ -95,7 +95,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   fitContent = false,
   layoutMode = 'responsive',
   showHorizontalControls = false,
-  verticalScroll = false,
+  verticalScroll = true,
   canEdit,
   canEditRow,
 }: EditableDataTableProps<T>) {
@@ -444,9 +444,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const renderTableHeader = () => (
     <TableHeader
       className={cn(
-        verticalScroll ? 'sticky top-0 z-20 bg-card shadow-sm' : 'bg-muted/30',
+        verticalScroll ? 'sticky top-0 z-50 bg-card shadow-sm' : 'bg-muted/30',
       )}
-      style={verticalScroll ? { backgroundColor: 'var(--card)' } : undefined}
+      style={verticalScroll
+        ? { position: 'sticky', top: 0, zIndex: 50, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' }
+        : undefined}
     >
       <TableRow
         className="hover:bg-transparent border-none"
@@ -454,8 +456,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       >
         {showSelection && (
           <TableHead
-            className={cn('h-12 w-12 text-center text-[13px] font-semibold', verticalScroll && 'sticky top-0 z-30 bg-card')}
-            style={verticalScroll ? { position: 'sticky', top: 0, zIndex: 30, backgroundColor: 'var(--card)' } : undefined}
+            className={cn('h-12 w-12 text-center text-[13px] font-semibold', verticalScroll && 'sticky top-0 z-60 bg-card')}
+            style={verticalScroll ? { position: 'sticky', top: 0, zIndex: 60, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' } : undefined}
           >
             <Checkbox
               checked={allSelectableRowsSelected ? true : selectedIds.size > 0 ? 'indeterminate' : false}
@@ -469,9 +471,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             key={col.key as string}
             style={{
               width: col.width,
-              ...(verticalScroll ? { position: 'sticky', top: 0, zIndex: 30, backgroundColor: 'var(--card)' } : {}),
+              ...(verticalScroll ? { position: 'sticky', top: 0, zIndex: 60, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' } : {}),
             }}
-            className={cn('h-12 whitespace-nowrap align-middle text-[13px] font-semibold text-muted-foreground', verticalScroll && 'sticky top-0 z-30 bg-card')}
+            className={cn('h-12 whitespace-nowrap align-middle text-[13px] font-semibold text-muted-foreground', verticalScroll && 'sticky top-0 z-60 bg-card')}
           >
             <span className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap">
               <span className="min-w-0 truncate">{col.header}</span>
@@ -483,8 +485,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         ))}
         <TableHead
           data-actions-column="true"
-          className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[13px] font-semibold text-muted-foreground', actionsWidth, verticalScroll && 'sticky top-0 z-30 bg-card')}
-          style={verticalScroll ? { position: 'sticky', top: 0, zIndex: 30, backgroundColor: 'var(--card)' } : undefined}
+          className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[13px] font-semibold text-muted-foreground', actionsWidth, verticalScroll && 'sticky top-0 z-60 bg-card')}
+          style={verticalScroll ? { position: 'sticky', top: 0, zIndex: 60, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' } : undefined}
         >
           Acciones
         </TableHead>
@@ -557,6 +559,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           effectiveLayoutMode === 'cards' ? 'hidden' : effectiveLayoutMode === 'responsive' ? 'hidden xl:block' : 'block',
           'w-full min-w-0 max-w-full rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm'
         )}
+        data-table-viewport="true"
         onMouseEnter={() => { pointerInsideTable.current = true; }}
         onMouseLeave={() => { pointerInsideTable.current = false; }}
       >
@@ -571,6 +574,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         )}
         <div
           ref={tableScrollRef}
+          data-table-viewport-scroll="true"
           tabIndex={0}
           onKeyDownCapture={handleTableKeyDown}
           onMouseDown={() => tableScrollRef.current?.focus({ preventScroll: true })}

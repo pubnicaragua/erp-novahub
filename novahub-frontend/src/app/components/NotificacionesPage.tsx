@@ -103,7 +103,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   }, [activeSubModule, visibleTabs]);
 
   return (
-    <div className="min-h-full bg-background">
+    <div className="notifications-module min-h-full bg-background">
       <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
         {activeQuery.isError && (
           <div role="alert" className="mb-6 flex flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">

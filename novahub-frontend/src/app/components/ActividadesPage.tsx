@@ -110,7 +110,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
   };
 
   return (
-    <div className="flex min-w-0 max-w-full flex-1 overflow-x-hidden bg-background">
+    <div className="activities-module flex min-w-0 max-w-full flex-1 overflow-x-hidden bg-background">
       <main className="relative min-w-0 flex-1">
         <div className="mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
 

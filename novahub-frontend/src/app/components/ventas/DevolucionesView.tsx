@@ -687,6 +687,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           onBulkDelete={canPerform('SALES_RETURNS', 'delete') ? async (ids) => { const rejectToastId = toast.loading(`Rechazando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.reject(id as string); } toast.success('Notas de crédito rechazadas', { id: rejectToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron rechazar', { id: rejectToastId }); } } : undefined}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailReturn(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
+          verticalScroll
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>

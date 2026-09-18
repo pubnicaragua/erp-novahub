@@ -23,6 +23,7 @@ import {
   recurringInvoicesService,
   salesReturnsService,
   creditNotesService,
+  sellersService,
 } from '../services/ventas.service';
 import type { 
   Customer, Estimate, SalesOrder, Invoice, Employee,
@@ -315,10 +316,18 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     enabled: canReadHr && ['ordenes-venta', 'facturas'].includes(activeSection),
     placeholderData: keepPreviousData,
   });
+  const sellerLookupQuery = useQuery({
+    queryKey: ['sales', 'seller-lookup', tenantKey, activeSection],
+    queryFn: ({ signal }) => sellersService.getLookup({ page: 1, pageSize: 500 }, signal),
+    enabled: ['ordenes-venta', 'facturas', 'facturacion-caja'].includes(activeSection)
+      && (canPerform('SALES_ORDERS', 'view') || canPerform('SALES_INVOICES', 'view') || canPerform('RETAIL_POS', 'view') || canPerform('SALES', 'view')),
+    placeholderData: keepPreviousData,
+  });
 
   const loggedInSellerId = getLoggedInSellerEmployeeId(user);
   const salesEmployees = useMemo(() => {
-    const catalog = toArray(employeesQuery.data) as Employee[];
+    const lookupCatalog = toArray(sellerLookupQuery.data) as any[];
+    const catalog = (sellerLookupQuery.data !== undefined ? lookupCatalog : toArray(employeesQuery.data)) as Employee[];
     if (!loggedInSellerId || catalog.some((employee) => employee.id === loggedInSellerId)) return catalog;
     const linkedEmployee = user?.employee;
     if (!linkedEmployee?.id) return catalog;
@@ -342,7 +351,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
       createdAt: '',
       updatedAt: '',
     } as Employee, ...catalog];
-  }, [employeesQuery.data, loggedInSellerId, user]);
+  }, [employeesQuery.data, loggedInSellerId, sellerLookupQuery.data, user]);
 
   const data = {
     clientes: toArray(activeSection === 'clientes' ? customersListQuery.data : customersCatalogQuery.data) as Customer[],
@@ -587,6 +596,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               )}
               {activeSection === 'facturacion-caja' && (
                 <FacturacionCajaView 
+                  employees={salesEmployees}
                   branchId={selectedBranchId || undefined}
                   onNavigateToControlCaja={(registerId) => {
                     setControlCajaTargetParams(registerId ? { registerId, section: 'session' } : null);

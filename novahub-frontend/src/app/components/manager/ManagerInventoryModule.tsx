@@ -22,6 +22,7 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { useManagerShellNavigation } from '../ManagerShell';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { managerStatusLabel } from '../../utils/managerLabels';
+import { cn } from '../ui/utils';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type WarehouseOption = { id: string; name: string; scopeType: string; clientTenantId: string | null; businessUnitId?: string | null; authorizedBranchIds?: string[] };

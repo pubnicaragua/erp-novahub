@@ -22,7 +22,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import type { Customer } from '../../types';
-import { generateCustomerStatementPDF, translateStatus } from '../../utils/pdfGenerator';
+import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
+import { pdfStatusLabel } from '../../utils/pdfStatus';
 
 interface CustomerDetailsModalProps {
   customer: Customer | null;
@@ -113,13 +114,22 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
   const handleExportPDF = async () => {
     if (!customer) return;
     try {
-      await generateCustomerStatementPDF({
-        customer,
-        transactions,
+      await exportCustomerTransactionsPdf({
+        rows: transactions.map((transaction: any) => ({
+          id: transaction.id,
+          kind: transaction.label || transaction.type,
+          number: transaction.number || transaction.code || transaction.id || '—',
+          date: transaction.date || transaction.createdAt || transaction.startDate,
+          status: transaction.status,
+          amount: Number(transaction.total ?? transaction.amount ?? 0),
+          currency: transaction.currency || 'NIO',
+          description: transaction.description || transaction.name || transaction.category || transaction.label || '—',
+          branchName: transaction.branchName,
+        })),
+        customerName: customer.name,
+        customerData: customer,
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
-        formatAmount: formatConvertedAmount,
-        primaryColor: themeConfig?.colors.primary
       });
       toast.success('Estado de cuenta exportado');
     } catch (error) {
@@ -263,7 +273,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                             <Calendar className="size-3.5" /> {new Date(it.date).toLocaleDateString()}
                           </span>
                           <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30 flex items-center gap-1 whitespace-nowrap">
-                            • {translateStatus(it.status)}
+                            • {pdfStatusLabel(it.status)}
                           </span>
                         </div>
                       </div>
