@@ -5,6 +5,7 @@ import { billsService, paymentsMadeService, supplierCreditsService, purchaseOrde
 import { contabilidadService } from '../../services/contabilidad.service';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Label } from '../ui/label';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';

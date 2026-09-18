@@ -4,6 +4,7 @@ import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieC
 import { invoicesService, paymentsService, salesReturnsService, creditNotesService } from '../../services/ventas.service';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Label } from '../ui/label';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';

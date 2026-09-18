@@ -80,7 +80,7 @@ const submodulesFor = (parent: string): Submodule[] => SIDEBAR_PERMISSION_SUBMOD
 const QUOTEABLE_PARENT_LABELS: Record<string, string> = {
   SALES: 'Ventas', PURCHASES: 'Compras', RESTAURANT: 'Restaurante POS', TRACKING: 'Tracking de Importaciones',
   INVENTORY: 'Inventario de Mercancías', FINANCIAL: 'Finanzas', ACCOUNTING: 'Contabilidad', REPORTS: 'Reportes',
-  HR: 'Recursos Humanos', ACTIVITIES: 'Actividades', PROJECTS: 'Proyectos', FORCE_SALES: 'Fuerza Comercial',
+  HR: 'Recursos Humanos', ACTIVITIES: 'Actividades', PROJECTS: 'Proyectos',
   TICKETS: 'Gestión de tickets', HR_TRAINING: 'Centro de capacitación', SUPPORT_TECH: 'Soporte técnico', LEGAL: 'Asesoría legal',
   FINANCING: 'Financiamiento PYME', NOVACHAT: 'Nova Suite', DOCUMENTS: 'Nova Cloud', NOTIFICATIONS: 'Notificaciones',
 };

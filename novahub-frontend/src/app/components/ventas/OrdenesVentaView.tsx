@@ -6,6 +6,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
@@ -469,9 +470,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     number: localDoc?.number,
     customerId: localDoc?.customerId || null,
     sellerEmployeeId: localDoc?.sellerEmployeeId || null,
-    commissionType: localDoc?.commissionType,
-    commissionRate: localDoc?.commissionRate || 0,
-    commissionAmount: localDoc?.commissionAmount || 0,
     extraCostDescription: localDoc?.extraCostDescription || null,
     extraCostAmount: localDoc?.extraCostAmount || 0,
     extraCharges: getSalesExtraChargesPayload(localDoc),
@@ -906,50 +904,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     placeholder="Seleccionar vendedor"
                   />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Tipo de comisión</p>
-                  <Select
-                    value={localDoc?.commissionType || 'PERCENTAGE'}
-                    disabled={!localDoc?.sellerEmployeeId}
-                    onValueChange={(commissionType) => {
-                      const nextType = commissionType as 'PERCENTAGE' | 'FIXED';
-                      const updates = nextType === 'FIXED'
-                        ? { commissionType: nextType, commissionRate: 0 }
-                        : { commissionType: nextType, commissionAmount: 0 };
-                      setLocalDoc({ ...localDoc, ...updates } as any);
-                      void handleUpdate(localDoc!.id, updates as any);
-                    }}
-                  >
-                    <SelectTrigger className={cn("h-8 text-xs", !localDoc?.sellerEmployeeId && "opacity-50 cursor-not-allowed bg-muted/20")}><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PERCENTAGE">Porcentaje</SelectItem>
-                      <SelectItem value="FIXED">Monto fijo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">{localDoc?.commissionType === 'FIXED' ? 'Monto de comisión' : '% Comisión'}</p>
-                  <Input
-                    type="number"
-                    min="0"
-                    max={localDoc?.commissionType === 'FIXED' ? undefined : 100}
-                    value={localDoc?.commissionType === 'FIXED' ? (localDoc?.commissionAmount || '') : (localDoc?.commissionRate || '')}
-                    placeholder="0"
-                    disabled={!localDoc?.sellerEmployeeId}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      setLocalDoc({ ...localDoc, ...(localDoc?.commissionType === 'FIXED' ? { commissionAmount: value } : { commissionRate: value }) } as any);
-                    }}
-                    onBlur={() => {
-                      if (!localDoc?.sellerEmployeeId) return;
-                      const updates = localDoc.commissionType === 'FIXED'
-                        ? { commissionAmount: Number(localDoc.commissionAmount || 0), commissionRate: 0 }
-                        : { commissionRate: Number(localDoc.commissionRate || 0), commissionAmount: 0 };
-                      void handleUpdate(localDoc.id, updates as any);
-                    }}
-                    className={cn("h-8 text-xs", !localDoc?.sellerEmployeeId && "opacity-50 cursor-not-allowed bg-muted/20")}
-                  />
-                  {!localDoc?.sellerEmployeeId && <p className="text-[9px] text-muted-foreground/60 mt-0.5 italic">Selecciona un empleado primero</p>}
+                <div className="space-y-2 md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Comisión configurada</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? `${Number(localDoc?.commissionRate || 0).toFixed(2)}%` : '—'} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? Number(localDoc?.commissionAmount || 0).toFixed(2) : '—'} className="h-8 bg-muted/20 text-xs" /></div>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground">Se aplica automáticamente al subtotal neto; no se puede editar en la venta.</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>

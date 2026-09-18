@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, BarChart, Line, Bar, Area, Cell, LabelList } from 'recharts';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Label } from '../ui/label';
 import { invoicesService, paymentsService } from '../../services/ventas.service';
 import { billsService, paymentsMadeService } from '../../services/compras.service';
 import { incomeService, expensesService, recurringIncomesService, recurringExpensesService } from '../../services/finanzas.service';

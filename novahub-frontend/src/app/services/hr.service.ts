@@ -9,6 +9,11 @@ export const hrService = {
   getDepartmentLookup: (signal?: AbortSignal, type?: 'HR' | 'ACCESS') => api.get('/hr/lookups/departments', withSignal(type ? { type } : undefined, signal)),
   getDepartmentHeadCandidates: (signal?: AbortSignal) => api.get('/hr/department-head-candidates', withSignal(undefined, signal)),
   getDepartment: (id: string, signal?: AbortSignal) => api.get(`/hr/departments/${id}`, withSignal(undefined, signal)),
+  getCommissionConfiguration: (departmentId: string, signal?: AbortSignal) => api.get(`/hr/departments/${departmentId}/commission-config`, withSignal(undefined, signal)),
+  saveCommissionConfiguration: (departmentId: string, data: { scope: 'GLOBAL' | 'SELLER'; sellerEmployeeId?: string | null; currency: 'NIO' | 'USD'; rules: Array<{ minAmount: number; maxAmount: number | null; rate: number }> }) =>
+    api.put(`/hr/departments/${departmentId}/commission-config`, data),
+  resetCommissionConfiguration: (departmentId: string, data: { scope: 'GLOBAL' | 'SELLER'; sellerEmployeeId?: string | null }) =>
+    api.post(`/hr/departments/${departmentId}/commission-config/reset`, data),
   createDepartment: (data: any) => api.post('/hr/departments', data),
   updateDepartment: (id: string, data: any) => api.patch(`/hr/departments/${id}`, data),
   deleteDepartment: (id: string) => api.delete(`/hr/departments/${id}`),

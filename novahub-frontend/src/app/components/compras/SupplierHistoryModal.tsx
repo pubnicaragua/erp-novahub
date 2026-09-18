@@ -22,7 +22,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import type { Supplier } from '../../types';
-import { generateSupplierStatementPDF, translateStatus } from '../../utils/pdfGenerator';
+import { generateSupplierHistoryPDF } from '../../utils/pdfGenerator';
+import { pdfStatusLabel } from '../../utils/pdfStatus';
 
 interface SupplierHistoryModalProps {
   supplier: Supplier | null;
@@ -96,13 +97,22 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
   const handleExportPDF = async () => {
     if (!supplier) return;
     try {
-      await generateSupplierStatementPDF({
+      await generateSupplierHistoryPDF({
         supplier,
-        transactions,
+        items: transactions.map((transaction: any) => ({
+          date: transaction.date || transaction.createdAt || transaction.startDate,
+          type: transaction.label || transaction.type,
+          docNumber: transaction.number || transaction.code || transaction.id || '—',
+          description: transaction.description || transaction.name || transaction.category || transaction.label || '—',
+          quantity: Number(transaction.quantity || 1),
+          unitPrice: Number(transaction.unitPrice ?? transaction.amount ?? transaction.total ?? 0),
+          total: Number(transaction.total ?? transaction.amount ?? 0),
+          currency: transaction.currency || 'NIO',
+          exchangeRate: transaction.exchangeRate,
+        })),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount,
-        primaryColor: themeConfig?.colors.primary
       });
       toast.success('Estado de cuenta exportado');
     } catch (error) {
@@ -275,7 +285,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                             <Calendar className="size-3.5" /> {new Date(it.date).toLocaleDateString()}
                           </span>
                           <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30 flex items-center gap-1 whitespace-nowrap">
-                            • {translateStatus(it.status)}
+                            • {pdfStatusLabel(it.status)}
                           </span>
                         </div>
                       </div>

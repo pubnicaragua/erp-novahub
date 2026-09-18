@@ -39,6 +39,10 @@ export const auditService = {
   getEntityHistory: (entity: string, entityId: string) => api.get<any[]>(`/audit/entity/${entity}/${entityId}`),
 };
 
+export const sellersService = {
+  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<{ id: string; employeeNumber?: string; name: string; firstName: string; lastName: string }>>('/sales/sellers/lookup', { params: filters as any, signal }),
+};
+
 // ---- Estimates ----
 export const estimatesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Estimate>>('/sales/estimates', { params: filters as any, signal }),

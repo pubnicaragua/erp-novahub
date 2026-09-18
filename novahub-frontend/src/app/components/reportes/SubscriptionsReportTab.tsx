@@ -13,6 +13,16 @@ import type { ReportExportRef, ReportProps } from './types';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
+function hexToRgb(hex: string): [number, number, number] {
+  const normalized = String(hex || '').trim().replace(/^#/, '');
+  const expanded = normalized.length === 3
+    ? normalized.split('').map((value) => `${value}${value}`).join('')
+    : normalized;
+  const value = Number.parseInt(expanded, 16);
+  if (!Number.isFinite(value) || expanded.length !== 6) return [16, 185, 129];
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
 function toDate(value: unknown): Date | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(String(value));
