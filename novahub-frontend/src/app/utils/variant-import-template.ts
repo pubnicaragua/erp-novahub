@@ -92,11 +92,15 @@ const configurePurchaseOrderInventorySheet = (
     const taxRate = XLSX.utils.encode_col(taxRateColumn) + rowNumber;
     const taxAmount = XLSX.utils.encode_col(taxAmountColumn) + rowNumber;
 
-    // La base escrita por el usuario tiene prioridad. Si queda vacía, se usa
-    // cantidad por costo, que es la misma base aplicada en la previsualización.
+    // La base imponible se calcula automáticamente como cantidad por costo
+    // unitario, igual que en la previsualización de la orden.
+    sheet[taxBase] = {
+      t: 'n',
+      f: `IF(OR(${quantity}="",${unitCost}=""),"",ROUND(${quantity}*${unitCost},2))`,
+    };
     sheet[taxAmount] = {
       t: 'n',
-      f: `IF(OR(${taxRate}="",AND(${taxBase}="",OR(${quantity}="",${unitCost}=""))),"",ROUND(IF(${taxBase}<>"",${taxBase},${quantity}*${unitCost})*${taxRate}/100,2))`,
+      f: `IF(OR(${taxRate}="",${taxBase}=""),"",ROUND(${taxBase}*${taxRate}/100,2))`,
     };
   }
 
@@ -312,7 +316,7 @@ export const createCanonicalVariantImportWorkbook = (
   if (mode === 'PURCHASE_ORDER') {
     guideRows.push(
       ['Orden actual', `Proveedor: ${options.context?.supplierName || 'el proveedor seleccionado'} · Bodega destino: ${options.context?.purchaseWarehouseName || 'la bodega de la orden'} · Tipo: ${options.context?.purchaseType || 'INVENTARIO'}.`],
-      ['Cantidad, costo e impuestos', 'En una Orden de compra, Cantidad y Costo unitario de compra son los valores de la línea. Al digitar IVA % en Inventario, Monto IVA se calcula automáticamente: usa Base IVA si la escribes; si queda vacía, usa Cantidad × Costo unitario de compra. La previsualización vuelve a calcularlo y valida el resultado. Retención, Base ret., Ret. % y Monto ret. siguen siendo compatibles. Usa 0 en Retención cuando no aplique. Los archivos antiguos con Stock inicial, Costo entrada o Precio unitario siguen siendo compatibles.'],
+      ['Cantidad, costo e impuestos', 'En una Orden de compra, Cantidad y Costo unitario de compra son los valores de la línea. En la hoja Inventario, Base IVA se calcula automáticamente como Cantidad × Costo unitario de compra y Monto IVA se calcula como Base IVA × IVA %. La previsualización vuelve a calcularlos y valida el resultado. Retención, Base ret., Ret. % y Monto ret. siguen siendo compatibles. Usa 0 en Retención cuando no aplique. Los archivos antiguos con Stock inicial, Costo entrada o Precio unitario siguen siendo compatibles.'],
       ['Tipos de precio para Caja', `Para el producto padre, completa únicamente las columnas Precio ${priceLists.map((list) => list.name).join(', Precio ')} de la hoja Productos. Un producto sin variantes usará esos precios directamente. En productos con variantes, una variante sin precio propio en Precios heredará el del padre; para sobrescribirlo, usa la hoja Precios con Alcance VARIANTE + Código producto + SKU variante. Se conservarán en ${currency} con su tasa ${exchangeRate}.`],
       ['Catálogo nuevo', 'Los productos padre, variantes y atributos faltantes quedan pendientes en la orden. No se crean en Inventario al importar ni al guardar la orden; se materializan únicamente cuando la recepción ingresa la cantidad.'],
     );

@@ -213,6 +213,8 @@ const DARK_TOOLTIP = {
   padding: '10px 12px',
 } as const;
 
+const SALES_CATEGORY_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'] as const;
+
 export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, displayMode, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, formatExplicitAmount, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
@@ -1142,17 +1144,26 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
                       nameKey="name"
                     >
                       {catComposition.data.map((_, idx) => (
-                        <Cell key={idx} fill={['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'][idx % 6]} />
+                        <Cell key={idx} fill={SALES_CATEGORY_COLORS[idx % SALES_CATEGORY_COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={DARK_TOOLTIP}
+                      contentStyle={{ ...DARK_TOOLTIP, backgroundColor: '#0c0e14' }}
+                      labelStyle={{ color: '#f4f4f5', fontWeight: 700 }}
+                      itemStyle={{ color: '#f4f4f5' }}
                       formatter={(v: number, name: string, item: any) => {
                         const raw = item?.payload as any;
                         const pct = catComposition.total > 0 ? ((Number(v) / catComposition.total) * 100).toFixed(1) : '0.0';
+                        const categoryIndex = catComposition.data.findIndex((category) => category.name === String(name));
+                        const categoryColor = item?.color || SALES_CATEGORY_COLORS[Math.max(0, categoryIndex) % SALES_CATEGORY_COLORS.length];
+                        const unitsValue = Number(raw?.unidades);
+                        const units = Number.isFinite(unitsValue) ? Math.round(unitsValue).toLocaleString('es-NI') : '0';
                         return [
-                          <span key="v">{formatConvertedAmount(Number(v), 'NIO')} · Participación: {pct}%<br />Unidades: {raw?.unidades ?? 0} · Productos: {raw?.productos ?? 0}</span>,
-                          String(name)
+                          <span key="v" style={{ color: '#f4f4f5' }}>
+                            {formatConvertedAmount(Number(v), 'NIO')} · Participación: {pct}%<br />
+                            <span style={{ color: categoryColor }}>Unidades: {units} · Productos: {raw?.productos ?? 0}</span>
+                          </span>,
+                          <span key="name" style={{ color: '#f4f4f5', fontWeight: 700 }}>{String(name)}</span>
                         ];
                       }}
                       cursor={{ fill: 'rgba(255,255,255,0.04)' }}

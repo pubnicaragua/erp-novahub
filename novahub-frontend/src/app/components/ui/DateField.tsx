@@ -42,7 +42,7 @@ export function DateField({ value, onChange, placeholder = 'Seleccione fecha', c
           <span className="truncate">{display || placeholder}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align={align} sideOffset={4} className="w-auto p-0">
+      <PopoverContent align={align} sideOffset={4} className="w-auto p-0 max-w-[calc(100vw-32px)]">
         <Calendar
           mode="single"
           locale={es}
