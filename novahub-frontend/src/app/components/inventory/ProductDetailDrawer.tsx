@@ -62,6 +62,7 @@ import {
 import { inventoryService } from '../../services/inventario.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { resolveInventoryValuation } from '../../utils/inventory-valuation';
 import { ProductThumbnail } from '../ui/ProductImage';
 import { toast } from 'sonner';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
@@ -237,20 +238,6 @@ export function ProductDetailDrawer({
   const [expandedImageOpen, setExpandedImageOpen] = useState(false);
   const [levelDrafts, setLevelDrafts] = useState<Record<string, { minStock: string; maxStock: string }>>({});
   const [savingLevelId, setSavingLevelId] = useState<string | null>(null);
-  const [catalogAttrs, setCatalogAttrs] = useState<any[]>([]);
-
-  // Cargar catálogo de atributos para resolver nombres
-  useEffect(() => {
-    if (!productId) return;
-    const controller = new AbortController();
-    inventoryService.getAttributes(controller.signal)
-      .then((res) => {
-        const data = (res as any)?.data || res || [];
-        setCatalogAttrs(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [productId]);
 
   // Sincroniza los borradores de min/max cuando cambia el detalle del producto
   useEffect(() => {
@@ -391,7 +378,7 @@ export function ProductDetailDrawer({
   const itemLabelCap = isService ? 'Servicio' : 'Producto';
   const canViewInventoryCost = canPerform(isService ? 'INVENTORY_SERVICES' : 'INVENTORY_PRODUCTS', 'viewCost');
 
-  const costPrice = Number(product?.costPrice ?? product?.cost ?? 0);
+  const baseCostPrice = Number(product?.costPrice ?? product?.cost ?? 0);
   const servicePrice = (() => {
     const sourceCurrency = String(product?.priceCurrency || baseCurrency).toUpperCase();
     const originalAmount = Number(product?.salePriceOriginal);
@@ -408,7 +395,9 @@ export function ProductDetailDrawer({
       )
     : null;
   const totalStock = stockFromLevels ?? Number(product?.stock ?? 0);
-  const stockValue = totalStock * costPrice;
+  const inventoryValuation = resolveInventoryValuation(product);
+  const inventoryCostPrice = inventoryValuation.costPrice;
+  const stockValue = inventoryValuation.stockValue || totalStock * inventoryCostPrice;
 
   const statusInfo = getStatusBadge(product?.status);
 
@@ -499,12 +488,55 @@ export function ProductDetailDrawer({
         // El costo propio de la variante reemplaza al costo base. Cuando no
         // existe, se muestra el costo heredado más el modificador legado.
         costPrice: variant?.costPrice === null || variant?.costPrice === undefined
-          ? Math.max(0, costPrice + Number(variant?.costModifier || 0))
+          ? Math.max(0, baseCostPrice + Number(variant?.costModifier || 0))
           : Number(variant.costPrice),
         inheritsCost: variant?.costPrice === null || variant?.costPrice === undefined,
       };
     });
-  }, [product, costPrice]);
+  }, [product, baseCostPrice]);
+
+  // Las importaciones recibidas pueden guardar los atributos únicamente en
+  // cada variante. En ese caso los agrupamos para que el detalle del padre
+  // siga mostrando sus atributos y opciones disponibles.
+  const linkedAttributeSummary = useMemo(() => {
+    const groups = new Map<string, { attributeId?: string; name: string; selectedOptions: string[] }>();
+    const add = (rawName: unknown, rawId: unknown, rawOptions: unknown[]) => {
+      const name = String(rawName || rawId || '').trim();
+      if (!name) return;
+      const attributeId = String(rawId || '').trim() || undefined;
+      const key = String(attributeId || name).trim().toLowerCase();
+      const current = groups.get(key) || { attributeId, name, selectedOptions: [] };
+      rawOptions.map((option) => String(option || '').trim()).filter(Boolean).forEach((option) => {
+        if (!current.selectedOptions.some((existing) => existing.toLowerCase() === option.toLowerCase())) {
+          current.selectedOptions.push(option);
+        }
+      });
+      groups.set(key, current);
+    };
+
+    const directAttributes = Array.isArray(product?.linkedAttributes)
+      ? product.linkedAttributes
+      : Array.isArray(product?.attributes) ? product.attributes : [];
+    directAttributes.forEach((attribute: any) => add(
+      attribute?.name || attribute?.attributeName,
+      attribute?.attributeId,
+      Array.isArray(attribute?.selectedOptions)
+        ? attribute.selectedOptions
+        : Array.isArray(attribute?.options)
+          ? attribute.options
+          : attribute?.value ? [attribute.value] : [],
+    ));
+
+    (Array.isArray(product?.variants) ? product.variants : []).forEach((variant: any) => {
+      (Array.isArray(variant?.attributes) ? variant.attributes : []).forEach((attribute: any) => add(
+        attribute?.attributeName || attribute?.name || attribute?.attributeId,
+        attribute?.attributeId,
+        attribute?.value ? [attribute.value] : [],
+      ));
+    });
+
+    return [...groups.values()];
+  }, [product]);
 
   const totalVariantStock = useMemo(
     () => variantStockDistribution.reduce((total, variant) => total + variant.quantity, 0),
@@ -711,7 +743,7 @@ export function ProductDetailDrawer({
                      {!isService && canViewInventoryCost && (
                       <MetricCard
                         label="Valor stock"
-                        value={<CurrencyValuationAmount amount={stockValue} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
+                        value={<CurrencyValuationAmount amount={stockValue} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
                         icon={DollarSign}
                         accent="text-success"
                         loading={loading && !productSnapshot}
@@ -728,7 +760,7 @@ export function ProductDetailDrawer({
                      ) : canViewInventoryCost ? (
                       <MetricCard
                         label="Precio costo"
-                        value={<CurrencyValuationAmount amount={costPrice} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
+                        value={<CurrencyValuationAmount amount={inventoryCostPrice} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
                         icon={TrendingDown}
                         accent="text-destructive"
                         loading={loading && !productSnapshot}
@@ -807,7 +839,7 @@ export function ProductDetailDrawer({
                   </Card>
 
                   {/* Atributos vinculados */}
-                  {!isService && ((product?.linkedAttributes && Array.isArray(product.linkedAttributes) && product.linkedAttributes.length > 0) || (product?.attributes && Array.isArray(product.attributes) && product.attributes.length > 0)) && (
+                  {!isService && (linkedAttributeSummary.length > 0 || variantStockDistribution.length > 0) && (
                     <Card className="border-border/50">
                       <div className="p-4">
                         <div className="flex items-center gap-2 mb-3">
@@ -815,28 +847,20 @@ export function ProductDetailDrawer({
                           <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Atributos vinculados</p>
                         </div>
                         <div className="space-y-2">
-                          {(() => {
-                            const attrList = product.linkedAttributes || product.attributes || [];
-                            return attrList.map((linked: any, idx: number) => {
-                              const catalogAttr = catalogAttrs.find((a: any) => a.id === linked.attributeId);
-                              const name = linked.name || catalogAttr?.name || 'Atributo';
-                              const options = linked.selectedOptions || linked.options || [];
-                              return (
-                                <div key={idx} className="rounded-lg border border-border/50 bg-muted/20 p-2.5">
-                                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary">{name}</p>
-                                  {options.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1.5">
-                                      {options.map((opt: string, i: number) => (
-                                        <Badge key={i} variant="secondary" className="text-[9px]">
-                                          {opt}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
+                          {linkedAttributeSummary.map((linked: any, idx: number) => (
+                            <div key={linked.attributeId || idx} className="rounded-lg border border-border/50 bg-muted/20 p-2.5">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-primary">{linked.name}</p>
+                              {linked.selectedOptions.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {linked.selectedOptions.map((opt: string) => (
+                                    <Badge key={`${linked.name}-${opt}`} variant="secondary" className="text-[9px]">
+                                      {opt}
+                                    </Badge>
+                                  ))}
                                 </div>
-                              );
-                            });
-                          })()}
+                              )}
+                            </div>
+                          ))}
                         </div>
                         {variantStockDistribution.length > 0 && (
                           <div className="mt-4 border-t border-border/40 pt-4">
