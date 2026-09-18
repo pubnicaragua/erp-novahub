@@ -277,8 +277,34 @@ export function InvoiceAuditView() {
                 <SelectItem value="ISSUES" className="text-xs">Con anomalías</SelectItem>
               </SelectContent>
             </Select>
-            <DateField value={dateFrom} onChange={(v) => { setDateFrom(v); setPage(1); }} placeholder="Desde" className="w-36" />
-            <DateField value={dateTo} onChange={(v) => { setDateTo(v); setPage(1); }} placeholder="Hasta" className="w-36" />
+            <DateField
+              value={dateFrom}
+              onChange={(v) => {
+                if (dateTo && v && v > dateTo) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  setDateTo(v);
+                }
+                setDateFrom(v);
+                setPage(1);
+              }}
+              maxDate={dateTo || undefined}
+              placeholder="Desde"
+              className="w-36"
+            />
+            <DateField
+              value={dateTo}
+              onChange={(v) => {
+                if (dateFrom && v && v < dateFrom) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  return;
+                }
+                setDateTo(v);
+                setPage(1);
+              }}
+              minDate={dateFrom || undefined}
+              placeholder="Hasta"
+              className="w-36"
+            />
             <Button variant="outline" size="icon" className="size-9 rounded-xl" onClick={() => { refreshAll(); listQuery.refetch(); }} title="Actualizar">
               <RefreshCw className={cn('size-4', listQuery.isFetching && 'animate-spin')} />
             </Button>

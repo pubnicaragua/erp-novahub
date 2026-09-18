@@ -363,11 +363,35 @@ export function FlujoEfectivoView() {
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde" className="sm:w-[180px]" />
+            <DateField
+              value={dateFrom}
+              onChange={(val) => {
+                if (dateTo && val && val > dateTo) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  setDateTo(val);
+                }
+                setDateFrom(val);
+              }}
+              maxDate={dateTo || undefined}
+              placeholder="Desde"
+              className="sm:w-[180px]"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <DateField value={dateTo} onChange={setDateTo} placeholder="Hasta" className="sm:w-[180px]" />
+            <DateField
+              value={dateTo}
+              onChange={(val) => {
+                if (dateFrom && val && val < dateFrom) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  return;
+                }
+                setDateTo(val);
+              }}
+              minDate={dateFrom || undefined}
+              placeholder="Hasta"
+              className="sm:w-[180px]"
+            />
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => {

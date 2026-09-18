@@ -238,11 +238,35 @@ export function LibroMayorView() {
           </div>
           <div className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desde</label>
-            <DateField value={filterDateFrom} onChange={setFilterDateFrom} placeholder="Fecha inicial" className="w-full" />
+            <DateField
+              value={filterDateFrom}
+              onChange={(val) => {
+                if (filterDateTo && val && val > filterDateTo) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  setFilterDateTo(val);
+                }
+                setFilterDateFrom(val);
+              }}
+              maxDate={filterDateTo || undefined}
+              placeholder="Fecha inicial"
+              className="w-full"
+            />
           </div>
           <div className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Hasta</label>
-            <DateField value={filterDateTo} onChange={setFilterDateTo} placeholder="Fecha final" className="w-full" />
+            <DateField
+              value={filterDateTo}
+              onChange={(val) => {
+                if (filterDateFrom && val && val < filterDateFrom) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  return;
+                }
+                setFilterDateTo(val);
+              }}
+              minDate={filterDateFrom || undefined}
+              placeholder="Fecha final"
+              className="w-full"
+            />
           </div>
         </div>
 
