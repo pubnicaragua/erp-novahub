@@ -6,7 +6,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { toast } from 'sonner';
 import { cajaService, type DashboardData } from '../../services/caja.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -92,18 +92,22 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
           </h2>
         </div>
         <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 sm:gap-2 lg:w-auto">
-          <Input 
-            type="date" 
-            value={startDate} 
-            onChange={(e) => setStartDate(e.target.value)} 
+          <DateField
+            value={startDate}
+            onChange={setStartDate}
+            maxDate={endDate || undefined}
             className="h-9 w-full min-w-0 rounded-xl px-2 text-xs sm:h-10 sm:px-3 sm:text-sm lg:w-40"
+            placeholder="Fecha desde"
+            title="Fecha desde"
           />
           <span className="text-muted-foreground text-xs font-bold sm:text-sm">hasta</span>
-          <Input 
-            type="date" 
-            value={endDate} 
-            onChange={(e) => setEndDate(e.target.value)} 
+          <DateField
+            value={endDate}
+            onChange={setEndDate}
+            minDate={startDate || undefined}
             className="h-9 w-full min-w-0 rounded-xl px-2 text-xs sm:h-10 sm:px-3 sm:text-sm lg:w-40"
+            placeholder="Fecha hasta"
+            title="Fecha hasta"
           />
         </div>
       </div>

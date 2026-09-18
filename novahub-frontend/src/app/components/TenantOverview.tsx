@@ -21,7 +21,7 @@ import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
-import { Input } from './ui/input';
+import { DateField } from './ui/DateField';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../utils/pdfGenerator';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../utils/currency';
@@ -615,17 +615,23 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
           </Select>
           {period === 'custom' && (
             <div className="flex items-center gap-2">
-              <label className="relative block">
-                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                  aria-label="Fecha desde" className="h-9 w-[170px] rounded-xl border border-border/60 bg-card px-3 pr-10 text-xs font-bold text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 [&::-webkit-calendar-picker-indicator]:opacity-0" />
-                <CalendarDays className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-primary" />
-              </label>
+              <DateField
+                value={dateFrom}
+                onChange={setDateFrom}
+                maxDate={dateTo || undefined}
+                className="h-9 w-[170px] rounded-xl text-xs font-bold"
+                placeholder="Fecha desde"
+                title="Fecha desde"
+              />
               <span className="text-[10px] font-bold text-foreground/70">a</span>
-              <label className="relative block">
-                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                  aria-label="Fecha hasta" className="h-9 w-[170px] rounded-xl border border-border/60 bg-card px-3 pr-10 text-xs font-bold text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 [&::-webkit-calendar-picker-indicator]:opacity-0" />
-                <CalendarDays className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-primary" />
-              </label>
+              <DateField
+                value={dateTo}
+                onChange={setDateTo}
+                minDate={dateFrom || undefined}
+                className="h-9 w-[170px] rounded-xl text-xs font-bold"
+                placeholder="Fecha hasta"
+                title="Fecha hasta"
+              />
             </div>
           )}
           <Button

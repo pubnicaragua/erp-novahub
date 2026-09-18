@@ -44,6 +44,7 @@ import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
+import { DateField } from './ui/DateField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { toast } from 'sonner';
 import { BLOCKS, changeLabel, chartRows, dashboardRange, DEFAULT_PREFERENCES, INDICATORS, normalizePreferences, type DashboardBlock, type DashboardPeriod, type DashboardPreferences, type IndicatorDefinition } from './dashboard/executive-model';
@@ -441,7 +442,25 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         </div>
       </header>
 
-      {period === 'custom' && <div className="executive-date-row"><Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} aria-label="Fecha inicial" /><span>hasta</span><Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="Fecha final" /></div>}
+      {period === 'custom' && <div className="executive-date-row">
+        <DateField
+          value={dateFrom}
+          onChange={setDateFrom}
+          maxDate={dateTo || undefined}
+          className="h-9 w-[160px] rounded-[10px]"
+          placeholder="Fecha inicial"
+          title="Fecha inicial"
+        />
+        <span>hasta</span>
+        <DateField
+          value={dateTo}
+          onChange={setDateTo}
+          minDate={dateFrom || undefined}
+          className="h-9 w-[160px] rounded-[10px]"
+          placeholder="Fecha final"
+          title="Fecha final"
+        />
+      </div>}
       <div className="executive-meta-row"><span>Período: <strong>{rangeLabel}</strong></span><span className="executive-meta-separator">•</span><span>{data?.generatedAt ? `Actualizado ${new Date(data.generatedAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' })}` : 'Actualización automática'}</span><span className="executive-meta-spacer" /><span className="executive-live-dot" /> Datos del tenant actual</div>
       <CurrencyValuationBanner className="mb-5" compact />
 

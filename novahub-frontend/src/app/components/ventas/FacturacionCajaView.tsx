@@ -110,7 +110,6 @@ interface PosDraftStorage {
   deliveryAmount: number;
   includeTax: boolean;
   pricingMode: PricingMode;
-  productSearch: string;
   catalogItemFilter: CatalogItemFilter;
   cart: CartItem[];
   sessions: Record<string, CartSession>;
@@ -155,7 +154,6 @@ function readPosDraft(storageKey: string): PosDraftStorage | null {
       deliveryAmount: Number(parsed.deliveryAmount || 0),
       includeTax: parsed.includeTax !== false,
       pricingMode: parsed.pricingMode === 'individual' ? 'individual' : 'global',
-      productSearch: typeof parsed.productSearch === 'string' ? parsed.productSearch : '',
       catalogItemFilter: parsed.catalogItemFilter === 'PRODUCT' || parsed.catalogItemFilter === 'SERVICE' ? parsed.catalogItemFilter : 'ALL',
       cart: parsed.cart as CartItem[],
       sessions: parsed.sessions && typeof parsed.sessions === 'object' ? parsed.sessions as Record<string, CartSession> : {},
@@ -1102,7 +1100,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           setDeliveryAmount(draft.deliveryAmount);
           setIncludeTax(draft.includeTax);
           setPricingMode(draft.pricingMode);
-          setProductSearch(draft.productSearch);
           setCatalogItemFilter(draft.catalogItemFilter);
         }
         posDraftHydratedRef.current = true;
@@ -1166,7 +1163,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       deliveryAmount,
       includeTax,
       pricingMode,
-      productSearch,
       catalogItemFilter,
       cart,
       sessions: Object.fromEntries(cartSessions.current.entries()),

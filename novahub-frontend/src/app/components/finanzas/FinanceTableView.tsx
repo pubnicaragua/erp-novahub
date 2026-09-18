@@ -3,6 +3,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
 import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
@@ -46,6 +47,8 @@ interface Column {
 interface FinanceTableViewProps {
   data: any[];
   columns: Column[];
+  globalDateRange?: { start: string; end: string };
+  onClearGlobalDateRange?: () => void;
   exportColumns?: Column[];
   exportSummary?: (rows: any[]) => { label: string; value: unknown; columnIndex?: number } | undefined;
   onUpdate: (id: string, updates: any) => Promise<void>;
@@ -66,6 +69,8 @@ interface FinanceTableViewProps {
 export function FinanceTableView({
   data,
   columns,
+  globalDateRange,
+  onClearGlobalDateRange,
   exportColumns,
   exportSummary,
   onUpdate,
@@ -91,13 +96,22 @@ export function FinanceTableView({
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [dateRange, setDateRange] = useState(() => ({
+    start: globalDateRange?.start || '',
+    end: globalDateRange?.end || '',
+  }));
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryTargetItem, setCategoryTargetItem] = useState<{ id: string; key: string } | null>(null);
   const [detailItem, setDetailItem] = useState<any | null>(null);
+
+  const clearTableFilters = () => {
+    setCategoryFilter('');
+    setDateRange({ start: '', end: '' });
+    if (globalDateRange?.start || globalDateRange?.end) onClearGlobalDateRange?.();
+  };
 
   // Edit Modal State (Mobile/Alternative Desktop)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -566,15 +580,29 @@ export function FinanceTableView({
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fecha Inicio</label>
-            <Input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({ ...p, start: e.target.value }))} className="h-8 max-w-[150px]" />
+            <DateField
+              value={dateRange.start}
+              onChange={(value) => setDateRange(p => ({ ...p, start: value }))}
+              maxDate={dateRange.end || undefined}
+              className="h-9 max-w-[150px]"
+              placeholder="Fecha inicio"
+              title="Fecha inicio"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fecha Fin</label>
-            <Input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({ ...p, end: e.target.value }))} className="h-8 max-w-[150px]" />
+            <DateField
+              value={dateRange.end}
+              onChange={(value) => setDateRange(p => ({ ...p, end: value }))}
+              minDate={dateRange.start || undefined}
+              className="h-9 max-w-[150px]"
+              placeholder="Fecha fin"
+              title="Fecha fin"
+            />
           </div>
           {(categoryFilter || dateRange.start || dateRange.end) && (
             <div className="flex items-end">
-              <button onClick={() => { setCategoryFilter(''); setDateRange({ start: '', end: '' }); }} className="h-8 px-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"><X className="size-3" /> Limpiar</button>
+              <button onClick={clearTableFilters} className="h-8 px-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"><X className="size-3" /> Limpiar</button>
             </div>
           )}
         </div>

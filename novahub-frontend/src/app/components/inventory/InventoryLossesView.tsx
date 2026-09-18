@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { TrendingDown, PackageX, BookOpenCheck, ExternalLink, Eye, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { Button } from '../ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { toast } from 'sonner';
@@ -101,8 +101,22 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
         </div>
         <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="inventory-losses-actions">
           <InventoryViewTutorial label="Cómo consultar pérdidas" targetPrefix="inventory-losses" copy={{ data: { description: 'Filtra las pérdidas por período y revisa el valor, cantidad, razón, bodega y cuenta contable.' }, actions: { description: 'Usa los filtros para revisar el historial de mermas y su vínculo contable.' } }} />
-          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-9 w-full text-[10px] sm:w-36" aria-label="Desde" />
-          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-9 w-full text-[10px] sm:w-36" aria-label="Hasta" />
+          <DateField
+            value={dateFrom}
+            onChange={(value) => { setDateFrom(value); setPage(1); }}
+            maxDate={dateTo || undefined}
+            className="h-9 w-full text-[10px] sm:w-36"
+            placeholder="Desde"
+            title="Desde"
+          />
+          <DateField
+            value={dateTo}
+            onChange={(value) => { setDateTo(value); setPage(1); }}
+            minDate={dateFrom || undefined}
+            className="h-9 w-full text-[10px] sm:w-36"
+            placeholder="Hasta"
+            title="Hasta"
+          />
           <Button variant="outline" size="sm" className="h-9 w-full text-[10px] font-bold sm:w-auto" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }}>
             Limpiar
           </Button>
