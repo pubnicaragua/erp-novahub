@@ -24,6 +24,7 @@ function enhanceNativeTables(scope?: Iterable<HTMLTableElement>) {
     const labels = headerRow
       ? Array.from(headerRow.cells).map((cell) => normalizeLabel(cell.textContent))
       : [];
+    const isPlatformQuoteHistory = labels.slice(0, 7).join('|') === 'Cotización|Prospecto|Vigencia|Descuento|Total|Estado|Acciones';
 
     Array.from(table.tBodies).forEach((body) => {
       Array.from(body.rows).forEach((row) => {
@@ -36,6 +37,7 @@ function enhanceNativeTables(scope?: Iterable<HTMLTableElement>) {
     });
 
     table.dataset.responsiveCards = 'true';
+    if (isPlatformQuoteHistory) table.dataset.platformQuoteHistory = 'true';
     table.parentElement?.setAttribute('data-responsive-cards-container', 'true');
   });
 }

@@ -2523,6 +2523,55 @@ th .column-filter-menu .column-filter-icon,
   }
 }
 
+/* Historial de cotizaciones: cada dato secundario debe permanecer junto a su
+   valor, y los importes deben compartir una fila en teléfonos pequeños. */
+@media (max-width: 1279px) {
+  table[data-platform-quote-history="true"] > tbody > tr > td > p,
+  table[data-platform-quote-history="true"] > tbody > tr > td > div {
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  table[data-platform-quote-history="true"] > tbody > tr > td > p + p {
+    margin-top: 0.2rem;
+  }
+
+  table[data-platform-quote-history="true"] > tbody > tr > td:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 639px) {
+  table[data-platform-quote-history="true"] > tbody > tr {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  table[data-platform-quote-history="true"] > tbody {
+    gap: 1rem;
+    padding: 0.75rem 0.5rem;
+  }
+
+  table[data-platform-quote-history="true"] > tbody > tr {
+    border-color: hsl(var(--border) / 0.8) !important;
+    background: hsl(var(--background)) !important;
+    box-shadow: 0 6px 18px hsl(var(--foreground) / 0.06);
+  }
+
+  table[data-platform-quote-history="true"] > tbody > tr > td::before {
+    text-align: left !important;
+  }
+
+  table[data-platform-quote-history="true"] > tbody > tr > td:nth-child(1),
+  table[data-platform-quote-history="true"] > tbody > tr > td:nth-child(2),
+  table[data-platform-quote-history="true"] > tbody > tr > td:nth-child(3),
+  table[data-platform-quote-history="true"] > tbody > tr > td:nth-child(4),
+  table[data-platform-quote-history="true"] > tbody > tr > td:nth-child(5),
+  table[data-platform-quote-history="true"] > tbody > tr > td:nth-child(6),
+  table[data-platform-quote-history="true"] > tbody > tr > td:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
 /* NovaHub overlay language. Dialog, AlertDialog, Sheet and Drawer expose
    these hooks from their shared primitives so every module gets the same
    backdrop, focus surface and responsive action rhythm while retaining the
