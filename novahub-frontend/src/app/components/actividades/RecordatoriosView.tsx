@@ -46,6 +46,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     title: '',
     description: '',
     reminderDate: '',
+    advanceMinutes: '0',
     scope: 'PERSONAL',
     selectedUsers: [] as string[],
     selectedDept: ''
@@ -99,17 +100,23 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         targetId = 'ALL'; // GLOBAL
       }
 
+      let finalReminderDate = formData.reminderDate ? new Date(formData.reminderDate) : new Date();
+      const advance = parseInt(formData.advanceMinutes, 10) || 0;
+      if (advance > 0) {
+        finalReminderDate = new Date(finalReminderDate.getTime() - advance * 60000);
+      }
+
       await remindersService.create({ 
         title: formData.title, 
         description: formData.description,
-        reminderDate: formData.reminderDate ? new Date(formData.reminderDate).toISOString() : new Date().toISOString(), 
+        reminderDate: finalReminderDate.toISOString(), 
         status: 'PENDING', 
         scope: formData.scope,
         targetId
       });
       toast.success('Recordatorio programado'); 
       setIsAddOpen(false);
-      setFormData({ title: '', description: '', reminderDate: '', scope: 'PERSONAL', selectedUsers: [], selectedDept: '' });
+      setFormData({ title: '', description: '', reminderDate: '', advanceMinutes: '0', scope: 'PERSONAL', selectedUsers: [], selectedDept: '' });
       onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear recordatorio'); }
   };
@@ -189,10 +196,19 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
               <Label className="text-xs font-bold">Título o asunto</Label>
               <Input placeholder="Ej. Reunión de equipo" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="h-11 rounded-xl bg-background" />
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label className="text-xs font-bold">Fecha y hora</Label>
+                <Label className="text-xs font-bold">Fecha y hora del evento</Label>
                 <Input type="datetime-local" value={formData.reminderDate} onChange={e => setFormData({...formData, reminderDate: e.target.value})} className="h-11 rounded-xl bg-background" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold">Anticipación de alerta</Label>
+                <select className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" value={formData.advanceMinutes} onChange={e => setFormData({...formData, advanceMinutes: e.target.value})}>
+                  <option value="0">En el momento exacto</option>
+                  <option value="15">15 minutos antes</option>
+                  <option value="30">30 minutos antes</option>
+                  <option value="60">1 hora antes</option>
+                </select>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Alcance</Label>
