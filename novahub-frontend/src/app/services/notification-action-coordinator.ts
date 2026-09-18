@@ -27,7 +27,7 @@ const hasSonnerToast = (types: string[]): boolean => {
 };
 
 const hasLoadingSonnerToast = () => hasSonnerToast(['loading']);
-const hasCompletedActionSonnerToast = () => hasSonnerToast(['success', 'error']);
+const hasCompletedActionSonnerToast = () => hasSonnerToast(['success', 'error', 'warning', 'info']);
 
 /**
  * Sonner updates its DOM asynchronously and keeps a completed toast mounted

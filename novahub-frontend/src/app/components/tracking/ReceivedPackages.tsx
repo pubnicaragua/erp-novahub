@@ -26,6 +26,8 @@ import {
 } from '../ui/sheet';
 import { getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import type { NotificationDomainRefreshDetail } from '../../services/notification-domain-refresh';
 import { authService } from '../../services/auth.service';
 import { usersService } from '../../services/users.service';
 import {
@@ -52,6 +54,7 @@ function formatWeight(value?: number, unit?: string) {
 export function ReceivedPackages() {
   const { canPerform } = useAuth();
   const canCreatePackages = canPerform('TRACKING_PACKAGES', 'create');
+  const canReadPackages = canPerform('TRACKING_PACKAGES', 'view');
   const [result, setResult] = useState<ReceivedPackageListResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -79,7 +82,7 @@ export function ReceivedPackages() {
       const [ctx, branchList, userList] = await Promise.all([
         logisticsService.getContext(),
         authService.getMyBranches(),
-        usersService.getAll({ page: 1, pageSize: 200 } as any).catch(() => [] as any),
+        usersService.getLookup(undefined).catch(() => [] as any),
       ]);
       setModes(ctx.shipmentModes);
       setWarehouses(ctx.warehouses);
@@ -97,7 +100,7 @@ export function ReceivedPackages() {
     }
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     setLoading(true);
     try {
       const data = await logisticsService.listReceivedPackages({
@@ -105,11 +108,22 @@ export function ReceivedPackages() {
       });
       setResult(data);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'No se pudieron cargar los paquetes'));
+      if (!silent) toast.error(getApiErrorMessage(error, 'No se pudieron cargar los paquetes'));
     } finally {
       setLoading(false);
     }
   }, [page, pageSize, search, sortBy, sortOrder, filters]);
+
+  const refreshPackagesFromNotification = useCallback(async (_notification: NotificationDomainRefreshDetail) => {
+    await load(true);
+  }, [load]);
+
+  useNotificationDomainRefresh({
+    module: 'tracking',
+    subModules: ['packages', 'reception', 'batches', 'reconciliation', 'billing'],
+    onRefresh: refreshPackagesFromNotification,
+    enabled: canReadPackages,
+  });
 
   useEffect(() => {
     loadMeta();

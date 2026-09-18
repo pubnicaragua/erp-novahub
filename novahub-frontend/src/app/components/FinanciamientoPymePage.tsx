@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { financingService, type FinancingApplication, type PrefillData } from '../services/financing.service';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
+import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 
 const PURPOSES = [
   { value: 'capital_trabajo', label: 'Capital de trabajo' },
@@ -134,6 +135,12 @@ export function FinanciamientoPymePage({ activeSubModule, onSubModuleChange }: F
     };
     if (canPerform('FINANCING_APPLICATIONS', 'view')) load();
   }, [canPerform]);
+
+  useNotificationDomainRefresh({
+    module: 'financiamiento-pyme',
+    subModules: ['solicitudes'],
+    onRefresh: fetchApplications,
+  });
 
   const handleTabChange = (value: string) => {
     const next = FINANCING_TABS.find((tab) => tab.id === value);

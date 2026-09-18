@@ -33,6 +33,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -331,6 +332,7 @@ export function DiarioView() {
 
   async function handleImportAsientos() {
     if (validImportCount === 0) { toast.error('No hay filas válidas para importar'); return; }
+    const actionToken = beginNotificationAction();
     setImporting(true);
     setOperationProgress(10);
     try {
@@ -346,6 +348,7 @@ export function DiarioView() {
       const res = await contabilidadService.importCsv({ type: 'transactions', rows });
       setOperationProgress(90);
       toast.success(`Importación completada: ${res?.imported ?? validImportCount} asientos`);
+      completeNotificationAction(actionToken);
       loadJournals();
       setImportOpen(false);
       setRawImportRows([]);
@@ -353,6 +356,7 @@ export function DiarioView() {
       setOperationProgress(100);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || 'Error al importar asientos');
+      failNotificationAction(actionToken);
     } finally {
       setImporting(false);
       setOperationProgress(0);
@@ -378,22 +382,28 @@ export function DiarioView() {
   const refTypeOptions = REFERENCE_TYPES.map((r) => ({ label: r.label, value: r.value }));
 
   async function handlePost(journal: JournalEntry) {
+    const actionToken = beginNotificationAction();
     try {
       await contabilidadService.postJournal(journal.id);
       toast.success(`Asiento #${journal.number} contabilizado`);
+      completeNotificationAction(actionToken);
       loadJournals();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al contabilizar');
+      failNotificationAction(actionToken);
     }
   }
 
   async function handleVoid(journal: JournalEntry) {
+    const actionToken = beginNotificationAction();
     try {
       await contabilidadService.voidJournal(journal.id);
       toast.success(`Asiento #${journal.number} anulado`);
+      completeNotificationAction(actionToken);
       loadJournals();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
+      failNotificationAction(actionToken);
     }
   }
 

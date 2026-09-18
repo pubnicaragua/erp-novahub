@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import { useAuth } from '../../contexts/AuthContext'
-import { supplierInvoicesService } from '../../services/compras.service'
+import { sourceDocumentsService } from '../../services/finanzas.service'
 import { toast } from 'sonner'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell,
@@ -30,7 +30,7 @@ export function FinancePayablesView() {
 
   const invoicesQuery = useQuery({
     queryKey: ['finance', 'supplier-invoices', tenantKey],
-    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    queryFn: ({ signal }) => sourceDocumentsService.getLookup({ origin: 'PURCHASES', page: 1, pageSize: 200 }, signal),
     enabled: canReadPurchases,
     staleTime: 30_000,
     gcTime: 5 * 60_000,

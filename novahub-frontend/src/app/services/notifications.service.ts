@@ -3,6 +3,8 @@ import type { Notification } from '../types';
 
 export interface NotificationStreamEvent {
   type: 'notifications-invalidated';
+  audience?: 'tenant' | 'manager';
+  managerGroupId?: string;
   eventId: string;
   reason?: 'created' | 'updated' | 'deleted';
   occurredAt?: string;
@@ -21,8 +23,9 @@ export async function consumeNotificationEvents(
   signal: AbortSignal,
   onEvent: (event: NotificationStreamEvent) => void,
   onOpen?: () => void,
+  streamPath = '/notifications/events',
 ): Promise<void> {
-  const response = await fetch(getApiUrl('/notifications/events'), {
+  const response = await fetch(getApiUrl(streamPath), {
     headers: { Accept: 'text/event-stream', ...getAuthHeaders() },
     cache: 'no-store',
     signal,
@@ -147,6 +150,89 @@ function stopNotificationEventStream(): void {
   notificationStreamIdentity = '';
   notificationStreamReconnectAttempt = 0;
   notificationStreamHadConnection = false;
+}
+
+const managerNotificationStreamListeners = new Set<NotificationStreamListener>();
+let managerNotificationStreamController: AbortController | null = null;
+let managerNotificationStreamReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let managerNotificationStreamIdentity = '';
+let managerNotificationStreamReconnectAttempt = 0;
+let managerNotificationStreamHadConnection = false;
+
+/** Shares one authenticated Manager-group stream per browser session. */
+export function subscribeToManagerNotificationEvents(
+  identity: string,
+  groupId: string,
+  listener: NotificationStreamListener,
+): () => void {
+  if (!identity || !groupId) return () => undefined;
+  const streamPath = `/notifications/manager-events/${encodeURIComponent(groupId)}`;
+  if (managerNotificationStreamIdentity && managerNotificationStreamIdentity !== identity) {
+    stopManagerNotificationEventStream();
+    managerNotificationStreamListeners.clear();
+  }
+
+  managerNotificationStreamIdentity = identity;
+  managerNotificationStreamListeners.add(listener);
+  ensureManagerNotificationEventStream(identity, streamPath);
+
+  return () => {
+    managerNotificationStreamListeners.delete(listener);
+    if (managerNotificationStreamListeners.size === 0) stopManagerNotificationEventStream();
+  };
+}
+
+function ensureManagerNotificationEventStream(identity: string, streamPath: string): void {
+  if (managerNotificationStreamController || managerNotificationStreamIdentity !== identity) return;
+
+  const controller = new AbortController();
+  managerNotificationStreamController = controller;
+  void consumeNotificationEvents(
+    controller.signal,
+    (event) => {
+      if (event.audience !== 'manager') return;
+      managerNotificationStreamListeners.forEach((listener) => listener(event));
+    },
+    () => {
+      managerNotificationStreamReconnectAttempt = 0;
+      if (managerNotificationStreamHadConnection) {
+        const recoveryEvent: NotificationStreamEvent = {
+          type: 'notifications-invalidated',
+          audience: 'manager',
+          eventId: `manager-reconnected:${Date.now()}`,
+          reason: 'updated',
+        };
+        managerNotificationStreamListeners.forEach((listener) => listener(recoveryEvent));
+      }
+      managerNotificationStreamHadConnection = true;
+    },
+    streamPath,
+  ).catch(() => undefined).finally(() => {
+    if (managerNotificationStreamController !== controller || controller.signal.aborted) return;
+    managerNotificationStreamController = null;
+    scheduleManagerNotificationEventReconnect(identity, streamPath);
+  });
+}
+
+function scheduleManagerNotificationEventReconnect(identity: string, streamPath: string): void {
+  if (managerNotificationStreamListeners.size === 0 || managerNotificationStreamIdentity !== identity) return;
+  const delay = Math.min(30_000, 1_000 * (2 ** managerNotificationStreamReconnectAttempt));
+  managerNotificationStreamReconnectAttempt = Math.min(managerNotificationStreamReconnectAttempt + 1, 5);
+  if (managerNotificationStreamReconnectTimer) clearTimeout(managerNotificationStreamReconnectTimer);
+  managerNotificationStreamReconnectTimer = setTimeout(() => {
+    managerNotificationStreamReconnectTimer = null;
+    ensureManagerNotificationEventStream(identity, streamPath);
+  }, delay);
+}
+
+function stopManagerNotificationEventStream(): void {
+  if (managerNotificationStreamReconnectTimer) clearTimeout(managerNotificationStreamReconnectTimer);
+  managerNotificationStreamReconnectTimer = null;
+  managerNotificationStreamController?.abort();
+  managerNotificationStreamController = null;
+  managerNotificationStreamIdentity = '';
+  managerNotificationStreamReconnectAttempt = 0;
+  managerNotificationStreamHadConnection = false;
 }
 
 interface InboxNotificationDto {

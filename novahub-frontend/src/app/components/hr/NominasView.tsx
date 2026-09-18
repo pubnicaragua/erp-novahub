@@ -20,6 +20,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { formatDateEs } from '../../utils/dateFormat';
 import { HRViewTutorial } from './HRViewTutorial';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 
@@ -165,6 +166,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       toast.error('La fecha final debe ser posterior o igual a la inicial');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setPayrollSaveLoading(true);
       await hrService.updatePayroll(editingPayroll.id, {
@@ -173,11 +175,13 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         notes: payrollForm.notes || null,
       });
       toast.success('Nómina actualizada');
+      completeNotificationAction(actionToken);
       setEditingPayroll(null);
       onRefresh();
     } catch (error: any) {
       const message = error?.response?.data?.message || error?.message || 'Error al actualizar la nómina';
       toast.error(Array.isArray(message) ? message[0] : message);
+      failNotificationAction(actionToken);
     } finally {
       setPayrollSaveLoading(false);
     }
@@ -208,6 +212,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const handleProcessPayroll = async () => {
     if (!canPerform('HR_PAYROLL', 'approve') || hasProcessFrequencyMismatch) return;
     setProcessLoading(true);
+    const actionToken = beginNotificationAction();
     try {
       const payload: any = {
         periodStart: processPeriod.start.toISOString(),
@@ -229,6 +234,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       } else {
         toast.success(`Nómina procesada: ${createdCount} registros creados`);
       }
+      completeNotificationAction(actionToken);
       setProcessDialogOpen(false);
       onRefresh();
     } catch (error: any) {
@@ -239,29 +245,36 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       } else {
         toast.error(message);
       }
+      failNotificationAction(actionToken);
     } finally {
       setProcessLoading(false);
     }
   };
 
   const handleRequestPayment = async (id: string) => {
+    const actionToken = beginNotificationAction();
     try {
       await hrService.createPaymentRequest({ requestType: 'PAYROLL', sourceId: id });
       toast.success('Solicitud de pago enviada a Contabilidad');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estado');
+      failNotificationAction(actionToken);
     }
   };
 
   const handleDeletePayroll = async (id: string) => {
+    const actionToken = beginNotificationAction();
     try {
       setDeleteLoading(true);
       await hrService.deletePayroll(id);
       toast.success('Nómina eliminada exitosamente');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Error al eliminar nómina');
+      failNotificationAction(actionToken);
     } finally {
       setDeleteLoading(false);
       setPendingDeleteId(null);
@@ -274,14 +287,17 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       toast.info('No hay nóminas pendientes');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       await Promise.all(
         pendingPayrolls.map((p: any) => hrService.createPaymentRequest({ requestType: 'PAYROLL', sourceId: p.id }))
       );
       toast.success(`${pendingPayrolls.length} solicitudes enviadas a Contabilidad`);
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estados');
+      failNotificationAction(actionToken);
     }
   };
 

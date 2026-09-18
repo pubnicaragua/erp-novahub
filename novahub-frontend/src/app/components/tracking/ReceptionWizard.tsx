@@ -6,6 +6,7 @@ import { Input } from '../ui/input';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { getApiErrorMessage } from '../../services/api';
+import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 import { authService } from '../../services/auth.service';
 import { customersService } from '../../services/ventas.service';
 import { logisticsService, calculateBillableWeight, WAREHOUSE_STRATEGY_LABELS } from '../../services/logistics.service';
@@ -123,6 +124,7 @@ export function ReceptionWizard({ onDone, onOpenBatch }: { onDone?: (trackingCod
   const submit = async () => {
     if (!settings) return;
     setSubmitting(true);
+    const actionToken = beginNotificationAction();
     try {
       const warehouse = (ctx?.warehouses || []).find((w) => w.id === form.warehouseId);
       const payload = {
@@ -158,6 +160,7 @@ export function ReceptionWizard({ onDone, onOpenBatch }: { onDone?: (trackingCod
       }
       toast.error(getApiErrorMessage(error, 'No se pudo registrar el paquete'));
     } finally {
+      completeNotificationAction(actionToken);
       setSubmitting(false);
     }
   };
@@ -435,7 +438,7 @@ export function ReceptionWizard({ onDone, onOpenBatch }: { onDone?: (trackingCod
 function CustomerDatalist() {
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   useEffect(() => {
-    customersService.getAll({ page: 1, pageSize: 200 } as any)
+    customersService.getLookup({ page: 1, pageSize: 200 } as any)
       .then((res: any) => {
         const list = Array.isArray(res) ? res : res?.items || [];
         setCustomers(list.map((c: any) => ({ id: c.id, name: c.name })));

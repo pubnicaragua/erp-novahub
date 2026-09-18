@@ -19,6 +19,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
 import { HRCreateViewShell } from './HRCreateViewShell';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const SALARY_BASE_LABELS: Record<string, string> = {
   MONTHLY: 'Mensual',
@@ -75,7 +76,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
   });
   const loading = absenceQuery.isLoading;
   const absenceTypes = (Array.isArray(absenceQuery.data) ? absenceQuery.data : absenceQuery.data?.data || []) as AbsenceType[];
-  const fetchAbsenceTypes = () => queryClient.invalidateQueries({ queryKey: ['hr', 'absence-types'] });
+  const fetchAbsenceTypes = () => queryClient.invalidateQueries({ queryKey: ['hr', 'absence-types'], refetchType: 'active' });
 
   const colFilters = useColumnFilters();
 
@@ -147,6 +148,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       toast.error('Días máximos y tope no pueden ser negativos');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setSaving(true);
       if (editingId) {
@@ -156,23 +158,28 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
         await hrService.createAbsenceType(form);
         toast.success('Tipo de ausencia creado');
       }
+      completeNotificationAction(actionToken);
       resetForm();
       fetchAbsenceTypes();
       onRefresh?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al guardar');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
   };
 
   const toggleActive = async (at: AbsenceType) => {
+    const actionToken = beginNotificationAction();
     try {
       await hrService.updateAbsenceType(at.id, { isActive: !at.isActive });
       toast.success(at.isActive ? 'Desactivado' : 'Activado');
+      completeNotificationAction(actionToken);
       fetchAbsenceTypes();
     } catch {
       toast.error('Error al cambiar estado');
+      failNotificationAction(actionToken);
     }
   };
 

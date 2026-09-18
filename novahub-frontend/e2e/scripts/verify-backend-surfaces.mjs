@@ -21,6 +21,7 @@ const SURFACE_CLASSIFICATION = {
   'src/auth/auth.controller.ts': { category: 'infrastructure', reason: 'autenticación y sesión' },
   'src/branding/branding.controller.ts': { category: 'ui', uiModule: 'configuracion' },
   'src/caja/caja.controller.ts': { category: 'ui', uiModule: 'ventas' },
+  'src/customer-portal/customer-portal.controller.ts': { category: 'public', reason: 'portal externo de clientes' },
   'src/country-config/country-config.controller.ts': { category: 'backend-only', reason: 'catálogo de configuración regional' },
   'src/documents/documents.controller.ts': { category: 'ui', uiModule: 'documentos' },
   'src/enterprise-groups/enterprise-groups.controller.ts': { category: 'ui', uiModule: 'tenant-admin' },

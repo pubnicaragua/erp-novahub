@@ -17,6 +17,7 @@ import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
 import { HRCreateViewShell } from './HRCreateViewShell';
 import { formatDateEs } from '../../utils/dateFormat';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const TRAINING_STATUS_LABELS: Record<string, string> = {
   SCHEDULED: 'Programada',
@@ -86,9 +87,11 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
     createInFlightRef.current = true;
     setIsCreating(true);
+    const actionToken = beginNotificationAction();
     try {
       await hrService.createTraining(newTraining);
       toast.success('Capacitación creada');
+      completeNotificationAction(actionToken);
       setShowNewForm(false);
       setNewTraining({
         title: '',
@@ -105,6 +108,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear capacitación');
+      failNotificationAction(actionToken);
     } finally {
       createInFlightRef.current = false;
       setIsCreating(false);
@@ -113,12 +117,15 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
   const handleRequestPayment = async (training: any) => {
     if (!canPerform('HR_TRAINING', 'approve')) return;
+    const actionToken = beginNotificationAction();
     try {
       await hrService.createPaymentRequest({ requestType: 'TRAINING', sourceId: training.id });
       toast.success('Solicitud de pago enviada a Contabilidad');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo solicitar el pago');
+      failNotificationAction(actionToken);
     }
   };
 
@@ -129,6 +136,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
   const handleTrainingStatus = async (training: any, status: string) => {
     setChangingStatus(training.id);
+    const actionToken = beginNotificationAction();
     try {
       await hrService.updateTraining(training.id, { status });
       toast.success(
@@ -137,9 +145,11 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
             : status === 'CANCELLED' ? 'Capacitación cancelada'
               : 'Estado actualizado',
       );
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estado');
+      failNotificationAction(actionToken);
     } finally {
       setChangingStatus(null);
     }
@@ -147,12 +157,15 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
   const handleCompleteEnrollment = async (trainingId: string, employeeId: string) => {
     setCompletingEnrollment(`${trainingId}:${employeeId}`);
+    const actionToken = beginNotificationAction();
     try {
       await hrService.completeTraining(trainingId, employeeId, { status: 'COMPLETED' });
       toast.success('Empleado marcado como completado');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al marcar completado');
+      failNotificationAction(actionToken);
     } finally {
       setCompletingEnrollment(null);
     }
@@ -177,6 +190,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       return;
     }
     setEnrolling(true);
+    const actionToken = beginNotificationAction();
     try {
       if (toAdd.length > 0) {
         await Promise.all(toAdd.map((employeeId) => hrService.enrollEmployee({ employeeId, trainingId })));
@@ -185,10 +199,12 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
         toast.info('La desinscripción no está disponible en el sistema; los inscritos solo se marcan como completados.');
       }
       toast.success(`${toAdd.length} empleado(s) inscrito(s)`);
+      completeNotificationAction(actionToken);
       setEnrollingTraining(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al inscribir empleados');
+      failNotificationAction(actionToken);
     } finally {
       setEnrolling(false);
     }

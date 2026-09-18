@@ -13,6 +13,9 @@ import {
 } from '../ui/table';
 import { getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import type { NotificationDomainRefreshDetail } from '../../services/notification-domain-refresh';
+import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 import { suppliersService, purchaseOrdersService } from '../../services/compras.service';
 import {
   logisticsService,
@@ -31,7 +34,7 @@ const formatInputDate = (value?: string | Date) => (value ? format(new Date(valu
 
 export function Reconciliation() {
   const { canPerform } = useAuth();
-  const canReadReconciliation = canPerform('TRACKING_RECONCILIATION', 'read');
+  const canReadReconciliation = canPerform('TRACKING_RECONCILIATION', 'view');
   const canApproveReconciliation = canPerform('TRACKING_RECONCILIATION', 'approve');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -55,7 +58,7 @@ export function Reconciliation() {
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<ReconciliationConfirmResult | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!canReadReconciliation) return;
     try {
       setLoading(true);
@@ -63,11 +66,22 @@ export function Reconciliation() {
         page, pageSize, search: search || undefined, receptionBatchId: receptionBatchId || undefined,
       }));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'No se pudieron cargar los paquetes por conciliar'));
+      if (!silent) toast.error(getApiErrorMessage(error, 'No se pudieron cargar los paquetes por conciliar'));
     } finally {
       setLoading(false);
     }
   }, [canReadReconciliation, page, pageSize, search, receptionBatchId]);
+
+  const refreshReconciliationFromNotification = useCallback(async (_notification: NotificationDomainRefreshDetail) => {
+    await load(true);
+  }, [load]);
+
+  useNotificationDomainRefresh({
+    module: 'tracking',
+    subModules: ['reception', 'packages', 'reconciliation', 'batches', 'billing'],
+    onRefresh: refreshReconciliationFromNotification,
+    enabled: canReadReconciliation,
+  });
 
   useEffect(() => {
     const timer = setTimeout(load, 250);
@@ -78,8 +92,8 @@ export function Reconciliation() {
     (async () => {
       try {
         const [sup, ord, bch] = await Promise.all([
-          suppliersService.getAll({ page: 1, pageSize: 200 } as any),
-          purchaseOrdersService.getAll({ page: 1, pageSize: 200, status: 'APPROVED' } as any),
+          suppliersService.getLookup({ page: 1, pageSize: 200 } as any),
+          purchaseOrdersService.getLookup({ page: 1, pageSize: 200, status: 'APPROVED' } as any),
           logisticsService.listBatches({ page: 1, pageSize: 200 }),
         ]);
         const supplierList: any[] = sup?.data || (sup as any)?.items || [];
@@ -134,6 +148,7 @@ export function Reconciliation() {
   const confirm = useCallback(async () => {
     if (!canApproveReconciliation || !preview) return;
     setConfirming(true);
+    const actionToken = beginNotificationAction();
     try {
       const res = await logisticsService.reconciliationConfirm({
         supplierId: receptionBatchId ? undefined : supplierId,
@@ -155,6 +170,7 @@ export function Reconciliation() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo confirmar la conciliación'));
     } finally {
+      completeNotificationAction(actionToken);
       setConfirming(false);
     }
   }, [canApproveReconciliation, preview, supplierId, orderId, receptionBatchId, invoiceNumber, date, dueDate, notes]);

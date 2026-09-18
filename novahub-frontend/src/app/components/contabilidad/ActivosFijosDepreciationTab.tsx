@@ -16,6 +16,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchFixedAssetDetails, exportFixedAssetsExcel } from './fixedAssetsExport';
 import { toast } from 'sonner';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface AssetSummary {
   id: string;
@@ -86,11 +87,13 @@ export function ActivosFijosDepreciationTab() {
   async function handleProcess() {
     if (!canProcessDepreciation) return;
     if (!period) { toast.error('Selecciona un período'); return; }
+    const actionToken = beginNotificationAction();
     setProcessing(true);
     try {
       const res = await contabilidadService.processFixedAssetDepreciation(period, selectedIds.length > 0 ? selectedIds : undefined);
       const skipped = Array.isArray(res?.skipped) ? res.skipped : [];
       toast.success(`Depreciación procesada: ${res?.processed ?? 0} activos (${skipped.length} omitidos)`);
+      completeNotificationAction(actionToken);
       if (res?.errors?.length) {
         res.errors.slice(0, 5).forEach((e: string) => toast.error(e));
       }
@@ -101,6 +104,7 @@ export function ActivosFijosDepreciationTab() {
       setSelectedIds([]);
     } catch (err: any) {
       toast.error(err.message || 'Error al procesar depreciación');
+      failNotificationAction(actionToken);
     } finally {
       setProcessing(false);
     }

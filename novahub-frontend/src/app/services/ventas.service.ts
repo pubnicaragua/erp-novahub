@@ -5,10 +5,23 @@ import type {
   CreditNote, PaginatedResponse, ApiFilters,
 } from '../types';
 
+export interface CustomerPortalAdminAccess {
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  customerStatus: string;
+  portalEmail: string;
+  accessIsActive: boolean;
+}
+
+export type CustomerPortalAdminAccessResponse = PaginatedResponse<CustomerPortalAdminAccess>;
+
 // ---- Customers ----
 export const customersService = {
   getFormOptions: () => api.get<{ defaultCountryCode: string; countries: Array<{ code: string; name: string; phoneCode: string; taxIdLabel: string; rucLabel: string; strictIdentifiers: boolean; phoneNationalDigits?: number }> }>('/sales/customers/formats'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Customer>>('/sales/customers', { params: filters as any, signal }),
+  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<Customer, 'id' | 'code' | 'name' | 'status'>>>('/sales/customers/lookup', { params: filters as any, signal }),
+  getLookupById: (id: string, signal?: AbortSignal, purpose?: string) => api.get<Pick<Customer, 'id' | 'code' | 'name' | 'status' | 'phone'>>(`/sales/customers/lookup/${id}`, { params: purpose ? { purpose } : undefined, signal }),
   getById: (id: string) => api.get<Customer>(`/sales/customers/${id}`),
   create: (data: Partial<Customer>) => api.post<Customer>('/sales/customers', data),
   importMassive: (data: { rows: Array<Partial<Customer> & { fiscalRegime?: string; customerClass?: string; priceListCode?: string }> }) => api.post<{ total: number; created: number; skipped: number; errors: string[]; warnings: string[] }>('/sales/customers/import', data),
@@ -19,6 +32,7 @@ export const customersService = {
   savePortalAccess: (id: string, data: { email: string; password?: string; isActive?: boolean }) => api.put<any>(`/customer-portal/admin/customers/${id}/access`, data),
   setPortalAccessStatus: (id: string, isActive: boolean) => api.patch<any>(`/customer-portal/admin/customers/${id}/access/status`, { isActive }),
   resetPortalPassword: (id: string, password: string) => api.patch<any>(`/customer-portal/admin/customers/${id}/access/password`, { password }),
+  getPortalAccesses: (filters?: ApiFilters, signal?: AbortSignal) => api.get<CustomerPortalAdminAccessResponse>('/customer-portal/admin/accesses', { params: filters as any, signal }),
 };
 
 export const auditService = {
@@ -52,6 +66,8 @@ export const salesOrdersService = {
 // ---- Invoices ----
 export const invoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', { params: filters as any, signal }),
+  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/sales/invoices/lookup', { params: filters as any, signal }),
+  getLookupById: (id: string, signal?: AbortSignal) => api.get<any>(`/sales/invoices/lookup/${id}`, { signal }),
   getNextNumber: () => api.get<string>('/sales/invoices/next-number'),
   getSeriesConfiguration: () => api.get<InvoiceSeriesConfiguration>('/sales/invoice-series'),
   saveSeriesConfiguration: (data: { documentType: 'SALES_INVOICE' | 'POS_INVOICE'; prefix?: string | null; shareWithOtherType?: boolean }) =>

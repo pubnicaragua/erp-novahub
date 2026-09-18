@@ -8,6 +8,7 @@ import type {
 
 export const suppliersService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Supplier>>('/purchases/suppliers', { params: filters as any, signal }),
+  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<Supplier, 'id' | 'code' | 'name' | 'status'>>>('/purchases/lookups/suppliers', { params: filters as any, signal }),
   getById: (id: string) => api.get<Supplier>(`/purchases/suppliers/${id}`),
   create: (data: Partial<Supplier>) => api.post<Supplier>('/purchases/suppliers', data),
   importMassive: (data: { rows: Array<Partial<Supplier> & { paymentTerms?: string }> }) => api.post<{ total: number; created: number; skipped: number; errors: string[]; warnings: string[] }>('/purchases/suppliers/import', data),
@@ -19,6 +20,7 @@ export const suppliersService = {
 
 export const purchaseOrdersService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PurchaseOrder>>('/purchases/orders', { params: filters as any, signal }),
+  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Pick<PurchaseOrder, 'id' | 'number' | 'status' | 'supplierId' | 'warehouseId'>>>('/purchases/lookups/orders', { params: filters as any, signal }),
   getById: (id: string) => api.get<PurchaseOrder>(`/purchases/orders/${id}`),
   create: (data: Partial<PurchaseOrder>, idempotencyKey?: string) => api.idempotentPost<PurchaseOrder>('/purchases/orders', data, idempotencyKey),
   update: (id: string, data: Partial<PurchaseOrder>) => api.patch<PurchaseOrder>(`/purchases/orders/${id}`, data),
@@ -45,6 +47,7 @@ export const purchaseReceiptsService = {
 
 export const supplierInvoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SupplierInvoice>>('/purchases/invoices', { params: filters as any, signal }),
+  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<{ id: string; number: string; supplierId: string; supplierName: string; balance: number; status: string }>>('/purchases/lookups/invoices', { params: filters as any, signal }),
   getById: (id: string) => api.get<SupplierInvoice>(`/purchases/invoices/${id}`),
   create: (data: Partial<SupplierInvoice>) => api.post<SupplierInvoice>('/purchases/invoices', data),
   update: (id: string, data: Partial<SupplierInvoice>) => api.patch<SupplierInvoice>(`/purchases/invoices/${id}`, data),
@@ -138,6 +141,7 @@ export const purchaseRequestsService = {
   update: (id: string, data: Partial<PurchaseRequest>) => api.patch<PurchaseRequest>(`/purchases/requests/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/requests/${id}`),
   changeStatus: (id: string, status: string, reason?: string, supplierId?: string) => api.post<PurchaseRequest>(`/purchases/requests/${id}/status`, { status, reason, supplierId }),
+  approve: (id: string, supplierId: string, idempotencyKey?: string) => api.idempotentPost<any>(`/purchases/requests/${id}/approve`, { supplierId }, idempotencyKey),
 };
 
 // ─── GESTIÓN DE COMPRA ──────────────────────────────────────────────────────

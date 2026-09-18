@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { Combobox } from '../ui/Combobox'
 import { cn } from '../ui/utils'
 import { toast } from 'sonner'
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator'
 import { ChevronDown, ChevronUp, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 import { BankAccountsView } from './BankAccountsView'
 import { TaxCatalogView } from './TaxCatalogView'
@@ -765,13 +766,16 @@ const [mappingsSearch, setMappingsSearch] = useState('')
 
   const handleSave = async () => {
     if (!canEditAccounting) return
+    const actionToken = beginNotificationAction()
     setSaving(true)
     try {
       const payload = { autoGenEnabled, defaultCurrency, taxRate, industry, accountMappings: accountMappingsRef.current, customModules }
       await contabilidadService.updateConfig(payload)
       toast.success('Configuración guardada. El motor usará estas cuentas en adelante.')
+      completeNotificationAction(actionToken)
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar configuración contable')
+      failNotificationAction(actionToken)
     } finally {
       setSaving(false)
     }
@@ -785,6 +789,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     const saveTask = accountMappingSaveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
+        const actionToken = beginNotificationAction()
         setSaving(true)
         try {
           await contabilidadService.updateConfig({
@@ -797,11 +802,13 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             customModules,
           })
           toast.success('Cuenta contable guardada automáticamente', { id: 'account-mapping-save' })
+          completeNotificationAction(actionToken)
         } catch (error: any) {
           toast.error(
             error?.response?.data?.message || error?.message || 'No se pudo guardar la cuenta contable',
             { id: 'account-mapping-save' },
           )
+          failNotificationAction(actionToken)
         } finally {
           setSaving(false)
         }

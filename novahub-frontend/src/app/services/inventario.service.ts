@@ -44,6 +44,7 @@ export const inventoryService = {
     const products = await api.get<PaginatedResponse<Product>>('/inventory/products', { params: filters as any, signal });
     return resolveStorageReferences(products);
   },
+  getProductLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/products/lookup', { params: filters as any, signal }),
   getProduct: async (id: string, signal?: AbortSignal) => {
     const product = await api.get<Product>(`/inventory/products/${id}`, { signal });
     return resolveStorageReferences(product);
@@ -69,6 +70,7 @@ export const inventoryService = {
 
   // ==================== CATEGORIES ====================
   getCategories: (signal?: AbortSignal) => api.get<any[]>('/inventory/categories', { signal }),
+  getCategoryLookup: (signal?: AbortSignal) => api.get<Array<{ id: string; name: string; type?: string }>>('/inventory/categories/lookup', { signal }),
   createCategory: (data: { name: string; description?: string; type?: 'PRODUCT' | 'SERVICE' }) => api.post<any>('/inventory/categories', data),
   updateCategory: (id: string, data: { name: string; description?: string; type?: 'PRODUCT' | 'SERVICE' }) => api.patch<any>(`/inventory/categories/${id}`, data),
   deleteCategory: (id: string) => api.delete(`/inventory/categories/${id}`),

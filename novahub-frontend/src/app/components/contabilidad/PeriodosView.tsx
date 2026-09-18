@@ -22,6 +22,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const statusStyles: Record<string, string> = {
   OPEN: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
@@ -66,6 +67,7 @@ export function PeriodosView() {
       toast.error('Completa todos los campos');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       await contabilidadService.createPeriod({
         name: form.name,
@@ -75,24 +77,29 @@ export function PeriodosView() {
         endDate: new Date(Number(form.year), Number(form.month), 0).toISOString(),
       });
       toast.success('Período creado');
+      completeNotificationAction(actionToken);
       setShowCreate(false);
       setForm({ name: '', month: '', year: '' });
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.message || 'Error al crear período');
+      failNotificationAction(actionToken);
     }
   };
 
   const handleClose = async () => {
     if (!closeConfirmId) return;
+    const actionToken = beginNotificationAction();
     try {
       setCloseLoading(true);
       await contabilidadService.closePeriod(closeConfirmId);
       toast.success('Período cerrado exitosamente');
+      completeNotificationAction(actionToken);
       setCloseConfirmId(null);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.message || 'Error al cerrar período');
+      failNotificationAction(actionToken);
     } finally {
       setCloseLoading(false);
     }
@@ -100,14 +107,17 @@ export function PeriodosView() {
 
   const handleReopen = async () => {
     if (!reopenConfirmId) return;
+    const actionToken = beginNotificationAction();
     try {
       setReopenLoading(true);
       await contabilidadService.reopenPeriod(reopenConfirmId);
       toast.success('Período reabierto');
+      completeNotificationAction(actionToken);
       setReopenConfirmId(null);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.message || 'Error al reabrir período');
+      failNotificationAction(actionToken);
     } finally {
       setReopenLoading(false);
     }

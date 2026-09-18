@@ -15,6 +15,9 @@ import {
 } from '../ui/sheet';
 import { getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import type { NotificationDomainRefreshDetail } from '../../services/notification-domain-refresh';
+import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 import { suppliersService } from '../../services/compras.service';
 import { customersService } from '../../services/ventas.service';
 import {
@@ -92,10 +95,10 @@ export function BatchReception() {
     (async () => {
       try {
         const [sup, sub, wh, customerResponse] = await Promise.all([
-          suppliersService.getAll({ page: 1, pageSize: 200 } as any),
+          suppliersService.getLookup({ page: 1, pageSize: 200 } as any),
           logisticsService.listSubagencies(),
           logisticsService.listWarehouses(),
-          customersService.getAll({ page: 1, pageSize: 200 } as any),
+          customersService.getLookup({ page: 1, pageSize: 200 } as any),
         ]);
         const supplierPayload: any = (sup as any)?.data ?? sup;
         const supplierList: any[] = Array.isArray(supplierPayload) ? supplierPayload : supplierPayload?.items || [];
@@ -111,14 +114,14 @@ export function BatchReception() {
     })();
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       setLoading(true);
       setData(await logisticsService.listBatches({
         page, pageSize, search: search || undefined, status: statusFilter || undefined,
       }));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'No se pudieron cargar las referencias'));
+      if (!silent) toast.error(getApiErrorMessage(error, 'No se pudieron cargar las referencias'));
     } finally {
       setLoading(false);
     }
@@ -160,6 +163,28 @@ export function BatchReception() {
     }
   }, [detail]);
 
+  const refreshBatchesFromNotification = useCallback(async (notification: NotificationDomainRefreshDetail) => {
+    await load(true);
+    if (!detail || notification.targetId !== detail.batch.id) return;
+    if (notification.action === 'DELETE') {
+      setDetail(null);
+      setRows([]);
+      return;
+    }
+    try {
+      setDetail(await logisticsService.getBatch(detail.batch.id));
+    } catch {
+      // Si el registro dejó de estar disponible, la lista queda como fuente de verdad.
+    }
+  }, [detail, load]);
+
+  useNotificationDomainRefresh({
+    module: 'tracking',
+    subModules: ['batches'],
+    onRefresh: refreshBatchesFromNotification,
+    enabled: canCreateBatch || canEditBatch || canApproveBatch,
+  });
+
   const closeDetail = useCallback(() => {
     setDetail(null);
     setRows([]);
@@ -170,6 +195,7 @@ export function BatchReception() {
   const createBatch = useCallback(async () => {
     if (!canCreateBatch) return;
     setCreating(true);
+    const actionToken = beginNotificationAction();
     try {
       const batch = await logisticsService.createBatch({
         provider: createForm.provider || undefined,
@@ -187,6 +213,7 @@ export function BatchReception() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo crear la referencia'));
     } finally {
+      completeNotificationAction(actionToken);
       setCreating(false);
     }
   }, [canCreateBatch, createForm, openDetail]);
@@ -245,6 +272,7 @@ export function BatchReception() {
       customer: commonOwner.customerName ? { id: commonOwner.customerId || undefined, name: commonOwner.customerName } : undefined,
     }));
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       const result = await logisticsService.addBatchPackages(detail.batch.id, payload);
       const skipped = result.rows.filter((r) => r.result === 'SKIPPED').length;
@@ -254,6 +282,7 @@ export function BatchReception() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudieron guardar los paquetes'));
     } finally {
+      completeNotificationAction(actionToken);
       setSaving(false);
     }
   }, [canEditBatch, commonOwner, detail, rows, refreshDetail]);
@@ -261,6 +290,7 @@ export function BatchReception() {
   const confirmBatch = useCallback(async () => {
     if (!canApproveBatch || !detail) return;
     setConfirming(true);
+    const actionToken = beginNotificationAction();
     try {
       const result = await logisticsService.confirmBatch(detail.batch.id, {
         invoiceNumber: confirmForm.invoiceNumber || undefined,
@@ -279,6 +309,7 @@ export function BatchReception() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo confirmar la referencia'));
     } finally {
+      completeNotificationAction(actionToken);
       setConfirming(false);
     }
   }, [canApproveBatch, detail, confirmForm, refreshDetail]);

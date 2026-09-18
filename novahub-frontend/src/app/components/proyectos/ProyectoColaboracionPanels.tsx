@@ -23,7 +23,7 @@ export function ProyectoRecursosPanel({ projectId }: PanelsProps) {
   const [addUserId, setAddUserId] = useState('');
   const [addRole, setAddRole] = useState('MEMBER');
   const membersQuery = useTenantQuery<ProjectMember[]>(['projects', 'members', projectId], (s) => projectsService.members(projectId, s), { enabled: true });
-  const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getAll({ signal: s } as any), { enabled: true });
+  const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getLookup(undefined, s), { enabled: true });
   const members = asList(membersQuery.data) as ProjectMember[];
   const users = asList(usersQuery.data);
   const canEdit = canPerform('PROJECTS', 'edit');

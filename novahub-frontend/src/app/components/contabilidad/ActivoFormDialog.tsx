@@ -14,6 +14,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface ActivoFormDialogProps {
   open: boolean;
@@ -136,6 +137,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
     if (!form.name.trim() || !form.categoryId || !form.cost) { toast.error('Completa Nombre, Categoría y Costo'); return; }
     if (!form.acquisitionDate || !form.inUseDate) { toast.error('Ingresa las fechas de adquisición y puesta en uso'); return; }
     if (submitting) return;
+    const actionToken = beginNotificationAction();
     setSubmitting(true);
     try {
       const residualValue = form.currency === 'USD' && residualInBase
@@ -153,11 +155,13 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
         sourceAssetId: form.sourceAssetId || null,
       });
       toast.success('Activo fijo creado');
+      completeNotificationAction(actionToken);
       onOpenChange(false);
       reset();
       onCreated();
     } catch (err: any) {
       toast.error(err.message || 'Error al crear activo');
+      failNotificationAction(actionToken);
     } finally {
       setSubmitting(false);
     }

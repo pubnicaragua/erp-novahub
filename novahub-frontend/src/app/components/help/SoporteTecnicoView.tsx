@@ -18,6 +18,7 @@ import {
 } from '../../services/soporte-tecnico.service';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 const CATEGORIES = [
   { id: 'ALL', label: 'Todos', icon: LifeBuoy },
@@ -64,6 +65,12 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
   const [form, setForm] = useState({
     subject: '', description: '', category: 'BUG', priority: 'MEDIUM',
     evidenceFiles: [] as File[],
+  });
+
+  useNotificationDomainRefresh({
+    module: 'soporte-tecnico',
+    subModules: ['tickets'],
+    onRefresh: () => { void ticketsQuery.refetch(); },
   });
 
   useEffect(() => {

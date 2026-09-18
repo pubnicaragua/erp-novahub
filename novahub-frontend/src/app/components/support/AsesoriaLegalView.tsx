@@ -20,6 +20,7 @@ import { legalService, type LegalCase, type LegalReminder } from '../../services
 import { useAuth } from '../../contexts/AuthContext';
 import { LegalChatPanel } from './LegalChatPanel';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 interface AsesoriaLegalViewProps {
   activeSubModule?: string;
@@ -57,6 +58,12 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
     ? casesQuery.isLoading || casesQuery.isFetching
     : remindersQuery.isLoading || remindersQuery.isFetching;
   const fetchData = () => activeTab === 'cases' ? casesQuery.refetch() : remindersQuery.refetch();
+
+  useNotificationDomainRefresh({
+    module: 'asesoria-legal',
+    subModules: ['casos', 'cases', 'recordatorios', 'reminders'],
+    onRefresh: () => { void Promise.all([casesQuery.refetch(), remindersQuery.refetch()]); },
+  });
 
   useEffect(() => {
     if (activeSubModule && visibleTabs.some((tab) => tab.id === activeSubModule) && activeSubModule !== activeTab) {

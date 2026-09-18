@@ -114,6 +114,13 @@ export function useIncomingNotificationAlert() {
       seenEvents.current.add(key);
       pendingIds.delete(notification.id);
 
+      const metadata = notification.metadata && typeof notification.metadata === 'object' && !Array.isArray(notification.metadata)
+        ? notification.metadata as Record<string, unknown>
+        : {};
+      // Manager-group copies have their own SSE/presentation path. Keeping
+      // them out of the tenant listener prevents two toasts for one event.
+      if (metadata.managerGroupId) return;
+
       // The notification is also the low-latency domain-change signal. Query
       // invalidation is active-only; mounted legacy views receive the same
       // detail through the local refresh bus.

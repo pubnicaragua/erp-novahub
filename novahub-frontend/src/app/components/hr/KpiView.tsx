@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -23,6 +23,8 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
 import { formatDateEs } from '../../utils/dateFormat';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 interface KpiViewProps {
   employees?: any[];
@@ -127,7 +129,16 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
   const loading = kpiQuery.isLoading;
   const definitions = (kpiQuery.data?.definitions || []) as KpiDefinition[];
   const results = (kpiQuery.data?.results || []) as KpiResult[];
-  const fetchAll = () => queryClient.invalidateQueries({ queryKey: ['hr', 'kpi-data'] });
+  const fetchAll = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['hr', 'kpi-data'], refetchType: 'active' }),
+    [queryClient],
+  );
+  useNotificationDomainRefresh({
+    module: 'rh',
+    subModules: ['kpi'],
+    onRefresh: fetchAll,
+    enabled: canViewHr,
+  });
 
   const defColFilters = useColumnFilters();
   const resultColFilters = useColumnFilters();
@@ -149,6 +160,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
       toast.error(`La suma de pesos de KPI activos supera 100% (ya hay ${otherWeight}% asignados)`);
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setSavingDef(true);
       const data: any = {
@@ -163,11 +175,13 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
         await hrService.createKpiDefinition(data);
         toast.success('Definición creada');
       }
+      completeNotificationAction(actionToken);
       resetDefForm();
       fetchAll();
       onRefresh?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al guardar');
+      failNotificationAction(actionToken);
     } finally { setSavingDef(false); }
   };
 
@@ -178,15 +192,18 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
       toast.error('Completa todos los campos requeridos');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setSavingResult(true);
       await hrService.createKpiResult(resultForm);
       toast.success('Resultado KPI creado');
+      completeNotificationAction(actionToken);
       resetResultForm();
       fetchAll();
       onRefresh?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al guardar');
+      failNotificationAction(actionToken);
     } finally { setSavingResult(false); }
   };
 
@@ -435,12 +452,15 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
                             <button
                               title={d.isActive ? 'Desactivar' : 'Activar'}
                               onClick={async () => {
+                                const actionToken = beginNotificationAction();
                                 try {
                                   await hrService.updateKpiDefinition(d.id, { isActive: !d.isActive });
                                   toast.success(d.isActive ? 'KPI desactivado' : 'KPI activado');
+                                  completeNotificationAction(actionToken);
                                   fetchAll();
                                 } catch (e: any) {
                                   toast.error(e?.response?.data?.message || 'Error al cambiar estado');
+                                  failNotificationAction(actionToken);
                                 }
                               }}
                               className={cn(

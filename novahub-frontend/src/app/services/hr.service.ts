@@ -6,6 +6,7 @@ const withSignal = (params?: Record<string, any>, signal?: AbortSignal): HrGetOp
 export const hrService = {
   // ===== DEPARTMENTS =====
   getDepartments: (signal?: AbortSignal, type?: 'HR' | 'ACCESS') => api.get('/hr/departments', withSignal(type ? { type } : undefined, signal)),
+  getDepartmentLookup: (signal?: AbortSignal, type?: 'HR' | 'ACCESS') => api.get('/hr/lookups/departments', withSignal(type ? { type } : undefined, signal)),
   getDepartmentHeadCandidates: (signal?: AbortSignal) => api.get('/hr/department-head-candidates', withSignal(undefined, signal)),
   getDepartment: (id: string, signal?: AbortSignal) => api.get(`/hr/departments/${id}`, withSignal(undefined, signal)),
   createDepartment: (data: any) => api.post('/hr/departments', data),
@@ -14,6 +15,7 @@ export const hrService = {
 
   // ===== POSITIONS =====
   getPositions: (departmentId?: string, signal?: AbortSignal) => api.get('/hr/positions', withSignal({ departmentId }, signal)),
+  getPositionLookup: (departmentId?: string, signal?: AbortSignal) => api.get('/hr/lookups/positions', withSignal({ departmentId }, signal)),
   getPosition: (id: string, signal?: AbortSignal) => api.get(`/hr/positions/${id}`, withSignal(undefined, signal)),
   createPosition: (data: any) => api.post('/hr/positions', data),
   updatePosition: (id: string, data: any) => api.patch(`/hr/positions/${id}`, data),

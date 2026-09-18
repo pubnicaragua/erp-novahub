@@ -6,6 +6,7 @@ import { Input } from '../ui/input';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { getApiErrorMessage } from '../../services/api';
+import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 import { logisticsService, type ImportDefaults } from '../../services/logistics.service';
 
 interface QuickReceptionProps {
@@ -29,6 +30,7 @@ export function QuickReception({ defaults, onImported }: QuickReceptionProps) {
       .map((r) => ({ tracking: r.tracking.trim(), weight: Number(r.weight), sku: defaults.sku }));
     if (payloadRows.length === 0) return;
     setBusy(true);
+    const actionToken = beginNotificationAction();
     try {
       const res = await logisticsService.quickReception({ rows: payloadRows, defaults });
       const importedCount = res.imported;
@@ -40,7 +42,10 @@ export function QuickReception({ defaults, onImported }: QuickReceptionProps) {
       setTimeout(() => trackingRef.current?.focus(), 50);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Error al registrar'));
-    } finally { setBusy(false); }
+    } finally {
+      completeNotificationAction(actionToken);
+      setBusy(false);
+    }
   };
 
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>, index: number, field: 'tracking' | 'weight') => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BadgeCheck,
@@ -35,6 +35,8 @@ import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { hrService } from '../../services/hr.service';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 import { hasPaymentReferenceField, isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
 import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 
@@ -156,10 +158,6 @@ export function SolicitudesPagoRRHHView() {
     knownRequestIdsRef.current = currentIds;
     if (added.length > 0) {
       setNewRequestCount((current) => current + added.length);
-      toast.info(added.length === 1 ? 'Nueva solicitud de pago de RR. HH.' : `${added.length} nuevas solicitudes de pago de RR. HH.`, {
-        description: sourceLabel(added[0]),
-        duration: 6000,
-      });
     }
   }, [query.isLoading, requests]);
   const filtered = useMemo(() => {
@@ -175,18 +173,30 @@ export function SolicitudesPagoRRHHView() {
     amount: requests.filter((r) => r.status !== 'PAID' && r.status !== 'REJECTED').reduce((sum, r) => sum + Number(r.baseAmount || 0), 0),
   }), [requests]);
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['hr-payment-requests'] });
+  const refresh = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['hr-payment-requests'], refetchType: 'active' }),
+    [queryClient],
+  );
+  useNotificationDomainRefresh({
+    module: 'contabilidad',
+    subModules: ['solicitudes-pago'],
+    onRefresh: refresh,
+    enabled: canReadPaymentRequests,
+  });
 
   const runAction = async (id: string, action: () => Promise<any>, success: string) => {
     setBusyId(id);
+    const actionToken = beginNotificationAction();
     try {
       await action();
       toast.success(success);
+      completeNotificationAction(actionToken);
       refresh();
       setPaymentRequest(null);
     } catch (error: any) {
       const message = error?.response?.data?.message || error?.message || 'No se pudo completar la operación.';
       toast.error(Array.isArray(message) ? message.join(', ') : message);
+      failNotificationAction(actionToken);
     } finally {
       setBusyId(null);
     }

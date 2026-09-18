@@ -71,9 +71,9 @@ import { persistThemeMode, readPersistedDarkMode } from "../utils/theme-mode";
 import { Button } from "./ui/button";
 import { BrandLogo } from "./BrandLogo";
 import { cn } from "./ui/utils";
-import { notificationsService } from "../services/notifications.service";
+import { notificationsService, subscribeToManagerNotificationEvents } from "../services/notifications.service";
 import { playNotificationSound } from "../utils/notificationSound";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatCurrencyDescriptor, getCurrencyMetadata } from "../utils/currency";
 import { getReadableForeground } from "../utils/color-contrast";
 import { THEME_PRESETS, type ThemePreset } from "../constants/themePresets";
@@ -406,6 +406,7 @@ export function ManagerShell({
     () => (section === "inventory" || section === "sales" || section === "purchases" || section === "finances" || section === "accounting" || section === "reports" || section === "hr" || isManagerOperationSection(section) ? section : null),
   );
   const { user, logout } = useAuth();
+  const queryClient = useQueryClient();
   const { currency, displayMode, setDisplayMode, displayModeLabel } = useCurrency();
   const { themeConfig, updateTheme, resetTheme } = useTheme();
   const [isSavingTheme, setIsSavingTheme] = useState(false);
@@ -431,14 +432,131 @@ export function ManagerShell({
     queryKey: ["manager-notifications", group?.id, user?.id],
     queryFn: ({ signal }) => notificationsService.getManagerInbox(group!.id, signal),
     enabled: Boolean(group?.id && user?.id),
-    refetchInterval: 15_000,
-    refetchIntervalInBackground: true,
+    // SSE is the primary delivery channel. The visibility recovery below
+    // catches up after a browser suspends the tab.
+    refetchInterval: false,
     refetchOnWindowFocus: false,
   });
   const managerNotifications = managerNotificationsQuery.data || [];
   const unreadManagerNotifications = managerNotifications.filter((notification) => !notification.read);
   const managerNotificationIdsRef = useRef<Set<string> | null>(null);
   const managerNotificationScopeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!group?.id || !user?.id) return undefined;
+    const identity = `${group.id}:${user.id}`;
+    return subscribeToManagerNotificationEvents(identity, group.id, (event) => {
+      if (event.reason !== 'created' && event.reason !== 'updated') return;
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-notifications", group.id, user.id],
+        refetchType: 'active',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-hr-module", group.id],
+        refetchType: 'active',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-finance-module", group.id],
+        refetchType: 'active',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-accounting-module", group.id],
+        refetchType: 'active',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-operations", group.id],
+        refetchType: 'active',
+      });
+    });
+  }, [group?.id, queryClient, user?.id]);
+
+  useEffect(() => {
+    if (!group?.id || !user?.id) return undefined;
+    const recoverAfterVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-notifications", group.id, user.id],
+        refetchType: 'active',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-hr-module", group.id],
+        refetchType: 'active',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-finance-module", group.id],
+        refetchType: 'active',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-accounting-module", group.id],
+        refetchType: 'active',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["manager-operations", group.id],
+        refetchType: 'active',
+      });
+    };
+    document.addEventListener('visibilitychange', recoverAfterVisibility);
+    return () => document.removeEventListener('visibilitychange', recoverAfterVisibility);
+  }, [group?.id, queryClient, user?.id]);
+
+  const markManagerNotificationRead = async (id: string) => {
+    if (!group?.id) return;
+    await notificationsService.markManagerAsRead(group.id, id);
+    await managerNotificationsQuery.refetch();
+  };
+
+  const openManagerNotification = (notification: { id: string; metadata?: unknown }) => {
+    void markManagerNotificationRead(notification.id);
+    const metadata = notification.metadata && typeof notification.metadata === 'object' && !Array.isArray(notification.metadata)
+      ? notification.metadata as { navigation?: { module?: string; subModule?: string; filter?: string } }
+      : {};
+    if (metadata.navigation?.module !== 'manager') return;
+    const filter = String(metadata.navigation.filter || '').toLowerCase();
+    const subModule = String(metadata.navigation.subModule || '').toLowerCase();
+    if (subModule === 'rh' || subModule === 'rrhh' || subModule === 'recursos-humanos') {
+      const view = ['employees', 'departments', 'payroll', 'commissions', 'attendance', 'leaves', 'performance', 'kpi', 'training', 'benefits'].includes(filter)
+        ? filter as Parameters<typeof onHrViewChange>[0]
+        : 'overview';
+      onSectionChange('hr');
+      onHrViewChange(view);
+      return;
+    }
+    if (subModule === 'restaurant' || subModule === 'restaurante') {
+      const view = ['orders', 'kitchen', 'tables', 'menu', 'reports'].includes(filter) ? filter : 'overview';
+      onSectionChange('restaurant');
+      onOperationViewChange('restaurant', view);
+      return;
+    }
+    if (subModule === 'finanzas' || subModule === 'finance' || subModule === 'financials') {
+      const financeView: ManagerFinanceView = ({
+        cash: 'cash', bancos: 'cash', 'caja-bancos': 'cash', 'cuentas-cobrar': 'receivables', receivables: 'receivables',
+        'cuentas-pagar': 'payables', payables: 'payables', ingresos: 'income', income: 'income',
+        gastos: 'expenses', expenses: 'expenses', recurrentes: 'recurring', 'ingresos-recurrentes': 'recurring',
+        'gastos-recurrentes': 'recurring', calendario: 'calendar', analysis: 'analysis', analisis: 'analysis',
+        balance: 'balance', 'balance-general': 'balance', perdidas: 'losses', losses: 'losses',
+      } as Record<string, ManagerFinanceView>)[filter] || 'overview';
+      onSectionChange('finances');
+      onFinanceViewChange(financeView);
+      return;
+    }
+    if (subModule === 'contabilidad' || subModule === 'accounting') {
+      const accountingView: ManagerAccountingView = ({
+        cuentas: 'chart', chart: 'chart', 'plan-cuentas': 'chart', asientos: 'journal', diario: 'journal', journal: 'journal',
+        mayor: 'ledger', ledger: 'ledger', 'balance-comprobacion': 'trialBalance', 'estado-resultados': 'profitLoss',
+        'balance-general': 'balanceSheet', 'balance-general-contable': 'balanceSheet', 'flujo-efectivo': 'cashFlow',
+        'diferencias-cambiarias': 'exchange', exchange: 'exchange', 'cambios-patrimonio': 'equity', equity: 'equity',
+        'activos-fijos': 'assets', assets: 'assets', 'libro-bancos': 'bankBook', bancos: 'bankBook',
+        conciliacion: 'reconciliation', conciliaciones: 'reconciliation', periodos: 'periods', 'reportes-fiscales': 'fiscal', fiscal: 'fiscal',
+        'auditoria-facturas': 'invoiceAudit', 'invoice-audit': 'invoiceAudit', presupuestos: 'budgets', budgets: 'budgets',
+        'centros-costos': 'budgets', 'categorias-gastos': 'expenseCategories', 'solicitudes-pago': 'hrPaymentRequests',
+      } as Record<string, ManagerAccountingView>)[filter] || 'overview';
+      onSectionChange('accounting');
+      onAccountingViewChange(accountingView);
+      return;
+    }
+    onSectionChange('inventory');
+    onInventoryViewChange(filter === 'transfers' ? 'transfers' : 'adjustments');
+  };
 
   useEffect(() => {
     if (!managerNotificationsQuery.isFetched) return;
@@ -458,24 +576,16 @@ export function ManagerShell({
       (notification) => !notification.read && !managerNotificationIdsRef.current?.has(notification.id),
     );
     managerNotificationIdsRef.current = currentIds;
-    if (newUnreadNotifications.length > 0) playNotificationSound();
+    newUnreadNotifications.forEach((notification) => {
+      playNotificationSound();
+      toast.info(notification.title || 'Nueva notificación del Manager', {
+        description: notification.message || 'Tienes una novedad pendiente de revisar.',
+        duration: 6_000,
+        position: 'top-right',
+        action: { label: 'Abrir', onClick: () => openManagerNotification(notification) },
+      });
+    });
   }, [group?.id, managerNotificationScopeRef, managerNotifications, managerNotificationsQuery.isFetched, user?.id]);
-
-  const markManagerNotificationRead = async (id: string) => {
-    if (!group?.id) return;
-    await notificationsService.markManagerAsRead(group.id, id);
-    await managerNotificationsQuery.refetch();
-  };
-
-  const openManagerNotification = (notification: { id: string; metadata?: unknown }) => {
-    void markManagerNotificationRead(notification.id);
-    const metadata = notification.metadata && typeof notification.metadata === 'object' && !Array.isArray(notification.metadata)
-      ? notification.metadata as { navigation?: { module?: string; filter?: string } }
-      : {};
-    if (metadata.navigation?.module !== 'manager') return;
-    onSectionChange('inventory');
-    onInventoryViewChange(metadata.navigation.filter === 'transfers' ? 'transfers' : 'adjustments');
-  };
 
   const toggleTheme = (event?: MouseEvent<HTMLElement>) => {
     const root = document.documentElement;

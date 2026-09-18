@@ -5,6 +5,7 @@
 
 import { isSafeAuthToken } from './auth-token';
 import { notifyErpMutation } from '../utils/action-lock';
+import { beginNotificationAction, completeNotificationAction } from './notification-action-coordinator';
 
 const DEFAULT_API_URL = import.meta.env.PROD
   ? 'https://backenderpnh.onrender.com/api'
@@ -363,12 +364,14 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method || 'GET';
   const isMutation = method !== 'GET';
+  const notificationAction = isMutation ? beginNotificationAction() : null;
   if (isMutation) notifyErpMutation('start', method, path);
 
   try {
     return await apiRequestInternal<T>(path, options);
   } finally {
     if (isMutation) notifyErpMutation('end', method, path);
+    completeNotificationAction(notificationAction);
   }
 }
 

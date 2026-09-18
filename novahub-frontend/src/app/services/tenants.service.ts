@@ -21,6 +21,8 @@ export interface TenantUser {
   name: string;
   email: string;
   role: string;
+  userType?: string;
+  customerId?: string | null;
   isPrincipalAdmin?: boolean;
   customRoleId?: string | null;
   customRole?: { id: string; name: string; permissions?: any; allowedModules: string[]; warehouseIds?: string[] } | null;

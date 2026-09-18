@@ -26,6 +26,7 @@ import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const statusStyles: Record<string, string> = {
   PENDING: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -144,6 +145,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
   const handleCreate = async () => {
     if (!form.accountId) return void toast.error('Selecciona una cuenta bancaria');
     if (!/^\d{4}-\d{2}$/.test(form.period)) return void toast.error('Selecciona el mes de la conciliación');
+    const actionToken = beginNotificationAction();
     try {
       const res = await contabilidadService.createReconciliation({
         accountId: form.accountId,
@@ -151,6 +153,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
         endBalance: form.endBalance !== '' ? Number(form.endBalance) : undefined,
       });
       toast.success('Conciliación creada. Los saldos del libro se calcularon automáticamente.');
+      completeNotificationAction(actionToken);
       setShowCreate(false);
       setForm({ accountId: '', period: '', endBalance: '' });
       setPreview(null);
@@ -158,19 +161,23 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
       void fetchDetail(res.id);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear');
+      failNotificationAction(actionToken);
     }
   };
 
   const handleAutoMatch = async () => {
     if (!detail?.id) return;
+    const actionToken = beginNotificationAction();
     try {
       setAutoMatchLoading(true);
       const res = await contabilidadService.autoMatchReconciliation(detail.id);
       setDetail(res);
       toast.success('Coincidencias automáticas aplicadas');
+      completeNotificationAction(actionToken);
       fetchReconciliations();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al aplicar coincidencias');
+      failNotificationAction(actionToken);
     } finally {
       setAutoMatchLoading(false);
     }
@@ -178,15 +185,18 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
 
   const handleComplete = async () => {
     if (!detail?.id) return;
+    const actionToken = beginNotificationAction();
     try {
       setCompleteLoading(true);
       const res = await contabilidadService.completeReconciliation(detail.id);
       setDetail(res);
       toast.success('Conciliación completada');
+      completeNotificationAction(actionToken);
       fetchReconciliations();
       void fetchDetail(detail.id);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al completar');
+      failNotificationAction(actionToken);
     } finally {
       setCompleteLoading(false);
     }
@@ -203,11 +213,14 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
 
   const persistItem = async (itemId: string, patch: any) => {
     if (!detail) return;
+    const actionToken = beginNotificationAction();
     try {
       const updated = await contabilidadService.updateReconciliationItem(detail.id, itemId, patch);
       setDetail(updated);
+      completeNotificationAction(actionToken);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el movimiento');
+      failNotificationAction(actionToken);
       fetchDetail(detail.id);
     }
   };
@@ -224,12 +237,15 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
     const amount = Number(bankEndInput);
     const next = Number.isFinite(amount) ? amount : 0;
     if (next === Number(detail.endBalance || 0)) return;
+    const actionToken = beginNotificationAction();
     try {
       const updated = await contabilidadService.updateReconciliation(detail.id, { endBalance: next });
       setDetail(updated);
       toast.success('Saldo del estado de cuenta actualizado');
+      completeNotificationAction(actionToken);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el saldo del banco');
+      failNotificationAction(actionToken);
       fetchDetail(detail.id);
     }
   };
@@ -239,6 +255,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
     if (!addItemForm.description.trim()) return void toast.error('Describe el movimiento del estado de cuenta');
     const amount = Number(addItemForm.amount);
     if (!Number.isFinite(amount) || amount <= 0) return void toast.error('El monto debe ser mayor que cero');
+    const actionToken = beginNotificationAction();
     try {
       setAddItemLoading(true);
       const updated = await contabilidadService.addReconciliationItem(detail.id, {
@@ -252,8 +269,10 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
       setAddItemOpen(false);
       setAddItemForm({ date: new Date().toISOString().split('T')[0], description: '', reference: '', amount: '', type: 'DEBIT' });
       toast.success('Movimiento del estado de cuenta agregado');
+      completeNotificationAction(actionToken);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al agregar el movimiento');
+      failNotificationAction(actionToken);
     } finally {
       setAddItemLoading(false);
     }

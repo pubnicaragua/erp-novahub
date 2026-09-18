@@ -20,6 +20,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useAuth } from '../../contexts/AuthContext';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const ACCOUNT_TYPES = [
   { value: 'ASSET', label: 'Activo' },
@@ -75,6 +76,7 @@ export function CategoriasGastosView() {
       toast.error('Código, nombre y cuenta son requeridos');
       return;
     }
+    const actionToken = beginNotificationAction();
     setSaving(true);
     try {
       if (editing) {
@@ -84,10 +86,12 @@ export function CategoriasGastosView() {
         await contabilidadService.createExpenseCategory(form);
         toast.success('Categoría creada');
       }
+      completeNotificationAction(actionToken);
       setDialogOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al guardar');
+      failNotificationAction(actionToken);
     } finally { setSaving(false); }
   }
 
@@ -98,13 +102,16 @@ export function CategoriasGastosView() {
 
   async function confirmDelete() {
     if (!pendingDeleteId || !canDeactivate) return;
+    const actionToken = beginNotificationAction();
     try {
       await contabilidadService.deleteExpenseCategory(pendingDeleteId);
       toast.success('Categoría eliminada');
+      completeNotificationAction(actionToken);
       setPendingDeleteId(null);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al eliminar');
+      failNotificationAction(actionToken);
     }
   }
 

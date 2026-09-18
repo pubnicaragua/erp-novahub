@@ -12,7 +12,7 @@
     "lint:fix": "eslint src --fix --max-warnings 0",
     "validate:theme-contrast": "node scripts/validate-theme-contrast.mjs",
     "test:e2e": "playwright test",
-    "test:e2e:catalog": "node --experimental-strip-types e2e/scripts/verify-contract-rules.mjs && node e2e/scripts/verify-module-contracts.mjs && node --experimental-strip-types e2e/scripts/verify-permission-catalog.mjs && node e2e/scripts/verify-backend-surfaces.mjs",
+    "test:e2e:catalog": "node --experimental-strip-types e2e/scripts/verify-contract-rules.mjs && node e2e/scripts/verify-module-contracts.mjs && node --experimental-strip-types e2e/scripts/verify-permission-catalog.mjs && node e2e/scripts/verify-workflow-dependencies.mjs && node e2e/scripts/verify-backend-surfaces.mjs",
     "test:e2e:prisma-contract": "node e2e/scripts/verify-prisma-model-references.mjs",
     "test:e2e:backend-surfaces": "node e2e/scripts/verify-backend-surfaces.mjs",
     "test:e2e:manual": "node e2e/run-manual.mjs",

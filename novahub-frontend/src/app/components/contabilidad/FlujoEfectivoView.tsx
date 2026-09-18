@@ -13,6 +13,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { useAccountingQuery, accountingList } from '../../hooks/useAccountingQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import { DateField } from '../ui/DateField';
@@ -184,15 +185,18 @@ export function FlujoEfectivoView() {
   };
 
   const handleSettingsSave = async () => {
+    const actionToken = beginNotificationAction();
     setSettingsSaving(true);
     try {
       await contabilidadService.updateConfig({ config: { cashFlow: { accountIds: settingsDraft } } });
       toast.success('Cuentas de efectivo del Flujo de Efectivo guardadas');
+      completeNotificationAction(actionToken);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
       handleSettingsOpenChange(false);
       query.refetch();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la configuración');
+      failNotificationAction(actionToken);
     } finally {
       setSettingsSaving(false);
     }

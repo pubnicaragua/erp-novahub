@@ -38,6 +38,7 @@ import { ComisionesView } from './hr/ComisionesView';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { fetchAllReportPages } from '../hooks/useTenantQuery';
+import { getNotificationDomainQueryKeys, type NotificationDomainRefreshDetail } from '../services/notification-domain-refresh';
 
 interface RecursosHumanosPageProps {
   activeSubModule?: string;
@@ -208,7 +209,14 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
   const loading = hrQuery.isLoading;
   const queryError = hrQuery.error as any;
   const errorMessage = queryError?.response?.data?.message || queryError?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
-  const refreshData = () => queryClient.invalidateQueries({ queryKey: ['hr'] });
+  const refreshData = (detail?: NotificationDomainRefreshDetail) => {
+    const navigation = detail?.navigation || { module: 'rh', subModule: activeTab };
+    const tenantKey = String(user?.clientTenantId || '');
+    const queryKeys = getNotificationDomainQueryKeys(navigation, tenantKey);
+    queryKeys.forEach((queryKey) => {
+      void queryClient.invalidateQueries({ queryKey, refetchType: 'active' });
+    });
+  };
 
 
   return (

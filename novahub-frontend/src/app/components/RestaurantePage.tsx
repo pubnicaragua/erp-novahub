@@ -27,8 +27,11 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { useBranchScope } from '../hooks/useBranchScope';
+import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { getApiErrorMessage } from '../services/api';
+import { beginNotificationAction, completeNotificationAction } from '../services/notification-action-coordinator';
+import type { NotificationDomainRefreshDetail } from '../services/notification-domain-refresh';
 import { cajaService } from '../services/caja.service';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { RestaurantViewTutorial } from './RestaurantViewTutorial';
@@ -86,29 +89,6 @@ const kitchenStatus: Record<string, { label: string; className: string }> = {
 };
 
 const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-function playOrderSound() {
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const context = new AudioContextClass();
-    const now = context.currentTime;
-    [880, 1174.66].forEach((frequency, index) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.001, now + index * 0.18);
-      gain.gain.exponentialRampToValueAtTime(0.25, now + index * 0.18 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + index * 0.18 + 0.35);
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start(now + index * 0.18);
-      oscillator.stop(now + index * 0.18 + 0.4);
-    });
-    window.setTimeout(() => { void context.close().catch(() => undefined); }, 1200);
-  } catch { /* el audio es opcional */ }
-}
 
 export function RestaurantePage({ activeSubModule, onSubModuleChange }: RestaurantePageProps) {
   const { canPerform } = useAuth();
@@ -192,12 +172,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
     if (knownOrderIds.current) {
       const fresh = nextOrders.filter((order) => !knownOrderIds.current!.has(order.id) && !sessionCreatedOrderIds.current.has(order.id));
       if (fresh.length > 0) {
-        playOrderSound();
         setNewOrdersCount((count) => count + fresh.length);
-        const first = fresh[0];
-        toast.info(`Nuevo pedido ${fresh.map((order) => order.number).join(', ')}`, {
-          description: first.table ? `Mesa ${first.table.code} · ${first.table.name}` : first.type === 'QR' ? 'Recibido desde el QR del cliente' : 'Pedido entrante',
-        });
       }
     }
     knownOrderIds.current = nextIds;
@@ -218,7 +193,9 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       setTables(nextTableList);
       if (nextTableList[0]?.publicToken) setPublicLink((current) => current || `${window.location.origin}/restaurant/menu/${nextTableList[0].publicToken}`);
       setMenu(nextMenu || []);
-      setOrders(nextOrders || []);
+      const nextOrderList = nextOrders || [];
+      setOrders(nextOrderList);
+      knownOrderIds.current = new Set(nextOrderList.map((order) => order.id));
       setTickets(nextTickets || []);
       setSummary(nextSummary || null);
     } catch (error: unknown) {
@@ -228,6 +205,48 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       setRefreshing(false);
     }
   }, [canViewKitchen, canViewMenu, canViewOrders, canViewReports, canViewTables, selectedBranchId]);
+
+  const refreshRestaurantSection = useCallback(async (detail: NotificationDomainRefreshDetail) => {
+    const subModule = detail.navigation.subModule;
+    const branchId = selectedBranchId || undefined;
+    try {
+      if (subModule === 'salon' && canViewTables) {
+        setTables((await restaurantService.listTables(branchId)) || []);
+        return;
+      }
+      if (subModule === 'comandas' && canViewOrders) {
+        const nextOrders = (await restaurantService.listOrders(branchId)) || [];
+        setOrders(nextOrders);
+        knownOrderIds.current = new Set(nextOrders.map((order) => order.id));
+        if (checkoutOrder && detail.targetId === checkoutOrder.id) {
+          setCheckoutOrder(nextOrders.find((order) => order.id === checkoutOrder.id) || null);
+        }
+        if (canViewTables) setTables((await restaurantService.listTables(branchId)) || []);
+        return;
+      }
+      if (subModule === 'cocina' && canViewKitchen) {
+        setTickets((await restaurantService.listKitchenTickets(branchId)) || []);
+        if (canViewOrders) setOrders((await restaurantService.listOrders(branchId)) || []);
+        return;
+      }
+      if (subModule === 'carta' && canViewMenu) {
+        setMenu((await restaurantService.getMenu()) || []);
+        return;
+      }
+      if (subModule === 'reportes' && canViewReports) {
+        setSummary((await restaurantService.getSummary({ branchId })) || null);
+      }
+    } catch {
+      // El polling queda como recuperación ante un fallo puntual del refresco.
+    }
+  }, [canViewKitchen, canViewMenu, canViewOrders, canViewReports, canViewTables, checkoutOrder, selectedBranchId]);
+
+  useNotificationDomainRefresh({
+    module: 'restaurante',
+    subModules: ['salon', 'comandas', 'cocina', 'carta', 'reportes'],
+    onRefresh: refreshRestaurantSection,
+    enabled: canViewRestaurant,
+  });
 
   useEffect(() => {
     if (!canViewRestaurant) {
@@ -329,26 +348,28 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   });
 
   const createOrder = async () => {
-    if (!canCreateOrders || !canApproveKitchen) {
-      toast.error('No tienes permiso para registrar y enviar comandas a cocina.');
+    if (!canCreateOrders) {
+      toast.error('No tienes permiso para registrar comandas.');
       return;
     }
     if (!selectedTable || cartLines.length === 0) {
       toast.error('Selecciona una mesa y agrega al menos un platillo.');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       const order = await restaurantService.createOrder({
         tableId: selectedTable.id,
         items: cartLines.map(({ item, quantity }) => ({ menuItemId: item.id, quantity })),
       });
       sessionCreatedOrderIds.current.add(order.id);
-      await restaurantService.sendToKitchen(order.id);
       setCart({});
       toast.success(`Comanda ${order.number} enviada a cocina.`);
       await loadData();
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo crear la comanda.'));
+    } finally {
+      completeNotificationAction(actionToken);
     }
   };
 
@@ -362,6 +383,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       toast.error('Selecciona una sucursal y completa código y nombre.');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       await restaurantService.createTable({ ...newTable, branchId, seats: Number(newTable.seats) || 2 });
       setNewTable({ code: '', name: '', zone: '', seats: '2' });
@@ -370,34 +392,57 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       await loadData();
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo crear la mesa.'));
+    } finally {
+      completeNotificationAction(actionToken);
     }
   };
 
   const updateKitchen = async (ticket: RestaurantKitchenTicket, status: string) => {
     if (!canApproveKitchen) return;
+    const actionToken = beginNotificationAction();
     try {
       await restaurantService.updateKitchenTicket(ticket.id, status);
       toast.success(`Comanda ${ticket.order.number}: ${kitchenStatus[status]?.label || status}.`);
       await loadData();
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo actualizar cocina.'));
+    } finally {
+      completeNotificationAction(actionToken);
     }
   };
 
   const changeOrderStatus = async (order: RestaurantOrder, status: string) => {
     if (!canApproveOrders) return;
+    const actionToken = beginNotificationAction();
     try {
       await restaurantService.updateOrderStatus(order.id, status);
+      toast.success(`Comanda ${order.number}: ${orderStatus[status] || status}.`);
       await loadData();
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo actualizar la comanda.'));
+    } finally {
+      completeNotificationAction(actionToken);
+    }
+  };
+
+  const sendToKitchen = async (order: RestaurantOrder) => {
+    if (!canApproveKitchen) return;
+    const actionToken = beginNotificationAction();
+    try {
+      await restaurantService.sendToKitchen(order.id);
+      toast.success(`Comanda ${order.number} enviada a cocina.`);
+      await loadData();
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.'));
+    } finally {
+      completeNotificationAction(actionToken);
     }
   };
 
   const openCheckout = async (order: RestaurantOrder) => {
     if (!canApproveOrders) return;
     try {
-      const available = await cajaService.getRegisters();
+      const available = await cajaService.getRegisterLookup();
       setRegisters((available || []).map((register) => ({ id: register.id, name: register.name })));
       setCheckoutRegisterId(available?.[0]?.id || '');
       setCheckoutOrder(order);
@@ -409,12 +454,14 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
   const checkout = async () => {
     if (!canApproveOrders) return;
     if (!checkoutOrder || !checkoutRegisterId) return;
+    let actionToken: string | null = null;
     try {
       const session = await cajaService.getActiveSession(checkoutRegisterId);
       if (!session?.id) {
         toast.error('La caja seleccionada no tiene una sesión abierta. Abre la caja antes de cobrar.');
         return;
       }
+      actionToken = beginNotificationAction();
       await restaurantService.checkout(checkoutOrder.id, {
         registerId: checkoutRegisterId,
         sessionId: session.id,
@@ -425,6 +472,8 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
       await loadData();
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo cobrar el pedido.'));
+    } finally {
+      completeNotificationAction(actionToken);
     }
   };
 
@@ -451,7 +500,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
                 <div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-primary">Restaurante POS</p><h1 className="truncate text-xl font-black tracking-tight">Operación del restaurante</h1></div>
                 <RestaurantViewTutorial view={tab} />
               </div>
-              <select value={selectedBranchId || ''} onChange={(event) => setSelectedBranchId(event.target.value || null)} className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary">
+              <select value={selectedBranchId || ''} onChange={(event) => setSelectedBranchId(event.target.value || '')} className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary">
                 <option value="">Todas las sucursales</option>
                 {accessibleBranches.map((branch: { id: string; name: string }) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </select>
@@ -502,9 +551,9 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
                     {tables.length === 0 ? <EmptyState icon={<LayoutGrid className="size-8" />} title="Aún no hay mesas configuradas" description="Crea la primera mesa para comenzar a operar el salón." action={canCreateTables ? <Button size="sm" onClick={() => setShowTableForm(true)}><Plus className="size-4" />Crear mesa</Button> : undefined} /> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{tables.map((table) => { const status = tableStatus[table.status] || tableStatus.AVAILABLE; return <div key={table.id} role="button" tabIndex={0} onClick={() => setSelectedTableId(table.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedTableId(table.id); }} className={`group relative min-h-32 cursor-pointer rounded-2xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selectedTableId === table.id ? 'border-primary ring-4 ring-primary/10' : 'border-border/60'}`}><div className="flex items-start justify-between"><span className="text-2xl font-black">{table.code}</span><Badge className={status.className}>{status.label}</Badge></div><p className="mt-2 text-sm font-semibold text-foreground">{table.name}</p><p className="mt-1 text-xs text-muted-foreground">{table.zone || 'Salón principal'} · {table.seats} puestos</p><button type="button" onClick={(event) => { event.stopPropagation(); void copyQrLink(table); }} className="absolute bottom-3 right-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground" title="Ver enlace QR" aria-label={`Ver enlace QR de ${table.name}`}><QrCode className="size-4" /></button></div>; })}</div>}
                     {publicLink && <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4"><p className="text-xs font-black uppercase tracking-widest text-primary">Enlace público para clientes</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input readOnly value={publicLink} aria-label="Enlace público del menú" /><Button variant="outline" onClick={() => void navigator.clipboard.writeText(publicLink)}>Copiar</Button><a className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90" href={publicLink} target="_blank" rel="noreferrer">Abrir menú</a></div><p className="mt-2 text-xs text-muted-foreground">Este enlace abre la carta de la mesa y permite enviar pedidos sin iniciar sesión.</p></div>}
                   </section>
-                  <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}</span></span><span className="font-black text-primary">{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ item, quantity }) => <div key={item.id} className="flex items-center justify-between text-sm"><span>{quantity} × {item.name}</span><div className="flex items-center gap-2"><button type="button" onClick={() => removeFromCart(item.id)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0 || !canCreateOrders || !canApproveKitchen} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
+                  <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}</span></span><span className="font-black text-primary">{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ item, quantity }) => <div key={item.id} className="flex items-center justify-between text-sm"><span>{quantity} × {item.name}</span><div className="flex items-center gap-2"><button type="button" onClick={() => removeFromCart(item.id)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0 || !canCreateOrders} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
                 </div>}
-                {tab === 'comandas' && <div data-tour="restaurant-orders"><OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} onSend={async (order) => { if (!canApproveKitchen) return; try { await restaurantService.sendToKitchen(order.id); await loadData(); } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.')); } }} onStatus={changeOrderStatus} onCheckout={openCheckout} /></div>}
+                {tab === 'comandas' && <div data-tour="restaurant-orders"><OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} onSend={sendToKitchen} onStatus={changeOrderStatus} onCheckout={openCheckout} /></div>}
                 {tab === 'cocina' && <div data-tour="restaurant-kitchen"><KitchenBoard tickets={tickets} canApprove={canApproveKitchen} onStatus={updateKitchen} /></div>}
                 {tab === 'carta' && <div data-tour="restaurant-menu"><MenuBoard menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} onSaved={() => loadData()} /></div>}
                 {tab === 'reportes' && <div data-tour="restaurant-reports"><ReportsBoard summary={summary} /></div>}
@@ -585,6 +634,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
 
   const saveSettings = async (nextTheme?: 'modern' | 'classic' | 'elegant' | 'rustic', nextShowImages?: boolean) => {
     setSavingTheme(true);
+    const actionToken = beginNotificationAction();
     try {
       await restaurantService.updateMenuSettings({ theme: nextTheme ?? theme, showImages: nextShowImages ?? showImages });
       if (nextTheme) setTheme(nextTheme);
@@ -593,6 +643,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo guardar el diseño.'));
     } finally {
+      completeNotificationAction(actionToken);
       setSavingTheme(false);
     }
   };
@@ -607,12 +658,13 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
   const saveCategory = async () => {
     if (!categoryName.trim()) { toast.error('Escribe el nombre de la categoría.'); return; }
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       await restaurantService.createCategory({ name: categoryName.trim(), description: categoryDescription.trim() || undefined });
       setCategoryName(''); setCategoryDescription('');
       toast.success('Categoría creada.'); await onSaved();
     } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo crear la categoría.')); }
-    finally { setSaving(false); }
+    finally { completeNotificationAction(actionToken); setSaving(false); }
   };
 
   const saveItem = async () => {
@@ -621,6 +673,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
       toast.error('Completa categoría, nombre y un precio válido.'); return;
     }
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       if (editingItemId) {
         await restaurantService.updateMenuItem(editingItemId, { name: itemForm.name.trim(), description: itemForm.description.trim() || null, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation });
@@ -631,7 +684,7 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
       }
       setItemForm({ ...emptyForm, categoryId: itemForm.categoryId }); setEditingItemId(null); await onSaved();
     } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo guardar el platillo.')); }
-    finally { setSaving(false); }
+    finally { completeNotificationAction(actionToken); setSaving(false); }
   };
 
   const editItem = (categoryId: string, item: RestaurantMenuItem) => {
@@ -641,9 +694,10 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
 
   const toggleItem = async (item: RestaurantMenuItem) => {
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try { await restaurantService.updateMenuItem(item.id, { isAvailable: !item.isAvailable }); toast.success(item.isAvailable ? 'Platillo ocultado del menú público.' : 'Platillo publicado en el menú.'); await onSaved(); }
     catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo cambiar la disponibilidad.')); }
-    finally { setSaving(false); }
+    finally { completeNotificationAction(actionToken); setSaving(false); }
   };
 
   return <section className="space-y-5">

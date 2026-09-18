@@ -71,6 +71,7 @@ import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
 import { PasswordRequirements } from './PasswordRequirements';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
+import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 
 const submodulesFor = (parent: string): Submodule[] => SIDEBAR_PERMISSION_SUBMODULES
   .filter((sub) => sub.parent === parent && sub.subscription !== false)
@@ -268,6 +269,13 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
       setLoading(false);
     }
   };
+
+  useNotificationDomainRefresh({
+    module: 'suscripciones',
+    subModules: ['suscripciones', 'mi-sucursal', 'empresa', 'usuarios', 'roles', 'departamentos', 'dominio'],
+    onRefresh: () => { void fetchData(); },
+    enabled: Boolean(user),
+  });
 
   const inferSystemRoleFromCustomRole = (role: any): 'ADMIN' | 'EMPLOYEE' | 'VIEWER' => {
     const perms = Array.isArray(role?.permissions) ? role.permissions : [];

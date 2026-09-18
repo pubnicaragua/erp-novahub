@@ -33,6 +33,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AccountImportPreview } from './AccountImportPreview';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { Combobox } from '../ui/Combobox';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
@@ -298,6 +299,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     if (!pendingStatusAccount) return;
     const account = pendingStatusAccount;
     const nextIsActive = !account.isActive;
+    const actionToken = beginNotificationAction();
     setStatusChanging(true);
     try {
       await contabilidadService.updateAccount(account.id, { isActive: nextIsActive });
@@ -305,8 +307,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       setPendingStatusAccount(null);
       await fetchAccounts(true);
       toast.success(nextIsActive ? 'Cuenta habilitada' : 'Cuenta inhabilitada');
+      completeNotificationAction(actionToken);
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo actualizar el estado de la cuenta');
+      failNotificationAction(actionToken);
     } finally {
       setStatusChanging(false);
     }
@@ -316,6 +320,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     if (!mergeSource || !mergeTargetId) return;
     const source = mergeSource;
     const target = flatList.find(a => a.id === mergeTargetId);
+    const actionToken = beginNotificationAction();
     setMerging(true);
     try {
       const res = await contabilidadService.mergeAccount(source.id, mergeTargetId, mergeDeleteSource);
@@ -330,8 +335,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       } else {
         toast.success(`Transferencia completada. ${res?.transferredRecords ?? 0} registros movidos a ${target ? `${target.code} · ${target.name}` : 'la cuenta destino'}. La cuenta ${source.code} quedó inhabilitada y vacía.`);
       }
+      completeNotificationAction(actionToken);
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo transferir la cuenta');
+      failNotificationAction(actionToken);
     } finally {
       setMerging(false);
     }
@@ -465,6 +472,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
 
   const handleSave = async () => {
     if (!formData.name.trim()) { toast.error('El nombre es obligatorio'); return; }
+    const actionToken = beginNotificationAction();
     setSaving(true);
     try {
       const payload = {
@@ -482,10 +490,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         await contabilidadService.createAccount(payload);
         toast.success('Cuenta creada');
       }
+      completeNotificationAction(actionToken);
       setDialogOpen(false);
       fetchAccounts(true);
     } catch (e: any) {
       toast.error(e?.message || 'Error al guardar cuenta');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -586,6 +596,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
 
   const handleConfirmImport = async () => {
     if (importPreviewRows.length === 0) { toast.error('No hay cuentas válidas para importar'); return; }
+    const actionToken = beginNotificationAction();
     setImporting(true);
     setImportProgress(5);
     try {
@@ -599,6 +610,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         ? `${res?.imported ?? importPreviewRows.length} importadas, ${res?.removed ?? 0} reemplazadas`
         : `${res?.imported ?? importPreviewRows.length} cuentas importadas${importPreviewErrors.length > 0 ? ` (${importPreviewErrors.length} errores)` : ''}`;
       toast.success(msg);
+      completeNotificationAction(actionToken);
       setImportPreviewOpen(false);
       setImportOpen(false);
       setImportFile(null);
@@ -607,6 +619,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       setImportPreviewErrors([]);
     } catch (e: any) {
       toast.error(e?.message || 'Error al importar');
+      failNotificationAction(actionToken);
     } finally {
       setImporting(false);
       setImportProgress(0);
