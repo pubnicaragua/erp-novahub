@@ -96,9 +96,11 @@ const normalizeTrialBalanceRow = (row: any) => {
   const debit = Number(row?.totalDebit ?? row?.debit ?? row?.debitos ?? row?.debits ?? 0);
   const credit = Number(row?.totalCredit ?? row?.credit ?? row?.creditos ?? row?.credits ?? 0);
   const type = String(row?.accountType ?? row?.type ?? row?.tipo ?? account?.type ?? '').toUpperCase();
+  const rawCode = String(row?.accountCode ?? row?.code ?? row?.codigo ?? account?.code ?? '—');
+  const rawName = String(row?.accountName ?? row?.name ?? row?.nombre ?? account?.name ?? '—');
   return {
-    code: String(row?.accountCode ?? row?.code ?? row?.codigo ?? account?.code ?? '—'),
-    name: String(row?.accountName ?? row?.name ?? row?.nombre ?? account?.name ?? '—'),
+    code: rawCode,
+    name: rawName,
     type: ACCOUNT_TYPE_LABELS[type] || (type ? type : 'Sin clasificar'),
     debit: Number.isFinite(debit) ? debit : 0,
     credit: Number.isFinite(credit) ? credit : 0,

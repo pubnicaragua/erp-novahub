@@ -2295,40 +2295,42 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de venta</h3>
                     <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} {catalogItemFilter === 'SERVICE' ? 'servicios' : catalogItemFilter === 'PRODUCT' ? 'productos' : 'artículos'} disponibles</p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label
-                      title="Muestra en cada producto un botón para consultar su disponibilidad en otras sucursales"
-                      className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground select-none"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showAvailabilityAction}
-                        onChange={(event) => setShowAvailabilityAction(event.target.checked)}
-                        className="size-3.5 accent-primary"
-                      />
-                      Disponibilidad
-                    </label>
-                    <div className="inline-flex h-8 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
-                      <button
-                        type="button"
-                        aria-pressed={catalogView === 'list'}
-                        onClick={() => setCatalogView('list')}
-                        className={`flex h-6 items-center gap-1 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                          }`}
+                  <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label
+                        title="Muestra en cada producto un botón para consultar su disponibilidad en otras sucursales"
+                        className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground select-none"
                       >
-                        <List className="size-3" /> Lista
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={catalogView === 'catalog'}
-                        onClick={() => setCatalogView('catalog')}
-                        className={`flex h-6 items-center gap-1 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'catalog' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                      >
-                        <LayoutGrid className="size-3" /> Catálogo
-                      </button>
+                        <input
+                          type="checkbox"
+                          checked={showAvailabilityAction}
+                          onChange={(event) => setShowAvailabilityAction(event.target.checked)}
+                          className="size-3.5 accent-primary"
+                        />
+                        Disponibilidad
+                      </label>
+                      <div className="inline-flex h-8 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
+                        <button
+                          type="button"
+                          aria-pressed={catalogView === 'list'}
+                          onClick={() => setCatalogView('list')}
+                          className={`flex h-6 items-center gap-1 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                          <List className="size-3" /> Lista
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={catalogView === 'catalog'}
+                          onClick={() => setCatalogView('catalog')}
+                          className={`flex h-6 items-center gap-1 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'catalog' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                          <LayoutGrid className="size-3" /> Catálogo
+                        </button>
+                      </div>
                     </div>
-                    <div className="relative min-w-0 flex-1 sm:flex-none sm:w-72">
+                    <div className="relative w-full sm:w-72">
                       {isSearching ? (
                         <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
                       ) : (
@@ -2339,7 +2341,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                         onChange={(e) => setProductSearch(e.target.value)}
                         placeholder="Buscar producto o servicio..."
                         disabled={isRegisterDisabled}
-                        className="pl-9 h-8 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
+                        className="pl-9 h-8 w-full rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
                       />
                     </div>
                   </div>
@@ -2363,95 +2365,154 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   ))}
                 </div>
                 {catalogView === 'list' ? (
-                  <div className="overflow-x-auto rounded-xl border border-border/50">
-                    <div className="max-h-64 overflow-y-auto">
-                      <table className="w-full min-w-[520px] table-fixed text-xs md:min-w-0">
-                        <colgroup>
-                          <col className="w-[18%]" />
-                          <col className="w-[38%]" />
-                          <col className="w-[22%]" />
-                          <col className="w-[22%]" />
-                        </colgroup>
-                        <thead>
-                          <tr className="border-b border-border/30 bg-muted/30">
-                            <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Código</th>
-                            <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Descripción</th>
-                            <th className="px-2 sm:px-3 py-2.5 text-right text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Precio unit.</th>
-                            <th data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Acción</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/20">
-                          {filteredProducts.slice(0, 30).map((prod) => (
-                            <tr key={prod.id} className="transition-colors hover:bg-muted/20">
-                              <td className="min-w-0 px-2 sm:px-3 py-2.5 font-mono font-bold text-primary truncate">{prod.code}</td>
-                              <td className="min-w-0 px-2 sm:px-3 py-2.5">
-                                <div className="flex min-w-0 items-center gap-2">
-                                  <div className="min-w-0">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                      <p className="min-w-0 truncate font-bold">{prod.name}</p>
-                                      {prod.brand && <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">{prod.brand}</span>}
-                                      <Badge variant="secondary" className="shrink-0 text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
-                                    </div>
-                                  </div>
-                                  {prod.itemType === 'SERVICE' ? (
-                                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.isActive !== false ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/5" : "text-rose-500 border-rose-500/30 bg-rose-500/5"}`}>
-                                      {prod.isActive !== false ? 'Disponible' : 'No disp.'}
-                                    </Badge>
-                                  ) : (
-                                    prod.trackInventory && (
-                                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
-                                        {prod.currentStock ?? 0} unid.
-                                      </Badge>
-                                    )
-                                  )}
-                                </div>
-                                {prod.itemType !== 'SERVICE' && prod.trackInventory && (
-                                  <SalesWarehouseStockHint
-                                    product={prod}
-                                    warehouses={directWarehouseOptions}
-                                    warehouseId={selectedWarehouseId}
-                                    className="mt-1 px-0"
-                                  />
-                                )}
-                                {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
-                                {prod.commercialNote && <p className="max-w-[320px] truncate text-[10px] text-primary/70" title={prod.commercialNote}>Nota: {prod.commercialNote}</p>}
-                              </td>
-                              <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">
-                                {getCatalogPrice(prod) === undefined ? <span className="text-[10px] font-black uppercase text-rose-500">Sin precio</span> : formatCurrency(getCatalogPrice(prod) ?? 0)}
-                              </td>
-                              <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
-                                <div className="flex flex-wrap items-center justify-center gap-1">
-                                  {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
-                                    <Button size="sm" variant="outline"
-                                      onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
-                                      disabled={isRegisterDisabled}
-                                      title={`Consultar disponibilidad de ${prod.name} en otras sucursales`}
-                                      className="h-7 whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
-                                      <Store className="mr-1 size-3" /> Disponibilidad
-                                    </Button>
-                                  )}
-                                  <Button size="sm" variant="ghost" onClick={() => handleAddOrCheck(prod)}
-                                    disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
-                                    className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
-                                    <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar')}
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                          {filteredProducts.length === 0 && (
-                            <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No hay productos ni servicios disponibles</td></tr>
-                          )}
-                        </tbody>
-                      </table>
+                  <div className="overflow-y-auto overflow-x-auto rounded-xl border border-border/50 max-h-80 sm:max-h-96">
+                    {/* Vista lista para móvil */}
+                    <div className="divide-y divide-border/25 sm:hidden">
+                      {filteredProducts.slice(0, 30).map((prod) => (
+                        <div key={prod.id} className="p-3 hover:bg-muted/20 transition-colors space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                              <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
+                              <Badge variant="secondary" className="text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
+                              {prod.itemType === 'SERVICE' ? (
+                                <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.isActive !== false ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/5" : "text-rose-500 border-rose-500/30 bg-rose-500/5"}`}>
+                                  {prod.isActive !== false ? 'Disponible' : 'No disp.'}
+                                </Badge>
+                              ) : (
+                                prod.trackInventory && (
+                                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                    {prod.currentStock ?? 0} unid.
+                                  </Badge>
+                                )
+                              )}
+                            </div>
+                            <span className="font-mono text-xs font-black text-primary shrink-0 whitespace-nowrap">
+                              {getCatalogPrice(prod) === undefined ? <span className="text-[10px] text-rose-500 font-bold uppercase">Sin precio</span> : formatCurrency(getCatalogPrice(prod) ?? 0)}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground leading-snug">{prod.name}</p>
+                            {prod.brand && <p className="text-[10px] font-bold text-primary/80 uppercase mt-0.5">{prod.brand}{prod.brandCustomerName ? ` · ${prod.brandCustomerName}` : ''}</p>}
+                            {prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                              <SalesWarehouseStockHint
+                                product={prod}
+                                warehouses={directWarehouseOptions}
+                                warehouseId={selectedWarehouseId}
+                                className="mt-1 px-0"
+                              />
+                            )}
+                            {prod.description && <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{prod.description}</p>}
+                          </div>
+                          <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1">
+                            {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                              <Button size="sm" variant="outline"
+                                onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
+                                disabled={isRegisterDisabled}
+                                title={`Consultar disponibilidad de ${prod.name} en otras sucursales`}
+                                className="h-7 text-[10px] font-bold text-primary hover:bg-primary/10 rounded-lg px-2">
+                                <Store className="mr-1 size-3" /> Disponibilidad
+                              </Button>
+                            )}
+                            <Button size="sm" variant="default" onClick={() => handleAddOrCheck(prod)}
+                              disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
+                              className="h-7 text-[10px] font-bold rounded-lg px-2.5">
+                              <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar')}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      {filteredProducts.length === 0 && (
+                        <div className="p-8 text-center text-xs text-muted-foreground">No hay productos ni servicios disponibles</div>
+                      )}
                     </div>
+
+                    {/* Vista tabla para pantallas medianas y grandes */}
+                    <table data-responsive-cards="false" className="hidden sm:table w-full min-w-[520px] table-fixed text-xs">
+                      <colgroup>
+                        <col className="w-[18%]" />
+                        <col className="w-[38%]" />
+                        <col className="w-[22%]" />
+                        <col className="w-[22%]" />
+                      </colgroup>
+                      <thead className="sticky top-0 z-10">
+                        <tr className="border-b border-border/30 bg-muted/50 backdrop-blur-sm">
+                          <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Código</th>
+                          <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Descripción</th>
+                          <th className="px-2 sm:px-3 py-2.5 text-right text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Precio unit.</th>
+                          <th data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/20">
+                        {filteredProducts.slice(0, 30).map((prod) => (
+                          <tr key={prod.id} className="transition-colors hover:bg-muted/20">
+                            <td className="min-w-0 px-2 sm:px-3 py-2.5 font-mono font-bold text-primary truncate">{prod.code}</td>
+                            <td className="min-w-0 px-2 sm:px-3 py-2.5">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <p className="min-w-0 truncate font-bold">{prod.name}</p>
+                                    {prod.brand && <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">{prod.brand}</span>}
+                                    <Badge variant="secondary" className="shrink-0 text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
+                                  </div>
+                                </div>
+                                {prod.itemType === 'SERVICE' ? (
+                                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.isActive !== false ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/5" : "text-rose-500 border-rose-500/30 bg-rose-500/5"}`}>
+                                    {prod.isActive !== false ? 'Disponible' : 'No disp.'}
+                                  </Badge>
+                                ) : (
+                                  prod.trackInventory && (
+                                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                      {prod.currentStock ?? 0} unid.
+                                    </Badge>
+                                  )
+                                )}
+                              </div>
+                              {prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                <SalesWarehouseStockHint
+                                  product={prod}
+                                  warehouses={directWarehouseOptions}
+                                  warehouseId={selectedWarehouseId}
+                                  className="mt-1 px-0"
+                                />
+                              )}
+                              {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
+                              {prod.commercialNote && <p className="max-w-[320px] truncate text-[10px] text-primary/70" title={prod.commercialNote}>Nota: {prod.commercialNote}</p>}
+                            </td>
+                            <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">
+                              {getCatalogPrice(prod) === undefined ? <span className="text-[10px] font-black uppercase text-rose-500">Sin precio</span> : formatCurrency(getCatalogPrice(prod) ?? 0)}
+                            </td>
+                            <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
+                              <div className="flex flex-wrap items-center justify-center gap-1">
+                                {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                  <Button size="sm" variant="outline"
+                                    onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
+                                    disabled={isRegisterDisabled}
+                                    title={`Consultar disponibilidad de ${prod.name} en otras sucursales`}
+                                    className="h-7 whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
+                                    <Store className="mr-1 size-3" /> Disponibilidad
+                                  </Button>
+                                )}
+                                <Button size="sm" variant="ghost" onClick={() => handleAddOrCheck(prod)}
+                                  disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
+                                  className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
+                                  <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar')}
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredProducts.length === 0 && (
+                          <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No hay productos ni servicios disponibles</td></tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
-                  <div className="max-h-[34rem] overflow-y-auto pr-1">
+                  <div className="max-h-[42rem] overflow-y-auto pr-1">
                     {filteredProducts.length > 0 ? (
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                         {filteredProducts.slice(0, 30).map((prod) => (
-                          <article key={prod.id} className="group overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
+                          <article key={prod.id} className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
                             <ProductThumbnail
                               src={prod.imageUrl}
                               alt={prod.name}
@@ -2459,9 +2520,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                               fit="contain"
                               className="rounded-none border-x-0 border-t-0 bg-muted/25 p-3 shadow-none"
                             />
-                            <div className="space-y-3 p-4">
-                              <div>
-                                <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <div className="flex flex-1 flex-col gap-3 p-4">
+                              <div className="flex-1">
+                                <div className="mb-1.5 flex items-start justify-between gap-2">
                                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                     <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
                                     <Badge variant="secondary" className="text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
@@ -2487,7 +2548,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                         <Store className="size-3.5" />
                                       </Button>
                                     )}
-                                    <span className="font-mono text-sm font-black text-primary">{getCatalogPrice(prod) === undefined ? 'Sin precio' : formatCurrency(getCatalogPrice(prod) ?? 0)}</span>
+                                    <span className="font-mono text-sm font-black text-primary whitespace-nowrap">
+                                      {getCatalogPrice(prod) === undefined ? 'Sin precio' : formatCurrency(getCatalogPrice(prod) ?? 0)}
+                                    </span>
                                   </div>
                                 </div>
                                 <h4 className="truncate text-sm font-black">{prod.name}</h4>
@@ -2504,24 +2567,26 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                   />
                                 )}
                               </div>
-                              <Button
-                                onClick={() => handleAddOrCheck(prod)}
-                                disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
-                                className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
-                              >
-                                <ShoppingCart className="mr-2 size-3.5" />
-                                {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disponible' : 'Agregar a factura') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar a factura')}
-                              </Button>
-                              {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                              <div className="mt-auto space-y-2">
                                 <Button
-                                  variant="outline"
-                                  onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
-                                  disabled={isRegisterDisabled}
-                                  className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
+                                  onClick={() => handleAddOrCheck(prod)}
+                                  disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
+                                  className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
                                 >
-                                  <Store className="mr-2 size-3" /> Disponibilidad
+                                  <ShoppingCart className="mr-2 size-3.5" />
+                                  {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disponible' : 'Agregar a factura') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar a factura')}
                                 </Button>
-                              )}
+                                {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
+                                    disabled={isRegisterDisabled}
+                                    className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
+                                  >
+                                    <Store className="mr-2 size-3" /> Disponibilidad
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           </article>
                         ))}
@@ -2576,7 +2641,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 ) : (
                   <>
                   <div className="hidden overflow-x-auto rounded-xl border border-border/50 lg:block">
-                    <table className="w-full min-w-[1120px] table-fixed text-xs">
+                    <table data-responsive-cards="false" className="w-full min-w-[1120px] table-fixed text-xs">
                       <colgroup>
                         <col className="w-[17rem]" />
                         <col className="w-[13rem]" />
