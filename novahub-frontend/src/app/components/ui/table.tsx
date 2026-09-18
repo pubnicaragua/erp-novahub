@@ -58,7 +58,7 @@ function addResponsiveCellLabels(children: React.ReactNode, labels: string[]): R
   });
 }
 
-function Table({ className, containerClassName, containerStyle, responsiveCards = true, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; containerStyle?: React.CSSProperties; responsiveCards?: boolean }) {
+function Table({ className, containerClassName, containerStyle, responsiveCards = true, viewport = false, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; containerStyle?: React.CSSProperties; responsiveCards?: boolean; viewport?: boolean }) {
   const responsiveChildren = responsiveCards
     ? addResponsiveCellLabels(props.children, getResponsiveHeaderLabels(props.children))
     : props.children;
@@ -67,8 +67,15 @@ function Table({ className, containerClassName, containerStyle, responsiveCards 
     <div
       data-slot="table-container"
       data-responsive-cards-container={responsiveCards ? "true" : undefined}
-      style={containerStyle}
-      className={cn("relative w-full max-w-full overflow-x-auto overflow-y-clip", containerClassName)}
+      data-table-viewport-scroll={viewport ? "true" : undefined}
+      style={viewport
+        ? { ...containerStyle, minHeight: containerStyle?.minHeight ?? "36rem", maxHeight: containerStyle?.maxHeight ?? "44rem", overscrollBehaviorY: "auto" }
+        : containerStyle}
+      className={cn(
+        "relative w-full max-w-full overflow-x-auto overflow-y-clip",
+        containerClassName,
+        viewport && "min-h-[36rem] max-h-[44rem] overflow-y-auto overscroll-y-auto scrollbar-overlay",
+      )}
     >
       <table
         data-slot="table"

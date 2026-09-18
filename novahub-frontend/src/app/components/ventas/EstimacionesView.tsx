@@ -1232,10 +1232,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setDetailEstimate(row)}
           highlightedRowId={highlightedAlertId}
-          actionsWidth="w-56"
+          actionsWidth="w-40"
           fitContent
           layoutMode={layoutMode}
           showHorizontalControls
+          verticalScroll
           actions={(row) => (
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 pr-1 xl:min-w-max xl:flex-nowrap" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <WhatsAppActionButton

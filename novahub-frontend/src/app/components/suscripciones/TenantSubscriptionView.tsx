@@ -38,6 +38,7 @@ import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode
 import { Checkbox } from '../ui/checkbox';
 import { CustomerPortalAccessDialog } from './CustomerPortalAccessDialog';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import type { ModuleQuoteCatalogModule, ModuleQuoteRequest, ModuleQuoteRequestTargetType } from '../../services/subscriptions.service';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -45,8 +46,11 @@ interface TenantSubscriptionViewProps {
   onSubModuleChange?: (subModule?: string) => void;
   availableModules: any[];
   requests: any[];
+  moduleCatalog?: ModuleQuoteCatalogModule[];
+  moduleQuoteRequests?: ModuleQuoteRequest[];
   customRoles?: any[];
-  onRequestModule: (moduleId: string, notes: string) => void;
+  onRequestModule?: (moduleId: string, notes: string) => void;
+  onRequestQuote?: (targetType: ModuleQuoteRequestTargetType, targetId: string, comment: string) => void | Promise<void>;
   onRefresh: () => void;
 }
 
@@ -100,7 +104,7 @@ const getDirectRolePermissions = (role: any) => {
   });
 };
 
-export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleChange, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
+export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleChange, availableModules, requests, moduleCatalog = [], moduleQuoteRequests = [], customRoles = [], onRequestModule, onRequestQuote, onRefresh }: TenantSubscriptionViewProps) {
   const { updateConfig } = useTheme();
   const { user: currentUser, canPerform, refreshProfile } = useAuth();
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
@@ -581,9 +585,13 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     setIsRequestDialogOpen(true);
   };
 
-  const submitRequest = () => {
+  const submitRequest = async () => {
     if (selectedModule && canRequestModules) {
-      onRequestModule(selectedModule.id, notes);
+      if (onRequestQuote) {
+        await onRequestQuote(selectedModule.targetType || 'MODULE', selectedModule.id, notes);
+      } else {
+        onRequestModule?.(selectedModule.id, notes);
+      }
       setIsRequestDialogOpen(false);
       setSelectedModule(null);
       setNotes('');
@@ -597,6 +605,17 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const isModulePending = (modId: string) => {
     return requests.some((r: any) => r.clientTenantId === tenant?.id && r.requestedModule === modId && r.status === 'PENDING');
   };
+
+  const orderedCatalog = useMemo(() => [...moduleCatalog].sort((left, right) => {
+    const rank = (status: string) => status === 'ACTIVE' ? 0 : status === 'PARTIAL' ? 1 : 2;
+    return rank(left.status) - rank(right.status) || left.label.localeCompare(right.label, 'es');
+  }), [moduleCatalog]);
+
+  const quoteStatusLabel = (status: string) => ({
+    PENDING: 'Solicitud pendiente', IN_REVIEW: 'En revisión', QUOTED: 'Cotizada', ATTENDED: 'Atendida', REJECTED: 'Rechazada',
+  } as Record<string, string>)[status] || status;
+
+  const activationLabel = (source: string) => source === 'INHERITED' ? 'Heredado' : source === 'MIXED' ? 'Directo + heredado' : source === 'DIRECT' ? 'Activo en sucursal' : 'No habilitado';
 
   if (!tenant) {
     return <div className="mx-auto flex min-h-[320px] max-w-3xl items-center justify-center p-6 text-center text-sm text-muted-foreground">Cargando la información de Mi Sucursal...</div>;
@@ -729,139 +748,62 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
         </TabsContent>
 
         <TabsContent value="plan" className="space-y-8">
-          {/* Plan Card */}
-          <Card className="bg-card border-border/50 overflow-hidden relative shadow-sm">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-            <CardContent className="p-8">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-                <div className="flex items-center gap-6">
-                  <div className="size-20 rounded-2xl bg-muted/20 flex items-center justify-center border border-border">
-                    <Building2 className="size-10 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-foreground tracking-tight mb-2">{tenant.name}</h2>
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Globe className="size-4" /> {tenant.slug}.novahub.io
-                      </span>
-                      <div className="size-1 rounded-full bg-border" />
-                      <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Users className="size-4" /> {operationalUsers.length} Usuarios Activos
-                      </span>
+          <Card className="relative overflow-hidden border-border/50 bg-card shadow-sm">
+            <div className="pointer-events-none absolute right-0 top-0 size-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl" />
+            <CardContent className="relative space-y-4 p-6 sm:p-8">
+              <div className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+                  <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted/20 sm:size-20"><Building2 className="size-8 text-primary sm:size-10" /></div>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-xl font-black tracking-tight sm:text-2xl">{tenant.name}</h2>
+                    <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                      <span className="flex min-w-0 items-center gap-1.5"><Globe className="size-4 shrink-0" /> <span className="truncate">{tenant.slug}.novahub.io</span></span>
+                      <span className="flex items-center gap-1.5"><Users className="size-4" /> {operationalUsers.length} usuarios activos</span>
                     </div>
                   </div>
                 </div>
-                
-                <div className="flex flex-col items-end gap-2">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Estado de Cuenta</p>
-                  <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 font-black">AL DÍA</Badge>
-                </div>
+                <div className="flex shrink-0 flex-col gap-2 lg:items-end"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado de cuenta</p><Badge className="w-fit border-primary/20 bg-primary/10 px-3 py-1 font-black text-primary">AL DÍA</Badge></div>
+              </div>
+              <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 text-sm text-muted-foreground">
+                Consulta el catálogo completo de NovaHub. Las vistas habilitadas permanecen disponibles y las demás se pueden cotizar sin abrir el módulo operativo ni activar nada automáticamente.
               </div>
             </CardContent>
           </Card>
 
-          {/* Modules Catalog */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {availableModules.map((mod) => {
-              const hasSubmodules = mod.submodules && mod.submodules.length > 0;
-              const activeSubmodulesCount = hasSubmodules 
-                ? mod.submodules.filter((sub: any) => isModuleActive(sub.id)).length 
-                : 0;
-              const allSubmodulesActive = hasSubmodules ? activeSubmodulesCount === mod.submodules.length : false;
-              
-              const isMainActive = hasSubmodules ? allSubmodulesActive : isModuleActive(mod.id);
-              const isMainPending = hasSubmodules ? false : isModulePending(mod.id);
-              const isPartial = hasSubmodules && !allSubmodulesActive && activeSubmodulesCount > 0;
-
-              const Icon = mod.icon;
-
-              return (
-                <Card key={mod.id} className={cn(
-                  "relative overflow-hidden transition-all duration-300 border-border/50 flex flex-col group",
-                  isMainActive ? "bg-primary/5 border-primary/20 shadow-md shadow-primary/5" : "bg-card hover:border-primary/30"
-                )}>
-                  <CardContent className="p-6 flex-1 flex flex-col">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className={cn(
-                        "p-3 rounded-xl transition-colors",
-                        isMainActive ? "bg-primary/20 text-primary" : isPartial ? "bg-primary/10 text-primary/70" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
-                      )}>
-                        <Icon className="size-6" />
+          {!orderedCatalog.length ? (
+            <div className="rounded-3xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">Cargando el catálogo de módulos…</div>
+          ) : (
+            <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2">
+              {orderedCatalog.map((module) => {
+                const moduleRequest = module.openRequest;
+                const moduleIsActive = module.status === 'ACTIVE';
+                const moduleIconClass = moduleIsActive ? 'bg-primary/15 text-primary' : module.status === 'PARTIAL' ? 'bg-primary/10 text-primary/80' : 'bg-muted text-muted-foreground';
+                const orderedViews = [...module.views].sort((left, right) => Number(right.status === 'ACTIVE') - Number(left.status === 'ACTIVE') || left.label.localeCompare(right.label, 'es'));
+                return (
+                  <Card key={module.id} className={cn('min-w-0 overflow-hidden border-border/50 shadow-sm', moduleIsActive && 'border-primary/20 bg-primary/[0.025]')}>
+                    <CardHeader className="gap-4 border-b border-border/40 p-5 sm:p-6">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3"><div className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', moduleIconClass)}><LayoutGrid className="size-5" /></div><div className="min-w-0"><CardTitle className="truncate text-base font-black sm:text-lg">{module.label}</CardTitle><CardDescription>{module.views.length ? `${module.views.filter((view) => view.status === 'ACTIVE').length} de ${module.views.length} vistas activas` : 'Módulo completo'}</CardDescription></div></div>
+                        <div className="flex shrink-0 flex-col items-end gap-1.5"><Badge variant={moduleIsActive ? 'default' : 'outline'} className={cn('text-[10px] font-black uppercase', moduleIsActive && 'bg-primary text-primary-foreground')}>{module.status === 'ACTIVE' ? <><Check className="mr-1 size-3" /> {module.activationSource === 'INHERITED' ? 'Activo heredado' : 'Activo'}</> : module.status === 'PARTIAL' ? 'Parcialmente activo' : 'No habilitado'}</Badge>{module.activationSource !== 'NONE' && <span className="text-[10px] font-bold text-muted-foreground">{activationLabel(module.activationSource)}</span>}</div>
                       </div>
-                      {isMainActive ? (
-                        <Badge className="bg-primary text-primary-foreground border-none font-bold uppercase text-[10px] px-2 py-0.5">
-                          <Check className="size-3 mr-1" /> Activo
-                        </Badge>
-                      ) : isMainPending ? (
-                        <Badge className="bg-primary/10 text-primary border-primary/20 font-bold uppercase text-[10px] animate-pulse">
-                          <Clock className="size-3 mr-1" /> Pendiente
-                        </Badge>
-                      ) : isPartial ? (
-                        <Badge className="bg-primary/10 text-primary/70 border-primary/20 font-bold uppercase text-[10px]">
-                          {activeSubmodulesCount} Activos
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <h4 className="font-bold text-lg mb-1">{mod.label}</h4>
-                    <p className="text-sm text-muted-foreground mb-6 line-clamp-2">{mod.description}</p>
-                    
-                    {/* Submodules List */}
-                    {hasSubmodules && (
-                      <div className="mt-auto space-y-2 pt-4 border-t border-border/50">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Funcionalidades</p>
-                        {mod.submodules.map((sub: any) => {
-                          const subActive = isModuleActive(sub.id);
-                          const subPending = isModulePending(sub.id);
-                          
-                          return (
-                            <div key={sub.id} className="flex items-center justify-between group/sub">
-                              <div className="flex items-center gap-2">
-                                <div className={cn("size-1.5 rounded-full", subActive ? "bg-primary" : "bg-muted-foreground/30")} />
-                                <span className={cn("text-xs font-medium", subActive ? "text-foreground" : "text-muted-foreground")}>
-                                  {sub.label}
-                                </span>
-                              </div>
-                              
-                              <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                                {canRequestModules && !subActive && !subPending && (
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    className="h-6 px-2 text-[10px] uppercase font-bold text-primary hover:bg-primary/10"
-                                    onClick={() => handleRequestClick(sub)}
-                                  >
-                                    Solicitar
-                                  </Button>
-                                )}
-                              </div>
-                              
-                              {subPending && (
-                                <Badge className="bg-primary/10 text-primary border-none text-[9px] uppercase px-1.5 py-0">
-                                  En Cola
-                                </Badge>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                      {module.status !== 'ACTIVE' && canRequestModules && !moduleRequest && <Button variant="outline" className="w-full rounded-xl border-primary/25 text-xs font-black uppercase tracking-wide text-primary hover:bg-primary/10" onClick={() => handleRequestClick({ id: module.id, label: module.label, targetType: 'MODULE' })}><Plus className="mr-2 size-4" /> Solicitar módulo completo</Button>}
+                      {moduleRequest && <Badge variant="outline" className="w-fit border-primary/30 bg-primary/5 text-[10px] font-bold text-primary"><Clock className="mr-1 size-3" /> {quoteStatusLabel(moduleRequest.status)}</Badge>}
+                    </CardHeader>
+                    {!!module.views.length && <CardContent className="space-y-2 p-5 sm:p-6"><p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vistas contratables</p>{orderedViews.map((view) => {
+                      const viewRequest = view.openRequest;
+                      const active = view.status === 'ACTIVE';
+                      return <div key={view.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/40 bg-muted/[0.12] px-3 py-2.5"><div className="flex min-w-0 items-center gap-2"><span className={cn('size-2 shrink-0 rounded-full', active ? 'bg-primary' : 'bg-muted-foreground/30')} /><span className={cn('min-w-0 break-words text-xs font-semibold', !active && 'text-muted-foreground')}>{view.label}</span>{view.activationSource !== 'NONE' && view.activationSource !== 'DIRECT' && <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[9px]">Heredado</Badge>}</div><div className="flex shrink-0 items-center gap-2">{active ? <Badge variant="outline" className="border-primary/25 px-1.5 py-0 text-[9px] text-primary">{view.activationSource === 'INHERITED' ? 'Activo heredado' : 'Activo'}</Badge> : viewRequest ? <Badge variant="outline" className="border-primary/25 px-1.5 py-0 text-[9px] text-primary">{quoteStatusLabel(viewRequest.status)}</Badge> : canRequestModules ? <Button variant="ghost" size="sm" className="h-7 rounded-lg px-2 text-[10px] font-black uppercase text-primary hover:bg-primary/10" onClick={() => handleRequestClick({ id: view.id, label: view.label, targetType: 'VIEW' })}>Solicitar cotización</Button> : <span className="text-[10px] text-muted-foreground">No habilitada</span>}</div></div>;
+                    })}</CardContent>}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
 
-                    {canRequestModules && !hasSubmodules && !isMainActive && !isMainPending && (
-                      <div className="mt-auto pt-6">
-                        <Button 
-                          variant="outline" 
-                          className="w-full font-bold uppercase text-[10px] tracking-widest border-primary/20 text-primary hover:bg-primary/10"
-                          onClick={() => handleRequestClick(mod)}
-                        >
-                          <Plus className="size-4 mr-2" /> Solicitar Activación
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+          <Card className="border-border/50 shadow-sm">
+            <CardHeader className="p-5 pb-3 sm:p-6 sm:pb-3"><CardTitle className="text-base font-black uppercase tracking-wide">Historial de solicitudes</CardTitle><CardDescription>El estado se actualiza desde la plataforma. Solicitar una cotización no modifica tus módulos.</CardDescription></CardHeader>
+            <CardContent className="space-y-2 p-5 pt-2 sm:p-6 sm:pt-2">{!moduleQuoteRequests.length ? <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Aún no has enviado solicitudes de cotización.</div> : moduleQuoteRequests.map((request) => <div key={request.id} className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border/50 bg-muted/[0.08] p-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="break-words text-sm font-bold">{request.parentModuleLabel} · {request.targetLabel}</p><p className="text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleDateString('es-NI')} · {request.comment || 'Sin comentario'}</p></div><Badge variant="outline" className="w-fit shrink-0 border-primary/25 text-[10px] font-bold text-primary">{quoteStatusLabel(request.status)}</Badge></div>)}</CardContent>
+          </Card>
         </TabsContent>
 
          <TabsContent value="team" className="space-y-4">
@@ -1286,16 +1228,16 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
       <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Solicitar Módulo: {selectedModule?.label}</DialogTitle>
+            <DialogTitle>Solicitar cotización: {selectedModule?.label}</DialogTitle>
             <DialogDescription>
-              Envía una solicitud para habilitar este módulo en tu empresa. Nuestro equipo se contactará para los detalles.
+              La solicitud llegará al equipo de plataforma para preparar una cotización. No se activará ningún módulo automáticamente.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Notas Adicionales (Opcional)</Label>
               <Textarea 
-                placeholder="¿Algún requerimiento especial para este módulo?"
+                placeholder="Describe la necesidad o el alcance que necesitas (opcional)."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
@@ -1304,7 +1246,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsRequestDialogOpen(false)}>Cancelar</Button>
             <Button className="bg-primary text-primary-foreground" onClick={submitRequest}>
-              Enviar Solicitud
+              Solicitar cotización
             </Button>
           </DialogFooter>
         </DialogContent>

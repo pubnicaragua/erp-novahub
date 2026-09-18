@@ -1508,26 +1508,28 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             )}
           </div>
         </div>
-        <EditableDataTable 
-          data={filteredData}
-          pagination={pagination}
-          showHorizontalControls
-          actionsWidth="w-56"
-          fitContent
-          columns={visibleColumns}
-          layoutMode={layoutMode}
-          onRowUpdate={handleUpdate}
-          onRowClick={(row) => setDetailOrder(row)}
-          highlightedRowId={highlightedAlertId}
-          isLoading={loading}
-           actions={(row) => (
-             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 pr-1 xl:min-w-max xl:flex-nowrap" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+        <div className="sales-orders-table min-w-0">
+          <EditableDataTable
+            data={filteredData}
+            pagination={pagination}
+            showHorizontalControls
+            actionsWidth="w-40"
+            fitContent
+            columns={visibleColumns}
+            layoutMode={layoutMode}
+            verticalScroll
+            onRowUpdate={handleUpdate}
+            onRowClick={(row) => setDetailOrder(row)}
+            highlightedRowId={highlightedAlertId}
+            isLoading={loading}
+            actions={(row) => (
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 pr-1 xl:min-w-max xl:flex-nowrap" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                 <WhatsAppActionButton
                   phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
                   documentLabel="orden de venta"
                   onSend={() => handleWhatsApp(row)}
                 />
-                 {canPerform('SALES_ORDERS', 'approve') && ['IN_PROCESS', 'APPROVED'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber && (
+                {canPerform('SALES_ORDERS', 'approve') && ['IN_PROCESS', 'APPROVED'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber && (
                   <Button 
                     type="button"
                     title={normalizeOrderStatus(row.status) === 'IN_PROCESS' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
@@ -1563,9 +1565,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   <Ban className="size-4 text-muted-foreground" />
                   </Button>
                 )}
-             </div>
-         )}
-         />
+              </div>
+            )}
+          />
+        </div>
        </div>
 
       <SalesDocumentDetailSheet

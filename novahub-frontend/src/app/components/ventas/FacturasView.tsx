@@ -2205,6 +2205,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         actionsWidth="w-44"
         fitContent
           layoutMode={layoutMode}
+          verticalScroll
           highlightedRowId={highlightedAlertId}
           showSelection={canPerform('SALES_INVOICES', 'delete')}
           isRowSelectable={(invoice) => canPerform('SALES_INVOICES', 'delete') && isInvoiceCancellableFromList(invoice)}

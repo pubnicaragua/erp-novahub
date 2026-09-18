@@ -898,6 +898,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           showSelection={false}
           layoutMode={layoutMode}
+          verticalScroll
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1">

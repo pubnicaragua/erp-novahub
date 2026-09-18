@@ -1000,10 +1000,11 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
           onRowUpdate={async () => {}}
           onRowClick={(row) => setDetailCredit(row)}
           isLoading={loading}
-          actionsWidth="w-36"
+          actionsWidth="w-32"
           fitContent
           showHorizontalControls
           layoutMode={layoutMode}
+          verticalScroll
           actions={(row) => {
             const status = normalizeStatus(row.status);
             const activeQueue = ['PENDING', 'CLAIMED'].includes(normalizeStatus(row.cashQueue?.status));

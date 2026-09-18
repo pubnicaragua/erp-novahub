@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useAuth } from '../contexts/AuthContext';
-import { subscriptionsService, type SubscriptionRequest } from '../services/subscriptions.service';
+import { subscriptionsService, type ModuleQuoteCatalogModule, type ModuleQuoteRequest, type SubscriptionRequest } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
 import { rolesService } from '../services/roles.service';
 import { toast } from 'sonner';
@@ -63,7 +63,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import type { Submodule } from '../types/modules';
-import { SIDEBAR_PERMISSION_SUBMODULES } from '../utils/sidebarPermissions';
+import { SIDEBAR_PERMISSION_PARENT_ORDER, SIDEBAR_PERMISSION_SUBMODULES } from '../utils/sidebarPermissions';
 import { storageService } from '../services/storage.service';
 import { optimizeImageFile } from '../utils/image-optimization';
 import { authService } from '../services/auth.service';
@@ -77,26 +77,22 @@ const submodulesFor = (parent: string): Submodule[] => SIDEBAR_PERMISSION_SUBMOD
   .filter((sub) => sub.parent === parent && sub.subscription !== false)
   .map((sub) => ({ ...sub, description: `Vista de ${sub.label}` }));
 
-const AVAILABLE_MODULES = [
-  { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: submodulesFor('SALES') },
-  { id: 'INVENTORY', label: 'Inventario', icon: Package, description: 'Stock, Almacenes y SKU', submodules: submodulesFor('INVENTORY') },
-  { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General', submodules: submodulesFor('FINANCIAL') },
-  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores, órdenes y créditos del proveedor', submodules: submodulesFor('PURCHASES') },
-  { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados', submodules: submodulesFor('HR') },
-  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades', submodules: submodulesFor('ACTIVITIES') },
-  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental', submodules: submodulesFor('DOCUMENTS') },
-  { id: 'TICKETS', label: 'Gestión de tickets', icon: Headphones, description: 'Soporte y Atención' },
-  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema', submodules: submodulesFor('NOTIFICATIONS') },
-  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: submodulesFor('REPORTS') },
-  { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Plan de Cuentas, Asientos y Reportes Fiscales', submodules: submodulesFor('ACCOUNTING') },
-  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
-  { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
-  { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
-  { id: 'TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
-  { id: 'SUPPORT', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
-  { id: 'NOVACHAT', label: 'Nova Suite', icon: NovaSuiteIcon, description: 'Bandeja multicanal y comunicación unificada' },
-  { id: 'TRACKING', label: 'Tracking de Importaciones', icon: Ship, description: 'Envíos de agencia por código de tracking' },
-];
+const QUOTEABLE_PARENT_LABELS: Record<string, string> = {
+  SALES: 'Ventas', PURCHASES: 'Compras', RESTAURANT: 'Restaurante POS', TRACKING: 'Tracking de Importaciones',
+  INVENTORY: 'Inventario de Mercancías', FINANCIAL: 'Finanzas', ACCOUNTING: 'Contabilidad', REPORTS: 'Reportes',
+  HR: 'Recursos Humanos', ACTIVITIES: 'Actividades', PROJECTS: 'Proyectos', FORCE_SALES: 'Fuerza Comercial',
+  TICKETS: 'Gestión de tickets', HR_TRAINING: 'Centro de capacitación', SUPPORT_TECH: 'Soporte técnico', LEGAL: 'Asesoría legal',
+  FINANCING: 'Financiamiento PYME', NOVACHAT: 'Nova Suite', DOCUMENTS: 'Nova Cloud', NOTIFICATIONS: 'Notificaciones',
+};
+const EXCLUDED_QUOTEABLE_PARENTS = new Set(['DASHBOARD', 'MY_COMPANY', 'CONFIGURATION']);
+const AVAILABLE_MODULES = SIDEBAR_PERMISSION_PARENT_ORDER
+  .filter((parent) => !EXCLUDED_QUOTEABLE_PARENTS.has(parent) && Boolean(QUOTEABLE_PARENT_LABELS[parent]))
+  .map((parent) => ({
+    id: parent,
+    label: QUOTEABLE_PARENT_LABELS[parent],
+    description: `Módulo y vistas contratables de ${QUOTEABLE_PARENT_LABELS[parent]}`,
+    submodules: submodulesFor(parent),
+  }));
 
 const SYSTEM_ROLE_OPTIONS = [
   { value: 'ADMIN', label: 'Administrador', description: 'Acceso total del tenant' },
@@ -128,6 +124,8 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
   const canViewRoles = canPerform('CONFIG_ROLES', 'view');
   const canViewSubscriptions = canPerform('SUBSCRIPTIONS', 'view');
   const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
+  const [moduleCatalog, setModuleCatalog] = useState<ModuleQuoteCatalogModule[]>([]);
+  const [moduleQuoteRequests, setModuleQuoteRequests] = useState<ModuleQuoteRequest[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [customRoles, setCustomRoles] = useState<any[]>([]);
@@ -203,7 +201,7 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
   const { data: subscriptionData, isLoading: subscriptionLoading, refetch: refetchSubscriptions } = useTenantQuery(
     ['my-company', user?.tenantId || 'platform', user?.role || 'unknown'],
     async (signal) => {
-      if (!user) return { requests: [], tenants: [], customRoles: [] };
+      if (!user) return { requests: [], tenants: [], customRoles: [], moduleCatalog: [], moduleQuoteRequests: [] };
       if (user.isPlatformAdmin) {
         const [reqs, allTenants, rolesRes] = await Promise.all([
           user.role === 'partner' ? subscriptionsService.getPartnerRequests(undefined, signal) : subscriptionsService.getAllRequests(undefined, signal),
@@ -212,30 +210,38 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
           // tenant operativo y no debe cargar roles con alcance null.
           Promise.resolve([]),
         ]);
-        return { requests: asList(reqs), tenants: asList(allTenants), customRoles: asList(rolesRes) };
+        return { requests: asList(reqs), tenants: asList(allTenants), customRoles: asList(rolesRes), moduleCatalog: [], moduleQuoteRequests: [] };
       }
       if (user.isTenantAdmin) {
-        const [reqs, myTenants, rolesRes] = await Promise.all([
+        const [reqs, myTenants, rolesRes, catalogRes, quoteRequestsRes] = await Promise.all([
           canViewSubscriptions ? subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal) : Promise.resolve([]),
           canViewCompany ? tenantsService.getAll(undefined, signal) : Promise.resolve([]),
           canViewRoles ? rolesService.getAll({ clientTenantId: user.tenantId }, signal) : Promise.resolve([]),
+          canViewSubscriptions ? subscriptionsService.getCatalog(signal) : Promise.resolve(null),
+          canViewSubscriptions ? subscriptionsService.getModuleQuoteRequests({ clientTenantId: user.tenantId } as any, signal) : Promise.resolve([]),
         ]);
         return {
           requests: asList(reqs).filter((request: any) => request.clientTenantId === user.tenantId),
           tenants: asList(myTenants).filter((tenant: any) => tenant.id === user.tenantId),
           customRoles: asList(rolesRes),
+          moduleCatalog: catalogRes?.modules || [],
+          moduleQuoteRequests: asList(quoteRequestsRes),
         };
       }
 
-      const [tenantRes, reqs, rolesRes] = await Promise.all([
+      const [tenantRes, reqs, rolesRes, catalogRes, quoteRequestsRes] = await Promise.all([
         canViewCompany ? tenantsService.getOne(user.tenantId, signal) : Promise.resolve(null),
         canViewSubscriptions ? subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal) : Promise.resolve([]),
         canViewRoles ? rolesService.getAll({ clientTenantId: user.tenantId }, signal) : Promise.resolve([]),
+        canViewSubscriptions ? subscriptionsService.getCatalog(signal) : Promise.resolve(null),
+        canViewSubscriptions ? subscriptionsService.getModuleQuoteRequests({ clientTenantId: user.tenantId } as any, signal) : Promise.resolve([]),
       ]);
       return {
         requests: asList(reqs).filter((request: any) => request.clientTenantId === user.tenantId),
         tenants: tenantRes ? [tenantRes] : [],
         customRoles: asList(rolesRes),
+        moduleCatalog: catalogRes?.modules || [],
+        moduleQuoteRequests: asList(quoteRequestsRes),
       };
     },
     {
@@ -251,6 +257,8 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
     setRequests(subscriptionData.requests as SubscriptionRequest[]);
     setTenants(subscriptionData.tenants);
     setCustomRoles(subscriptionData.customRoles);
+    setModuleCatalog(subscriptionData.moduleCatalog || []);
+    setModuleQuoteRequests(subscriptionData.moduleQuoteRequests || []);
   }, [subscriptionData, subscriptionLoading]);
 
   const fetchData = async () => {
@@ -261,6 +269,8 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
         setRequests(refreshed.data.requests as SubscriptionRequest[]);
         setTenants(refreshed.data.tenants);
         setCustomRoles(refreshed.data.customRoles);
+        setModuleCatalog(refreshed.data.moduleCatalog || []);
+        setModuleQuoteRequests(refreshed.data.moduleQuoteRequests || []);
       }
     } catch (error) {
       console.error('Error fetching subscription data:', error);
@@ -620,6 +630,8 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
         onSubModuleChange={onSubModuleChange}
         availableModules={AVAILABLE_MODULES} 
         requests={requests.filter((r: any) => r.clientTenantId === user.tenantId)}
+        moduleCatalog={moduleCatalog}
+        moduleQuoteRequests={moduleQuoteRequests}
         customRoles={customRoles}
         onRefresh={fetchData}
         onRequestModule={(moduleId, notes) => {
@@ -635,6 +647,15 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
             toast.error(err.response?.data?.message || 'Error al enviar solicitud');
           });
         }}
+        onRequestQuote={async (targetType, targetId, comment) => {
+          try {
+            await subscriptionsService.createModuleQuoteRequest({ targetType, targetId, comment: comment || undefined });
+            toast.success('Solicitud de cotización enviada');
+            await fetchData();
+          } catch (err: any) {
+            toast.error(err.response?.data?.message || err?.message || 'Error al enviar la solicitud');
+          }
+        }}
       />
     </>);
   }
@@ -643,7 +664,7 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange }: Suscri
     || tenantDetails?.users?.[0];
 
   return (
-    <div className="p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4 space-y-6 max-w-7xl mx-auto min-h-screen">
+    <div className="subscriptions-module p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4 space-y-6 max-w-7xl mx-auto min-h-screen">
       <div className="flex justify-end">
         <div className="flex items-center gap-3">
           <Dialog open={isTenantDialogOpen} onOpenChange={setIsTenantDialogOpen}>

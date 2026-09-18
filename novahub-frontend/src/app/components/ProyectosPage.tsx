@@ -29,7 +29,7 @@ export const ProyectosPage = (_props: ProyectosPageProps) => {
   });
 
   return (
-    <div className="flex flex-1 bg-background w-full">
+    <div className="projects-module flex flex-1 bg-background w-full">
       <main className="flex-1 relative">
         <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
 

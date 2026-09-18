@@ -434,7 +434,7 @@ function DashboardLayout() {
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
       case 'auditoria': return <ModuleErrorBoundary moduleName="Logs y auditoría"><AuditoriaPage /></ModuleErrorBoundary>;
-      case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
+      case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView initialTab={activeSubModule === 'plan-sucursal' ? 'module-requests' : undefined} /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'platform-users': return user?.role === 'superadmin' ? <PlatformUsersView /> : <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6"><div className="text-center"><h1 className="text-2xl font-semibold tracking-tight">Acceso Denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para gestionar usuarios de plataforma</p></div></div>;
       // Alias de compatibilidad para enlaces antiguos: la administración de
       // sucursales ahora vive dentro de Grupos empresariales.
