@@ -37,6 +37,7 @@ export const hrService = {
   getPayrolls: (filters?: any, signal?: AbortSignal) => api.get('/hr/payroll', withSignal(filters, signal)),
   createPayroll: (data: any) => api.post('/hr/payroll', data),
   updatePayroll: (id: string, data: any) => api.patch(`/hr/payroll/${id}`, data),
+  recalculatePayroll: (id: string) => api.post(`/hr/payroll/${id}/recalculate`, {}),
   bulkProcessPayroll: (data: any) => api.post('/hr/payroll/bulk-process', data),
   calculatePayroll: (data: any) => api.post('/hr/payroll/calculate', data),
   getPayrollPeriods: (signal?: AbortSignal) => api.get('/hr/payroll/periods', withSignal(undefined, signal)),

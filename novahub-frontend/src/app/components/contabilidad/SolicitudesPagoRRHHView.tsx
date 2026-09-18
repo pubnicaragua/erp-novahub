@@ -62,6 +62,7 @@ type PaymentLine = { method: string; amount: string; currency: 'NIO' | 'USD'; ex
 const statusMeta: Record<string, { label: string; className: string; icon: typeof Clock3 }> = {
   PENDING: { label: 'Pendiente de aprobación', className: 'bg-amber-500/10 text-amber-600 border-amber-500/20', icon: Clock3 },
   APPROVED: { label: 'Aprobada · por pagar', className: 'bg-sky-500/10 text-sky-600 border-sky-500/20', icon: BadgeCheck },
+  PARTIAL: { label: 'Pago parcial · saldo pendiente', className: 'bg-orange-500/10 text-orange-600 border-orange-500/20', icon: Split },
   PAID: { label: 'Pagada', className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20', icon: CheckCircle2 },
   REJECTED: { label: 'Rechazada', className: 'bg-rose-500/10 text-rose-600 border-rose-500/20', icon: XCircle },
 };
@@ -169,8 +170,9 @@ export function SolicitudesPagoRRHHView() {
   const totals = useMemo(() => ({
     pending: requests.filter((r) => r.status === 'PENDING').length,
     approved: requests.filter((r) => r.status === 'APPROVED').length,
+    partial: requests.filter((r) => r.status === 'PARTIAL').length,
     paid: requests.filter((r) => r.status === 'PAID').length,
-    amount: requests.filter((r) => r.status !== 'PAID' && r.status !== 'REJECTED').reduce((sum, r) => sum + Number(r.baseAmount || 0), 0),
+    amount: requests.filter((r) => r.status !== 'PAID' && r.status !== 'REJECTED').reduce((sum, r) => sum + Math.max(0, Number(r.baseAmount || 0) - (r.payments || []).reduce((paid, payment) => paid + Number(payment.baseAmount || 0), 0)), 0),
   }), [requests]);
 
   const refresh = useCallback(
@@ -207,8 +209,10 @@ export function SolicitudesPagoRRHHView() {
     const sourceCurrency = request.currency === 'USD' ? 'USD' : 'NIO';
     const sourceRate = Number(request.exchangeRate || 1);
     const requestBase = Number(request.baseAmount || toBaseAmount(Number(request.amount || 0), sourceCurrency, sourceRate));
+    const paidBase = (request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0);
+    const remainingRequestBase = Math.max(0, requestBase - paidBase);
     const nextRate = paymentLineRate(nextCurrency);
-    const initialAmount = convertBetweenCurrencies(requestBase, baseCurrency, nextCurrency, 1, nextRate);
+    const initialAmount = convertBetweenCurrencies(remainingRequestBase, baseCurrency, nextCurrency, 1, nextRate);
 
     setPaymentRequest(request);
     setPaymentLines([{ ...paymentLine('TRANSFER', formatPaymentInput(initialAmount.toFixed(2)), nextCurrency), bankAccountId: '' }]);
@@ -223,17 +227,21 @@ export function SolicitudesPagoRRHHView() {
   const requestCurrency = paymentRequest?.currency === 'USD' ? 'USD' : 'NIO';
   const requestRate = Number(paymentRequest?.exchangeRate || 1);
   const requestTotalBase = Number(paymentRequest?.baseAmount || toBaseAmount(requestAmount, requestCurrency, requestRate));
-  const requestTotalInDocumentCurrency = paymentRequest
-    ? convertBetweenCurrencies(requestTotalBase, baseCurrency, requestCurrency, 1, requestRate)
-    : 0;
-  const balanced = Math.abs(paymentTotalBase - requestTotalBase) <= 0.01;
-  const remainingBase = Math.max(requestTotalBase - paymentTotalBase, 0);
-  const excessBase = Math.max(paymentTotalBase - requestTotalBase, 0);
+  const requestPaidBase = paymentRequest?.payments?.reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0) || 0;
+  const requestRemainingBase = Math.max(requestTotalBase - requestPaidBase, 0);
+  const isPayrollPayment = paymentRequest?.requestType === 'PAYROLL';
+  const balanced = isPayrollPayment
+    ? paymentTotalBase > 0 && paymentTotalBase <= requestRemainingBase + 0.01
+    : Math.abs(paymentTotalBase - requestRemainingBase) <= 0.01;
+  const remainingBase = Math.max(requestRemainingBase - paymentTotalBase, 0);
+  const excessBase = Math.max(paymentTotalBase - requestRemainingBase, 0);
   const formatNativeAmount = (amount: number, currency: string) => `${currency === 'USD' ? '$' : 'C$'} ${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const submitPayment = () => {
     if (!paymentRequest || !balanced) {
-      toast.error(`Distribuye exactamente el total convertido de la solicitud (${requestTotalBase.toFixed(2)} ${baseCurrency}). No se permiten pagos parciales.`);
+      toast.error(isPayrollPayment
+        ? `Registra un abono mayor que cero y no superior al saldo pendiente (${requestRemainingBase.toFixed(2)} ${baseCurrency}).`
+        : `Distribuye exactamente el saldo convertido de la solicitud (${requestRemainingBase.toFixed(2)} ${baseCurrency}).`);
       return;
     }
     if (paymentLines.some((line) => isBankMethod(line.method) && !line.bankAccountId)) {
@@ -267,7 +275,7 @@ export function SolicitudesPagoRRHHView() {
           <div className="flex shrink-0 items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-primary/15 bg-background/60 px-3 py-2 text-xs font-bold text-muted-foreground backdrop-blur">
               <ShieldAlert className="size-4 text-primary" />
-              {displayCurrency} · pagos completos
+              {displayCurrency} · abonos parciales
             </div>
             <Button
               type="button"
@@ -285,10 +293,11 @@ export function SolicitudesPagoRRHHView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[
           { label: 'Por aprobar', value: totals.pending, icon: Clock3, tone: 'text-amber-500 bg-amber-500/10' },
           { label: 'Aprobadas por pagar', value: totals.approved, icon: BadgeCheck, tone: 'text-sky-500 bg-sky-500/10' },
+          { label: 'Con saldo pendiente', value: totals.partial, icon: Split, tone: 'text-orange-500 bg-orange-500/10' },
           { label: 'Pagadas', value: totals.paid, icon: CheckCircle2, tone: 'text-emerald-500 bg-emerald-500/10' },
           { label: 'Compromiso pendiente', value: formatConvertedAmount(totals.amount, baseCurrency as any), icon: Banknote, tone: 'text-primary bg-primary/10' },
         ].map((item) => (
@@ -305,7 +314,7 @@ export function SolicitudesPagoRRHHView() {
         <div className="relative min-w-0 flex-1 sm:max-w-sm"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar empleado, beneficio..." className="h-10 rounded-xl pl-9" /></div>
         <div className="flex min-w-0 flex-wrap gap-2">
           <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="h-10 w-[160px] rounded-xl text-xs"><SelectValue placeholder="Todos los tipos" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los tipos</SelectItem><SelectItem value="PAYROLL">Nóminas</SelectItem><SelectItem value="BENEFIT">Beneficios</SelectItem><SelectItem value="TRAINING">Capacitaciones</SelectItem></SelectContent></Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="h-10 w-[180px] rounded-xl text-xs"><SelectValue placeholder="Todos los estados" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los estados</SelectItem><SelectItem value="PENDING">Por aprobar</SelectItem><SelectItem value="APPROVED">Por pagar</SelectItem><SelectItem value="PAID">Pagadas</SelectItem><SelectItem value="REJECTED">Rechazadas</SelectItem></SelectContent></Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="h-10 w-[180px] rounded-xl text-xs"><SelectValue placeholder="Todos los estados" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los estados</SelectItem><SelectItem value="PENDING">Por aprobar</SelectItem><SelectItem value="APPROVED">Por pagar</SelectItem><SelectItem value="PARTIAL">Pago parcial</SelectItem><SelectItem value="PAID">Pagadas</SelectItem><SelectItem value="REJECTED">Rechazadas</SelectItem></SelectContent></Select>
         </div>
       </div>
 
@@ -324,12 +333,12 @@ export function SolicitudesPagoRRHHView() {
                 <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
                   <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', type.tint)}><TypeIcon className="size-4" /></div>
                   <div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-2"><Badge variant="outline" className="border-none px-2 text-[10px] font-black uppercase">{type.label}</Badge><span className="truncate text-xs text-muted-foreground">#{request.id.slice(0, 8)}</span></div><p className="mt-1 truncate text-base font-black">{sourceLabel(request)}</p><p className="mt-1 text-xs text-muted-foreground">Solicitada {request.requestedAt ? new Date(request.requestedAt).toLocaleDateString('es-NI') : '—'}</p></div>
-                  <div className="min-w-[150px] lg:text-right"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto solicitado</p><p className="mt-1 text-lg font-black text-primary">{formatConvertedAmount(Number(request.amount || 0), request.currency as any, Number(request.exchangeRate || 1))}</p><p className="text-[10px] text-muted-foreground">{Number(request.payments?.length || 0) > 1 ? 'Pago mixto configurado' : 'Un medio de pago'}</p></div>
+                  <div className="min-w-[150px] lg:text-right"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto solicitado</p><p className="mt-1 text-lg font-black text-primary">{formatConvertedAmount(Number(request.amount || 0), request.currency as any, Number(request.exchangeRate || 1))}</p><p className="text-[10px] text-muted-foreground">Pagado: {formatNativeAmount((request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0), baseCurrency)} · Saldo: {formatNativeAmount(Math.max(Number(request.baseAmount || 0) - (request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0), 0), baseCurrency)}</p></div>
                   <Badge variant="outline" className={cn('w-fit shrink-0 gap-1 rounded-md px-3 py-1 text-[10px] font-black', status.className)}><StatusIcon className="size-3.5" /> {status.label}</Badge>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
                     {request.status === 'PENDING' && canApproveRequests && <Button size="sm" className="rounded-xl" disabled={busyId === request.id} onClick={() => runAction(request.id, () => hrService.approvePaymentRequest(request.id), 'Solicitud aprobada.') }><Check className="mr-1.5 size-4" /> Aprobar</Button>}
-                    {(request.status === 'PENDING' || request.status === 'APPROVED') && canRejectRequests && <Button size="sm" variant="outline" className="rounded-xl text-rose-600 hover:bg-rose-500/10" disabled={busyId === request.id} onClick={() => { const reason = window.prompt('Motivo del rechazo (opcional):') || 'Rechazada por Contabilidad'; runAction(request.id, () => hrService.rejectPaymentRequest(request.id, reason), 'Solicitud rechazada.'); }}><X className="mr-1.5 size-4" /> Rechazar</Button>}
-                    {request.status === 'APPROVED' && canPayRequests && <Button size="sm" className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={busyId === request.id} onClick={() => openPayment(request)}><Banknote className="mr-1.5 size-4" /> Registrar pago</Button>}
+                    {request.status === 'PENDING' && canRejectRequests && <Button size="sm" variant="outline" className="rounded-xl text-rose-600 hover:bg-rose-500/10" disabled={busyId === request.id} onClick={() => { const reason = window.prompt('Motivo del rechazo (opcional):') || 'Rechazada por Contabilidad'; runAction(request.id, () => hrService.rejectPaymentRequest(request.id, reason), 'Solicitud rechazada.'); }}><X className="mr-1.5 size-4" /> Rechazar</Button>}
+                    {(request.status === 'APPROVED' || request.status === 'PARTIAL') && canPayRequests && <Button size="sm" className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={busyId === request.id} onClick={() => openPayment(request)}><Banknote className="mr-1.5 size-4" /> Registrar abono</Button>}
                     {request.status === 'PAID' && <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600"><FileCheck2 className="size-4" /> Contabilizada</span>}
                     <ChevronRight className="hidden size-4 text-muted-foreground/40 lg:block" />
                   </div>
@@ -343,9 +352,9 @@ export function SolicitudesPagoRRHHView() {
 
       <Dialog open={Boolean(paymentRequest)} onOpenChange={(open) => !open && setPaymentRequest(null)}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto rounded-2xl">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Split className="size-5 text-primary" /> Registrar pago mixto</DialogTitle><DialogDescription>{paymentRequest ? `${sourceLabel(paymentRequest)} · Total ${formatConvertedAmount(requestAmount, paymentRequest.currency as any, Number(paymentRequest.exchangeRate || 1))}` : ''}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Split className="size-5 text-primary" /> Registrar abono</DialogTitle><DialogDescription>{paymentRequest ? `${sourceLabel(paymentRequest)} · Saldo pendiente ${formatNativeAmount(requestRemainingBase, baseCurrency)}` : ''}</DialogDescription></DialogHeader>
           <div className="space-y-3 py-2">
-             <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 text-xs text-muted-foreground">Distribuye el total entre efectivo, transferencia, tarjeta o cheque. Los montos se registran en la moneda elegida y se convierten con la tasa global; la suma contable debe cerrar exactamente.<span className="mt-1 block font-bold text-foreground">Equivalente de la solicitud: {formatExplicitAmount(requestTotalInDocumentCurrency, requestCurrency)}</span></div>
+             <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 text-xs text-muted-foreground">Distribuye un abono entre efectivo, transferencia, tarjeta o cheque. Los montos se registran en la moneda elegida y se convierten con la tasa global; cada abono no puede superar el saldo pendiente.<span className="mt-1 block font-bold text-foreground">Saldo equivalente en la moneda de la solicitud: {formatExplicitAmount(convertBetweenCurrencies(requestRemainingBase, baseCurrency, requestCurrency, 1, requestRate), requestCurrency)}</span></div>
              {paymentLines.map((line, index) => <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 p-3"><div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, method: value, bankAccountId: '', reference: '' } : item))}><SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger><SelectContent>{methods.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div><CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={exchangeRate} label="Moneda" onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, i) => { if (i !== index) return item; const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || exchangeRate); const nextRate = paymentLineRate(nextCurrency); return { ...item, amount: formatPaymentInput(convertBetweenCurrencies(parsePaymentAmount(item.amount), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: '' }; }))} /><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" step="0.01" value={line.amount} onChange={(event) => { const raw = event.target.value.replace(/,/g, ''); if (!/^\d*(\.\d{0,2})?$/.test(raw)) return; setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: formatPaymentInput(raw) } : item)); }} onBlur={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: parsePaymentAmount(event.target.value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') } : item))} className="h-9 rounded-lg text-xs tabular-nums" /></div><Button variant="ghost" size="icon" className="size-9 text-rose-500" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, i) => i !== index))} aria-label="Eliminar medio de pago"><Trash2 className="size-4" /></Button></div>{line.currency !== requestCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente solicitud: {formatExplicitAmount(getPaymentLineDocumentAmount(line, requestCurrency, requestRate, baseCurrency, convertBetweenCurrencies), requestCurrency)}</p>}{isBankMethod(line.method) && <BankAccountSelect currency={line.currency} value={line.bankAccountId} onChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, bankAccountId: value } : item))} label="Cuenta bancaria global" className="mt-3" />}{hasPaymentReferenceField(line.method) && <div className="mt-3"><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" /></div>}</div>)}
             <Button variant="outline" className="w-full rounded-xl border-dashed" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar otro medio</Button>
             <div className={cn('rounded-xl border px-4 py-3', balanced ? 'border-primary/20 bg-primary/5' : 'border-amber-500/20 bg-amber-500/5')}>
@@ -353,7 +362,7 @@ export function SolicitudesPagoRRHHView() {
                 <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto aplicado (base)</p><p className="mt-1 text-base font-black tabular-nums">{formatNativeAmount(paymentTotalBase, baseCurrency)}</p></div>
                 <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{excessBase > 0.01 ? 'Vuelto por dar' : remainingBase > 0.01 ? 'Pendiente' : 'Saldo cubierto'}</p><p className={cn('mt-1 text-base font-black tabular-nums', balanced ? 'text-primary' : excessBase > 0.01 ? 'text-emerald-600' : 'text-amber-600')}>{formatNativeAmount(excessBase > 0.01 ? excessBase : remainingBase, baseCurrency)}</p></div>
               </div>
-              <p className="mt-2 text-[10px] text-muted-foreground">Total contable requerido: <span className="font-bold text-foreground">{formatNativeAmount(requestTotalBase, baseCurrency)}</span></p>
+              <p className="mt-2 text-[10px] text-muted-foreground">Saldo contable antes del abono: <span className="font-bold text-foreground">{formatNativeAmount(requestRemainingBase, baseCurrency)}</span></p>
             </div>
           </div>
           <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setPaymentRequest(null)} disabled={busyId === paymentRequest?.id}>Cancelar</Button><Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={!balanced || busyId === paymentRequest?.id || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankMethod(line.method) && !line.bankAccountId)} onClick={submitPayment}>{busyId === paymentRequest?.id ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Banknote className="mr-2 size-4" />} Confirmar y contabilizar</Button></DialogFooter>

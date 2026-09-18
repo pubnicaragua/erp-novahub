@@ -904,6 +904,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               fitContent
               layoutMode={layoutMode}
               showHorizontalControls
+              verticalScroll
               actions={(row) => (
                 <div className="flex items-center gap-1">
                    <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>

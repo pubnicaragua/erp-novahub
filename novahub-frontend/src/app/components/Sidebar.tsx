@@ -429,6 +429,13 @@ const platformMenuItems: MenuItem[] = [
     icon: <Building2 className="size-5" />,
   },
   {
+    id: 'platform-users',
+    label: 'Usuarios de plataforma',
+    icon: <Users className="size-5" />,
+    section: 'NovaHub Platform',
+    superadminOnly: true,
+  },
+  {
     id: 'auditoria',
     label: 'Logs y auditoría',
     icon: <History className="size-5" />,
@@ -865,6 +872,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                         employee: 'Empleado',
                         viewer: 'Solo Lectura',
                         user: 'Usuario',
+                        platform_quote_user: 'Acceso especial',
                       }[user?.role?.toLowerCase() || ''] || user?.role}
                     </p>
                   </div>

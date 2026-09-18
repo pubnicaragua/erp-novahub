@@ -130,8 +130,14 @@ type CatalogViewMode = 'list' | 'catalog';
 type CatalogItemFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
 
 const CATALOG_VIEW_STORAGE_KEY = 'novahub-pos-catalog-view';
+const CATALOG_EXPANDED_STORAGE_KEY = 'novahub-pos-catalog-expanded';
 const POS_SHOW_AVAILABILITY_KEY = 'novahub-pos-show-availability';
 const POS_DRAFT_STORAGE_PREFIX = 'novahub-pos-draft:';
+
+const queueSentAtFormatter = new Intl.DateTimeFormat('es-NI', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
 
 function getPosDraftStorageKey(userId?: string | null, tenantId?: string | null) {
   return `${POS_DRAFT_STORAGE_PREFIX}${tenantId || 'tenant'}:${userId || 'user'}`;
@@ -167,10 +173,25 @@ function readPosDraft(storageKey: string): PosDraftStorage | null {
 
 function getInitialCatalogView(): CatalogViewMode {
   try {
-    return localStorage.getItem(CATALOG_VIEW_STORAGE_KEY) === 'catalog' ? 'catalog' : 'list';
+    return safeGetItem(CATALOG_VIEW_STORAGE_KEY) === 'list' ? 'list' : 'catalog';
   } catch {
-    return 'list';
+    return 'catalog';
   }
+}
+
+function getInitialCatalogExpanded(): boolean {
+  try {
+    const stored = safeGetItem(CATALOG_EXPANDED_STORAGE_KEY);
+    return stored === null || stored === '1';
+  } catch {
+    return true;
+  }
+}
+
+function formatQueueSentAt(value?: string | null) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : queueSentAtFormatter.format(date);
 }
 
 function getInitialShowAvailability(): boolean {
@@ -501,6 +522,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
   const [cashQueue, setCashQueue] = useState<InvoiceCashQueue[]>([]);
   const [cashQueueExpanded, setCashQueueExpanded] = useState(true);
+  const [catalogExpanded, setCatalogExpanded] = useState(getInitialCatalogExpanded);
   const [cashQueueLoading, setCashQueueLoading] = useState(false);
   const [cashQueueError, setCashQueueError] = useState<string | null>(null);
   const [cashQueueLastSyncAt, setCashQueueLastSyncAt] = useState<Date | null>(null);
@@ -516,6 +538,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [queueClaimingId, setQueueClaimingId] = useState<string | null>(null);
   const [queueReleasingId, setQueueReleasingId] = useState<string | null>(null);
   const [reconcilingQueue, setReconcilingQueue] = useState(false);
+  const [reconcileDialogOpen, setReconcileDialogOpen] = useState(false);
   const queueClaimingRef = useRef<string | null>(null);
   const queueReleasingRef = useRef<string | null>(null);
   const reconcilingQueueRef = useRef(false);
@@ -728,7 +751,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     try {
       const response = await cajaService.reconcileInvoiceCashQueue();
       const result = (response as any)?.data || response;
-      toast.success(`Reconciliación completada: ${Number(result?.released || 0) + Number(result?.markedPaid || 0) + Number(result?.cancelled || 0)} entrada(s) corregida(s).`);
+      toast.success('Reconciliación completada', {
+        description: `${Number(result?.examined || 0)} examinadas · ${Number(result?.released || 0)} liberadas · ${Number(result?.markedPaid || 0)} pagadas · ${Number(result?.cancelled || 0)} anuladas.`,
+      });
       await loadCashQueue();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'No se pudo reconciliar la cola de caja.'));
@@ -1226,6 +1251,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       // La preferencia es opcional; la vista sigue funcionando sin almacenamiento local.
     }
   }, [catalogView]);
+
+  useEffect(() => {
+    try {
+      safeSetItem(CATALOG_EXPANDED_STORAGE_KEY, catalogExpanded ? '1' : '0');
+    } catch {
+      // La preferencia es opcional; el catálogo sigue funcionando sin almacenamiento local.
+    }
+  }, [catalogExpanded]);
 
   useEffect(() => {
     try {
@@ -2118,9 +2151,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               >
                 {cashQueueExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
               </Button>
-              {canReconcilePosQueue && (['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()} disabled={reconcilingQueue} title="Libera reservas vencidas y marca como procesadas las entradas cuyo documento ya fue pagado" aria-label="Reconciliar cola de caja">{reconcilingQueue ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} {reconcilingQueue ? 'Reconciliando…' : 'Reconciliar'}</Button>}
-              <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>
-                <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar
+              {canReconcilePosQueue && (['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => setReconcileDialogOpen(true)} disabled={reconcilingQueue} title="Corrige reservas vencidas y retira documentos ya pagados o anulados" aria-label="Reconciliar cola de caja">{reconcilingQueue ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} {reconcilingQueue ? 'Reconciliando…' : 'Reconciliar cola'}</Button>}
+              <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading} title="Vuelve a consultar los documentos enviados a caja sin modificar sus estados">
+                <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar cola
               </Button>
             </div>
           </div>
@@ -2153,7 +2186,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     <div className="min-w-0">
                       <div className="flex items-center gap-2"><span className="font-black">{document.number}</span><Badge variant="outline" className="text-[9px]">{isCreditQueue ? 'Crédito' : 'Factura'}</Badge><Badge variant="outline" className="text-[9px]">{queue.status === 'PENDING' ? 'Pendiente' : isMine ? 'Tomada por mí' : `Tomada por ${queue.claimedBy?.name || 'otro cajero'}`}</Badge></div>
                       <p className="mt-1 truncate text-xs text-muted-foreground">{customer}</p>
-                      <p className="mt-1 font-mono text-sm font-black text-primary">{document.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(document.balance || 0))} <span className="font-sans text-[10px] font-medium text-muted-foreground">pendiente</span></p>
+                      <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                        <p className="font-mono text-sm font-black text-primary">{document.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(document.balance || 0))} <span className="font-sans text-[10px] font-medium text-muted-foreground">pendiente</span></p>
+                        <p className="text-[10px] font-medium text-muted-foreground">Enviado: {formatQueueSentAt(queue.createdAt)} · por {queue.requestedBy?.name || '—'}</p>
+                      </div>
                       {queue.status === 'CLAIMED' && queue.claimExpiresAt && <p className="mt-1 text-[10px] font-semibold text-primary">Reserva hasta {new Date(queue.claimExpiresAt).toLocaleTimeString('es-NI')}</p>}
                     </div>
                     <div className="flex items-center gap-2">
@@ -2291,11 +2327,26 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
             <Card className="border-border/50 shadow-sm" data-tour="pos-catalog">
               <CardContent className="p-5">
                 <div className="mb-4 space-y-3">
-                  <div>
-                    <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de venta</h3>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} {catalogItemFilter === 'SERVICE' ? 'servicios' : catalogItemFilter === 'PRODUCT' ? 'productos' : 'artículos'} disponibles</p>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de venta</h3>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} {catalogItemFilter === 'SERVICE' ? 'servicios' : catalogItemFilter === 'PRODUCT' ? 'productos' : 'artículos'} disponibles</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 shrink-0 rounded-lg"
+                      onClick={() => setCatalogExpanded((expanded) => !expanded)}
+                      aria-expanded={catalogExpanded}
+                      aria-controls="pos-catalog-content"
+                      aria-label={catalogExpanded ? 'Contraer catálogo de venta' : 'Expandir catálogo de venta'}
+                      title={catalogExpanded ? 'Contraer catálogo de venta' : 'Expandir catálogo de venta'}
+                    >
+                      {catalogExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                    </Button>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  {catalogExpanded && <div className="flex flex-wrap items-center gap-2">
                     <label
                       title="Muestra en cada producto un botón para consultar su disponibilidad en otras sucursales"
                       className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground select-none"
@@ -2342,8 +2393,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                         className="pl-9 h-8 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
                       />
                     </div>
-                  </div>
+                  </div>}
                 </div>
+                {catalogExpanded && <div id="pos-catalog-content">
                 <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-1.5" role="group" aria-label="Tipo de artículo">
                   <span className="px-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Mostrar:</span>
                   {([
@@ -2364,7 +2416,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 </div>
                 {catalogView === 'list' ? (
                   <div className="overflow-x-auto rounded-xl border border-border/50">
-                    <div className="max-h-64 overflow-y-auto">
+                    <div className="min-h-[36rem] max-h-[44rem] overflow-y-auto">
                       <table className="w-full min-w-[520px] table-fixed text-xs md:min-w-0">
                         <colgroup>
                           <col className="w-[18%]" />
@@ -2372,12 +2424,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                           <col className="w-[22%]" />
                           <col className="w-[22%]" />
                         </colgroup>
-                        <thead>
-                          <tr className="border-b border-border/30 bg-muted/30">
-                            <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Código</th>
-                            <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Descripción</th>
-                            <th className="px-2 sm:px-3 py-2.5 text-right text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Precio unit.</th>
-                            <th data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Acción</th>
+                        <thead className="sticky top-0 z-20 isolate" style={{ backgroundColor: 'var(--card)' }}>
+                          <tr className="border-b border-border/30 bg-card" style={{ backgroundColor: 'var(--card)' }}>
+                            <th className="bg-card px-2 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap sm:px-3" style={{ backgroundColor: 'var(--card)' }}>Código</th>
+                            <th className="bg-card px-2 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground sm:px-3" style={{ backgroundColor: 'var(--card)' }}>Descripción</th>
+                            <th className="bg-card px-2 py-2.5 text-right text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap sm:px-3" style={{ backgroundColor: 'var(--card)' }}>Precio unit.</th>
+                            <th data-actions-column="compact" className="bg-card px-2 py-2.5 text-center text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap sm:px-3" style={{ backgroundColor: 'var(--card)' }}>Acción</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border/20">
@@ -2447,7 +2499,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     </div>
                   </div>
                 ) : (
-                  <div className="max-h-[34rem] overflow-y-auto pr-1">
+                  <div className="min-h-[36rem] max-h-[44rem] min-w-0 overflow-y-auto pr-1">
                     {filteredProducts.length > 0 ? (
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                         {filteredProducts.slice(0, 30).map((prod) => (
@@ -2533,6 +2585,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     )}
                   </div>
                 )}
+                </div>}
               </CardContent>
             </Card>
 
@@ -3297,6 +3350,17 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         );
       })()}
       {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
+      <ConfirmDialog
+        open={reconcileDialogOpen}
+        onOpenChange={setReconcileDialogOpen}
+        title="Reconciliar cola de caja"
+        description="Esta operación revisará reservas vencidas y documentos ya pagados o anulados. No vuelve a cargar la cola: corrige sus estados cuando corresponde."
+        confirmLabel="Reconciliar cola"
+        cancelLabel="Cancelar"
+        variant="warning"
+        loading={reconcilingQueue}
+        onConfirm={handleReconcileCashQueue}
+      />
       <ConfirmDialog
         open={duplicateMatches.length > 0}
         onOpenChange={(open) => {

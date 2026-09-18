@@ -10,7 +10,6 @@ export const employeePayFrequencyOptions = [
   { value: 'WEEKLY', label: 'Semanal', importValue: 'Semanal' },
   { value: 'BIWEEKLY', label: 'Quincenal', importValue: 'Quincenal' },
   { value: 'MONTHLY', label: 'Mensual', importValue: 'Mensual' },
-  { value: 'HOURLY', label: 'Por hora', importValue: 'Por hora' },
 ] as const;
 
 export const employeeStatusOptions = [
@@ -54,7 +53,6 @@ const employeeImportAliases: Record<EmployeeImportValueField, Record<string, str
     SEMANAL: 'WEEKLY',
     QUINCENAL: 'BIWEEKLY',
     MENSUAL: 'MONTHLY',
-    POR_HORA: 'HOURLY',
   },
   employmentStatus: {
     ACTIVO: 'ACTIVE',

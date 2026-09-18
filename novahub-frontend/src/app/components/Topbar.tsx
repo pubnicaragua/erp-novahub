@@ -425,6 +425,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     employee: 'Empleado',
     viewer: 'Solo Lectura',
     user: 'Usuario',
+    platform_quote_user: 'Acceso especial',
   };
 
   const getRoleLabel = (role: string) => ROLE_LABELS[role?.toLowerCase()] || role;

@@ -64,6 +64,8 @@ interface EditableDataTableProps<T> {
   fitContent?: boolean;
   layoutMode?: 'table' | 'cards' | 'responsive';
   showHorizontalControls?: boolean;
+  /** Keep the table body in a localized vertical scroll viewport. Pagination remains outside it. */
+  verticalScroll?: boolean;
   /** Explicit UI permission. Defaults to whether an update handler exists. */
   canEdit?: boolean;
   /** Optional row-level authorization for inline editing. */
@@ -93,6 +95,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   fitContent = false,
   layoutMode = 'responsive',
   showHorizontalControls = false,
+  verticalScroll = false,
   canEdit,
   canEditRow,
 }: EditableDataTableProps<T>) {
@@ -430,6 +433,62 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     }
   };
 
+  const renderTableColumnGroup = () => (
+    <colgroup>
+      {showSelection && <col style={{ width: '48px' }} />}
+      {columns.map((column) => <col key={column.key as string} style={{ width: column.width || '140px' }} />)}
+      <col style={{ width: `${actionColumnWidth}px` }} />
+    </colgroup>
+  );
+
+  const renderTableHeader = () => (
+    <TableHeader
+      className={cn(
+        verticalScroll ? 'sticky top-0 z-20 bg-card shadow-sm' : 'bg-muted/30',
+      )}
+      style={verticalScroll ? { backgroundColor: 'var(--card)' } : undefined}
+    >
+      <TableRow className="hover:bg-transparent border-none">
+        {showSelection && (
+          <TableHead
+            className={cn('h-12 w-12 text-center text-[13px] font-semibold', verticalScroll && 'sticky top-0 z-30 bg-card')}
+            style={verticalScroll ? { position: 'sticky', top: 0, zIndex: 30, backgroundColor: 'var(--card)' } : undefined}
+          >
+            <Checkbox
+              checked={allSelectableRowsSelected ? true : selectedIds.size > 0 ? 'indeterminate' : false}
+              disabled={selectableIds.length === 0}
+              onCheckedChange={toggleSelectAll}
+            />
+          </TableHead>
+        )}
+        {columns.map((col) => (
+          <TableHead
+            key={col.key as string}
+            style={{
+              width: col.width,
+              ...(verticalScroll ? { position: 'sticky', top: 0, zIndex: 30, backgroundColor: 'var(--card)' } : {}),
+            }}
+            className={cn('h-12 whitespace-nowrap align-middle text-[13px] font-semibold text-muted-foreground', verticalScroll && 'sticky top-0 z-30 bg-card')}
+          >
+            <span className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap">
+              <span className="min-w-0 truncate">{col.header}</span>
+              {isValidElement(col.headerExtra)
+                ? cloneElement(col.headerExtra as React.ReactElement<{ compact?: boolean }>, { compact: true })
+                : col.headerExtra}
+            </span>
+          </TableHead>
+        ))}
+        <TableHead
+          data-actions-column="true"
+          className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[13px] font-semibold text-muted-foreground', actionsWidth, verticalScroll && 'sticky top-0 z-30 bg-card')}
+          style={verticalScroll ? { position: 'sticky', top: 0, zIndex: 30, backgroundColor: 'var(--card)' } : undefined}
+        >
+          Acciones
+        </TableHead>
+      </TableRow>
+    </TableHeader>
+  );
+
   return (
     <BoneyardSkeleton
       name="sales-data-table"
@@ -513,49 +572,27 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           onKeyDownCapture={handleTableKeyDown}
           onMouseDown={() => tableScrollRef.current?.focus({ preventScroll: true })}
           aria-label="Tabla navegable. Usa las flechas para moverte entre filas y columnas."
-          className="w-full min-w-0 max-w-full overflow-x-auto overflow-y-clip outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className={cn(
+            'w-full min-w-0 max-w-full overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+            verticalScroll
+              ? 'min-h-[36rem] max-h-[44rem] overflow-y-auto overscroll-contain scrollbar-overlay'
+              : 'overflow-y-clip',
+          )}
         >
         <Table
-          containerClassName={fitContent ? 'w-full min-w-0 max-w-none overflow-visible' : undefined}
+          containerClassName={
+            verticalScroll
+              ? 'contents'
+              : fitContent
+                ? 'w-full min-w-0 max-w-none overflow-visible'
+                : undefined
+          }
           containerStyle={tableMinWidth ? { width: `max(100%, ${tableMinWidth}px)`, maxWidth: 'none' } : undefined}
           style={tableMinWidth ? { width: '100%', minWidth: `${tableMinWidth}px`, maxWidth: 'none' } : undefined}
           className={cn(fitContent ? 'w-full min-w-full' : 'w-full min-w-max', 'table-fixed')}
         >
-          <colgroup>
-            {showSelection && <col style={{ width: '48px' }} />}
-            {columns.map((column) => <col key={column.key as string} style={{ width: column.width || '140px' }} />)}
-            <col style={{ width: `${actionColumnWidth}px` }} />
-          </colgroup>
-          <TableHeader className="bg-muted/30">
-            <TableRow className="hover:bg-transparent border-none">
-              {showSelection && (
-                  <TableHead className="h-12 w-12 text-center text-[13px] font-semibold">
-                  <Checkbox 
-                    checked={allSelectableRowsSelected ? true : selectedIds.size > 0 ? 'indeterminate' : false}
-                    disabled={selectableIds.length === 0}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-              )}
-              {columns.map((col) => (
-                <TableHead 
-                  key={col.key as string} 
-                  style={{ width: col.width }}
-                  className="h-12 whitespace-nowrap align-middle text-[13px] font-semibold text-muted-foreground"
-                >
-                  <span className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap">
-                    <span className="min-w-0 truncate">{col.header}</span>
-                    {isValidElement(col.headerExtra)
-                      ? cloneElement(col.headerExtra as React.ReactElement<{ compact?: boolean }>, { compact: true })
-                      : col.headerExtra}
-                  </span>
-                </TableHead>
-              ))}
-              <TableHead data-actions-column="true" className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[13px] font-semibold text-muted-foreground', actionsWidth)}>
-                Acciones
-              </TableHead>
-            </TableRow>
-          </TableHeader>
+          {renderTableColumnGroup()}
+          {renderTableHeader()}
           <TableBody>
             {data.map((row, rowIndex) => {
               const rowId = row[idField];

@@ -62,7 +62,7 @@ const payrollStatusLabel = (status?: string) => ({
 } as Record<string, string>)[String(status || '').toUpperCase()] || 'No especificado';
 
 const payFrequencyLabel = (frequency?: string) => ({
-  WEEKLY: 'Semanal', BIWEEKLY: 'Quincenal', MONTHLY: 'Mensual', HOURLY: 'Por hora',
+  WEEKLY: 'Semanal', BIWEEKLY: 'Quincenal', MONTHLY: 'Mensual',
 } as Record<string, string>)[String(frequency || '').toUpperCase()] || 'No especificada';
 
 const contractLabel = (value?: string) => ({

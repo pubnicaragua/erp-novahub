@@ -495,6 +495,16 @@ export interface PlatformQuote {
   updatedAt: string;
 }
 
+export interface PlatformUser {
+  id: string;
+  name: string;
+  email: string;
+  isActive: boolean;
+  lastLoginAt?: string | null;
+  createdAt: string;
+  platformPermissions: string[];
+}
+
 export const enterpriseGroupsService = {
   getPlatformGroups: (
     params?: { search?: string; page?: number; pageSize?: number; includeOptions?: boolean; includeMetrics?: boolean },
@@ -527,6 +537,10 @@ export const enterpriseGroupsService = {
       `/enterprise-groups/platform/legacy-users/${tenantId}/trial`,
       { extensionDays },
     ),
+  getPlatformUsers: (signal?: AbortSignal) =>
+    api.get<PlatformUser[]>('/enterprise-groups/platform/users', { signal }),
+  createPlatformUser: (body: { name: string; email: string; password: string; platformPermissions: string[] }) =>
+    api.idempotentPost<PlatformUser>('/enterprise-groups/platform/users', body),
   getPlatformGroup: (groupId: string, signal?: AbortSignal) =>
     api.get<any>(`/enterprise-groups/platform/${groupId}`, { signal }),
   createPlatformGroup: (body: any) =>

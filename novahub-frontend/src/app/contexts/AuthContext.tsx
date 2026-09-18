@@ -11,7 +11,7 @@ import type { UserThemeSettings } from '../services/branding.service';
 
 const SIDEBAR_PERMISSION_PARENT_MODULE_IDS = new Set<string>(SIDEBAR_PERMISSION_PARENT_ORDER);
 
-export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
+export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer' | 'platform_quote_user';
 export type UserType = 'admin' | 'collaborator' | 'manager' | 'customer_portal';
 
 const SESSION_BRANDING_KEY = 'nh-session-branding';
@@ -99,7 +99,8 @@ export type Module =
   | 'dashboard-ventas'
   | 'qa-console'
   | 'fuerza-comercial'
-  | 'guia-implementacion';
+  | 'guia-implementacion'
+  | 'platform-users';
 
 export type SubModule = string;
 
@@ -169,6 +170,7 @@ export interface User {
   customerId?: string | null;
   tenantName: string;
   permissions: Permission[];
+  platformPermissions: string[];
   enabledModules: string[];
   isPlatformAdmin: boolean;
   isTenantUser: boolean;
@@ -317,7 +319,7 @@ const ALL_MODULES: Module[] = [
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
   'auditoria',
   'financiamiento-pyme', 'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
-  'contabilidad', 'novachat', 'qa-console', 'fuerza-comercial',
+  'contabilidad', 'novachat', 'qa-console', 'fuerza-comercial', 'platform-users',
 ];
 
 const getPermissionsByRole = (role: Role): Permission[] => {
@@ -402,6 +404,7 @@ const normalizeRole = (rawRole: string): Role => {
   if (!rawRole) return 'employee';
   const lowered = rawRole.toLowerCase().replace(/[^a-z_]/g, '');
   if (lowered === 'superadmin' || lowered === 'super_admin') return 'superadmin';
+  if (lowered === 'platform_quote_user') return 'platform_quote_user';
   return lowered as Role;
 };
 
@@ -429,7 +432,7 @@ const createUserObject = (apiPayload: any): User => {
   // Las cuentas de plataforma históricas pueden llegar como ADMIN después
   // de la normalización de roles. La separación real es que no tienen
   // clientTenantId; los Managers quedan fuera porque su userType es MANAGER.
-  const isPlatformAdmin = ['superadmin', 'partner'].includes(role)
+  const isPlatformAdmin = ['superadmin', 'partner', 'platform_quote_user'].includes(role)
     || (!apiUser.clientTenantId && userType === 'admin' && role !== 'manager');
 
   const hasActiveTenantBranding = Boolean(apiUser?.clientTenantId && apiUser?.clientTenant);
@@ -594,6 +597,9 @@ const createUserObject = (apiPayload: any): User => {
     customerId: apiUser.customerId || null,
     tenantName: isPlatformAdmin ? 'NovaHub Platform' : (apiUser.clientTenant?.name || 'Nova Hub'),
     permissions: mergedPermissions,
+    platformPermissions: Array.isArray(apiUser.platformPermissions)
+      ? apiUser.platformPermissions.map((permission: unknown) => String(permission))
+      : [],
     enabledModules: apiUser.enabledModules || [],
     isPlatformAdmin,
     isTenantUser: !isPlatformAdmin,
@@ -774,6 +780,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
+      if (user.role === 'platform_quote_user') return module === 'suscripciones' && user.platformPermissions.includes('PLATFORM_QUOTES');
       if (module === 'guia-implementacion') return user.role === 'superadmin';
       // La consola de SuperAdmin expone la auditoría como vista propia; no
       // debe conservar el módulo general de Configuración ni sus subpáginas.
@@ -782,7 +789,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'dashboard', 'suscripciones', 'tenant-admin', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
         'qa-console', 'fuerza-comercial',
-        'auditoria',
+        'auditoria', 'platform-users',
       ];
       const platformConfigurationModules = [
         'CONFIGURATION', 'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF',

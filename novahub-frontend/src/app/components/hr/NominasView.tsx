@@ -24,9 +24,10 @@ import { beginNotificationAction, completeNotificationAction, failNotificationAc
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 
-type PayrollFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+type PayrollFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'ALL';
 
 const PAYROLL_FREQUENCY_OPTIONS: Array<{ value: PayrollFrequency; label: string }> = [
+  { value: 'ALL', label: 'Todas las frecuencias' },
   { value: 'WEEKLY', label: 'Semanal' },
   { value: 'BIWEEKLY', label: 'Quincenal' },
   { value: 'MONTHLY', label: 'Mensual' },
@@ -36,8 +37,16 @@ const payrollFrequencyLabel = (frequency?: string) => ({
   WEEKLY: 'Semanal',
   BIWEEKLY: 'Quincenal',
   MONTHLY: 'Mensual',
-  HOURLY: 'Por hora',
 } as Record<string, string>)[String(frequency || '').toUpperCase()] || 'No especificada';
+
+const payrollEffectiveStatus = (payroll: any) => {
+  const paymentStatus = String(payroll?.paymentStatus || 'PENDING').toUpperCase();
+  if (paymentStatus === 'PARTIAL') return 'PARTIAL';
+  if (payroll?.status === 'PAID' || paymentStatus === 'PAID') return 'PAID';
+  if (paymentStatus === 'APPROVED') return 'APPROVED';
+  if (paymentStatus === 'REQUESTED') return 'REQUESTED';
+  return String(payroll?.status || 'PENDING').toUpperCase();
+};
 
 const startOfLocalDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
 const endOfLocalDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
@@ -74,7 +83,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [includeCommissions, setIncludeCommissions] = useState(true);
-  const [processFrequency, setProcessFrequency] = useState<PayrollFrequency>('MONTHLY');
+  const [processFrequency, setProcessFrequency] = useState<PayrollFrequency>('ALL');
   const [processDialogOpen, setProcessDialogOpen] = useState(false);
   const [processLoading, setProcessLoading] = useState(false);
   const employeeOptions = [
@@ -88,7 +97,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
   const filteredPayrolls = payrolls.filter((p: any) => {
     const matchesEmployee = filterEmployee === 'all' || p.employeeId === filterEmployee;
-    const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || payrollEffectiveStatus(p) === filterStatus;
     return matchesEmployee && matchesStatus;
   });
 
@@ -106,8 +115,10 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const employeeNameOptions = [...new Map(filteredPayrolls.map((p: any) => [payrollEmployeeName(p), payrollEmployeeName(p)])).entries()]
     .map(([, label]) => ({ value: label as string, label: label as string, count: filteredPayrolls.filter((p: any) => payrollEmployeeName(p) === label).length }));
   const statusOptionsForFilter = [
-    { value: 'PENDING', label: 'Pendiente', count: filteredPayrolls.filter((p: any) => p.status === 'PENDING').length },
-    { value: 'PAID', label: 'Pagado', count: filteredPayrolls.filter((p: any) => p.status === 'PAID').length },
+    { value: 'PENDING', label: 'Pendiente', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING').length },
+    { value: 'PARTIAL', label: 'Pago parcial', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PARTIAL').length },
+    { value: 'APPROVED', label: 'Aprobada', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'APPROVED').length },
+    { value: 'PAID', label: 'Pagado', count: filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PAID').length },
   ];
 
   const payrollBase = (p: any, field: string, baseField: string) => {
@@ -141,6 +152,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [editingPayroll, setEditingPayroll] = useState<any | null>(null);
   const [payrollForm, setPayrollForm] = useState({ periodStart: '', periodEnd: '', notes: '' });
   const [payrollSaveLoading, setPayrollSaveLoading] = useState(false);
+  const [payrollRecalculateLoading, setPayrollRecalculateLoading] = useState(false);
 
   const toDateInputValue = (value: unknown) => {
     if (!value) return '';
@@ -187,6 +199,25 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     }
   };
 
+  const handleRecalculatePayroll = async () => {
+    if (!editingPayroll) return;
+    const actionToken = beginNotificationAction();
+    try {
+      setPayrollRecalculateLoading(true);
+      await hrService.recalculatePayroll(editingPayroll.id);
+      toast.success('Nómina recalculada con el salario fijo y las comisiones del período');
+      completeNotificationAction(actionToken);
+      setEditingPayroll(null);
+      onRefresh();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error?.message || 'No se pudo recalcular la nómina';
+      toast.error(Array.isArray(message) ? message[0] : message);
+      failNotificationAction(actionToken);
+    } finally {
+      setPayrollRecalculateLoading(false);
+    }
+  };
+
   const handleOpenProcessPayroll = () => {
     if (!canPerform('HR_PAYROLL', 'approve')) return;
     if (filterEmployee !== 'all') {
@@ -195,6 +226,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       if (PAYROLL_FREQUENCY_OPTIONS.some(option => option.value === selectedFrequency)) {
         setProcessFrequency(selectedFrequency as PayrollFrequency);
       }
+    } else {
+      setProcessFrequency('ALL');
     }
     setProcessDialogOpen(true);
   };
@@ -203,14 +236,16 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     ? employees.find((employee: any) => employee.id === filterEmployee)
     : null;
   const selectedEmployeeFrequency = String(selectedProcessEmployee?.payFrequency || '').toUpperCase();
+  const selectedEmployeeUnsupported = Boolean(selectedProcessEmployee && !['WEEKLY', 'BIWEEKLY', 'MONTHLY'].includes(selectedEmployeeFrequency));
   const hasProcessFrequencyMismatch = Boolean(
     selectedProcessEmployee
+      && processFrequency !== 'ALL'
       && selectedEmployeeFrequency !== processFrequency
   );
-  const processPeriod = getCurrentPayrollPeriod(processFrequency);
+  const processPeriod = getCurrentPayrollPeriod(processFrequency === 'ALL' ? 'MONTHLY' : processFrequency);
 
   const handleProcessPayroll = async () => {
-    if (!canPerform('HR_PAYROLL', 'approve') || hasProcessFrequencyMismatch) return;
+    if (!canPerform('HR_PAYROLL', 'approve') || hasProcessFrequencyMismatch || selectedEmployeeUnsupported) return;
     setProcessLoading(true);
     const actionToken = beginNotificationAction();
     try {
@@ -282,7 +317,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   };
 
   const handleRequestAllPayments = async () => {
-    const pendingPayrolls = filteredPayrolls.filter((p: any) => p.status === 'PENDING' && String(p.paymentStatus || 'PENDING') === 'PENDING');
+    const pendingPayrolls = filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING');
     if (pendingPayrolls.length === 0) {
       toast.info('No hay nóminas pendientes');
       return;
@@ -352,7 +387,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       <StatCard key={`${key}-${currency}`} label={`${label} (${currency})`} value={formatExplicitAmount(amountByCurrency(currency), currency)} icon={icon} tone={tone} valueClassName="text-xl" onClick={onClick} />
     ))
     : <StatCard label={`${label}${valuationModeSuffix}`} value={formatCurrentAmount(total, displayCurrency)} icon={icon} tone={tone} sub={key === 'company-cost' ? (valuationModeSuffix ? valuationModeLabel : undefined) : undefined} valueClassName="text-xl" onClick={onClick} />;
-  const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING' && String(p.paymentStatus || 'PENDING') === 'PENDING').length;
+  const pendingCount = filteredPayrolls.filter((p: any) => payrollEffectiveStatus(p) === 'PENDING').length;
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const isOverdue = (p: any) => p.status === 'PENDING' && new Date(p.periodEnd) < new Date();
@@ -411,6 +446,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           >
             <option value="all">Todos</option>
             <option value="PENDING">Pendiente</option>
+            <option value="PARTIAL">Pago parcial</option>
+            <option value="APPROVED">Aprobada</option>
             <option value="PAID">Pagado</option>
           </select>
         </div>
@@ -467,6 +504,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             </thead>
             <tbody className="divide-y">
               {paginatedPayrolls.map((payroll: any) => {
+                const effectiveStatus = payrollEffectiveStatus(payroll);
                 return (
                   <React.Fragment key={payroll.id}>
                   <tr className="hover:bg-muted/50 cursor-pointer" onClick={() => setExpandedRow(expandedRow === payroll.id ? null : payroll.id)}>
@@ -504,19 +542,21 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-1 rounded-lg font-bold ${
-                        payroll.status === 'PAID' ? 'bg-success/10 text-success dark:bg-success/30 dark:text-success' :
+                        effectiveStatus === 'PAID' ? 'bg-success/10 text-success dark:bg-success/30 dark:text-success' :
+                        effectiveStatus === 'PARTIAL' ? 'bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-500' :
+                        effectiveStatus === 'APPROVED' ? 'bg-info/10 text-info dark:bg-info/30 dark:text-info' :
                         isOverdue(payroll) ? 'bg-destructive/10 text-destructive dark:bg-destructive/30 dark:text-destructive border border-destructive/20 shadow-sm shadow-destructive/20' :
-                        payroll.status === 'PENDING' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
+                        effectiveStatus === 'PENDING' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
                         'bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground'
                       }`}>
-                        {payroll.status === 'PAID' ? 'Pagado' : isOverdue(payroll) ? 'Vencida' : payroll.status === 'PENDING' ? 'Pendiente' : payroll.status}
+                        {effectiveStatus === 'PAID' ? 'Pagado' : effectiveStatus === 'PARTIAL' ? 'Pago parcial' : effectiveStatus === 'APPROVED' ? 'Aprobada' : isOverdue(payroll) ? 'Vencida' : effectiveStatus === 'PENDING' ? 'Pendiente' : effectiveStatus}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {payroll.status === 'PENDING' && (
+                        {effectiveStatus !== 'PAID' && (
                           <>
-                            {String(payroll.paymentStatus || 'PENDING') === 'PENDING' && canPerform('HR_PAYROLL', 'approve') && (
+                            {effectiveStatus === 'PENDING' && canPerform('HR_PAYROLL', 'approve') && (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -527,8 +567,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                                 Solicitar pago
                               </Button>
                             )}
-                            {String(payroll.paymentStatus || 'PENDING') === 'REQUESTED' && <span className="px-2 text-[10px] font-black uppercase text-warning">Solicitud enviada</span>}
-                            {String(payroll.paymentStatus || 'PENDING') === 'APPROVED' && <span className="px-2 text-[10px] font-black uppercase text-info">Aprobada en Contabilidad</span>}
+                            {effectiveStatus === 'REQUESTED' && <span className="px-2 text-[10px] font-black uppercase text-warning">Solicitud enviada</span>}
+                            {effectiveStatus === 'APPROVED' && <span className="px-2 text-[10px] font-black uppercase text-info">Aprobada en Contabilidad</span>}
+                            {effectiveStatus === 'PARTIAL' && <span className="px-2 text-[10px] font-black uppercase text-orange-600">Pago parcial · saldo en Contabilidad</span>}
                             {canPerform('HR_PAYROLL', 'edit') && (
                               <Button
                                 size="sm"
@@ -541,7 +582,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                                 Editar
                               </Button>
                             )}
-                            {canPerform('HR_PAYROLL', 'delete') && (
+                            {effectiveStatus !== 'PARTIAL' && canPerform('HR_PAYROLL', 'delete') && (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -612,6 +653,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         {/* Mobile View */}
         <div className="block md:hidden space-y-4 p-4 bg-muted/10">
           {paginatedPayrolls.map((payroll: any) => {
+            const effectiveStatus = payrollEffectiveStatus(payroll);
             return (
               <div key={payroll.id} className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-background p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4 border-b border-primary/10 pb-3">
@@ -625,12 +667,14 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     </div>
                   </div>
                   <span className={`text-[10px] px-2 py-1 rounded-lg font-bold shadow-sm ${
-                    payroll.status === 'PAID' ? 'bg-success/10 text-success dark:bg-success/30 dark:text-success' :
+                    effectiveStatus === 'PAID' ? 'bg-success/10 text-success dark:bg-success/30 dark:text-success' :
+                    effectiveStatus === 'PARTIAL' ? 'bg-orange-500/10 text-orange-600 dark:bg-orange-500/20' :
+                    effectiveStatus === 'APPROVED' ? 'bg-info/10 text-info dark:bg-info/30' :
                     isOverdue(payroll) ? 'bg-destructive/10 text-destructive dark:bg-destructive/30 border border-destructive/20 shadow-destructive/20' :
-                    payroll.status === 'PENDING' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
+                    effectiveStatus === 'PENDING' ? 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' :
                     'bg-muted text-muted-foreground dark:bg-muted'
                   }`}>
-                    {payroll.status === 'PAID' ? 'PAGADO' : isOverdue(payroll) ? 'VENCIDA' : payroll.status === 'PENDING' ? 'PENDIENTE' : payroll.status}
+                    {effectiveStatus === 'PAID' ? 'PAGADO' : effectiveStatus === 'PARTIAL' ? 'PAGO PARCIAL' : effectiveStatus === 'APPROVED' ? 'APROBADA' : isOverdue(payroll) ? 'VENCIDA' : effectiveStatus === 'PENDING' ? 'PENDIENTE' : effectiveStatus}
                   </span>
                 </div>
 
@@ -661,20 +705,22 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                   <Button size="sm" variant="outline" className="flex-1 rounded-xl text-[11px] h-8" onClick={() => setExpandedRow(expandedRow === payroll.id ? null : payroll.id)}>
                     {expandedRow === payroll.id ? <><ChevronUp className="size-3 mr-1"/>Desglose</> : <><ChevronDown className="size-3 mr-1"/>Desglose</>}
                   </Button>
-                  {payroll.status === 'PENDING' && (
+                  {effectiveStatus !== 'PAID' && (
                     <>
-                      {String(payroll.paymentStatus || 'PENDING') === 'PENDING' && canPerform('HR_PAYROLL', 'approve') && (
+                      {effectiveStatus === 'PENDING' && canPerform('HR_PAYROLL', 'approve') && (
                         <Button size="sm" onClick={() => handleRequestPayment(payroll.id)} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] h-8">
                           <Send className="size-3 mr-1" /> Solicitar pago
                         </Button>
                       )}
-                      {String(payroll.paymentStatus || 'PENDING') !== 'PENDING' && <span className="flex flex-1 items-center justify-center text-[10px] font-black uppercase text-warning">Solicitud {String(payroll.paymentStatus).toLowerCase()}</span>}
+                      {effectiveStatus === 'REQUESTED' && <span className="flex flex-1 items-center justify-center text-[10px] font-black uppercase text-warning">Solicitud enviada</span>}
+                      {effectiveStatus === 'APPROVED' && <span className="flex flex-1 items-center justify-center text-[10px] font-black uppercase text-info">Aprobada en Contabilidad</span>}
+                      {effectiveStatus === 'PARTIAL' && <span className="flex flex-1 items-center justify-center text-[10px] font-black uppercase text-orange-600">Pago parcial</span>}
                       {canPerform('HR_PAYROLL', 'edit') && (
                         <Button size="sm" variant="outline" onClick={() => handleOpenEditPayroll(payroll)} className="px-3 text-primary border-primary/30 hover:bg-primary/10 rounded-xl h-8" title="Editar nómina">
                           <Pencil className="size-3.5" />
                         </Button>
                       )}
-                      {canPerform('HR_PAYROLL', 'delete') && (
+                      {effectiveStatus !== 'PARTIAL' && canPerform('HR_PAYROLL', 'delete') && (
                         <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-destructive border-destructive hover:bg-destructive hover:border-destructive rounded-xl h-8">
                           <Trash2 className="size-3.5" />
                         </Button>
@@ -759,7 +805,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><CalendarDays className="size-5 text-primary" /> Procesar nómina</DialogTitle>
             <DialogDescription>
-              Selecciona la periodicidad. Se procesarán los empleados activos que tengan esa frecuencia configurada en su expediente.
+              Selecciona una frecuencia o procesa todas. Para “Todas las frecuencias” se agrupan los empleados según su configuración y cada grupo recibe su período correspondiente.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -770,7 +816,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                 value={processFrequency}
                 onChange={(event) => setProcessFrequency(event.target.value as PayrollFrequency)}
                 className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-medium"
-                disabled={processLoading}
+                disabled={processLoading || Boolean(selectedProcessEmployee)}
               >
                 {PAYROLL_FREQUENCY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -779,7 +825,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Período sugerido</p>
               <p className="mt-1 text-sm font-bold text-foreground">{formatDateEs(processPeriod.start)} – {formatDateEs(processPeriod.end)}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                El salario mensual se prorratea automáticamente a {payrollFrequencyLabel(processFrequency).toLowerCase()} y la periodicidad queda guardada en el registro.
+                {processFrequency === 'ALL'
+                  ? 'Se procesarán por separado los grupos semanal, quincenal y mensual. El salario mensual fijo se prorratea dentro de cada grupo.'
+                  : `El salario mensual fijo se prorratea automáticamente a ${payrollFrequencyLabel(processFrequency).toLowerCase()} y la periodicidad queda guardada en el registro.`}
               </p>
             </div>
             {hasProcessFrequencyMismatch && (
@@ -791,10 +839,19 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                 </AlertDescription>
               </Alert>
             )}
+            {selectedEmployeeUnsupported && (
+              <Alert variant="destructive">
+                <AlertTriangle className="size-4" />
+                <AlertTitle>Frecuencia pendiente de corrección</AlertTitle>
+                <AlertDescription>
+                  El empleado seleccionado tiene una frecuencia por hora no compatible. Corrige su expediente a semanal, quincenal o mensual antes de procesarlo.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProcessDialogOpen(false)} disabled={processLoading}>Cancelar</Button>
-            <Button onClick={handleProcessPayroll} disabled={processLoading || hasProcessFrequencyMismatch}>
+            <Button onClick={handleProcessPayroll} disabled={processLoading || hasProcessFrequencyMismatch || selectedEmployeeUnsupported}>
               {processLoading ? 'Procesando…' : 'Confirmar y procesar'}
             </Button>
           </DialogFooter>
@@ -823,9 +880,14 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               <Input id="payroll-notes" value={payrollForm.notes} onChange={(e) => setPayrollForm((current) => ({ ...current, notes: e.target.value }))} placeholder="Observaciones opcionales" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingPayroll(null)} disabled={payrollSaveLoading}>Cancelar</Button>
-            <Button onClick={handleSavePayroll} disabled={payrollSaveLoading}>{payrollSaveLoading ? 'Guardando…' : 'Guardar cambios'}</Button>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+            <Button variant="ghost" onClick={handleRecalculatePayroll} disabled={payrollSaveLoading || payrollRecalculateLoading || !canPerform('HR_PAYROLL', 'edit')}>
+              {payrollRecalculateLoading ? 'Recalculando…' : 'Recalcular montos'}
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setEditingPayroll(null)} disabled={payrollSaveLoading || payrollRecalculateLoading}>Cancelar</Button>
+              <Button onClick={handleSavePayroll} disabled={payrollSaveLoading || payrollRecalculateLoading}>{payrollSaveLoading ? 'Guardando…' : 'Guardar cambios'}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

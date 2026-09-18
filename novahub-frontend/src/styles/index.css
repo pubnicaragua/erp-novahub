@@ -119,6 +119,251 @@ select.erp-filter-select,
   outline: none;
 }
 
+/* El documento editable conserva su composición de escritorio, pero el
+   viewport pequeño nunca arrastra el ancho completo de la hoja. El scroll
+   queda únicamente en la tabla densa de conceptos. */
+@media (max-width: 1279px) {
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) {
+    min-width: 0;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) {
+    min-width: 0;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 639px) {
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div {
+    min-width: 0 !important;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:first-child {
+    min-height: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .75rem;
+    padding-inline: 1.25rem;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:first-child > div:first-child {
+    width: 100%;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) {
+    padding: 1rem;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+    border-collapse: separate;
+  }
+
+  /* En pantalla pequeña la tabla editable se convierte en tarjetas de línea.
+     El PDF se genera desde platformQuotePdf.ts, por lo que conserva su tabla
+     documental y este cambio solo afecta la edición dentro del navegador. */
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > thead {
+    display: none;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody {
+    display: grid;
+    gap: .75rem;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:has(td[colspan]) {
+    display: block;
+    border: 1px solid rgb(16 94 65 / 0.14);
+    border-radius: 1rem;
+    background: rgb(225 245 233 / 0.72);
+    overflow: hidden;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:has(td[colspan]) > td {
+    display: block;
+    width: 100%;
+    padding: .75rem;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    padding: .875rem;
+    border: 1px solid rgb(15 23 42 / 0.12);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 20px rgb(15 23 42 / 0.06);
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .25rem;
+    padding: 0;
+    text-align: left;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td::before {
+    color: rgb(100 116 139);
+    font-size: .58rem;
+    font-weight: 900;
+    line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:first-child {
+    display: none;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(2),
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(n + 5) {
+    grid-column: 1 / -1;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(2)::before { content: "Concepto"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3)::before { content: "Cantidad"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4)::before { content: "Precio unitario"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):has(select[aria-label="Tipo de descuento"]) > td:nth-child(5)::before { content: "Descuento"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):not(:has(select[aria-label="Tipo de descuento"])) > td:nth-child(5)::before { content: "Cobro"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):has(select[aria-label="Tipo de descuento"]) > td:nth-child(6)::before,
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):not(:has(select[aria-label="Tipo de descuento"])) > td:nth-child(5)::before { content: "Cobro"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):has(select[aria-label="Tipo de descuento"]) > td:nth-child(7)::before,
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):not(:has(select[aria-label="Tipo de descuento"])) > td:nth-child(6)::before { content: "Descripción / alcance"; }
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):has(select[aria-label="Tipo de descuento"]):has(td.text-orange-700) > td:nth-child(8)::before,
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])):not(:has(select[aria-label="Tipo de descuento"])):has(td.text-orange-700) > td:nth-child(7)::before { content: "Condición comercial"; }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) input,
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) select {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  [data-platform-quote-editor] > [data-slot="card-content"] > div:nth-child(3) > div > div:nth-child(3) > table > tbody > tr:not(:has(td[colspan])) button[aria-label="Eliminar concepto"] {
+    opacity: 1;
+  }
+
+  /* En móvil cada campo ocupa su propia fila: la leyenda queda arriba y el
+     control debajo. Los bloques compuestos conservan sus controles en línea. */
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td {
+    overflow: visible;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td::before {
+    white-space: nowrap;
+    font-size: .52rem;
+    letter-spacing: .06em;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:first-child {
+    display: none !important;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:nth-child(n + 2) {
+    grid-column: 1 / -1;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4) > div {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-content: stretch;
+    gap: .35rem;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4) > div > span,
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:nth-child(5) > div > div > span {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:nth-child(5):has(select[aria-label="Tipo de descuento"]) > div > div {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: .35rem;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:nth-child(5):has(select[aria-label="Tipo de descuento"]) > div,
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])):not(:has(select[aria-label="Tipo de descuento"])) > td:nth-child(5) > div,
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])):has(select[aria-label="Tipo de descuento"]) > td:nth-child(6) > div {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: .5rem;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) input,
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) select {
+    min-width: 0;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) input {
+    min-height: 2.15rem;
+    border: 1px solid rgb(148 163 184 / 0.45) !important;
+    border-radius: .55rem;
+    background: #fff !important;
+    padding: .4rem .55rem !important;
+    color: #0f172a;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) input::placeholder {
+    color: rgb(100 116 139 / 0.82);
+    opacity: 1;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3) input {
+    text-align: center;
+  }
+
+  [data-platform-quote-editor] table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4) input {
+    text-align: right;
+  }
+
+  /* El selector directo evita que el navegador conserve el layout nativo de
+     celda de tabla: cada leyenda debe ser un bloque y su contenido debe ir
+     debajo, incluso cuando la hoja editable está dentro de un wrapper. */
+  [data-platform-quote-editor] table tbody > tr:not(:has(td[colspan])) > td {
+    display: flex !important;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start;
+    gap: .35rem;
+  }
+
+  [data-platform-quote-editor] table tbody > tr:not(:has(td[colspan])) > td::before {
+    display: block;
+    width: 100%;
+    flex: 0 0 auto;
+    margin: 0;
+  }
+
+  [data-platform-quote-editor] table tbody > tr:not(:has(td[colspan])) > td > div {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 /* Las cabeceras de los módulos consolidados ya comunican el contexto mediante
    el título, las pestañas y los indicadores de alcance. Retirar el párrafo
    descriptivo evita repetir una explicación antigua bajo el encabezado. */

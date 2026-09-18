@@ -92,6 +92,7 @@ const ContabilidadPage = lazyWithChunkRecovery(() => import('./components/contab
 const QaConsoleView = lazyWithChunkRecovery(() => import('./components/qa/QaConsoleView').then(m => ({ default: m.QaConsoleView })), 'qa');
 const ManagerPage = lazyWithChunkRecovery(() => import('./components/ManagerPage').then(m => ({ default: m.ManagerPage })), 'manager');
 const EnterpriseGroupsAdminView = lazyWithChunkRecovery(() => import('./components/admin/EnterpriseGroupsAdminView').then(m => ({ default: m.EnterpriseGroupsAdminView })), 'enterprise-groups');
+const PlatformUsersView = lazyWithChunkRecovery(() => import('./components/admin/PlatformUsersView').then(m => ({ default: m.PlatformUsersView })), 'platform-users');
 const ImplementationGuideView = lazyWithChunkRecovery(() => import('./components/admin/ImplementationGuideView').then(m => ({ default: m.ImplementationGuideView })), 'implementation-guide');
 const CustomerPortalPage = lazyWithChunkRecovery(() => import('./components/customer-portal/CustomerPortalPage').then(m => ({ default: m.CustomerPortalPage })), 'customer-portal');
 
@@ -434,6 +435,7 @@ function DashboardLayout() {
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
       case 'auditoria': return <ModuleErrorBoundary moduleName="Logs y auditoría"><AuditoriaPage /></ModuleErrorBoundary>;
       case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
+      case 'platform-users': return user?.role === 'superadmin' ? <PlatformUsersView /> : <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6"><div className="text-center"><h1 className="text-2xl font-semibold tracking-tight">Acceso Denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para gestionar usuarios de plataforma</p></div></div>;
       // Alias de compatibilidad para enlaces antiguos: la administración de
       // sucursales ahora vive dentro de Grupos empresariales.
       case 'tenant-admin': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage />;

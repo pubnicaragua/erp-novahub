@@ -14,6 +14,7 @@ import { EnterpriseGroupSetupView } from './EnterpriseGroupSetupView';
 import { TrialExtensionRequestsPanel } from '../suscripciones/TrialExtensionRequestsPanel';
 import { PlatformQuotesPanel } from './PlatformQuotesPanel';
 import { BrandLogo } from '../BrandLogo';
+import { useAuth } from '../../contexts/AuthContext';
 
 const normalizeSearchValue = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase();
 
@@ -28,11 +29,13 @@ function formatStorage(value: unknown) {
 }
 
 export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boolean }) {
+  const { user } = useAuth();
+  const quoteOnly = user?.role === 'platform_quote_user';
   const [workspace, setWorkspace] = useState<{ mode: 'create' | 'edit'; groupId?: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [groupsPage, setGroupsPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<'groups' | 'legacy' | 'requests' | 'quotes'>('groups');
+  const [activeTab, setActiveTab] = useState<'groups' | 'legacy' | 'requests' | 'quotes'>(quoteOnly ? 'quotes' : 'groups');
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearchTerm(searchTerm.trim());
@@ -44,7 +47,7 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
   const query = useTenantQuery(
     ['platform-enterprise-groups', debouncedSearchTerm, groupsPage, includeGroupOptions],
     (signal) => enterpriseGroupsService.getPlatformGroups({ search: debouncedSearchTerm || undefined, page: groupsPage, pageSize: 12, includeOptions: includeGroupOptions, includeMetrics: false }, signal),
-    { placeholderData: keepPreviousData },
+    { placeholderData: keepPreviousData, enabled: !quoteOnly },
   );
   const legacyQuery = useTenantQuery(['platform-enterprise-groups-legacy-users'], (signal) => enterpriseGroupsService.getPlatformLegacyUsers(signal), { enabled: activeTab === 'legacy' });
   const data = query.data;
@@ -91,7 +94,7 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
           ['legacy', 'Usuarios heredados', UserRound],
           ['requests', 'Solicitudes de trial', Clock3],
           ['quotes', 'Cotizaciones', FileText],
-        ] as const).map(([tab, label, Icon]) => (
+        ] as const).filter(([tab]) => !quoteOnly || tab === 'quotes').map(([tab, label, Icon]) => (
           <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide transition ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
             <Icon className="size-4" /> {label}
           </button>

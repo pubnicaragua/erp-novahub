@@ -513,7 +513,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         !contractValues.includes(contractType) ? 'Tipo de contrato inválido: usa Tiempo completo, Medio tiempo, Contratista, Pasante o Temporal' : '',
         !Number.isFinite(salary) || salary < 0 ? 'Salario inválido' : '',
         !['NIO', 'USD'].includes(String(row.currency || '').toUpperCase()) ? 'Moneda inválida' : '',
-        !payFrequencyValues.includes(payFrequency) ? 'Frecuencia de pago inválida: usa Semanal, Quincenal, Mensual o Por hora' : '',
+        !payFrequencyValues.includes(payFrequency) ? 'Frecuencia de pago inválida: usa Semanal, Quincenal o Mensual' : '',
         !statusValues.includes(employmentStatus) ? 'Estado laboral inválido: usa Activo, Inactivo, En ausencia o Terminado' : '',
       ].filter(Boolean);
       next.departmentId = departmentId;
@@ -551,7 +551,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       ['Tipo de contrato', 'Ingresa el valor en español: Tiempo completo, Medio tiempo, Contratista, Pasante o Temporal.'],
       ['Salario y moneda', 'El salario debe ser numérico y mayor o igual a cero. Monedas soportadas en esta vista: NIO y USD.'],
       ['Cédula', 'Es opcional, pero si se informa no puede repetirse en otro empleado de la misma empresa. La comparación ignora mayúsculas, espacios y guiones.'],
-      ['Frecuencia de pago', 'Ingresa el valor en español: Semanal, Quincenal, Mensual o Por hora.'],
+      ['Frecuencia de pago', 'Ingresa el valor en español: Semanal, Quincenal o Mensual.'],
       ['Estado laboral', 'Ingresa el valor en español: Activo, Inactivo, En ausencia o Terminado.'],
       ['Vendedores', 'No se importa un vendedor por empleado. La elegibilidad para comisiones la determina el departamento marcado como vendedor.'],
     ]);
@@ -1307,7 +1307,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
                 <div className="space-y-2"><Label>Tipo de contrato *</Label><Select value={newEmployeeForm.contractType || 'FULL_TIME'} onValueChange={(value) => updateNewEmployeeForm('contractType', value)}><SelectTrigger data-testid="hr-employee-contract"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FULL_TIME">Tiempo completo</SelectItem><SelectItem value="PART_TIME">Medio tiempo</SelectItem><SelectItem value="CONTRACTOR">Contratista</SelectItem><SelectItem value="INTERN">Pasante</SelectItem><SelectItem value="TEMPORARY">Temporal</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>Salario *</Label><Input data-testid="hr-employee-salary" type="number" min="0" value={newEmployeeForm.salary ?? ''} onChange={(event) => updateNewEmployeeForm('salary', event.target.value === '' ? '' : Number(event.target.value))} placeholder="0.00" /></div>
                 <div className="space-y-2"><Label>Moneda</Label><Select value={newEmployeeForm.currency || 'NIO'} onValueChange={(value) => updateNewEmployeeForm('currency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO - Córdoba</SelectItem><SelectItem value="USD">USD - Dólar</SelectItem></SelectContent></Select></div>
-                <div className="space-y-2"><Label>Frecuencia de pago</Label><Select value={newEmployeeForm.payFrequency || 'MONTHLY'} onValueChange={(value) => updateNewEmployeeForm('payFrequency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem><SelectItem value="HOURLY">Por hora</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Frecuencia de pago</Label><Select value={newEmployeeForm.payFrequency || 'MONTHLY'} onValueChange={(value) => updateNewEmployeeForm('payFrequency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>Estado</Label><Select value={newEmployeeForm.employmentStatus || 'ACTIVE'} onValueChange={(value) => updateNewEmployeeForm('employmentStatus', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem><SelectItem value="ON_LEAVE">En ausencia</SelectItem><SelectItem value="TERMINATED">Terminado</SelectItem></SelectContent></Select></div>
               </div>
             </section>
