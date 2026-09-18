@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { getApiErrorMessage } from '../../services/api';
+import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 import { logisticsService, type ImportDefaults, type ImportRowInput, type ImportRowResult } from '../../services/logistics.service';
 
 interface BulkImportProps {
@@ -125,6 +126,7 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
 
   const confirm = async () => {
     setBusy(true);
+    const actionToken = beginNotificationAction();
     try {
       const res = await logisticsService.importPackages({ rows, defaults });
       setResult({ imported: res.imported, skipped: res.skippedDuplicates });
@@ -132,7 +134,10 @@ export function BulkImport({ defaults, onImported }: BulkImportProps) {
       onImported();
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo importar'));
-    } finally { setBusy(false); }
+    } finally {
+      completeNotificationAction(actionToken);
+      setBusy(false);
+    }
   };
 
   return (

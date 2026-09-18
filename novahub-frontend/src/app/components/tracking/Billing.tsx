@@ -16,6 +16,9 @@ import {
 } from '../ui/table';
 import { getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
+import type { NotificationDomainRefreshDetail } from '../../services/notification-domain-refresh';
+import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { customersService } from '../../services/ventas.service';
 import { buildCustomerWhatsAppUrl } from '../ventas/WhatsAppActionButton';
@@ -37,7 +40,7 @@ type SubView = 'available' | 'delivery' | 'traceability';
 
 export function Billing() {
   const { canPerform } = useAuth();
-  const canReadBilling = canPerform('TRACKING_BILLING', 'read');
+  const canReadBilling = canPerform('TRACKING_BILLING', 'view');
   const canApproveBilling = canPerform('TRACKING_BILLING', 'approve');
   const canDeleteBilling = canPerform('TRACKING_BILLING', 'delete');
   const [sub, setSub] = useState<SubView>('available');
@@ -78,7 +81,7 @@ export function Billing() {
   const [replacementCtx, setReplacementCtx] = useState<{ invoiceId: string; customerName: string; packageIds: string[]; rates: Record<string, number> } | null>(null);
   const [creditNoteBusy, setCreditNoteBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!canReadBilling) return;
     try {
       setLoading(true);
@@ -89,11 +92,33 @@ export function Billing() {
       setData(avail);
       setAlerts(al);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'No se pudieron cargar los paquetes disponibles'));
+      if (!silent) toast.error(getApiErrorMessage(error, 'No se pudieron cargar los paquetes disponibles'));
     } finally {
       setLoading(false);
     }
   }, [canReadBilling, page, pageSize, search]);
+
+  const loadDeliverable = useCallback(async () => {
+    if (!canReadBilling) return;
+    try {
+      const res = await logisticsService.listReceivedPackages({ page: 1, pageSize: 200 });
+      setDeliverable(res.items.filter((p) => p.saleStatus === 'BILLED'));
+    } catch {
+      setDeliverable([]);
+    }
+  }, [canReadBilling]);
+
+  const refreshBillingFromNotification = useCallback(async (_notification: NotificationDomainRefreshDetail) => {
+    await load(true);
+    if (sub === 'delivery') await loadDeliverable();
+  }, [load, loadDeliverable, sub]);
+
+  useNotificationDomainRefresh({
+    module: 'tracking',
+    subModules: ['billing', 'packages', 'reception', 'reconciliation', 'batches'],
+    onRefresh: refreshBillingFromNotification,
+    enabled: canReadBilling,
+  });
 
   useEffect(() => {
     const timer = setTimeout(load, 250);
@@ -101,7 +126,7 @@ export function Billing() {
   }, [load]);
 
   useEffect(() => {
-    customersService.getAll({ page: 1, pageSize: 200 } as any)
+    customersService.getLookup({ page: 1, pageSize: 200 } as any)
       .then((response: any) => {
         const payload = response?.data ?? response;
         const list = Array.isArray(payload) ? payload : payload?.items || payload?.rows || [];
@@ -112,15 +137,8 @@ export function Billing() {
 
   useEffect(() => {
     if (!canReadBilling || sub !== 'delivery') return;
-    (async () => {
-      try {
-        const res = await logisticsService.listReceivedPackages({ page: 1, pageSize: 200 });
-        setDeliverable(res.items.filter((p) => p.saleStatus === 'BILLED'));
-      } catch {
-        setDeliverable([]);
-      }
-    })();
-  }, [canReadBilling, sub]);
+    void loadDeliverable();
+  }, [canReadBilling, loadDeliverable, sub]);
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -188,7 +206,7 @@ export function Billing() {
       const url = publicLinkUrl(link.path);
       let phone = '';
       try {
-        const cust: any = await customersService.getById(lastCustomerId);
+        const cust: any = await customersService.getLookupById(lastCustomerId, undefined, 'TRACKING_WHATSAPP');
         phone = String(cust?.phone || '');
       } catch { /* sin teléfono: se abre la lista de chats */ }
       const text = `Hola, te compartimos tu factura ${result.invoice.number} de NovaHub: ${url}`;
@@ -204,6 +222,7 @@ export function Billing() {
   const confirm = useCallback(async () => {
     if (!canApproveBilling || !preview) return;
     setConfirming(true);
+    const actionToken = beginNotificationAction();
     try {
       const res = await logisticsService.billingConfirm({
         customerId: preview.customer.id,
@@ -221,6 +240,7 @@ export function Billing() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo confirmar la factura'));
     } finally {
+      completeNotificationAction(actionToken);
       setConfirming(false);
     }
   }, [canApproveBilling, preview, date, dueDate, rates, replacementCtx, load]);
@@ -240,6 +260,7 @@ export function Billing() {
     if (!canApproveBilling) return;
     if (deliverSel.size === 0) { toast.error('Selecciona al menos un paquete facturado'); return; }
     setDelivering(true);
+    const actionToken = beginNotificationAction();
     try {
       const res = await logisticsService.deliverPackages({ packageIds: [...deliverSel], note: deliverNote || undefined });
       toast.success(`${res.delivered} paquete(s) entregado(s)`);
@@ -249,6 +270,7 @@ export function Billing() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo registrar la entrega'));
     } finally {
+      completeNotificationAction(actionToken);
       setDelivering(false);
     }
   }, [canApproveBilling, deliverSel, deliverNote]);
@@ -283,6 +305,7 @@ export function Billing() {
     if (!canDeleteBilling || !reversalPreview) return;
     if (reversalReason.trim().length < 3) { toast.error('Indica una razón de al menos 3 caracteres'); return; }
     setReversalBusy(true);
+    const actionToken = beginNotificationAction();
     try {
       const res = await logisticsService.billingCancel({ invoiceId: reversalPreview.invoice.id, reason: reversalReason.trim() });
       setReversalResult(res);
@@ -291,6 +314,7 @@ export function Billing() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo anular la venta'));
     } finally {
+      completeNotificationAction(actionToken);
       setReversalBusy(false);
     }
   }, [canDeleteBilling, reversalPreview, reversalReason, load]);
@@ -318,6 +342,7 @@ export function Billing() {
   const runCreditNote = useCallback(async () => {
     if (!canApproveBilling || !reversalPreview) return;
     setCreditNoteBusy(true);
+    const actionToken = beginNotificationAction();
     try {
       const res = await logisticsService.billingCreditNote({ invoiceId: reversalPreview.invoice.id, reason: reversalReason.trim() || undefined });
       toast.success(`Nota de crédito ${res.creditNote.number} emitida (${res.packages.length} paquete(s))`);
@@ -325,6 +350,7 @@ export function Billing() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'La nota de crédito requiere el flujo del módulo de Ventas'));
     } finally {
+      completeNotificationAction(actionToken);
       setCreditNoteBusy(false);
     }
   }, [canApproveBilling, reversalPreview, reversalReason]);

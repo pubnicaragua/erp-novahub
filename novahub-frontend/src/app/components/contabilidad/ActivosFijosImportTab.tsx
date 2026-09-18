@@ -14,6 +14,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const TEMPLATE_HEADERS = [
   'Código', 'Nombre', 'Categoría', 'Marca', 'Modelo', 'No. serie', 'Sucursal', 'Centro de costo',
@@ -192,6 +193,7 @@ export function ActivosFijosImportTab() {
 
   async function handleImport() {
     if (!result || result.valid === 0) { toast.error('Valida primero y asegúrate de que haya filas válidas'); return; }
+    const actionToken = beginNotificationAction();
     setImporting(true);
     setOperationProgress(12);
     try {
@@ -199,6 +201,7 @@ export function ActivosFijosImportTab() {
       const res = await contabilidadService.importFixedAssets(effectiveRows());
       setOperationProgress(90);
       toast.success(`Importación completada: ${res?.imported ?? 0} activos`);
+      completeNotificationAction(actionToken);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       queryClient.invalidateQueries({ queryKey: ['fixed-assets'] });
       setResult(null);
@@ -207,6 +210,7 @@ export function ActivosFijosImportTab() {
       setOperationProgress(100);
     } catch (err: any) {
       toast.error(err.message || 'Error al importar');
+      failNotificationAction(actionToken);
     } finally {
       setImporting(false);
       setOperationProgress(0);

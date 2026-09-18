@@ -55,7 +55,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     const interval = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
     return () => window.clearInterval(interval);
   }, []);
-  const usersQuery = useTenantQuery<any[]>(['activities', 'task-users'], signal => usersService.getAll(undefined, signal), {
+  const usersQuery = useTenantQuery<any[]>(['activities', 'task-users'], signal => usersService.getLookup(undefined, signal), {
     enabled: isAddOpen,
   });
   const employees = asList(usersQuery.data);

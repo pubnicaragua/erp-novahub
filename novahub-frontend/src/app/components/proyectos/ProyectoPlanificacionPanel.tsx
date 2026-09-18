@@ -32,7 +32,7 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
 
   const tasksQuery = useTenantQuery<ProjectTask[]>(['projects', 'tasks', projectId], (s) => projectsService.tasks(projectId, s), { enabled: true });
   const milestonesQuery = useTenantQuery<ProjectMilestone[]>(['projects', 'milestones', projectId], (s) => projectsService.milestones(projectId, s), { enabled: true });
-  const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getAll({ signal: s } as any), { enabled: true });
+  const usersQuery = useTenantQuery<any[]>(['projects', 'users'], (s) => usersService.getLookup(undefined, s), { enabled: true });
 
   const tasks = asList(tasksQuery.data) as ProjectTask[];
   const milestones = asList(milestonesQuery.data) as ProjectMilestone[];

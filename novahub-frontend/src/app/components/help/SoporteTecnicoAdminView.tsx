@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { soporteTecnicoService } from '../../services/soporte-tecnico.service';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
   OPEN: { label: 'Abierto', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20', icon: Clock },
@@ -54,6 +55,12 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
   const [newStatus, setNewStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  useNotificationDomainRefresh({
+    module: 'soporte-tecnico',
+    subModules: ['tickets'],
+    onRefresh: () => { void Promise.all([ticketsQuery.refetch(), statsQuery.refetch()]); },
+  });
 
   useEffect(() => {
     if (activeSubModule && activeSubModule !== filterStatus) {

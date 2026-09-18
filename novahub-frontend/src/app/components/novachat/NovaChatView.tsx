@@ -18,6 +18,7 @@ import {
   type ChatMessage,
 } from '../../services/novachat.service';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 const CHANNEL_ICONS: Record<string, LucideIcon> = {
   WHATSAPP: Phone,
@@ -89,6 +90,12 @@ export function NovaChatView() {
   );
   const messages = asList(messagesQuery.data) as ChatMessage[];
   const loading = inboxQuery.isLoading || inboxQuery.isFetching;
+
+  useNotificationDomainRefresh({
+    module: 'novachat',
+    subModules: ['conversaciones', 'mensajes', 'canales', 'contactos', 'agentes'],
+    onRefresh: () => { void Promise.all([inboxQuery.refetch(), messagesQuery.refetch()]); },
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

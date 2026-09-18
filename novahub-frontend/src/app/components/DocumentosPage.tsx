@@ -12,6 +12,7 @@ import { contractsService, legalInvoicesService, reportsService, filesService } 
 import { useAuth } from '../contexts/AuthContext';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 
 interface DocumentosPageProps {
   activeSubModule?: string;
@@ -58,6 +59,12 @@ export const DocumentosPage = ({ activeSubModule, onSubModuleChange, isSidebarCo
   const activeQuery = activeTab === 'archivos' || activeTab === 'carpetas' ? filesQuery : activeTab === 'contratos' ? contractsQuery : activeTab === 'facturas' ? invoicesQuery : reportsQuery;
   const loading = activeTab === 'planes' ? false : activeQuery.isLoading || activeQuery.isFetching;
   const fetchData = () => activeQuery.refetch();
+
+  useNotificationDomainRefresh({
+    module: 'documentos',
+    subModules: ['archivos', 'carpetas', 'contratos', 'facturas', 'reportes'],
+    onRefresh: () => { void activeQuery.refetch(); },
+  });
 
   useEffect(() => {
     const requestedTab = normalizeTab(activeSubModule);

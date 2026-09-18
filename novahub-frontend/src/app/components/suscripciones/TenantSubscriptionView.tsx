@@ -20,6 +20,7 @@ import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
 import { tenantsService } from '../../services/tenants.service';
 import { hrService } from '../../services/hr.service';
 import { usersService } from '../../services/users.service';
+import { customersService } from '../../services/ventas.service';
 import { brandingService } from '../../services/branding.service';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
@@ -35,6 +36,8 @@ import { pendingUserCreate, clearPendingUserCreate } from '../../utils/pendingUs
 import { PasswordRequirements } from '../PasswordRequirements';
 import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { Checkbox } from '../ui/checkbox';
+import { CustomerPortalAccessDialog } from './CustomerPortalAccessDialog';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -108,6 +111,8 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const canEditUsers = canPerform('CONFIG_USERS', 'edit');
   const canDeactivateUsers = canPerform('CONFIG_USERS', 'deactivate');
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
+  const canViewPortalAccess = canPerform('SALES_CLIENTS', 'view');
+  const canEditPortalAccess = canPerform('SALES_CLIENTS', 'edit');
   const canManageRoles = canPerform('CONFIG_ROLES', 'edit');
   const canViewRoles = canPerform('CONFIG_ROLES', 'view');
   const canViewDepartments = canPerform('CONFIG_DEPARTMENTS', 'view');
@@ -124,6 +129,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
   const [isWarehouseAccessDialogOpen, setIsWarehouseAccessDialogOpen] = useState(false);
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
+  const [isPortalAccessDialogOpen, setIsPortalAccessDialogOpen] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [warehouseAccessUser, setWarehouseAccessUser] = useState<any>(null);
@@ -140,6 +146,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [selectedModule, setSelectedModule] = useState<any>(null);
   const [notes, setNotes] = useState('');
   const [users, setUsers] = useState<any[]>([]);
+  const [portalAccessTotal, setPortalAccessTotal] = useState(0);
   const [employees, setEmployees] = useState<any[]>([]);
   const [companyName, setCompanyName] = useState('');
   const [companySlug, setCompanySlug] = useState('');
@@ -162,7 +169,11 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
   const [teamUsersLayout, setTeamUsersLayout] = useState<ViewLayoutMode>('table');
   const isCompactTeamViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveTeamUsersLayout: ViewLayoutMode = isCompactTeamViewport ? 'cards' : teamUsersLayout;
-  const isCurrentUserPrincipalAdmin = users.some((user) => user.id === currentUser?.id && user.isPrincipalAdmin);
+  const operationalUsers = useMemo(
+    () => users.filter((user) => String(user?.userType || '').toUpperCase() !== 'CUSTOMER_PORTAL'),
+    [users],
+  );
+  const isCurrentUserPrincipalAdmin = operationalUsers.some((user) => user.id === currentUser?.id && user.isPrincipalAdmin);
   const selectedDirectRole = selectedUser?.customRole || customRoles.find((role: any) => role.id === selectedUser?.customRoleId) || null;
 
   useEffect(() => () => {
@@ -173,15 +184,29 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     ['my-company-detail', tenant?.id || 'none'],
     async (signal) => {
       if (!tenant?.id) return null;
-      const [usersRes, branding, industriesRes, employeesRes] = await Promise.all([
+      const [usersRes, branding, industriesRes, employeesRes, portalAccessesRes] = await Promise.all([
         (canViewUsers || canViewDepartments) ? tenantsService.getUsers(tenant.id, signal) : Promise.resolve([]),
         (canViewCompany || canPerform('CONFIG_BRANDING', 'view')) ? brandingService.getCurrent(signal) : Promise.resolve(null),
         canViewCompany ? api.get<any[]>(`/tenants/${tenant.id}/industries`, { signal }) : Promise.resolve([]),
         (canViewEmployees || canEditEmployees) ? hrService.getEmployees({ status: 'ACTIVE', pageSize: 500 }, signal) : Promise.resolve([]),
+        (canViewUsers && canViewPortalAccess)
+          ? customersService.getPortalAccesses({ page: 1, pageSize: 50 }, signal)
+          : Promise.resolve(null),
       ]);
-      return { users: asList(usersRes), branding, industries: asList(industriesRes), employees: asList(employeesRes) };
+      return {
+        users: asList(usersRes),
+        branding,
+        industries: asList(industriesRes),
+        employees: asList(employeesRes),
+        portalAccessTotal: Number((portalAccessesRes as any)?.meta?.total || 0),
+      };
     },
-    { enabled: Boolean(tenant?.id), onError: (error) => toast.error(error.message || 'Error cargando Mi Sucursal') },
+    {
+      enabled: Boolean(tenant?.id),
+      staleTime: 0,
+      refetchOnMount: 'always',
+      onError: (error) => toast.error(error.message || 'Error cargando Mi Sucursal'),
+    },
   );
 
   useEffect(() => {
@@ -193,6 +218,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
     setUsers(tenantData.users);
     setEmployees(tenantData.employees || []);
     setIndustryOptions(tenantData.industries);
+    setPortalAccessTotal(Number(tenantData.portalAccessTotal || 0));
   }, [tenant, tenantData, tenantDataLoading]);
 
   useEffect(() => {
@@ -606,7 +632,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
             <LayoutGrid className="size-4" /> Módulos y Plan
           </TabsTrigger>}
           {canViewUsers && <TabsTrigger value="team" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Users className="size-4" /> Mi Equipo ({users.length})
+            <Users className="size-4" /> Mi Equipo ({operationalUsers.length})
           </TabsTrigger>}
           {canViewRoles && <TabsTrigger value="roles" className="shrink-0 gap-2 px-6 text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Shield className="size-4" /> Roles
@@ -687,7 +713,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                 {[
                   { label: 'Tenant ID', value: tenant.id, mono: true },
                   { label: 'Slug activo', value: tenant.slug || companySlug || 'N/A', mono: true },
-                  { label: 'Usuarios', value: String(users.length), mono: false },
+                  { label: 'Usuarios', value: String(operationalUsers.length), mono: false },
                   { label: 'Plan actual', value: tenant.plan || 'BASIC', mono: false },
                 ].map(({ label, value, mono }) => <div key={label} className="flex items-center justify-between rounded-xl border border-border/30 bg-muted/20 p-3">
                   <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">{label}</span>
@@ -720,7 +746,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                       </span>
                       <div className="size-1 rounded-full bg-border" />
                       <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Users className="size-4" /> {users.length} Usuarios Activos
+                        <Users className="size-4" /> {operationalUsers.length} Usuarios Activos
                       </span>
                     </div>
                   </div>
@@ -843,12 +869,15 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
             {canViewUsers && <Card className="min-w-0 border-border/50" data-tour="team-users">
               <CardHeader className="flex flex-col items-start justify-between gap-3 border-b border-border/30 bg-muted/10 pb-3 sm:flex-row sm:items-center">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Users className="size-4 text-primary" /> Usuarios ({users.length})</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Users className="size-4 text-primary" /> Usuarios ({operationalUsers.length})</CardTitle>
                   <CardDescription className="mt-1 text-xs">Administra las personas que tienen acceso a la empresa.</CardDescription>
                 </div>
                 <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                   {canViewUsers && <Button data-tour="team-tutorial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTeamTutorial(true)} aria-label="Cómo gestionar Mi Equipo" title="Cómo gestionar Mi Equipo">
                     <CircleHelp className="size-4" />
+                  </Button>}
+                  {canViewPortalAccess && portalAccessTotal > 0 && <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 rounded-xl border-primary/20 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={() => setIsPortalAccessDialogOpen(true)}>
+                    <Globe className="size-3.5" aria-hidden="true" /> Accesos de clientes portal <Badge variant="secondary" className="ml-0.5 px-1.5 py-0 text-[9px]">{portalAccessTotal}</Badge>
                   </Button>}
                   <ViewLayoutSelect value={effectiveTeamUsersLayout} onChange={setTeamUsersLayout} ariaLabel="Distribución de usuarios" className="h-8" />
                   {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={handleOpenCreateUser}>
@@ -858,7 +887,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
               </CardHeader>
               <CardContent className="min-w-0 p-4">
             <div className={cn(effectiveTeamUsersLayout === 'cards' ? 'grid min-w-0 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4' : 'space-y-2')}>
-            {users.map((u) => {
+            {operationalUsers.map((u) => {
                const isCurrentUser = currentUser?.id === u.id;
                const normalizedRole = String(u.role || '').toUpperCase();
                const normalizedUserType = String(u.userType || '').toUpperCase();
@@ -926,7 +955,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
               </div>;
             })}
             </div>
-                {!users.length && <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Aún no hay usuarios creados.</div>}
+                {!operationalUsers.length && <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Aún no hay usuarios operativos creados.</div>}
               </CardContent>
             </Card>}
           </div>
@@ -935,7 +964,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
            <TeamAccessPanel
              tenantId={tenant.id}
              tenantName={tenant.name}
-             users={users}
+             users={operationalUsers}
              onBack={() => { setActiveTab(canViewUsers ? 'team' : 'general'); onSubModuleChange?.(canViewUsers ? 'usuarios' : 'mi-sucursal'); }}
              onRolesChange={async () => { await refetchTenantData(); await onRefresh(); }}
              canViewRoles={canViewRoles}
@@ -1314,6 +1343,19 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {canViewUsers && canViewPortalAccess && <CustomerPortalAccessDialog
+        open={isPortalAccessDialogOpen}
+        onOpenChange={setIsPortalAccessDialogOpen}
+        canEdit={canEditPortalAccess}
+      />}
     </div>
   );
+
+  useNotificationDomainRefresh({
+    module: 'suscripciones',
+    subModules: ['suscripciones', 'mi-sucursal', 'empresa', 'usuarios', 'roles', 'departamentos', 'dominio'],
+    onRefresh: () => { void refetchTenantData(); },
+    enabled: Boolean(tenant?.id),
+  });
 }

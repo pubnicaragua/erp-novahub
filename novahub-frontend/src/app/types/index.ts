@@ -35,7 +35,7 @@ export interface ApiFilters {
   supplierInvoiceId?: string;
   status?: string;
   customerId?: string;
-  supplierId?: string;
+  purpose?: string;
   dateFrom?: string;
   dateTo?: string;
   from?: string;

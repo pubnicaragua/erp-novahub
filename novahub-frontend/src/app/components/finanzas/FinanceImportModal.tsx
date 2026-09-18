@@ -13,6 +13,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
@@ -296,15 +297,18 @@ export function FinanceImportModal({
 
   const handleImport = async () => {
     if (parsedData.length === 0) return;
+    const actionToken = beginNotificationAction();
     setLoading(true);
     try {
       const res = await onImport(parsedData);
       toast.success(`Se importaron ${res?.count || parsedData.length} registros exitosamente.`);
+      completeNotificationAction(actionToken);
       onRefresh();
       handleClose();
     } catch (error: any) {
       const msg = error?.response?.data?.message || 'Error durante la importación';
       toast.error(typeof msg === 'string' ? msg : msg[0] || 'Error');
+      failNotificationAction(actionToken);
     } finally {
       setLoading(false);
     }

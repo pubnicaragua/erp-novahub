@@ -10,9 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { invoicesService } from '../../services/ventas.service';
-import { supplierInvoicesService } from '../../services/compras.service';
-import { accountsService } from '../../services/finanzas.service';
+import { accountsService, sourceDocumentsService } from '../../services/finanzas.service';
 import { toast } from 'sonner';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard, financeCategoryLabel } from './financeChartTheme';
@@ -55,8 +53,8 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const salesInvoicesQuery = useQuery({
     queryKey: ['finance', 'sales-invoices', tenantKey],
     queryFn: ({ signal }) => fetchAllReportPages(
-      (filters) => invoicesService.getAll(filters, signal),
-      { pageSize: 5000, report: true },
+      (filters) => sourceDocumentsService.getLookup({ ...filters, origin: 'SALES' }, signal),
+      { pageSize: 200, report: true },
       signal,
     ),
     enabled: canReadSales,
@@ -68,8 +66,8 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const supplierInvoicesQuery = useQuery({
     queryKey: ['finance', 'supplier-invoices', tenantKey],
     queryFn: ({ signal }) => fetchAllReportPages(
-      (filters) => supplierInvoicesService.getAll(filters, signal),
-      { pageSize: 5000, report: true },
+      (filters) => sourceDocumentsService.getLookup({ ...filters, origin: 'PURCHASES' }, signal),
+      { pageSize: 200, report: true },
       signal,
     ),
     enabled: canReadPurchases,

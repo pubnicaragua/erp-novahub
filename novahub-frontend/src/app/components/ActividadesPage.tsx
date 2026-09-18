@@ -12,6 +12,7 @@ import { tasksService, eventsService, remindersService, activityLogsService } fr
 import { useAuth } from '../contexts/AuthContext';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 
 interface ActividadesPageProps {
   activeSubModule?: string;
@@ -71,6 +72,14 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
     : logsQuery;
   const loading = activeQuery.isLoading || activeQuery.isFetching;
   const fetchData = () => queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
+
+  useNotificationDomainRefresh({
+    module: 'actividades',
+    subModules: ['tareas', 'eventos', 'recordatorios', 'calendario', 'reuniones'],
+    onRefresh: () => {
+      void queryClient.invalidateQueries({ queryKey: ['activities'], refetchType: 'active' });
+    },
+  });
 
   const tabs = [
     { id: 'tareas', label: 'Tareas', icon: ListTodo, color: 'text-blue-500', module: 'ACTIVITIES_TASKS' },

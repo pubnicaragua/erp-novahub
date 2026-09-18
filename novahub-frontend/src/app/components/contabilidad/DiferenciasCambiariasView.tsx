@@ -12,6 +12,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 type RevaluationPreview = {
   asOfDate: string;
@@ -132,14 +133,17 @@ export function DiferenciasCambiariasView() {
   };
 
   const runAction = async (key: string, action: () => Promise<any>, successMessage: string) => {
+    const actionToken = beginNotificationAction();
     setActionLoading(key);
     try {
       const nextRun = runFromResponse(await action());
       if (nextRun) setRun(nextRun);
       await historyQuery.refetch();
       toast.success(successMessage);
+      completeNotificationAction(actionToken);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo completar la acción cambiaria.');
+      failNotificationAction(actionToken);
     } finally {
       setActionLoading(null);
     }

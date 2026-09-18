@@ -14,6 +14,7 @@ import { Textarea } from '../ui/textarea';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { hrService } from '../../services/hr.service';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { HRViewTutorial } from './HRViewTutorial';
 
 interface DepartmentForm {
@@ -156,6 +157,7 @@ export function DepartamentosView({ departments = [], employees = [], positions 
       return;
     }
 
+    const actionToken = beginNotificationAction();
     try {
       setSaving(true);
       const payload = {
@@ -170,10 +172,12 @@ export function DepartamentosView({ departments = [], employees = [], positions 
       if (!departmentId) throw new Error('El departamento se guardó, pero no se recibió su identificador');
       await syncDepartmentEmployees(departmentId);
       toast.success(editingId ? 'Departamento actualizado' : 'Departamento creado');
+      completeNotificationAction(actionToken);
       setEditorOpen(false);
       await onRefresh?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo guardar el departamento');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -181,14 +185,17 @@ export function DepartamentosView({ departments = [], employees = [], positions 
 
   const handleDelete = async () => {
     if (!pendingDeleteId) return;
+    const actionToken = beginNotificationAction();
     try {
       setDeleting(true);
       await hrService.deleteDepartment(pendingDeleteId);
       toast.success('Departamento desactivado');
+      completeNotificationAction(actionToken);
       setPendingDeleteId(null);
       await onRefresh?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo desactivar el departamento');
+      failNotificationAction(actionToken);
     } finally {
       setDeleting(false);
     }

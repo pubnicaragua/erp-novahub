@@ -70,7 +70,11 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   );
   const canCompleteEvent = canPerform('ACTIVITIES_EVENTS', 'approve') || canPerform('ACTIVITIES_MEETINGS', 'approve');
   const canViewFinance = canPerform('FINANCIAL', 'view');
-  const canViewAccounts = canViewFinance || canPerform('FINANCIAL_ACCOUNTS', 'view');
+  const canViewAccounts = canViewFinance
+    || canPerform('FINANCIAL_ACCOUNTS', 'view')
+    || canPerform('ACTIVITIES_EVENTS', 'view')
+    || canPerform('ACTIVITIES_CALENDAR', 'view')
+    || canPerform('ACTIVITIES_MEETINGS', 'view');
   const canViewAccountingConfig = canPerform('ACCOUNTING', 'view');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [costReason, setCostReason] = useState('');
@@ -81,7 +85,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
     title: '', description: '', location: '', startDate: '', endDate: '', cost: '', income: '', guestEmails: '', expenseAccountId: '', incomeAccountId: '',
   });
   const [invitation, setInvitation] = useState<{ text: string; guests: string[] } | null>(null);
-  const accountsQuery = useTenantQuery<any[]>(['finance', 'accounts'], () => fetchAllReportPages((filters) => accountsService.getAll(filters), { page: 1, pageSize: 200 }), {
+  const accountsQuery = useTenantQuery<any[]>(['finance', 'accounts-lookup'], () => fetchAllReportPages((filters) => accountsService.getLookup(filters), { page: 1, pageSize: 200 }), {
     enabled: canViewAccounts,
   });
   const accountingConfigQuery = useTenantQuery<any>(['accounting', 'config'], (signal) => contabilidadService.getConfig(signal), {

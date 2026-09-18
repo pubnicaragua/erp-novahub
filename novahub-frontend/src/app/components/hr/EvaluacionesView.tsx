@@ -13,6 +13,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
 import { HRCreateViewShell } from './HRCreateViewShell';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -103,10 +104,12 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
       toast.error('Los comentarios de la evaluación son obligatorios');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setSaving(true);
       await hrService.createPerformanceReview(newReview);
       toast.success('Evaluación creada');
+      completeNotificationAction(actionToken);
       setShowNewForm(false);
       setNewReview({
         employeeId: '',
@@ -122,18 +125,22 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al crear evaluación');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
   };
 
   const handleStatusChange = async (review: any, status: string) => {
+    const actionToken = beginNotificationAction();
     try {
       await hrService.updatePerformanceReview(review.id, { status });
       toast.success(status === 'COMPLETED' ? 'Evaluación completada' : status === 'IN_PROGRESS' ? 'Evaluación en progreso' : 'Estado actualizado');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al actualizar estado');
+      failNotificationAction(actionToken);
     }
   };
 
@@ -152,13 +159,16 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
 
   const savePostComments = async (reviewId: string) => {
     const text = (editingPostComments[reviewId] || '').trim();
+    const actionToken = beginNotificationAction();
     try {
       await hrService.updatePerformanceReview(reviewId, { postEvaluationComments: text || null });
       toast.success('Comentarios post-evaluación guardados');
+      completeNotificationAction(actionToken);
       setEditingPostComments(prev => ({ ...prev, [reviewId]: '' }));
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al guardar comentarios');
+      failNotificationAction(actionToken);
     }
   };
 

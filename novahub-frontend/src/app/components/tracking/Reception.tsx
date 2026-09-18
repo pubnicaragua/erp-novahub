@@ -7,6 +7,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { getApiErrorMessage } from '../../services/api';
+import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 import { useAuth } from '../../contexts/AuthContext';
 import { suppliersService } from '../../services/compras.service';
 import { customersService } from '../../services/ventas.service';
@@ -152,8 +153,8 @@ export function Reception() {
       try {
         const [context, supplierResponse, customerResponse, subagencyResponse] = await Promise.all([
           logisticsService.getContext(),
-          suppliersService.getAll({ page: 1, pageSize: 200 } as any),
-          customersService.getAll({ page: 1, pageSize: 200 } as any),
+          suppliersService.getLookup({ page: 1, pageSize: 200 } as any),
+          customersService.getLookup({ page: 1, pageSize: 200 } as any),
           logisticsService.listSubagencies().catch(() => []),
         ]);
         setCtx({
@@ -346,6 +347,7 @@ export function Reception() {
   const saveReception = useCallback(async () => {
     if (!canCreateReception || !ctx || !canSave) return;
     setSaving(true);
+    const actionToken = beginNotificationAction();
     try {
       const batch = await logisticsService.createBatch({
         sourceTicket: form.sourceTicket.trim() || undefined,
@@ -376,6 +378,7 @@ export function Reception() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo registrar la recepción'));
     } finally {
+      completeNotificationAction(actionToken);
       setSaving(false);
     }
   }, [canCreateReception, canSave, ctx, form, rows, warehouse]);

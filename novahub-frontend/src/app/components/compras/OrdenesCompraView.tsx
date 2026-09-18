@@ -55,6 +55,7 @@ import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { ProductSimilarityAlert } from '../inventory/ProductSimilarityAlert';
 import type { SimilarProductGroup, SimilarProductMatch } from '../../services/inventario.service';
 import { buildVariantDisplayName } from '../../types/variants';
+import { resolveStandardProductPriceLists } from '../../utils/product-price-lists';
 
 interface Props {
   data: PurchaseOrder[];
@@ -113,6 +114,8 @@ type PurchaseImportRow = {
   _skuMessage?: string;
   variantLabel?: string;
   parentProductCode?: string;
+  _importProductCode?: string;
+  _importVariantSku?: string;
   _advanced?: boolean;
 };
 
@@ -223,9 +226,12 @@ interface PurchaseImportPreviewProps {
   onBack: () => void;
   similarityPendingCount?: number;
   onReviewSimilarities?: () => void;
+  salePriceCount?: number;
+  salePriceLists?: string[];
+  hasAdvancedCatalog?: boolean;
 }
 
-function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, importing, progress, currency, importCurrency, warehouseName, conversionRate, categoryOptions, exchangeRate, taxOptions, withholdingOptions, onRowUpdate, onCategoryChange, onCreateCategory, onImportCurrencyChange, onDownloadErrors, onConfirm, onBack, similarityPendingCount = 0, onReviewSimilarities }: PurchaseImportPreviewProps) {
+function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, importing, progress, currency, importCurrency, warehouseName, conversionRate, categoryOptions, exchangeRate, taxOptions, withholdingOptions, onRowUpdate, onCategoryChange, onCreateCategory, onImportCurrencyChange, onDownloadErrors, onConfirm, onBack, similarityPendingCount = 0, onReviewSimilarities, salePriceCount = 0, salePriceLists = [], hasAdvancedCatalog = false }: PurchaseImportPreviewProps) {
   useImportPreviewLayout();
   const validRows = rows.filter((row) => !row._hasError).length;
   const errorRows = rows.filter((row) => row._hasError).length;
@@ -238,6 +244,22 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
   const [categoryRowIndex, setCategoryRowIndex] = useState<number | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const [locallyCreatedCategories, setLocallyCreatedCategories] = useState<any[]>([]);
+  const availableCategoryOptions = useMemo(() => {
+    const byId = new Map<string, any>();
+    [...categoryOptions, ...locallyCreatedCategories].forEach((category: any) => {
+      const key = String(category?.id || category?.name || '').trim().toLowerCase();
+      if (key) byId.set(key, category);
+    });
+    return [...byId.values()];
+  }, [categoryOptions, locallyCreatedCategories]);
+  const categoryComboboxOptions = useMemo(() => availableCategoryOptions
+    .filter((category: any) => category.isActive !== false && category.id)
+    .map((category: any) => ({
+      value: String(category.id),
+      label: String(category.name || category.id),
+      description: category.type === 'SERVICE' ? 'Servicio' : 'Producto',
+    })), [availableCategoryOptions]);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const [collapsedParentKeys, setCollapsedParentKeys] = useState<Set<string>>(() => new Set());
@@ -324,15 +346,18 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
       toast.error('El nombre de la categoría es requerido');
       return;
     }
-    if (categoryOptions.some((category: any) => String(category.name || '').trim().toLowerCase() === name.toLowerCase())) {
+    if (availableCategoryOptions.some((category: any) => String(category.name || '').trim().toLowerCase() === name.toLowerCase())) {
       toast.error('Esa categoría ya existe; selecciónala en la fila');
       return;
     }
     setCreatingCategory(true);
     try {
       const created = await onCreateCategory(name);
+      setLocallyCreatedCategories((current) => [...current.filter((category: any) => String(category.id) !== String(created?.id)), created]);
       if (categoryRowIndex !== null && created?.id) onCategoryChange(categoryRowIndex, String(created.id), String(created.name || name));
-      toast.success(`Categoría "${created?.name || name}" creada y asignada`);
+      toast[created?.wasExisting ? 'warning' : 'success'](created?.wasExisting
+        ? `La categoría "${created?.name || name}" ya existía. Se seleccionó la existente.`
+        : `Categoría "${created?.name || name}" creada y asignada`);
       setCategoryDialogOpen(false);
       setNewCategoryName('');
       setCategoryRowIndex(null);
@@ -376,7 +401,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
     const withholding = calcItemWithholding(row);
     const taxValue = String(row.taxType || 'GRAVADO').toUpperCase();
     const withholdingValue = String(row.withholdingType || 'NONE').toUpperCase();
-    const matchingCategory = categoryOptions.find((category: any) => String(category.id) === String(row.categoryId)) || categoryOptions.find((category: any) => String(category.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase());
+    const matchingCategory = availableCategoryOptions.find((category: any) => String(category.id) === String(row.categoryId)) || availableCategoryOptions.find((category: any) => String(category.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase());
     const categoryValue = row.categoryId || matchingCategory?.id || '__none__';
     const skuLinked = row._skuStatus === 'found' && row.skuResolution !== 'MANUAL';
     const card = (
@@ -387,14 +412,14 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           <ImportPreviewField label="Aviso / vínculo" className="sm:col-span-2"><div className="space-y-2"><p className={`break-words text-xs ${row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}`}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</p>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo</option></select>}</div></ImportPreviewField>
           <ImportPreviewField label="Descripción *" className="sm:col-span-2"><Input value={row.description} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={`${importPreviewFieldClass} ${!row.description ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Notas"><div><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><p className="mt-1 text-[10px] text-muted-foreground">{Array.from(row.commercialNoteSnapshot || '').length}/100</p></div></ImportPreviewField>
-          <ImportPreviewField label="Categoría" className="sm:col-span-2"><div className="flex min-w-0 items-center gap-1"><select aria-label={`Categoría de ${row.sku || `fila ${index + 1}`}`} value={categoryValue} onChange={(event) => onCategoryChange(index, event.target.value === '__none__' ? '' : event.target.value)} className={`${importPreviewFieldClass} min-w-0 flex-1 ${row._hasError ? 'border-red-500' : matchingCategory ? '' : 'border-amber-500/70 text-amber-700'}`} disabled={importing}><option value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'}</option>{categoryOptions.filter((category: any) => category.isActive !== false).map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg border-amber-500/50 p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button></div></ImportPreviewField>
+          <ImportPreviewField label="Categoría" className="sm:col-span-2"><div className="flex min-w-0 items-center gap-1"><Combobox options={categoryComboboxOptions} value={categoryValue === '__none__' ? '' : String(categoryValue)} onChange={(value) => onCategoryChange(index, value, categoryComboboxOptions.find((option) => option.value === value)?.label)} placeholder={row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'} searchPlaceholder="Buscar categoría..." emptyMessage="No se encontró la categoría" maxVisibleOptions={100} ariaLabel={`Categoría de ${row.sku || `fila ${index + 1}`}`} className={`${importPreviewFieldClass} min-w-0 flex-1 ${row._hasError ? 'border-red-500' : matchingCategory ? '' : 'border-amber-500/70 text-amber-700'}`} contentClassName="z-[80] w-[min(24rem,calc(100vw-2rem))]" disabled={importing} /><Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg border-amber-500/50 p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button></div></ImportPreviewField>
           <ImportPreviewField label="Cantidad"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label={`Precio unitario (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(row.unitPrice)} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label={`Costo unitario de compra (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(row.unitPrice)} onChange={(event) => onRowUpdate(index, 'unitPrice', normalizePurchaseDecimalInput(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Tipo IVA"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="">Seleccionar IVA</option>{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
           <ImportPreviewField label={`Base IVA (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(isTaxExempt(taxValue) ? 0 : tax.taxBase)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
           <ImportPreviewField label="IVA %"><Input type="text" inputMode="decimal" value={formatInputNumber(tax.taxRate)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
           <ImportPreviewField label={`Monto IVA (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(2)}</div></ImportPreviewField>
-          <ImportPreviewField label="Retención" className="sm:col-span-2"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="NONE">Sin retención</option>{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
+          <ImportPreviewField label="Retención" className="sm:col-span-2"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="NONE">0 · Sin retención</option>{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
           <ImportPreviewField label={`Base ret. (${currencySymbol})`}><Input type="text" inputMode="decimal" value={formatInputNumber(withholdingValue === 'NONE' ? 0 : withholding.withholdingBase)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
           <ImportPreviewField label="Ret. %"><Input type="text" inputMode="decimal" value={formatInputNumber(withholding.withholdingRate)} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
           <ImportPreviewField label={`Monto ret. (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(2)}</div></ImportPreviewField>
@@ -407,15 +432,15 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
   };
 
   return (
-    <div data-import-preview-shell="true" className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-5">
-        <div className="flex flex-col gap-3 border-b border-border/50 pb-4 lg:flex-row lg:items-start lg:justify-between">
+    <div data-import-preview-shell="true" className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-2.5 sm:p-4 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 sm:gap-3">
+        <div className="flex flex-col gap-2 border-b border-border/50 pb-2.5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Importación de ítems</p>
             <h2 className="mt-1 text-2xl font-black tracking-tight">Previsualizar productos</h2>
             <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los productos antes de agregarlos a esta orden de compra.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-primary/20 bg-primary/5 px-3 py-2 text-xs shadow-sm">
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border-2 border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px] shadow-sm">
             <span className="font-black uppercase tracking-wider text-primary">Moneda de la orden</span>
             <Badge variant="outline" className="border-primary/30 bg-background font-black text-primary">{getCurrencyLabel(currencyCode)}</Badge>
             <span className="text-muted-foreground">Tasa: <b className="text-foreground">{currencyCode === 'NIO' ? '1.00' : Number(exchangeRate || 1).toFixed(2)} NIO/USD</b></span>
@@ -426,7 +451,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
               value={importCurrencyCode}
               onChange={(event) => onImportCurrencyChange(event.target.value)}
               disabled={importing}
-              className="h-8 rounded-lg border-2 border-primary/25 bg-background px-2 text-xs font-bold uppercase shadow-sm outline-none focus:border-primary"
+              className="h-7 rounded-lg border-2 border-primary/25 bg-background px-2 text-[11px] font-bold uppercase shadow-sm outline-none focus:border-primary"
             >
               <option value="NIO">NIO · Córdobas</option>
               <option value="USD">USD · Dólares</option>
@@ -438,7 +463,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3 py-2 text-sm">
           <div className="min-w-0">
             <p className="font-semibold break-words">Archivo: {fileName}</p>
             <p className="text-xs text-muted-foreground">Los errores se omitirán. Las advertencias se mostrarán antes de confirmar.</p>
@@ -448,13 +473,25 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           </Button>
         </div>
 
-        <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel={hasGroupedVariants ? 'variantes (líneas)' : 'productos'} />
+        <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel={hasGroupedVariants ? 'variantes (líneas)' : 'productos'} compact />
+
+        {hasAdvancedCatalog && (salePriceCount > 0 ? (
+          <div className="rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-800 dark:text-emerald-200">
+            <p className="font-black">Precios de venta incluidos: {salePriceCount}</p>
+            <p className="mt-1">Listas: {salePriceLists.join(' · ')}. Se crearán en Inventario al recepcionar para usarlas en Caja.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+            <p className="font-black">El archivo no incluye precios de venta.</p>
+            <p className="mt-1">Los productos nuevos llegarán a Inventario sin listas para Caja. Completa la hoja Precios antes de confirmar.</p>
+          </div>
+        ))}
 
         {similarityPendingCount > 0 && (
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs" role="alert">
+          <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs" role="alert">
             <div className="min-w-0">
               <p className="font-black text-amber-800 dark:text-amber-200">Hay {similarityPendingCount} coincidencia(s) pendiente(s) por revisar.</p>
-              <p className="mt-1 text-amber-700 dark:text-amber-300">Selecciona el producto existente o resuelve cada alerta antes de agregarlo a la orden.</p>
+              <p className="mt-0.5 text-amber-700 dark:text-amber-300">Selecciona el producto existente o resuelve cada alerta antes de agregarlo a la orden.</p>
             </div>
             <Button type="button" variant="outline" size="sm" className="shrink-0 border-amber-500/50 text-amber-800 dark:text-amber-200" onClick={onReviewSimilarities} disabled={importing || !onReviewSimilarities}>
               Revisar coincidencias
@@ -463,7 +500,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         )}
 
         {hasGroupedVariants && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
             <p className="min-w-0 flex-1 text-muted-foreground"><span className="font-black text-foreground">Catálogo agrupado:</span> {groupedParents.length} producto(s) padre · {rows.filter((row) => row._advanced && row.variantLabel).length} variante(s). El padre es informativo; solo sus variantes se agregarán a la orden.</p>
             <div className="flex shrink-0 gap-2">
               <Button type="button" variant="outline" size="sm" className="h-8 text-[11px]" onClick={() => setAllParentsExpanded(true)} disabled={importing || allParentsExpanded}>Expandir todos</Button>
@@ -473,27 +510,27 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         )}
 
         <div className="hidden min-h-0 min-w-0 flex-1 sm:flex">
-        <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
+        <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" compact className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
           <Table containerClassName="!max-w-none !overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="block w-[2500px] min-w-[2500px]">
-            <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
+            <TableHeader className="sticky top-0 z-10 block !bg-white shadow-sm dark:!bg-black">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
-                <TableHead className="w-8 text-[10px] uppercase"></TableHead>
-                <TableHead className="w-56 text-[10px] uppercase">SKU / variante</TableHead>
-                <TableHead className="min-w-[300px] text-[10px] uppercase">Aviso / vínculo</TableHead>
-                <TableHead className="min-w-[240px] text-[10px] uppercase">Descripción</TableHead>
-                <TableHead className="w-44 text-[10px] uppercase">Notas</TableHead>
-                <TableHead className="w-40 text-[10px] uppercase">Categoría</TableHead>
-                <TableHead className="w-24 text-right text-[10px] uppercase">Stock actual</TableHead>
-                <TableHead className="w-28 text-right text-[10px] uppercase">Cantidad</TableHead>
-                <TableHead className="w-32 text-right text-[10px] uppercase">Precio unitario ({currencySymbol})</TableHead>
-                <TableHead className="w-40 text-[10px] uppercase">Tipo IVA</TableHead>
-                <TableHead className="w-28 text-right text-[10px] uppercase">Base IVA ({currencySymbol})</TableHead>
-                <TableHead className="w-24 text-right text-[10px] uppercase">IVA %</TableHead>
-                <TableHead className="w-28 text-right text-[10px] uppercase">Monto IVA ({currencySymbol})</TableHead>
-                <TableHead className="w-40 text-[10px] uppercase">Retención</TableHead>
-                <TableHead className="w-28 text-right text-[10px] uppercase">Base ret. ({currencySymbol})</TableHead>
-                <TableHead className="w-24 text-right text-[10px] uppercase">Ret. %</TableHead>
-                <TableHead className="w-32 text-right text-[10px] uppercase">Monto ret. ({currencySymbol})</TableHead>
+                <TableHead className="w-8 text-[10px] uppercase text-slate-900 dark:text-white"></TableHead>
+                <TableHead className="w-56 text-[10px] uppercase text-slate-900 dark:text-white">SKU / variante</TableHead>
+                <TableHead className="min-w-[300px] text-[10px] uppercase text-slate-900 dark:text-white">Aviso / vínculo</TableHead>
+                <TableHead className="min-w-[240px] text-[10px] uppercase text-slate-900 dark:text-white">Descripción</TableHead>
+                <TableHead className="w-44 text-[10px] uppercase text-slate-900 dark:text-white">Notas</TableHead>
+                <TableHead className="w-40 text-[10px] uppercase text-slate-900 dark:text-white">Categoría</TableHead>
+                <TableHead className="w-24 text-right text-[10px] uppercase text-slate-900 dark:text-white">Stock actual</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase text-slate-900 dark:text-white">Cantidad</TableHead>
+                <TableHead className="w-32 text-right text-[10px] uppercase text-slate-900 dark:text-white">Costo unitario de compra ({currencySymbol})</TableHead>
+                <TableHead className="w-40 text-[10px] uppercase text-slate-900 dark:text-white">Tipo IVA</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase text-slate-900 dark:text-white">Base IVA ({currencySymbol})</TableHead>
+                <TableHead className="w-24 text-right text-[10px] uppercase text-slate-900 dark:text-white">IVA %</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase text-slate-900 dark:text-white">Monto IVA ({currencySymbol})</TableHead>
+                <TableHead className="w-40 text-[10px] uppercase text-slate-900 dark:text-white">Retención</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase text-slate-900 dark:text-white">Base ret. ({currencySymbol})</TableHead>
+                <TableHead className="w-24 text-right text-[10px] uppercase text-slate-900 dark:text-white">Ret. %</TableHead>
+                <TableHead className="w-32 text-right text-[10px] uppercase text-slate-900 dark:text-white">Monto ret. ({currencySymbol})</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody style={{ display: 'block', position: 'relative', height: tableVirtualizer.getTotalSize() }}>
@@ -534,8 +571,8 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                 const withholdingOptionExists = withholdingOptions.some((option) => option.code === withholdingValue);
                 const skuLinked = row._skuStatus === 'found' && row.skuResolution !== 'MANUAL';
 
-                const matchingCategory = categoryOptions.find((category: any) => String(category.id) === String(row.categoryId))
-                  || categoryOptions.find((category: any) => String(category.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase());
+                const matchingCategory = availableCategoryOptions.find((category: any) => String(category.id) === String(row.categoryId))
+                  || availableCategoryOptions.find((category: any) => String(category.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase());
                 const categoryValue = row.categoryId || matchingCategory?.id || '__none__';
 
                 return (
@@ -547,15 +584,19 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                   <TableCell className="p-1"><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className="h-8 w-full text-xs" title={row.commercialNoteSnapshot || undefined} /></TableCell>
                   <TableCell className="p-1 align-top">
                     <div className="flex min-w-[250px] items-center gap-1">
-                      <select
-                        aria-label={`Categoría de ${row.sku || `fila ${index + 1}`}`}
-                        value={categoryValue}
-                        onChange={(event) => onCategoryChange(index, event.target.value === '__none__' ? '' : event.target.value)}
-                        className={cn('h-8 min-w-0 flex-1 rounded-md border-2 bg-background px-2 text-xs shadow-sm outline-none focus:border-primary', row._hasError ? 'border-red-500' : matchingCategory ? 'border-border' : 'border-amber-500/70 text-amber-700')}
-                      >
-                        <option value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'}</option>
-                        {categoryOptions.filter((category: any) => category.isActive !== false).map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                      </select>
+                      <Combobox
+                        options={categoryComboboxOptions}
+                        value={categoryValue === '__none__' ? '' : String(categoryValue)}
+                        onChange={(value) => onCategoryChange(index, value, categoryComboboxOptions.find((option) => option.value === value)?.label)}
+                        placeholder={row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'}
+                        searchPlaceholder="Buscar categoría..."
+                        emptyMessage="No se encontró la categoría"
+                        maxVisibleOptions={100}
+                        ariaLabel={`Categoría de ${row.sku || `fila ${index + 1}`}`}
+                        className={cn('h-8 min-w-0 flex-1', row._hasError ? 'border-red-500' : matchingCategory ? 'border-border' : 'border-amber-500/70 text-amber-700')}
+                        contentClassName="z-[80] w-[min(24rem,calc(100vw-2rem))]"
+                        disabled={importing}
+                      />
                       <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg border-2 border-amber-500/50 p-0 text-amber-600 shadow-sm" title="Crear esta categoría" aria-label={`Crear categoría para ${row.sku || `fila ${index + 1}`}`} onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button>
                     </div>
                     {row._errorMessage?.includes('Categoría') && <p className="mt-1 text-[10px] font-semibold text-red-500">Selecciona una categoría o créala con +</p>}
@@ -567,7 +608,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                   <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(isTaxExempt(taxValue) ? 0 : tax.taxBase)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
                   <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(tax.taxRate)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
                   <TableCell className="p-1 text-right text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(2)}</TableCell>
-                  <TableCell className="p-1"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="NONE">Sin retención</option>{withholdingValue !== 'NONE' && !withholdingOptionExists && <option value={withholdingValue}>{withholdingValue}</option>}{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
+                  <TableCell className="p-1"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="NONE">0 · Sin retención</option>{withholdingValue !== 'NONE' && !withholdingOptionExists && <option value={withholdingValue}>{withholdingValue}</option>}{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
                   <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(withholdingValue === 'NONE' ? 0 : withholding.withholdingBase)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
                   <TableCell className="p-1"><Input type="text" inputMode="decimal" value={formatInputNumber(withholding.withholdingRate)} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
                   <TableCell className="p-1 text-right text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(2)}</TableCell>
@@ -619,6 +660,45 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
 
 const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 
+const normalizeImportHeaderForMatch = (value: unknown) => normalizeImportHeader(value)
+  .replace(/(?:cordobas|dolares|usd|nio|c)$/i, '');
+
+const matchesImportHeader = (header: unknown, aliases: string[]) => {
+  const normalizedHeader = normalizeImportHeaderForMatch(header);
+  return aliases.some((alias) => normalizeImportHeaderForMatch(alias) === normalizedHeader);
+};
+
+const parseImportNumber = (value: unknown, fallback: string | number = ''): string | number => {
+  if (value === '' || value === undefined || value === null) return fallback;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN;
+
+  let raw = String(value).trim();
+  if (!raw) return fallback;
+  raw = raw.replace(/[%$€£]|c\s*\$?/gi, '').replace(/\s/g, '');
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  if (lastComma >= 0 && lastDot >= 0) {
+    raw = lastComma > lastDot
+      ? raw.replace(/\./g, '').replace(',', '.')
+      : raw.replace(/,/g, '');
+  } else if (lastComma >= 0) {
+    const decimals = raw.length - lastComma - 1;
+    raw = decimals > 0 && decimals <= 2 ? raw.replace(',', '.') : raw.replace(/,/g, '');
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+};
+
+const hasImportNumber = (value: unknown) => value !== ''
+  && value !== undefined
+  && value !== null
+  && Number.isFinite(Number(value));
+
+const hasInvalidImportNumber = (value: unknown) => value !== ''
+  && value !== undefined
+  && value !== null
+  && !Number.isFinite(Number(value));
+
 const mergeImportCatalogOptions = (configured: ImportCatalogOption[], fallback: ImportCatalogOption[]) => {
   const byCode = new Map<string, ImportCatalogOption>(fallback.map((option) => [option.code, option]));
   configured.forEach((option) => byCode.set(option.code, option));
@@ -667,7 +747,7 @@ const DEFAULT_ORDER_WITHHOLDING_RATES: Record<string, number> = {
 
 function calcItemWithholding(item: any): { withholdingBase: number; withholdingRate: number; withholdingTotal: number } {
   const type = String(item.withholdingType || 'NONE').toUpperCase();
-  if (type === 'NONE') return { withholdingBase: 0, withholdingRate: 0, withholdingTotal: 0 };
+  if (type === 'NONE' || type === '0') return { withholdingBase: 0, withholdingRate: 0, withholdingTotal: 0 };
   const quantity = Number(item.quantity);
   const unitPrice = Number(item.unitPrice);
   const lineTotal = Number.isFinite(quantity) && Number.isFinite(unitPrice) ? Math.max(0, quantity) * Math.max(0, unitPrice) : 0;
@@ -740,10 +820,10 @@ const findImportProductMatch = (sku: unknown, catalog: any[] = []) => {
 
 /**
  * Convierte la plantilla avanzada de Inventario en líneas de una orden.
- * Para productos con variantes se genera una línea por SKU; el stock inicial
- * de la hoja Inventario se interpreta como cantidad solicitada y Costo entrada
- * como precio unitario de compra. La plantilla sigue siendo compatible con
- * productos simples (una sola línea con el SKU padre).
+ * Para productos con variantes se genera una línea por SKU. En una orden de
+ * compra, Cantidad y Precio unitario de la hoja Inventario son los valores de
+ * la línea; los nombres antiguos Stock inicial y Costo entrada solo quedan
+ * como respaldo de archivos anteriores.
  */
 const buildPurchaseImportRowsFromAdvancedCatalog = (catalog: VariantImportCatalog): PurchaseImportRow[] => {
   const variantsByProduct = new Map<string, VariantImportCatalog['variants']>();
@@ -767,64 +847,127 @@ const buildPurchaseImportRowsFromAdvancedCatalog = (catalog: VariantImportCatalo
       });
       const requestedQuantity = stockRows.length > 0
         ? stockRows.reduce((sum, stock) => sum + Math.max(0, Number(stock.quantity || 0)), 0)
-        : 1;
+        : 0;
       const entryCost = stockRows.find((stock) => stock.unitCost !== undefined && stock.unitCost !== null && String(stock.unitCost).trim() !== '')?.unitCost;
       const effectiveCost = entryCost !== undefined
         ? Number(entryCost)
         : variant?.costPrice !== undefined && variant.costPrice !== null
           ? Number(variant.costPrice)
           : Number(product.costPrice || 0);
+      const importLine = stockRows.find((stock) => stock.description || stock.commercialNote || stock.category || stock.taxType || stock.withholdingType || stock.currentStock !== undefined) || stockRows[0];
       const attributes = (variant?.attributes || []).map((attribute) => `${attribute.attributeName}: ${attribute.value}`).join(' · ');
       const variantLabel = variant?.name || attributes || variant?.sku || '';
       return {
         sku: String(sku || '').trim(),
-        description: `${product.name || product.code}${variantLabel ? ` · ${variantLabel}` : ''}`.trim(),
+        description: importLine?.description || `${product.name || product.code}${variantLabel ? ` · ${variantLabel}` : ''}`.trim(),
         variantLabel: variant ? variantLabel : undefined,
         parentProductCode: variant ? String(product.code || '').trim() : undefined,
-         commercialNoteSnapshot: product.commercialNote || null,
+         commercialNoteSnapshot: importLine?.commercialNote || product.commercialNote || null,
          brand: product.brand || '',
          attributes: variant?.attributes || [],
-         category: product.category || '',
+         category: importLine?.category || product.category || '',
         quantity: requestedQuantity,
         unitPrice: Number.isFinite(effectiveCost) ? effectiveCost : 0,
-        taxType: 'GRAVADO',
-        taxBase: '',
-        taxRate: 15,
-        withholdingType: 'NONE',
-        withholdingBase: '',
-        withholdingRate: 0,
+        currentStock: importLine?.currentStock,
+        taxType: importLine?.taxType || 'GRAVADO',
+        taxBase: importLine?.taxBase ?? '',
+        taxRate: importLine?.taxRate ?? 15,
+        taxAmount: importLine?.taxAmount,
+        withholdingType: importLine?.withholdingType || 'NONE',
+        withholdingBase: importLine?.withholdingBase ?? '',
+        withholdingRate: importLine?.withholdingRate ?? 0,
+        withholdingTotal: importLine?.withholdingTotal,
+        _importProductCode: String(product.code || '').trim(),
+        _importVariantSku: variant?.sku ? String(variant.sku).trim() : undefined,
         _advanced: true,
       } as PurchaseImportRow;
     });
   });
 };
 
+const normalizePurchasePriceKey = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-zA-Z0-9]+/g, '')
+  .toLowerCase();
+
+const validatePurchaseCatalogPrices = (catalog: VariantImportCatalog, configuredPriceLists: Array<{ code: string; name: string }>) => {
+  const priceLists = resolveStandardProductPriceLists(
+    configuredPriceLists.length > 0 ? configuredPriceLists : FALLBACK_PURCHASE_PRICE_LISTS,
+  );
+  const listKeys = new Set(priceLists.flatMap((list) => [normalizePurchasePriceKey(list.code), normalizePurchasePriceKey(list.name)]));
+  const productCodes = new Set((catalog.products || []).map((product) => normalizePurchasePriceKey(product.code)).filter(Boolean));
+  const variantKeys = new Set((catalog.variants || []).map((variant) => `${normalizePurchasePriceKey(variant.productCode)}|${normalizePurchasePriceKey(variant.sku)}`));
+  const seen = new Set<string>();
+
+  for (const price of catalog.prices || []) {
+    const amount = Number(price.price);
+    const productCode = normalizePurchasePriceKey(price.productCode);
+    const variantSku = normalizePurchasePriceKey(price.variantSku);
+    const listKey = normalizePurchasePriceKey(price.priceListCode);
+    if (!Number.isFinite(amount) || amount < 0) throw new Error(`El precio de venta de ${price.productCode || price.variantSku || 'la plantilla'} debe ser un número mayor o igual a cero.`);
+    if (!productCode || !productCodes.has(productCode)) throw new Error(`El precio de venta ${price.productCode || price.variantSku || ''} no tiene un Código producto válido.`);
+    if (!listKey || !listKeys.has(listKey)) throw new Error(`La lista de precios "${price.priceListCode || ''}" no existe o está inactiva.`);
+    const isVariant = price.scope === 'VARIANT' || Boolean(variantSku);
+    if (isVariant && !variantKeys.has(`${productCode}|${variantSku}`)) throw new Error(`La variante "${price.variantSku || ''}" del precio no existe en la plantilla.`);
+    const uniqueKey = `${price.scope}:${productCode}:${variantSku}:${listKey}`;
+    if (seen.has(uniqueKey)) throw new Error(`Hay un precio repetido para la lista "${price.priceListCode || ''}" y el SKU "${price.variantSku || price.productCode || ''}".`);
+    seen.add(uniqueKey);
+  }
+};
+
 /**
  * Conserva en la línea de compra la definición necesaria para materializar
- * el catálogo al recepcionar. No contiene stock ni precios de venta.
+ * el catálogo al recepcionar, incluyendo los precios de venta por lista.
  */
-const buildPendingPurchaseCatalog = (catalog: VariantImportCatalog, row: PurchaseImportRow) => {
-  const parentCode = String(row.parentProductCode || row.sku || '').trim().toLowerCase();
+const buildPendingPurchaseCatalog = (
+  catalog: VariantImportCatalog,
+  row: PurchaseImportRow,
+  priceCurrency = 'NIO',
+  priceExchangeRate = 1,
+) => {
+  const sourceProductCode = String(row._importProductCode || row.parentProductCode || row.sku || '').trim();
+  const parentCode = sourceProductCode.toLowerCase();
   const product = (catalog.products || []).find((candidate) => String(candidate.code || '').trim().toLowerCase() === parentCode);
   if (!product) return undefined;
 
+  const sourceVariantSku = String(row._importVariantSku || row.sku || '').trim();
   const variant = (catalog.variants || []).find((candidate) => (
-    String(candidate.sku || '').trim().toLowerCase() === String(row.sku || '').trim().toLowerCase()
+    String(candidate.sku || '').trim().toLowerCase() === sourceVariantSku.toLowerCase()
     && String(candidate.productCode || '').trim().toLowerCase() === String(product.code || '').trim().toLowerCase()
   ));
   const stockCost = (catalog.stock || [])
-    .filter((stock) => String(stock.variantSku || stock.productCode || '').trim().toLowerCase() === String(row.sku || '').trim().toLowerCase())
+    .filter((stock) => {
+      const stockSku = String(stock.variantSku || stock.productCode || '').trim().toLowerCase();
+      return stockSku === sourceVariantSku.toLowerCase() || (!variant && stockSku === parentCode);
+    })
     .map((stock) => Number(stock.unitCost))
     .find((cost) => Number.isFinite(cost) && cost >= 0);
   const productCost = Number(product.costPrice);
   const rowCost = Number(row.unitPrice);
+  const sourcePriceProductCode = String(product.code || '').trim().toLowerCase();
+  const productPrices = (catalog.prices || [])
+    .filter((price) => String(price.scope || 'PRODUCT').toUpperCase() !== 'VARIANT'
+      && String(price.productCode || '').trim().toLowerCase() === sourcePriceProductCode)
+    .map((price) => ({ priceListCode: String(price.priceListCode || '').trim(), price: Number(price.price) }));
+  const variantPrices = (catalog.prices || [])
+    .filter((price) => String(price.scope || '').toUpperCase() === 'VARIANT'
+      && String(price.productCode || '').trim().toLowerCase() === sourcePriceProductCode
+      && String(price.variantSku || '').trim().toLowerCase() === sourceVariantSku.toLowerCase())
+    .map((price) => ({ priceListCode: String(price.priceListCode || '').trim(), price: Number(price.price) }));
+  const normalizedPriceCurrency = normalizePurchaseCurrency(priceCurrency);
+  const normalizedPriceExchangeRate = Number(priceExchangeRate) > 0 ? Number(priceExchangeRate) : 1;
+  const targetProductCode = variant ? String(product.code || '').trim() : String(row.sku || product.code || '').trim();
+  const targetVariantSku = variant ? String(row.sku || variant.sku || '').trim() : '';
 
-   return {
-     format: 'NOVAHUB_PURCHASE_PENDING_V1',
-     similarityResolution: row.similarityResolution || 'CREATE_NEW',
-     allowSimilarProductCreate: row.similarityResolution === 'CREATE_NEW',
-     product: {
-      code: product.code,
+  return {
+    format: 'NOVAHUB_PURCHASE_PENDING_V1',
+    similarityResolution: row.similarityResolution || 'CREATE_NEW',
+    allowSimilarProductCreate: row.similarityResolution === 'CREATE_NEW',
+    priceCurrency: normalizedPriceCurrency,
+    priceExchangeRate: normalizedPriceExchangeRate,
+    product: {
+      code: targetProductCode,
       name: product.name,
       category: row.category || product.category,
       categoryId: row.categoryId || undefined,
@@ -838,21 +981,25 @@ const buildPendingPurchaseCatalog = (catalog: VariantImportCatalog, row: Purchas
       trackSeries: product.trackSeries,
       brand: product.brand,
       isActive: product.isActive,
+      prices: productPrices,
     },
     variant: variant ? {
       productCode: variant.productCode,
-      sku: variant.sku,
+      sku: targetVariantSku,
       name: variant.name,
       costPrice: variant.costPrice ?? stockCost ?? (Number.isFinite(rowCost) ? rowCost : undefined),
       attributes: Array.isArray(variant.attributes) ? variant.attributes : [],
+      prices: variantPrices,
     } : null,
   };
 };
 
-const buildPendingPurchaseCatalogFromRow = (row: PurchaseImportRow) => ({
+const buildPendingPurchaseCatalogFromRow = (row: PurchaseImportRow, priceCurrency = 'NIO', priceExchangeRate = 1) => ({
   format: 'NOVAHUB_PURCHASE_PENDING_V1',
   similarityResolution: row.similarityResolution || 'CREATE_NEW',
   allowSimilarProductCreate: row.similarityResolution === 'CREATE_NEW',
+  priceCurrency: normalizePurchaseCurrency(priceCurrency),
+  priceExchangeRate: Number(priceExchangeRate) > 0 ? Number(priceExchangeRate) : 1,
   product: {
     code: row.sku,
     name: row.description || row.sku,
@@ -865,6 +1012,7 @@ const buildPendingPurchaseCatalogFromRow = (row: PurchaseImportRow) => ({
     trackInventory: true,
     trackBatch: false,
     trackSeries: false,
+    prices: [],
   },
   variant: null,
 });
@@ -978,7 +1126,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         .filter((list: any) => list?.isActive !== false)
         .map((list: any) => ({ code: String(list.code || '').trim().toUpperCase(), name: String(list.name || '').trim() }))
         .filter((list) => list.code && list.name);
-      setPurchasePriceLists(activePriceLists);
+      setPurchasePriceLists(resolveStandardProductPriceLists(activePriceLists));
     }).catch(() => {
       // Los valores de respaldo mantienen la previsualización operativa si el catálogo no responde.
     });
@@ -1016,10 +1164,18 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         || selectedProduct?.variants?.find((variant: any) => normalizeSimilarityInputKey(variant.sku) === normalizeSimilarityInputKey(sku));
       const match = selectedProduct
         ? { product: selectedProduct, variant: selectedVariant }
-        : findImportProductMatch(sku, catalog);
+        : findImportProductMatch(sku, catalog)
+          || (row._advanced && row.parentProductCode ? findImportProductMatch(row.parentProductCode, catalog) : undefined);
       const product = match?.product;
+      const exactSkuMatch = Boolean(match && (
+        normalizeSimilarityInputKey(product?.code) === normalizeSimilarityInputKey(sku)
+        || (product?.variants || []).some((variant: any) => normalizeSimilarityInputKey(variant?.sku) === normalizeSimilarityInputKey(sku))
+      ));
       const forceManualSku = row.skuResolution === 'MANUAL' || row.similarityResolution === 'CREATE_NEW';
-      const linkedProduct = forceManualSku ? undefined : product;
+      const isAdvancedVariant = Boolean(row._advanced && row.variantLabel);
+      // En una variante nueva, CREATE_NEW cambia el SKU de la variante; el
+      // producto padre existente se conserva para no duplicarlo.
+      const linkedProduct = forceManualSku && !isAdvancedVariant ? undefined : product;
       const linkedVariant = forceManualSku ? undefined : match?.variant;
       const quantity = Number(row.quantity);
       const importedUnitPrice = Number(row.unitPrice);
@@ -1028,27 +1184,46 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         : Number(linkedProduct?.costPrice ?? linkedProduct?.cost ?? 0) + Number(linkedVariant?.costModifier || 0);
       const unitPrice = linkedProduct && (!Number.isFinite(importedUnitPrice) || importedUnitPrice === 0) ? productCost : importedUnitPrice;
       const taxType = normalizeImportCatalogValue(row.taxType, importTaxOptions, 'GRAVADO');
-      const withholdingType = normalizeImportCatalogValue(row.withholdingType, importWithholdingOptions, 'NONE', ['NONE', 'SIN RETENCION', 'NO APLICA', 'NINGUNA']);
+      const withholdingType = normalizeImportCatalogValue(row.withholdingType, importWithholdingOptions, 'NONE', ['0', 'NONE', 'SIN RETENCION', 'NO APLICA', 'NINGUNA']);
       const taxOption = importTaxOptions.find((option) => option.code === taxType);
       const withholdingOption = importWithholdingOptions.find((option) => option.code === withholdingType);
       const categoryName = String(row.category || linkedProduct?.category?.name || linkedProduct?.category || '').trim();
       const categoryByName = categories.find((category: any) => String(category.name || '').trim().toLowerCase() === categoryName.toLowerCase());
       const resolvedCategoryId = String(row.categoryId || linkedProduct?.categoryId || linkedProduct?.category?.id || categoryByName?.id || '').trim();
       const canCreateCategoryOnImport = Boolean(row._advanced) && Boolean(categoryName);
-      // La tasa no se toma del archivo: siempre la gobierna la opción fiscal
-      // seleccionada en el catálogo para evitar que una fila altere la regla.
-      const taxRate = isTaxExempt(taxType) ? 0 : (taxOption?.rate ?? (['GRAVADO', 'GRAVADO_15', 'IVA_GRAVADO_15'].includes(taxType) ? 15 : 0));
-      const withholdingRate = withholdingType === 'NONE' ? 0 : (withholdingOption?.rate ?? DEFAULT_ORDER_WITHHOLDING_RATES[withholdingType] ?? 0);
       const lineTotal = Number.isFinite(quantity) && Number.isFinite(unitPrice) ? Math.max(0, quantity) * Math.max(0, unitPrice) : 0;
-      const taxBase = isTaxExempt(taxType) ? 0 : lineTotal;
-      const withholdingBase = withholdingType === 'NONE' ? 0 : lineTotal;
+      const importedTaxRate = hasImportNumber(row.taxRate) ? Math.max(0, Number(row.taxRate)) : undefined;
+      const importedWithholdingRate = hasImportNumber(row.withholdingRate) ? Math.max(0, Number(row.withholdingRate)) : undefined;
+      const importedTaxBase = hasImportNumber(row.taxBase) ? Math.max(0, Number(row.taxBase)) : undefined;
+      const importedWithholdingBase = hasImportNumber(row.withholdingBase) ? Math.max(0, Number(row.withholdingBase)) : undefined;
+      const taxRate = isTaxExempt(taxType)
+        ? 0
+        : (importedTaxRate && importedTaxRate > 0 ? importedTaxRate : (taxOption?.rate ?? (['GRAVADO', 'GRAVADO_15', 'IVA_GRAVADO_15'].includes(taxType) ? 15 : 0)));
+      const withholdingRate = withholdingType === 'NONE'
+        ? 0
+        : (importedWithholdingRate && importedWithholdingRate > 0 ? importedWithholdingRate : (withholdingOption?.rate ?? DEFAULT_ORDER_WITHHOLDING_RATES[withholdingType] ?? 0));
+      const taxBase = isTaxExempt(taxType) ? 0 : (importedTaxBase !== undefined && importedTaxBase > 0 ? importedTaxBase : lineTotal);
+      const withholdingBase = withholdingType === 'NONE' ? 0 : (importedWithholdingBase !== undefined && importedWithholdingBase > 0 ? importedWithholdingBase : lineTotal);
+      const taxAmount = taxBase * taxRate / 100;
+      const withholdingTotal = withholdingBase * withholdingRate / 100;
+      const importedTaxAmount = hasImportNumber(row.taxAmount) ? Number(row.taxAmount) : undefined;
+      const importedWithholdingTotal = hasImportNumber(row.withholdingTotal) ? Number(row.withholdingTotal) : undefined;
+      const taxAmountMismatch = importedTaxAmount !== undefined && Math.abs(importedTaxAmount - taxAmount) > 0.01;
+      const withholdingAmountMismatch = importedWithholdingTotal !== undefined && Math.abs(importedWithholdingTotal - withholdingTotal) > 0.01;
+      const hasNegativeFiscalValue = [row.taxBase, row.taxRate, row.taxAmount, row.withholdingBase, row.withholdingRate, row.withholdingTotal]
+        .some((value) => hasImportNumber(value) && Number(value) < 0);
       const errors = [
         !sku ? 'SKU requerido' : existingOrderSkus.has(sku.toLowerCase()) ? 'SKU ya está en esta orden' : skuCounts.get(sku.toLowerCase())! > 1 ? 'SKU duplicado en el archivo' : '',
+        exactSkuMatch && row.similarityResolution === 'CREATE_NEW' ? 'Para crear un producto nuevo debes cambiar el SKU' : '',
         match && forceManualSku && row.similarityResolution !== 'CREATE_NEW' ? 'Este SKU ya está usado; escribe otro SKU para crear un producto nuevo' : '',
         !String(row.description || '').trim() && !linkedProduct ? 'Descripción requerida para SKU no encontrado' : '',
         !categoryName ? 'Categoría requerida' : !resolvedCategoryId && !canCreateCategoryOnImport ? 'Categoría no encontrada; selecciona una existente o créala' : '',
         !Number.isFinite(quantity) || quantity <= 0 ? 'Cantidad debe ser mayor que cero' : '',
-        !Number.isFinite(unitPrice) || unitPrice < 0 ? 'Precio unitario inválido' : '',
+        Number.isFinite(quantity) && !Number.isInteger(quantity) ? 'Cantidad debe ser un número entero' : '',
+        !Number.isFinite(unitPrice) || unitPrice < 0 ? 'Costo unitario de compra inválido' : '',
+        hasInvalidImportNumber(row.taxBase) || hasInvalidImportNumber(row.taxRate) || hasInvalidImportNumber(row.taxAmount) ? 'Los valores de IVA deben ser numéricos' : '',
+        hasInvalidImportNumber(row.withholdingBase) || hasInvalidImportNumber(row.withholdingRate) || hasInvalidImportNumber(row.withholdingTotal) ? 'Los valores de retención deben ser numéricos' : '',
+        hasNegativeFiscalValue ? 'Los valores de impuestos y retenciones no pueden ser negativos' : '',
         !validTaxCodes.has(taxType) ? 'Tipo de IVA inválido; selecciona una opción del catálogo' : '',
         !validWithholdingCodes.has(withholdingType) ? 'Retención inválida; selecciona una opción del catálogo' : '',
       ].filter(Boolean);
@@ -1058,9 +1233,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             ? `Variante nueva de ${row.parentProductCode || 'producto padre'}; queda pendiente y se creará al recepcionar`
             : 'SKU no encontrado en inventario; se agregará como producto nuevo al recepcionar'
           : '',
-        sku && !product && forceManualSku ? 'SKU libre; se agregará como producto nuevo al recepcionar' : '',
-        sku && product && forceManualSku ? 'SKU coincide con inventario; escribe otro SKU para crear un producto nuevo' : '',
+        sku && !product && forceManualSku
+          ? isAdvancedVariant
+            ? `SKU libre; la variante se agregará al producto padre ${row.parentProductCode || 'de la plantilla'} al recepcionar`
+            : 'SKU libre; se agregará como producto nuevo al recepcionar'
+          : '',
+        sku && product && forceManualSku && row.similarityResolution !== 'CREATE_NEW' ? 'SKU coincide con inventario; selecciona una resolución para continuar' : '',
+        sku && product && row.similarityResolution === 'CREATE_NEW'
+          ? isAdvancedVariant
+            ? `Se creará la variante bajo el producto padre ${row.parentProductCode || product.code || 'de la plantilla'} al recepcionar`
+            : 'Se creará un producto nuevo al recepcionar; el SKU importado debe ser diferente al existente'
+          : '',
         canCreateCategoryOnImport && !resolvedCategoryId ? `La categoría "${categoryName}" se creará al recepcionar` : '',
+        taxAmountMismatch ? `Monto IVA ajustado a ${taxAmount.toFixed(2)} para coincidir con base y porcentaje` : '',
+        withholdingAmountMismatch ? `Monto ret. ajustado a ${withholdingTotal.toFixed(2)} para coincidir con base y porcentaje` : '',
       ].filter(Boolean);
 
       // Si el archivo trae una nota explícita, prevalece sobre la nota del
@@ -1068,25 +1254,22 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       const commercialNoteSnapshot = String(row.commercialNoteSnapshot || linkedProduct?.commercialNote || '').trim();
       const noteLength = Array.from(commercialNoteSnapshot).length;
       const noteError = noteLength > 100 ? 'La nota comercial no puede superar los 100 caracteres' : '';
-      const productLevels = Array.isArray(linkedProduct?.inventoryLevels)
-        ? linkedProduct.inventoryLevels
-        : (Array.isArray(linkedProduct?.stockLevels) ? linkedProduct.stockLevels : []);
-      const variantLevels = linkedVariant
-        ? productLevels.filter((level: any) => String(level?.variantId || '') === String(linkedVariant.id))
-        : productLevels;
-      const linkedStock = linkedVariant
-        ? variantLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0)
-        : (linkedProduct?.stock != null ? Number(linkedProduct.stock) : variantLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0));
+      const pendingVariantOnExistingProduct = Boolean(row._advanced && row.variantLabel && linkedProduct && !linkedVariant);
+      const linkedStock = pendingVariantOnExistingProduct
+        ? (hasImportNumber(row.currentStock) ? Number(row.currentStock) : 0)
+        : getProductStockForWarehouse(linkedProduct, linkedVariant?.id, localDoc?.warehouseId);
       const linkedName = linkedVariant
         ? `${linkedProduct?.name || ''} · ${linkedVariant.name || linkedVariant.sku || 'Variante'}`.trim()
         : linkedProduct?.name;
 
       return {
         ...row,
-        sku: linkedVariant?.sku || linkedProduct?.code || sku,
+        sku: linkedVariant?.sku || (pendingVariantOnExistingProduct ? sku : linkedProduct?.code || sku),
         productId: linkedProduct?.id,
         variantId: linkedVariant?.id,
-        currentStock: linkedProduct ? linkedStock : undefined,
+        currentStock: linkedProduct
+          ? linkedStock
+          : (hasImportNumber(row.currentStock) ? Number(row.currentStock) : undefined),
         description: String(row.description || linkedName || '').trim(),
         commercialNoteSnapshot,
         category: categoryName,
@@ -1095,18 +1278,24 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         taxType,
         taxBase,
         taxRate,
-        taxAmount: taxBase * taxRate / 100,
+        taxAmount,
         withholdingType,
         withholdingBase,
         withholdingRate,
-        withholdingTotal: withholdingBase * withholdingRate / 100,
+        withholdingTotal,
         _hasError: errors.length > 0 || Boolean(noteError),
         _errorMessage: errors[0] || noteError,
         _hasWarning: warningParts.length > 0,
         _warningMessage: warningParts.join(' · '),
-        _skuStatus: (skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : product ? 'found' : sku ? 'missing' : undefined) as PurchaseImportRow['_skuStatus'],
-        _skuMessage: product
-          ? (forceManualSku && row.similarityResolution !== 'CREATE_NEW' ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${linkedName || product.code || sku}`)
+        _skuStatus: (skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : row.similarityResolution === 'CREATE_NEW' || !product || pendingVariantOnExistingProduct ? 'missing' : 'found') as PurchaseImportRow['_skuStatus'],
+        _skuMessage: pendingVariantOnExistingProduct
+          ? `Variante nueva de ${linkedProduct?.name || row.parentProductCode || 'producto padre'}; se creará al recepcionar`
+          : row.similarityResolution === 'CREATE_NEW'
+          ? row._advanced && row.variantLabel
+            ? `Variante nueva del producto padre ${row.parentProductCode || 'de la plantilla'}; se creará al recepcionar`
+            : 'Se creará como producto nuevo al recepcionar; SKU nuevo confirmado'
+          : product
+            ? (forceManualSku ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${linkedName || product.code || sku}`)
           : sku
             ? row._advanced && row.variantLabel
               ? `Variante pendiente · producto padre: ${row.parentProductCode || '—'}`
@@ -1228,6 +1417,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               purchasePriceLists.length > 0 ? purchasePriceLists : FALLBACK_PURCHASE_PRICE_LISTS,
               { purchaseOrder: true },
             );
+            validatePurchaseCatalogPrices(catalog, purchasePriceLists);
             const advancedRows = buildPurchaseImportRowsFromAdvancedCatalog(catalog);
             if (!advancedRows.length) throw new Error('La plantilla avanzada no contiene productos o variantes utilizables');
             setAdvancedImportCatalog(catalog);
@@ -1245,30 +1435,33 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           if (raw.length < 2) throw new Error('El archivo está vacío o no tiene datos');
           const headers = raw[0].map(normalizeImportHeader);
           const fieldAliases: Record<string, string[]> = {
-            sku: ['sku', 'codigo / sku', 'codigo', 'código', 'code', 'product code'],
+            sku: ['sku', 'sku / variante', 'sku variante', 'codigo / sku', 'codigo variante', 'codigo', 'código', 'code', 'product code'],
             description: ['descripcion', 'descripción', 'description', 'nombre', 'producto'],
-             commercialNote: ['notas', 'nota', 'nota comercial', 'notas comerciales', 'commercial note', 'commercialnote'],
-             brand: ['marca', 'brand'],
-             category: ['categoria', 'categoría', 'category'],
+            commercialNote: ['notas', 'nota', 'nota comercial', 'notas comerciales', 'commercial note', 'commercialnote'],
+            brand: ['marca', 'brand'],
+            category: ['categoria', 'categoría', 'category'],
+            currentStock: ['stock actual', 'stock', 'existencia', 'current stock'],
             quantity: ['cantidad', 'quantity', 'qty'],
-            unitPrice: ['precio unitario', 'precio', 'unit price', 'cost price'],
+            unitPrice: ['costo unitario de compra', 'costo de compra', 'costo unitario', 'precio unitario', 'precio', 'unit price', 'cost price'],
             taxType: ['tipo iva', 'tipo de iva', 'iva', 'tax type'],
             taxBase: ['base iva', 'base de iva', 'tax base'],
-            taxRate: ['tasa iva', 'tasa de iva', 'tax rate'],
-            withholdingType: ['retencion', 'retención', 'tipo retencion', 'tipo de retencion', 'withholding'],
-            withholdingBase: ['base retencion', 'base de retencion', 'withholding base'],
-            withholdingRate: ['tasa retencion', 'tasa de retencion', 'withholding rate'],
+            taxRate: ['iva %', 'iva%', 'tasa iva', 'tasa de iva', 'tax rate'],
+            taxAmount: ['monto iva', 'importe iva', 'iva monto', 'tax amount'],
+            withholdingType: ['retencion', 'retención', 'ret.', 'tipo retencion', 'tipo de retencion', 'withholding'],
+            withholdingBase: ['base retencion', 'base de retencion', 'base ret.', 'withholding base'],
+            withholdingRate: ['ret. %', 'ret %', 'tasa retencion', 'tasa de retencion', 'withholding rate'],
+            withholdingTotal: ['monto ret', 'monto retencion', 'importe retencion', 'ret. monto', 'withholding amount'],
           };
           const columnMap: Record<string, number> = {};
           Object.entries(fieldAliases).forEach(([key, candidates]) => {
-            const index = headers.findIndex((header: string) => candidates.some((candidate) => normalizeImportHeader(candidate) === header));
+            const index = headers.findIndex((header: string) => matchesImportHeader(header, candidates));
             if (index >= 0) columnMap[key] = index;
           });
           const get = (row: any[], key: string) => columnMap[key] === undefined ? '' : row[columnMap[key]];
           const text = (row: any[], key: string, fallback = '') => String(get(row, key) ?? fallback).trim();
           const number = (row: any[], key: string, fallback: string | number = '') => {
             const value = get(row, key);
-            return value === '' || value === undefined || value === null ? fallback : Number(value);
+            return parseImportNumber(value, fallback);
           };
           const parsed = raw.slice(1)
             .filter((row) => row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== ''))
@@ -1276,17 +1469,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               sku: text(row, 'sku'),
             description: text(row, 'description'),
                commercialNoteSnapshot: text(row, 'commercialNote'),
-               brand: text(row, 'brand'),
-               category: text(row, 'category'),
+              brand: text(row, 'brand'),
+              category: text(row, 'category'),
+              currentStock: number(row, 'currentStock', undefined as any),
               quantity: number(row, 'quantity', 0),
               unitPrice: number(row, 'unitPrice', 0),
               taxType: normalizeImportCatalogValue(text(row, 'taxType', 'GRAVADO'), mergeImportCatalogOptions(taxOptions, FALLBACK_IMPORT_TAX_OPTIONS), 'GRAVADO'),
               taxBase: number(row, 'taxBase', ''),
               taxRate: number(row, 'taxRate', ''),
-              withholdingType: normalizeImportCatalogValue(text(row, 'withholdingType', 'NONE'), mergeImportCatalogOptions(withholdingOptions, FALLBACK_IMPORT_WITHHOLDING_OPTIONS), 'NONE', ['NONE', 'SIN RETENCION', 'NO APLICA', 'NINGUNA']),
+              taxAmount: number(row, 'taxAmount', ''),
+              withholdingType: normalizeImportCatalogValue(text(row, 'withholdingType', 'NONE'), mergeImportCatalogOptions(withholdingOptions, FALLBACK_IMPORT_WITHHOLDING_OPTIONS), 'NONE', ['0', 'NONE', 'SIN RETENCION', 'NO APLICA', 'NINGUNA']),
               withholdingBase: number(row, 'withholdingBase', ''),
               withholdingRate: number(row, 'withholdingRate', ''),
-              currentStock: undefined,
+              withholdingTotal: number(row, 'withholdingTotal', ''),
           } as PurchaseImportRow));
           if (!parsed.length) throw new Error('No se encontraron filas con datos');
           setPreviewProgress(90);
@@ -1385,6 +1580,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       }
       return nextRow;
     })));
+    if (field === 'sku') {
+      const previousRow = importData[index];
+      const previousKeys = [previousRow?.sku, previousRow?.description, previousRow?.parentProductCode]
+        .map(normalizeSimilarityInputKey)
+        .filter(Boolean);
+      setSimilarPurchaseGroups((current) => current.filter((group) => !previousKeys.includes(normalizeSimilarityInputKey(group.inputKey))));
+      setSimilarPurchaseAlertOpen(false);
+    }
   };
 
   const handlePurchaseImportCategoryChange = useCallback((index: number, categoryId: string, categoryName?: string) => {
@@ -1393,26 +1596,49 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       const selected = categories.find((category: any) => String(category.id) === String(categoryId));
       return {
         ...row,
-        categoryId: selected?.id || '',
+        categoryId: selected?.id || categoryId || '',
         category: selected?.name || categoryName || '',
       };
     })));
   }, [categories, validateImportRows]);
 
   const handleCreatePurchaseImportCategory = useCallback(async (name: string) => {
-    const response = await inventoryService.createCategory({
-      name: name.trim(),
-      type: localDoc?.purchaseType === 'SERVICE' ? 'SERVICE' : 'PRODUCT',
-    });
-    const created = ((response as any)?.data || response || {}) as any;
-    const createdCategory = {
-      ...created,
-      id: created.id || `purchase-import-category-${Date.now()}`,
-      name: created.name || name.trim(),
-      type: created.type || (localDoc?.purchaseType === 'SERVICE' ? 'SERVICE' : 'PRODUCT'),
-    };
-    setCategories((current) => [...current.filter((category: any) => String(category.id) !== String(createdCategory.id)), createdCategory]);
-    return createdCategory;
+    const categoryType = localDoc?.purchaseType === 'SERVICE' ? 'SERVICE' : 'PRODUCT';
+    try {
+      const response = await inventoryService.createCategory({
+        name: name.trim(),
+        type: categoryType,
+      });
+      const created = ((response as any)?.data || response || {}) as any;
+      const createdCategory = {
+        ...created,
+        id: created.id || `purchase-import-category-${Date.now()}`,
+        name: created.name || name.trim(),
+        type: created.type || categoryType,
+      };
+      setCategories((current) => [...current.filter((category: any) => String(category.id) !== String(createdCategory.id)), createdCategory]);
+      return createdCategory;
+    } catch (error: any) {
+      const existingFromError = (error?.data as any)?.category || (error?.data as any)?.message?.category;
+      const isDuplicate = error?.code === 'CATEGORY_DUPLICATE'
+        || Boolean(existingFromError?.id)
+        || /ya existe la categoría|categor[ií]a.*duplic/i.test(String(error?.message || ''));
+      if (!isDuplicate) throw error;
+
+      const categoryList = existingFromError?.id
+        ? [existingFromError]
+        : await inventoryService.getCategories();
+      const normalizedName = name.trim().toLowerCase();
+      const existingCategory = categoryList.find((category: any) => (
+        String(category.name || '').trim().toLowerCase() === normalizedName
+        && String(category.type || categoryType).toUpperCase() === categoryType
+      ));
+      if (!existingCategory?.id) throw error;
+
+      const selectedCategory = { ...existingCategory, wasExisting: true };
+      setCategories((current) => [...current.filter((category: any) => String(category.id) !== String(selectedCategory.id)), selectedCategory]);
+      return selectedCategory;
+    }
   }, [localDoc?.purchaseType]);
 
   const handlePurchaseImportCurrencyChange = useCallback((nextCurrency: string) => {
@@ -1450,13 +1676,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       Notas: row.commercialNoteSnapshot || '',
       Categoría: row.category,
       Cantidad: row.quantity,
-      'Precio unitario': row.unitPrice,
+      'Costo unitario de compra': row.unitPrice,
       'Tipo IVA': row.taxType,
       'Base IVA': row.taxBase,
-      'Tasa IVA': row.taxRate,
+      'IVA %': row.taxRate,
+      'Monto IVA': row.taxAmount,
       Retención: row.withholdingType,
       'Base retención': row.withholdingBase,
-      'Tasa retención': row.withholdingRate,
+      'Ret. %': row.withholdingRate,
+      'Monto retención': row.withholdingTotal,
       Clasificación: row._hasError ? 'Error' : 'Advertencia',
       Detalle: row._errorMessage || row._warningMessage || row._skuMessage || 'Revisar fila',
     }));
@@ -1500,15 +1728,28 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   const resolvePurchaseSimilarity = useCallback((group: SimilarProductGroup, match?: SimilarProductMatch, variant?: { id: string; sku: string }) => {
     if (!match?.id) return;
-    if (!variant && (match.variants?.length || 0) > 1) {
-      toast.warning('Este producto tiene varias variantes. Selecciona la variante exacta para agregarla a la orden.');
-      return;
-    }
     const groupKey = normalizeSimilarityInputKey(group.inputKey);
     const rowIndex = importData.findIndex((row) => [row.sku, row.description, row.parentProductCode]
       .some((value) => normalizeSimilarityInputKey(value) === groupKey));
     if (rowIndex < 0) {
       toast.error('La fila importada ya no está disponible; vuelve a cargar la previsualización.');
+      return;
+    }
+    const importedRow = importData[rowIndex];
+    const importedVariant = Boolean(importedRow?._advanced && importedRow.variantLabel);
+    const hasExactVariant = (match.variants || []).some((candidate) => normalizeSimilarityInputKey(candidate.sku) === normalizeSimilarityInputKey(importedRow?.sku || group.inputKey));
+    const groupHasExactSkuMatch = group.matches.some((candidate) => [candidate.code, candidate.sku, ...(candidate.variants || []).map((candidateVariant) => candidateVariant.sku)]
+      .some((value) => normalizeSimilarityInputKey(value) === normalizeSimilarityInputKey(importedRow?.sku || group.inputKey)));
+    if (!variant && hasExactVariant) {
+      toast.warning('La variante importada ya existe. Selecciona la variante exacta para usarla.');
+      return;
+    }
+    if (!variant && importedVariant && groupHasExactSkuMatch && !hasExactVariant) {
+      toast.warning('El SKU ya existe en otra coincidencia. Selecciona la variante existente o cambia el SKU para crear una nueva.');
+      return;
+    }
+    if (!variant && (match.variants?.length || 0) > 1 && !importedVariant) {
+      toast.warning('Este producto tiene varias variantes. Selecciona la variante exacta para agregarla a la orden.');
       return;
     }
     setSimilarPurchaseResolvingKey(`${group.inputKey}:${match.id}`);
@@ -1522,7 +1763,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const selectedVariant = variant
       || selectedProduct?.variants?.find((candidate: any) => String(candidate.id) === String(importData[rowIndex]?.variantId))
       || selectedProduct?.variants?.find((candidate: any) => normalizeSimilarityInputKey(candidate.sku) === normalizeSimilarityInputKey(importData[rowIndex]?.sku))
-      || (match.variants?.length === 1 ? match.variants[0] : undefined);
+      || (!importedVariant && match.variants?.length === 1 ? match.variants[0] : undefined);
+    const keepImportedVariantSku = importedVariant && !selectedVariant;
     setProducts((current) => [...current.filter((product: any) => String(product.id) !== String(match.id)), selectedCatalogProduct]);
     setImportData((current) => validateImportRows(current.map((row, index) => index === rowIndex
       ? {
@@ -1532,34 +1774,48 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         skuResolution: 'LINK_EXISTING',
         productId: match.id,
         variantId: selectedVariant?.id,
-        sku: selectedVariant?.sku || selectedProduct?.code || match.sku || match.code || row.sku,
+        sku: selectedVariant?.sku || (keepImportedVariantSku ? row.sku : selectedProduct?.code || match.sku || match.code || row.sku),
         description: row.description || match.name,
         category: row.category || selectedProduct?.category?.name || selectedProduct?.category || match.category || '',
         categoryId: row.categoryId || selectedProduct?.categoryId || selectedProduct?.category?.id || '',
       }
       : row), [...products.filter((product: any) => String(product.id) !== String(match.id)), selectedCatalogProduct]));
-    setSimilarPurchaseGroups((current) => current.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== groupKey));
+    const remainingSimilarityGroups = similarPurchaseGroups.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== groupKey);
+    setSimilarPurchaseGroups(remainingSimilarityGroups);
+    if (remainingSimilarityGroups.length === 0) setSimilarPurchaseAlertOpen(false);
     setSimilarPurchaseResolvingKey(null);
-    toast.success(`Se seleccionó ${selectedVariant ? `la variante ${selectedVariant.sku}` : `el producto ${match.name || match.code}`}. La orden no modifica stock ni costo; al recibir, el stock se sumará y el costo se calculará ponderado.`);
-  }, [importData, products, validateImportRows]);
+    toast.success(`Se vinculó ${selectedVariant ? `la variante ${selectedVariant.sku}` : `el producto ${match.name || match.code}`}. La cantidad de esta línea se conservará y se sumará al stock al recepcionar.`);
+  }, [importData, products, similarPurchaseGroups, validateImportRows]);
 
-  const createPurchaseSimilarityAsNew = useCallback((group: SimilarProductGroup) => {
+  const createPurchaseSimilarityAsNew = useCallback((group: SimilarProductGroup, newSku?: string) => {
     const groupKey = normalizeSimilarityInputKey(group.inputKey);
     const exactSku = group.matches.some((match) => [match.code, match.sku, ...(match.variants || []).map((variant) => variant.sku)]
       .some((value) => normalizeSimilarityInputKey(value) === groupKey));
-    if (exactSku) {
-      toast.error('Ese SKU ya existe. Cambia el SKU o selecciona el producto existente.');
-      return;
-    }
     const rowIndex = importData.findIndex((row) => [row.sku, row.description, row.parentProductCode]
       .some((value) => normalizeSimilarityInputKey(value) === groupKey));
     if (rowIndex < 0) return;
+    const requestedSku = String(newSku || '').trim();
+    if (exactSku && !requestedSku) {
+      toast.error('Escribe un SKU nuevo para crear este registro.');
+      return;
+    }
+    if (exactSku) {
+      const normalizedRequestedSku = normalizeSimilarityInputKey(requestedSku);
+      const matchesExistingProduct = Boolean(findImportProductMatch(requestedSku, products));
+      const duplicatesAnotherRow = importData.some((row, index) => index !== rowIndex && normalizeSimilarityInputKey(row.sku) === normalizedRequestedSku);
+      if (!normalizedRequestedSku || matchesExistingProduct || duplicatesAnotherRow) {
+        toast.error('El nuevo SKU ya existe o está repetido. Escribe un SKU diferente.');
+        return;
+      }
+    }
     setImportData((current) => validateImportRows(current.map((row, index) => index === rowIndex
-      ? { ...row, similarityResolution: 'CREATE_NEW', similarityProductId: undefined, productId: undefined, variantId: undefined }
+      ? { ...row, ...(exactSku ? { sku: requestedSku } : {}), similarityResolution: 'CREATE_NEW', similarityProductId: undefined, skuResolution: 'MANUAL', productId: undefined, variantId: undefined }
       : row)));
-    setSimilarPurchaseGroups((current) => current.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== groupKey));
+    const remainingSimilarityGroups = similarPurchaseGroups.filter((candidate) => normalizeSimilarityInputKey(candidate.inputKey) !== groupKey);
+    setSimilarPurchaseGroups(remainingSimilarityGroups);
+    if (remainingSimilarityGroups.length === 0) setSimilarPurchaseAlertOpen(false);
     toast.info('La fila se creará como un producto nuevo al recepcionar la orden.');
-  }, [importData, validateImportRows]);
+  }, [importData, products, similarPurchaseGroups, validateImportRows]);
 
   const handleFinalPurchaseImport = async () => {
     if (importConfirmText !== 'IMPORTAR' || !localDoc) return;
@@ -1567,7 +1823,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const skipped = importData.length - validRows.length;
     setImporting(true);
     setImportProgress(15);
-    let rowsToImport = validRows;
+    const rowsToImport = validRows;
     try {
       // La importación solo agrega líneas a la orden. Para SKU nuevos se
       // conserva un snapshot pendiente; el catálogo y sus variantes se crean
@@ -1605,11 +1861,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         withholdingBase: Number(withholding.withholdingBase.toFixed(2)),
         withholdingTotal: Number(withholding.withholdingTotal.toFixed(2)),
         total: Number((quantity * unitPrice).toFixed(2)),
-        pendingCatalog: row.productId
+        pendingCatalog: row.productId && !(row._advanced && row.variantLabel && !row.variantId)
           ? undefined
           : advancedImportCatalog
-            ? buildPendingPurchaseCatalog(advancedImportCatalog, row)
-            : buildPendingPurchaseCatalogFromRow(row),
+            ? buildPendingPurchaseCatalog(advancedImportCatalog, row, importCurrency, globalRate)
+            : buildPendingPurchaseCatalogFromRow(row, importCurrency, globalRate),
       };
       });
       const currentItems = (localDoc.items || []) as any[];
@@ -2333,20 +2589,45 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setLocalDoc(prev => ({ ...prev!, items, ...totals }));
   };
 
+  const importedSalePrices = advancedImportCatalog?.prices || [];
+  const importedSalePriceLists = [...new Set(importedSalePrices.map((price) => {
+    const configured = purchasePriceLists.find((list) => String(list.code).toUpperCase() === String(price.priceListCode).toUpperCase());
+    return configured?.name || price.priceListCode;
+  }).filter(Boolean))];
+
   if (importPreviewOpen) {
     return (
       <>
-        <ProductSimilarityAlert
-          open={similarPurchaseAlertOpen && similarPurchaseGroups.length > 0}
-          groups={similarPurchaseGroups}
+      <ProductSimilarityAlert
+        open={similarPurchaseAlertOpen && similarPurchaseGroups.length > 0}
+        groups={similarPurchaseGroups}
           title="Alerta: posible producto existente en la orden"
-          description="Se encontraron coincidencias por nombre, marca, SKU o atributos. Revisa los datos mostrados y selecciona el producto o la variante existente cuando corresponda. Un SKU exacto no puede duplicarse; si la coincidencia no es exacta, puedes crear un producto nuevo al recepcionar."
-          selectionHint="En esta pantalla solo se vincula la línea al producto o variante. Al recibir en la bodega seleccionada, el stock se sumará y el costo se calculará ponderando (existencias actuales × costo actual) + (entrada × costo de entrada), dividido entre las existencias totales."
-          resolvingKey={similarPurchaseResolvingKey}
-          onOpenChange={(value) => { setSimilarPurchaseAlertOpen(value); if (!value) setSimilarPurchaseResolvingKey(null); }}
-          onSelectExisting={(group, match, variant) => resolvePurchaseSimilarity(group, match, variant)}
-          onCreateNew={(group) => createPurchaseSimilarityAsNew(group)}
-        />
+          description="Se encontraron coincidencias por nombre, marca, SKU o atributos. Revisa si corresponde a un producto con variante o sin variante. Si el SKU es exacto, debes cambiarlo para crear un registro nuevo."
+          selectionHint="Puedes crear un registro nuevo con otro SKU o vincularlo al producto/variante existente. Si lo vinculas, la cantidad de esta línea se conservará y se sumará al stock al recepcionar. En productos con variantes, la suma se hace sobre la variante seleccionada, no sobre el producto padre. El costo se calculará ponderando las existencias actuales y la entrada."
+        canSelectParentForGroup={(group) => {
+          const groupKey = normalizeSimilarityInputKey(group.inputKey);
+          const row = importData.find((candidate) => [candidate.sku, candidate.description, candidate.parentProductCode]
+            .some((value) => normalizeSimilarityInputKey(value) === groupKey));
+          return Boolean(row?._advanced && row.variantLabel);
+        }}
+        resolvingKey={similarPurchaseResolvingKey}
+        onOpenChange={(value) => { setSimilarPurchaseAlertOpen(value); if (!value) setSimilarPurchaseResolvingKey(null); }}
+        onSelectExisting={(group, match, variant) => resolvePurchaseSimilarity(group, match, variant)}
+        onCreateNew={(group, newSku) => createPurchaseSimilarityAsNew(group, newSku)}
+        allowExactSkuCreateInput
+        lineDetailsForGroup={(group) => {
+          const groupKey = normalizeSimilarityInputKey(group.inputKey);
+          const rowIndex = importData.findIndex((row) => [row.sku, row.description, row.parentProductCode]
+            .some((value) => normalizeSimilarityInputKey(value) === groupKey));
+          const row = rowIndex >= 0 ? importData[rowIndex] : undefined;
+          if (!row) return undefined;
+          return {
+            unitPrice: row.unitPrice,
+            currentStock: row.currentStock,
+            currency: normalizePurchaseCurrency(importCurrency),
+          };
+        }}
+      />
         <PurchaseImportPreview
           rows={importData}
           fileName={importFileName}
@@ -2367,6 +2648,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           onImportCurrencyChange={handlePurchaseImportCurrencyChange}
           onDownloadErrors={handleDownloadPurchaseImportErrors}
           onConfirm={handlePurchaseImportConfirm}
+          salePriceCount={importedSalePrices.length}
+          salePriceLists={importedSalePriceLists}
+          hasAdvancedCatalog={Boolean(advancedImportCatalog)}
           similarityPendingCount={similarPurchaseGroups.length}
           onReviewSimilarities={() => setSimilarPurchaseAlertOpen(true)}
           onBack={() => { setSimilarPurchaseGroups([]); setSimilarPurchaseResolvingKey(null); setSimilarPurchaseAlertOpen(false); setImportPreviewOpen(false); setImportModalOpen(true); }}
@@ -2837,7 +3121,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                       />
                     </div>
                     <div className="col-span-1 min-w-0 xl:col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Precio</p>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Costo unitario</p>
                       <Input
                         data-testid="purchase-order-item-price"
                         disabled={!canEditOrderItems}
@@ -2958,7 +3242,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               </div>
               <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground">
                 <p className="font-black uppercase tracking-widest text-foreground">Validaciones de la importación</p>
-                <p className="mt-2">Se aplican las mismas validaciones de carga: SKU requerido y sin duplicados, categoría, cantidad mayor que cero, costo/precio unitario válido, IVA, retención y nota comercial de hasta 100 caracteres. Un SKU encontrado en Inventario se vinculará; uno desconocido quedará pendiente para crearse al recepcionar.</p>
+                <p className="mt-2">Se aplican las mismas validaciones de carga: SKU requerido y sin duplicados, categoría, cantidad mayor que cero, costo unitario de compra válido, IVA, retención y nota comercial de hasta 100 caracteres. Un SKU encontrado en Inventario se vinculará; uno desconocido quedará pendiente para crearse al recepcionar.</p>
                 <p className="mt-2 font-semibold text-primary">La bodega no se toma del archivo: se usa únicamente la Bodega destino seleccionada en esta orden.</p>
                 <Button variant="outline" size="sm" className="mt-3 gap-2" onClick={handleDownloadPurchaseTemplate}><Download className="size-4" /> Descargar plantilla y guía</Button>
               </div>

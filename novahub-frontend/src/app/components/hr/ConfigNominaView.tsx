@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -11,12 +11,14 @@ import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
 import {
   Settings2, Save, RefreshCw, Shield, DollarSign, Building2, 
-  Calculator, Info, CheckCircle2, Percent, Scale
+  Calculator, Info, Percent, Scale
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { HRViewTutorial } from './HRViewTutorial';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
 interface PayrollConfigData {
   id?: string;
@@ -58,6 +60,7 @@ export function ConfigNominaView() {
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<PayrollConfigData>(DEFAULT_CONFIG);
   const [hasExisting, setHasExisting] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   // Simulation calculator state
   const [simSalaryBruto, setSimSalaryBruto] = useState<number>(13000);
@@ -72,10 +75,22 @@ export function ConfigNominaView() {
     enabled: canPerform('HR', 'view'),
   });
   const loading = configQuery.isLoading;
+  const refreshNotificationData = useCallback(() => {
+    void configQuery.refetch();
+  }, [configQuery.refetch]);
+  useNotificationDomainRefresh({
+    module: 'rh',
+    subModules: ['config-nomina'],
+    onRefresh: refreshNotificationData,
+    enabled: canPerform('HR', 'view'),
+  });
 
   useEffect(() => {
     const res = configQuery.data as any;
-    if (res && res.id) {
+    if (res && res.id && !isDirty) {
+        // This is the intentional server-to-form hydration point. Dirty
+        // edits are guarded above so an external refresh cannot overwrite them.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setConfig({
           id: res.id,
           name: res.name || 'Configuración Default',
@@ -93,11 +108,20 @@ export function ConfigNominaView() {
           indemnizacionPct: Number(res.indemnizacionPct),
           isActive: res.isActive ?? true,
         });
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setHasExisting(true);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setIsDirty(false);
     }
-  }, [configQuery.data]);
+  }, [configQuery.data, isDirty]);
+
+  const updateConfig = (patch: Partial<PayrollConfigData>) => {
+    setIsDirty(true);
+    setConfig((current) => ({ ...current, ...patch }));
+  };
 
   const handleSave = async () => {
+    const actionToken = beginNotificationAction();
     try {
       setSaving(true);
       if (config.id) {
@@ -109,9 +133,12 @@ export function ConfigNominaView() {
         setHasExisting(true);
       }
       toast.success('Configuración de nómina guardada exitosamente');
+      completeNotificationAction(actionToken);
+      setIsDirty(false);
     } catch (error: any) {
       console.error('Error saving payroll config:', error);
       toast.error(error?.response?.data?.message || error?.message || 'Error al guardar configuración de nómina');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -230,7 +257,7 @@ export function ConfigNominaView() {
                       <Input
                         type="number" step="0.01"
                         value={config.inssLaboralPct}
-                        onChange={e => setConfig({ ...config, inssLaboralPct: Number(e.target.value) })}
+                        onChange={e => updateConfig({ inssLaboralPct: Number(e.target.value) })}
                         className="rounded-xl h-11"
                       />
                       <Percent className="size-4 text-muted-foreground" />
@@ -247,7 +274,7 @@ export function ConfigNominaView() {
                     <p className="text-sm font-bold">Impuesto sobre la Renta (IR)</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">Art. 23 Ley 822 - Ley de Concertación Tributaria</p>
                   </div>
-                  <Switch checked={config.irEnabled} onCheckedChange={v => setConfig({ ...config, irEnabled: v })} />
+                  <Switch checked={config.irEnabled} onCheckedChange={v => updateConfig({ irEnabled: v })} />
                 </div>
 
                 {/* IR Table */}
@@ -279,7 +306,7 @@ export function ConfigNominaView() {
                                 {row.baseKey ? (
                                   <Input type="number" className="w-28 h-8 text-xs text-center mx-auto rounded-lg"
                                     value={(config as any)[row.baseKey]}
-                                    onChange={e => setConfig({ ...config, [row.baseKey!]: Number(e.target.value) })} />
+                                    onChange={e => updateConfig({ [row.baseKey!]: Number(e.target.value) } as Partial<PayrollConfigData>)} />
                                 ) : (
                                   <span className="text-xs font-medium text-muted-foreground">{row.exento ? '—' : String(row.base)}</span>
                                 )}
@@ -287,7 +314,7 @@ export function ConfigNominaView() {
                               <td className="p-3 text-center">
                                 <Input type="number" className="w-20 h-8 text-xs text-center mx-auto rounded-lg"
                                   value={(config as any)[row.pctKey]} step="0.1"
-                                  onChange={e => setConfig({ ...config, [row.pctKey]: Number(e.target.value) })} />
+                                  onChange={e => updateConfig({ [row.pctKey]: Number(e.target.value) } as Partial<PayrollConfigData>)} />
                               </td>
                             </tr>
                           ))}
@@ -319,7 +346,7 @@ export function ConfigNominaView() {
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">INSS Patronal (%)</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" step="0.01" value={config.inssPatronalPct}
-                        onChange={e => setConfig({ ...config, inssPatronalPct: Number(e.target.value) })}
+                        onChange={e => updateConfig({ inssPatronalPct: Number(e.target.value) })}
                         className="rounded-xl h-11" />
                       <Percent className="size-4 text-muted-foreground" />
                     </div>
@@ -329,7 +356,7 @@ export function ConfigNominaView() {
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">INATEC (%)</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" step="0.01" value={config.inatecPct}
-                        onChange={e => setConfig({ ...config, inatecPct: Number(e.target.value) })}
+                        onChange={e => updateConfig({ inatecPct: Number(e.target.value) })}
                         className="rounded-xl h-11" />
                       <Percent className="size-4 text-muted-foreground" />
                     </div>
@@ -356,7 +383,7 @@ export function ConfigNominaView() {
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Treceavo Mes (%)</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" step="0.01" value={config.trecenoMesPct}
-                        onChange={e => setConfig({ ...config, trecenoMesPct: Number(e.target.value) })}
+                        onChange={e => updateConfig({ trecenoMesPct: Number(e.target.value) })}
                         className="rounded-xl h-11" />
                       <Percent className="size-4 text-muted-foreground" />
                     </div>
@@ -366,7 +393,7 @@ export function ConfigNominaView() {
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Vacaciones (%)</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" step="0.01" value={config.vacacionesPct}
-                        onChange={e => setConfig({ ...config, vacacionesPct: Number(e.target.value) })}
+                        onChange={e => updateConfig({ vacacionesPct: Number(e.target.value) })}
                         className="rounded-xl h-11" />
                       <Percent className="size-4 text-muted-foreground" />
                     </div>
@@ -376,7 +403,7 @@ export function ConfigNominaView() {
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Indemnización (%)</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" step="0.01" value={config.indemnizacionPct}
-                        onChange={e => setConfig({ ...config, indemnizacionPct: Number(e.target.value) })}
+                        onChange={e => updateConfig({ indemnizacionPct: Number(e.target.value) })}
                         className="rounded-xl h-11" />
                       <Percent className="size-4 text-muted-foreground" />
                     </div>

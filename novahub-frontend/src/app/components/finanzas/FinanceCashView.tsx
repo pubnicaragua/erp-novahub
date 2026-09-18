@@ -3,9 +3,8 @@ import { Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
-import { accountsService } from '../../services/finanzas.service'
-import { invoicesService } from '../../services/ventas.service'
-import { supplierInvoicesService, paymentsMadeService } from '../../services/compras.service'
+import { accountsService, sourceDocumentsService } from '../../services/finanzas.service'
+import { paymentsMadeService } from '../../services/compras.service'
 import { toast } from 'sonner'
 import { useAuth } from '../../contexts/AuthContext'
 import {
@@ -36,8 +35,8 @@ export function FinanceCashView() {
 
   const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : [])
   const accountsQuery = useQuery({ queryKey: ['finance', 'accounts', tenantKey], queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal), enabled: canReadFinancial, staleTime: 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false, retry: 1 })
-  const salesInvoicesQuery = useQuery({ queryKey: ['finance', 'sales-invoices', tenantKey], queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal), enabled: canReadSales, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
-  const supplierInvoicesQuery = useQuery({ queryKey: ['finance', 'supplier-invoices', tenantKey], queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal), enabled: canReadPurchases, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const salesInvoicesQuery = useQuery({ queryKey: ['finance', 'sales-invoices-lookup', tenantKey], queryFn: ({ signal }) => sourceDocumentsService.getLookup({ origin: 'SALES', page: 1, pageSize: 200 }, signal), enabled: canReadSales, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const supplierInvoicesQuery = useQuery({ queryKey: ['finance', 'supplier-invoices-lookup', tenantKey], queryFn: ({ signal }) => sourceDocumentsService.getLookup({ origin: 'PURCHASES', page: 1, pageSize: 200 }, signal), enabled: canReadPurchases, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
   const paymentsQuery = useQuery({ queryKey: ['finance', 'payments-made', tenantKey], queryFn: ({ signal }) => paymentsMadeService.getAll({ page: 1, pageSize: 200 }, signal), enabled: canReadPurchases, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
   const bankAccounts = toList(accountsQuery.data).filter((a: any) => ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) || String(a.name || '').toUpperCase().includes('CAJA') || String(a.name || '').toUpperCase().includes('BANCO'))
   const salesInvoices = toList(salesInvoicesQuery.data)

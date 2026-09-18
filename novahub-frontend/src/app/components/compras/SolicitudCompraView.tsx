@@ -12,7 +12,7 @@ import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { toast } from 'sonner';
-import { purchaseRequestsService, purchaseManagementService, purchaseOrdersService } from '../../services/compras.service';
+import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
 import type { Product, PurchaseRequest, PurchaseManagement, Warehouse, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
@@ -33,6 +33,7 @@ import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas
 import { getPurchasePriorityOption } from '../../utils/purchasePriority';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
+import { WORKFLOW_DEPENDENCIES, workflowDependencyState } from '../../types/workflow-dependencies';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-primary/10 text-primary',
@@ -94,9 +95,11 @@ interface SolicitudCompraViewProps {
   supplierCatalog?: Supplier[];
   productCatalog?: Product[];
   selectedBranchId?: string;
+  supplierCatalogLoading?: boolean;
+  supplierCatalogError?: boolean;
 }
 
-export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog: _warehouseCatalog, supplierCatalog = [], productCatalog = [], selectedBranchId = '' }: SolicitudCompraViewProps) {
+export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog: _warehouseCatalog, supplierCatalog = [], selectedBranchId = '', supplierCatalogLoading = false, supplierCatalogError = false }: SolicitudCompraViewProps) {
   const { user, canPerform } = useAuth();
   const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
   const canApproveRequests = canPerform('PURCHASES_REQUESTS', 'approve');
@@ -106,7 +109,13 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const canApproveManagement = canPerform('PURCHASES_REQUESTS', 'approve');
   const canRejectManagement = canPerform('PURCHASES_REQUESTS', 'reject');
   const canConvertManagement = canPerform('PURCHASES_REQUESTS', 'convert');
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, convertBetweenCurrencies, formatConvertedAmount } = useCurrency();
+  const supplierDependencyState = workflowDependencyState({
+    isLoading: supplierCatalogLoading,
+    isError: supplierCatalogError,
+    data: supplierCatalog,
+  });
+  const supplierDependencyMessages = WORKFLOW_DEPENDENCIES.PURCHASE_REQUEST_APPROVAL_SUPPLIER.messages;
+  const { exchangeRate: globalRate, displayCurrency, convertBetweenCurrencies, formatConvertedAmount } = useCurrency();
   const [search, setSearch] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-requests-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -378,101 +387,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     setPendingRequestAction(action);
   };
 
-  const buildOrderFromRequest = (request: PurchaseRequest, supplierId: string) => {
-    // Las solicitudes antiguas pueden traer la relación `warehouse` sin el
-    // campo plano. Conservamos siempre la bodega elegida en la solicitud.
-    const requestWarehouseId = String(
-      request.warehouseId
-      || request.warehouse?.id
-      || request.items?.find((item) => item.warehouseId)?.warehouseId
-      || '',
-    ).trim();
-    const requester = request.requestedBy
-      ? `${request.requestedBy.firstName || ''} ${request.requestedBy.lastName || ''}`.trim()
-      : (request.requestedById || 'Admin');
-    const items = (request.items || []).map((item: any) => {
-      const product = item.product || productCatalog.find((candidate) => String(candidate.id) === String(item.productId));
-      const variant = item.variant || product?.variants?.find((candidate: any) => String(candidate.id) === String(item.variantId));
-      const hasCostSnapshot = item.unitCost !== undefined
-        && item.unitCost !== null
-        && Number.isFinite(Number(item.unitCost));
-      const snapshotCostBase = Math.max(0, Number(item.unitCost || 0));
-      const snapshotCost = hasCostSnapshot
-        ? Number(convertBetweenCurrencies(
-          snapshotCostBase,
-          baseCurrency,
-          displayCurrency,
-          1,
-          Number(globalRate || 1),
-        ).toFixed(6))
-        : undefined;
-      const variantCost = variant?.costPrice !== null && variant?.costPrice !== undefined
-        ? Number(variant.costPrice)
-        : (variant ? Number(product?.costPrice || product?.cost || 0) + Number(variant.costModifier || 0) : undefined);
-      const priceCandidates = [variantCost, item.unitPrice, product?.costPrice, product?.cost, product?.price]
-        .map((value) => Number(value))
-        .filter((value) => Number.isFinite(value) && value > 0);
-      // Las solicitudes nuevas traen un snapshot del costo funcional. Se
-      // conserva incluso si el producto cambia de costo antes de aprobarla;
-      // solo las solicitudes históricas sin snapshot usan el catálogo actual.
-      const unitPrice = hasCostSnapshot ? snapshotCost! : priceCandidates[0] || 0;
-      const quantity = Math.max(0, Number(item.quantity || 0));
-      const taxRateValue = Number(product?.taxRate);
-      const taxRate = Number.isFinite(taxRateValue) && taxRateValue >= 0
-        ? (taxRateValue > 0 && taxRateValue <= 1 ? taxRateValue * 100 : taxRateValue)
-        : 15;
-      const taxType = String(item.taxType || (taxRate > 0 ? 'GRAVADO' : 'EXENTO')).toUpperCase();
-      const lineSubtotal = Number((quantity * unitPrice).toFixed(2));
-      const taxBase = taxType === 'GRAVADO' ? lineSubtotal : 0;
-      const taxAmount = Number((taxBase * (taxType === 'GRAVADO' ? taxRate : 0) / 100).toFixed(2));
-
-      return {
-        productId: item.productId || null,
-        variantId: item.variantId || variant?.id || null,
-        code: item.code || item.productCode || variant?.sku || product?.code || '',
-        name: item.name || product?.name || item.description || '',
-        description: item.description || (variant?.name ? `${product?.name || ''} · ${variant.name}` : product?.name) || '',
-        category: (product as any)?.category?.name || (product as any)?.category || item.category || '',
-        categoryId: product?.categoryId || (product as any)?.category?.id || item.categoryId || null,
-        stock: Number(item.currentStock || product?.stock || 0),
-        stockApplies: product?.itemType !== 'SERVICE',
-        quantity,
-        unitPrice,
-        total: lineSubtotal,
-        taxType,
-        taxRate: taxType === 'GRAVADO' ? taxRate : 0,
-        taxBase,
-        taxAmount,
-        withholdingType: 'NONE',
-        withholdingRate: 0,
-        withholdingBase: 0,
-      };
-    });
-    const subtotal = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
-    const taxAmount = items.reduce((sum, item) => sum + Number(item.taxAmount || 0), 0);
-
-    return {
-      supplierId,
-      date: new Date().toISOString(),
-      expectedDelivery: request.requiredDate || new Date(Date.now() + 7 * 86400000).toISOString(),
-      warehouseId: requestWarehouseId,
-      currency: displayCurrency,
-      exchangeRate: globalRate,
-      status: 'DRAFT',
-      purchaseType: 'INVENTORY',
-      requestedBy: requester,
-      purchaseRequestId: request.id,
-      purchaseRequestNumber: request.number,
-      notes: request.notes || request.justification || '',
-      subtotal,
-      taxAmount,
-      withholdingTotal: 0,
-      withholdingBase: 0,
-      total: subtotal + taxAmount,
-      items,
-    };
-  };
-
   const confirmRequestAction = async () => {
     if (!pendingRequestAction) return;
     const { request: req, action } = pendingRequestAction;
@@ -485,7 +399,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     const requestToastId = toast.loading(action === 'approve' ? 'Aprobando solicitud y generando orden de compra...' : 'Anulando solicitud de compra...');
     try {
       if (action === 'approve') {
-        await purchaseOrdersService.create(buildOrderFromRequest(req, approvalSupplierId));
+        await purchaseRequestsService.approve(req.id, approvalSupplierId);
         toast.success(`${req.number} aprobada y enviada a órdenes de compra`, { id: requestToastId });
       } else {
         await purchaseRequestsService.changeStatus(req.id, 'CANCELLED');
@@ -757,7 +671,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         variant={requestActionPresentation?.action === 'cancel' ? 'destructive' : 'default'}
         onConfirm={confirmRequestAction}
         closeOnConfirm={false}
-        disabled={pendingRequestAction?.action === 'approve' && !approvalSupplierId}
+        disabled={pendingRequestAction?.action === 'approve' && (!approvalSupplierId || supplierDependencyState !== 'ready')}
         loading={Boolean(pendingRequestAction && actionLoading === pendingRequestAction.request.id)}
       >
         {pendingRequestAction?.action === 'approve' && (
@@ -771,16 +685,19 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                 .map(supplier => ({
                   label: supplier.name,
                   value: supplier.id,
-                  description: [supplier.code, supplier.phone].filter(Boolean).join(' · ') || undefined,
+                  description: supplier.code || undefined,
                 }))}
               value={approvalSupplierId}
               onChange={setApprovalSupplierId}
               placeholder="Seleccionar proveedor..."
-              searchPlaceholder="Buscar por nombre, código o teléfono..."
-              emptyMessage="No se encontró el proveedor."
+              searchPlaceholder="Buscar por nombre o código..."
+              emptyMessage={supplierDependencyState === 'error' ? supplierDependencyMessages.error : supplierDependencyMessages.empty}
               maxVisibleOptions={supplierCatalog.length || 100}
               className="h-11 text-sm"
             />
+            {supplierDependencyState === 'loading' && <p className="text-[11px] text-muted-foreground">{supplierDependencyMessages.loading}</p>}
+            {supplierDependencyState === 'error' && <p className="text-[11px] text-destructive">{supplierDependencyMessages.error}</p>}
+            {supplierDependencyState === 'empty' && <p className="text-[11px] text-amber-600 dark:text-amber-400">{supplierDependencyMessages.empty}</p>}
             <p className="text-[11px] text-muted-foreground">El proveedor seleccionado quedará vinculado a la solicitud y a la orden de compra que se creará.</p>
           </div>
         )}

@@ -8,6 +8,7 @@ import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Combobox } from '../ui/Combobox';
 import { toast } from 'sonner';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
@@ -80,6 +81,7 @@ export function ReportSettingsDialog({ open, onOpenChange, title, description, f
   };
 
   const handleSave = async () => {
+    const actionToken = beginNotificationAction();
     setSaving(true);
     try {
       const accountMappings: Record<string, Record<string, string>> = {};
@@ -91,10 +93,12 @@ export function ReportSettingsDialog({ open, onOpenChange, title, description, f
       }
       await contabilidadService.updateConfig({ config: { accountMappings } });
       toast.success('Configuración contable guardada');
+      completeNotificationAction(actionToken);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
       handleOpenChange(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la configuración');
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }

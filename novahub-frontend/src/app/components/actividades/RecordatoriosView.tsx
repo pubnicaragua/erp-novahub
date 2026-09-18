@@ -33,10 +33,10 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
   const { canPerform } = useAuth();
   const canViewHr = canPerform('HR', 'view');
-  const usersQuery = useTenantQuery<any[]>(['activities', 'reminder-users'], signal => usersService.getAll(undefined, signal), {
+  const usersQuery = useTenantQuery<any[]>(['activities', 'reminder-users'], signal => usersService.getLookup(undefined, signal), {
     enabled: Boolean(isAddOpen || selectedReminder),
   });
-  const departmentsQuery = useTenantQuery<any[]>(['activities', 'departments'], signal => hrService.getDepartments(signal), {
+  const departmentsQuery = useTenantQuery<any[]>(['activities', 'department-lookup'], signal => hrService.getDepartmentLookup(signal) as any, {
     enabled: isAddOpen && canViewHr,
   });
   const availableUsers = asList(usersQuery.data);

@@ -56,43 +56,194 @@ const FALLBACK_PRICE_LISTS: CanonicalImportPriceList[] = [
   { code: 'DISTRIBUTOR', name: 'Distribuidor' },
 ];
 
-const appendSheet = (workbook: XLSX.WorkBook, name: string, rows: any[][]) => {
+const PURCHASE_ORDER_FORMULA_ROWS = 1000;
+
+const appendSheet = (
+  workbook: XLSX.WorkBook,
+  name: string,
+  rows: any[][],
+  configure?: (sheet: XLSX.WorkSheet) => void,
+) => {
   const sheet = XLSX.utils.aoa_to_sheet(rows);
+  configure?.(sheet);
   sheet['!cols'] = (rows[0] || []).map((header) => ({
     wch: Math.max(12, Math.min(34, String(header).length + 2)),
   }));
   XLSX.utils.book_append_sheet(workbook, sheet, name);
 };
 
+const configurePurchaseOrderInventorySheet = (
+  sheet: XLSX.WorkSheet,
+  headers: string[],
+) => {
+  const quantityColumn = headers.indexOf('Cantidad');
+  const unitCostColumn = headers.findIndex((header) => header.startsWith('Costo unitario de compra'));
+  const taxBaseColumn = headers.findIndex((header) => header.startsWith('Base IVA'));
+  const taxRateColumn = headers.indexOf('IVA %');
+  const taxAmountColumn = headers.findIndex((header) => header.startsWith('Monto IVA'));
+
+  if ([quantityColumn, unitCostColumn, taxBaseColumn, taxRateColumn, taxAmountColumn].some((column) => column < 0)) return;
+
+  for (let rowIndex = 1; rowIndex <= PURCHASE_ORDER_FORMULA_ROWS; rowIndex += 1) {
+    const rowNumber = rowIndex + 1;
+    const quantity = XLSX.utils.encode_col(quantityColumn) + rowNumber;
+    const unitCost = XLSX.utils.encode_col(unitCostColumn) + rowNumber;
+    const taxBase = XLSX.utils.encode_col(taxBaseColumn) + rowNumber;
+    const taxRate = XLSX.utils.encode_col(taxRateColumn) + rowNumber;
+    const taxAmount = XLSX.utils.encode_col(taxAmountColumn) + rowNumber;
+
+    // La base escrita por el usuario tiene prioridad. Si queda vacía, se usa
+    // cantidad por costo, que es la misma base aplicada en la previsualización.
+    sheet[taxAmount] = {
+      t: 'n',
+      f: `IF(OR(${taxRate}="",AND(${taxBase}="",OR(${quantity}="",${unitCost}=""))),"",ROUND(IF(${taxBase}<>"",${taxBase},${quantity}*${unitCost})*${taxRate}/100,2))`,
+    };
+  }
+
+  sheet['!ref'] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: PURCHASE_ORDER_FORMULA_ROWS, c: headers.length - 1 },
+  });
+};
+
 export const createCanonicalVariantImportWorkbook = (
   options: CanonicalVariantImportTemplateOptions = {},
 ) => {
-  const priceLists = resolveStandardProductPriceLists(
-    (options.priceLists || []).filter((list) => list.code && list.name).length > 0
-      ? options.priceLists || []
-      : FALLBACK_PRICE_LISTS,
-  );
   const currency = String(options.currency || 'NIO').toUpperCase();
   const exchangeRate = Number(options.exchangeRate || 1) > 0 ? Number(options.exchangeRate) : 1;
   const canViewInventoryCost = options.canViewInventoryCost !== false;
   const mode = options.context?.mode || 'INVENTORY';
+  const configuredPriceLists = (options.priceLists || []).filter((list) => list.code && list.name);
+  // La importación solo maneja las tres listas comerciales principales. Las
+  // listas adicionales se administran manualmente desde Listas de precios.
+  const priceLists = resolveStandardProductPriceLists(
+    configuredPriceLists.length > 0 ? configuredPriceLists : FALLBACK_PRICE_LISTS,
+  );
 
-  const productHeaders = getCanonicalProductImportHeaders(priceLists, canViewInventoryCost);
-  const variantHeaders = [
-    'Código producto', 'SKU variante', 'Nombre variante',
-    ...(canViewInventoryCost ? ['Costo variante'] : []),
-  ];
+  const productHeaders = mode === 'PURCHASE_ORDER'
+    ? [
+      'Código/Sku', 'Nombre', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Marca',
+      ...priceLists.map((list) => `Precio ${list.name}`),
+      'Serie/IMEI',
+    ]
+    : getCanonicalProductImportHeaders(priceLists, canViewInventoryCost);
+  const variantHeaders = mode === 'PURCHASE_ORDER'
+    ? ['Código producto', 'SKU variante', 'Nombre variante']
+    : [
+      'Código producto', 'SKU variante', 'Nombre variante',
+      ...(canViewInventoryCost ? ['Costo variante'] : []),
+    ];
   const managerLocations = (options.locations || []).filter((location) => String(location.label || '').trim());
+  const purchaseOrderLineHeaders = mode === 'PURCHASE_ORDER'
+    ? [
+      'Cantidad', `Costo unitario de compra (${currency === 'USD' ? '$' : 'C$'})`,
+      'Tipo IVA', `Base IVA (${currency === 'USD' ? '$' : 'C$'})`, 'IVA %',
+      `Monto IVA (${currency === 'USD' ? '$' : 'C$'})`, 'Retención',
+      `Base ret. (${currency === 'USD' ? '$' : 'C$'})`, 'Ret. %',
+      `Monto ret. (${currency === 'USD' ? '$' : 'C$'})`,
+    ]
+    : [];
   const inventoryHeaders = mode === 'PURCHASE_ORDER'
-    ? ['Código producto', 'SKU variante', 'Stock inicial', 'Stock mínimo', 'Stock máximo', 'Costo entrada', 'Moneda costo', 'Tasa costo']
+    ? ['Código producto', 'SKU / variante', ...purchaseOrderLineHeaders]
     : ['Código producto', 'SKU variante', 'Bodega', 'Stock inicial', 'Stock mínimo', 'Stock máximo', 'Costo entrada', 'Moneda costo', 'Tasa costo'];
+  const priceHeaders = mode === 'PURCHASE_ORDER'
+    ? ['Alcance', 'Código producto', 'SKU variante', ...priceLists.map((list) => `Precio ${list.name}`)]
+    : ['Alcance', 'Código producto', 'SKU variante', 'Lista', 'Precio'];
+
+  const simpleProductCategory = 'Computación';
+  const variableProductCategory = options.categoryName || 'Telefonía';
+  const exampleWarehouse = options.warehouseName || 'Bodega Central';
+  const examplePrices = currency === 'USD'
+    ? { simple: [100, 95, 90], variable: [1100, 1040, 1000] }
+    : { simple: [19999, 19099, 18499], variable: [21999, 20799, 19999] };
+  const exampleSimpleCode = 'LOG-MXKEYS';
+  const exampleVariableCode = 'APL-IP15';
+  const secondVariableCode = 'SAM-S24';
+  const exampleVariants = [
+    ['APL-IP15-128-BLU', '128 GB / Azul', '128 GB', 'Azul'],
+    ['APL-IP15-256-NEG', '256 GB / Negro', '256 GB', 'Negro'],
+    ['APL-IP15-512-VER', '512 GB / Verde', '512 GB', 'Verde'],
+  ];
+  const secondVariableVariants = [
+    ['SAM-S24-128-GRY', '128 GB / Gris', '128 GB', 'Gris'],
+    ['SAM-S24-256-BLK', '256 GB / Negro', '256 GB', 'Negro'],
+  ];
+  const secondVariablePrices = currency === 'USD'
+    ? [500, 475, 450]
+    : [9999, 9499, 8999];
+  const exampleProductRows = mode === 'PURCHASE_ORDER'
+    ? [
+      [exampleSimpleCode, 'Logitech MX Keys', 'Teclado inalámbrico Logitech MX Keys.', 'Garantía 12 meses', simpleProductCategory, 'unidad', 'Logitech', ...examplePrices.simple, 'NO'],
+      [exampleVariableCode, 'Apple iPhone 15', 'Teléfono inteligente Apple iPhone 15 desbloqueado.', 'Equipo desbloqueado · Garantía 12 meses', variableProductCategory, 'unidad', 'Apple', ...examplePrices.variable, 'NO'],
+      [secondVariableCode, 'Samsung Galaxy S24', 'Teléfono inteligente Samsung Galaxy S24.', 'Equipo desbloqueado · Garantía 12 meses', variableProductCategory, 'unidad', 'Samsung', ...secondVariablePrices, 'NO'],
+    ]
+    : [
+      [exampleSimpleCode, 'Logitech MX Keys', 'Teclado inalámbrico Logitech MX Keys.', 'Garantía 12 meses', simpleProductCategory, 'unidad', 'Logitech', 'NO', currency, ...examplePrices.simple, ...(canViewInventoryCost ? [currency === 'USD' ? 75 : 15000] : []), 'NO'],
+      [exampleVariableCode, 'Apple iPhone 15', 'Teléfono inteligente Apple iPhone 15 desbloqueado.', 'Equipo desbloqueado · Garantía 12 meses', variableProductCategory, 'unidad', 'Apple', 'SI', currency, ...examplePrices.variable, ...(canViewInventoryCost ? [currency === 'USD' ? 880 : 17600] : []), 'NO'],
+      [secondVariableCode, 'Samsung Galaxy S24', 'Teléfono inteligente Samsung Galaxy S24.', 'Equipo desbloqueado · Garantía 12 meses', variableProductCategory, 'unidad', 'Samsung', 'SI', currency, ...secondVariablePrices, ...(canViewInventoryCost ? [currency === 'USD' ? 390 : 7800] : []), 'NO'],
+    ];
+  const allVariableExamples = [...exampleVariants, ...secondVariableVariants];
+  const exampleVariantRows = mode === 'PURCHASE_ORDER'
+    ? [
+      ...exampleVariants.map(([sku, name]) => [exampleVariableCode, sku, name]),
+      ...secondVariableVariants.map(([sku, name]) => [secondVariableCode, sku, name]),
+    ]
+    : [
+      ...exampleVariants.map(([sku, name]) => [exampleVariableCode, sku, name, ...(canViewInventoryCost ? [''] : [])]),
+      ...secondVariableVariants.map(([sku, name]) => [secondVariableCode, sku, name, ...(canViewInventoryCost ? [''] : [])]),
+    ];
+  const exampleAttributeRows = allVariableExamples.flatMap(([sku, , storage, color]) => [
+    [sku, 'Almacenamiento', storage],
+    [sku, 'Color', color],
+  ]);
+  const exampleInventoryRows = mode === 'PURCHASE_ORDER'
+    ? [
+      [exampleSimpleCode, exampleSimpleCode, 10, currency === 'USD' ? 75 : 15000, 'GRAVADO', '', 15, '', '0', '', '', ''],
+      ...exampleVariants.map(([sku], index) => [exampleVariableCode, sku, 2 + index, currency === 'USD' ? 880 : 17600, 'GRAVADO', '', 15, '', '0', '', '', '']),
+      ...secondVariableVariants.map(([sku], index) => [secondVariableCode, sku, 2 + index, currency === 'USD' ? 390 : 7800, 'GRAVADO', '', 15, '', '0', '', '', '']),
+    ]
+    : [
+      [exampleSimpleCode, exampleSimpleCode, exampleWarehouse, 10, 2, '', currency === 'USD' ? 75 : 15000, currency, currency === 'USD' ? exchangeRate : 1],
+      ...exampleVariants.map(([sku], index) => [exampleVariableCode, sku, exampleWarehouse, 2 + index, 1, '', currency === 'USD' ? 880 : 17600, currency, currency === 'USD' ? exchangeRate : 1]),
+      ...secondVariableVariants.map(([sku], index) => [secondVariableCode, sku, exampleWarehouse, 2 + index, 1, '', currency === 'USD' ? 390 : 7800, currency, currency === 'USD' ? exchangeRate : 1]),
+    ];
+  const exampleVariantOverridePrices = currency === 'USD'
+    ? [1250, 1187.5, 1150]
+    : [31999, 30499, 29499];
+  const examplePriceRows = mode === 'PURCHASE_ORDER'
+    ? [['VARIANTE', exampleVariableCode, exampleVariants[1][0], ...exampleVariantOverridePrices]]
+    : priceLists.map((list, index) => [
+      'VARIANTE',
+      exampleVariableCode,
+      exampleVariants[1][0],
+      list.name,
+      exampleVariantOverridePrices[index],
+    ]);
 
   const workbook = XLSX.utils.book_new();
-  appendSheet(workbook, 'Productos', [productHeaders]);
-  appendSheet(workbook, 'Variantes', [variantHeaders]);
-  appendSheet(workbook, 'Atributos', [['SKU variante', 'Atributo', 'Valor']]);
-  appendSheet(workbook, 'Precios', [['Alcance', 'Código producto', 'SKU variante', 'Lista', 'Precio']]);
-  appendSheet(workbook, 'Inventario', [inventoryHeaders]);
+  appendSheet(workbook, 'Productos', [productHeaders, ...exampleProductRows]);
+  appendSheet(workbook, 'Variantes', [variantHeaders, ...exampleVariantRows]);
+  appendSheet(workbook, 'Atributos', [['SKU variante', 'Atributo', 'Valor'], ...exampleAttributeRows]);
+  // La orden de compra también debe llevar la configuración de venta. Se
+  // materializa al recepcionar, no al importar la orden.
+  appendSheet(workbook, 'Precios', [priceHeaders, ...examplePriceRows]);
+  appendSheet(
+    workbook,
+    'Inventario',
+    [inventoryHeaders, ...exampleInventoryRows],
+    mode === 'PURCHASE_ORDER'
+      ? (sheet) => configurePurchaseOrderInventorySheet(sheet, inventoryHeaders)
+      : undefined,
+  );
+
+  if (mode === 'PURCHASE_ORDER') {
+    workbook.Workbook = workbook.Workbook || {};
+    (workbook.Workbook as any).CalcPr = {
+      calcMode: 'auto',
+      fullCalcOnLoad: true,
+      forceFullCalc: true,
+    };
+  }
 
   if (mode === 'MANAGER') {
     appendSheet(workbook, 'Ubicaciones activas', [
@@ -109,27 +260,37 @@ export const createCanonicalVariantImportWorkbook = (
 
   const guideRows = [
     [mode === 'PURCHASE_ORDER' ? 'GUÍA · PLANTILLA CANÓNICA PARA ORDEN DE COMPRA' : 'GUÍA · PLANTILLA CANÓNICA DE PRODUCTOS CON VARIANTES'],
-    ['Plantilla vacía', 'Las hojas de carga contienen únicamente encabezados. Registra tus propios productos, variantes, atributos, precios y destinos antes de importar.'],
-    ['Contrato NOVAHUB_VARIANTS_V1. Las hojas Productos, Variantes, Atributos, Precios e Inventario se leen como una sola carga relacionada por código de producto y SKU de variante.'],
-    ['Productos', 'Una fila por producto padre. Usa los mismos datos de la creación: código/Sku, nombre, descripción, nota comercial, categoría, unidad, marca, indicador de variable, moneda, tres precios de venta, costo y serie/IMEI.'],
-    ['Variantes', 'Una fila por presentación vendible. El SKU variante debe ser único; el costo variante vacío hereda el costo del padre y un costo informado es propio de esa variante.'],
+    ['Datos incluidos', 'Las cinco hojas incluyen datos relacionados: Logitech MX Keys como producto simple, Apple iPhone 15 con tres variantes y Samsung Galaxy S24 con dos variantes. También incluyen sus atributos, precios, costos, cantidades e inventario. Retira o reemplaza estos registros antes de importar tus datos reales.'],
+    ['Cómo funciona cada producto', 'Logitech MX Keys no tiene filas en Variantes ni Atributos: usa su propio SKU en Inventario y los tres precios de Productos directamente en Caja. Apple iPhone 15 tiene tres variantes: APL-IP15-256-NEG sobrescribe sus precios en Precios y las otras dos heredan los del padre. Samsung Galaxy S24 tiene dos variantes y no tiene filas en Precios, por lo que ambas heredan automáticamente Minorista, Mayorista y Distribuidor desde Productos.'],
+    ['Qué hacer en cada hoja', 'Productos: registra una fila por producto padre y, para un producto simple, también sus tres precios de venta. Variantes: registra una fila por cada presentación vendible de Apple iPhone 15 y Samsung Galaxy S24; Logitech MX Keys no necesita filas aquí. Atributos: registra los atributos de cada SKU variante, como almacenamiento y color. Precios: registra únicamente los precios propios de una variante; si no hay fila para una variante, heredará los precios del padre registrados en Productos. Inventario: registra la cantidad y el costo de cada producto o variante; en una orden de compra también contiene los impuestos y retenciones. Al recepcionar, el sistema crea o actualiza el catálogo, suma existencias y deja los precios disponibles en Caja.'],
+    [mode === 'PURCHASE_ORDER' ? 'Contrato de orden' : 'Contrato NOVAHUB_VARIANTS_V1', mode === 'PURCHASE_ORDER'
+      ? 'Las hojas Productos, Variantes, Atributos, Precios e Inventario se relacionan por código de producto y SKU de variante. Los precios quedan pendientes hasta recepcionar.'
+      : 'Las hojas Productos, Variantes, Atributos, Precios e Inventario se leen como una sola carga relacionada por código de producto y SKU de variante.'],
+    ['Productos', mode === 'PURCHASE_ORDER'
+      ? `Una fila por producto padre. Código/Sku, nombre, descripción, nota comercial, categoría, unidad y marca identifican el producto que se creará al recepcionar. Las columnas ${priceLists.map((list) => `Precio ${list.name}`).join(', ')} son el precio de venta del producto padre registrado en esta hoja Productos. Si el producto no tiene variantes, Caja utilizará directamente estos precios y no es necesario repetirlos en la hoja Precios. Si tiene variantes, cada variante que no tenga un precio propio en Precios heredará automáticamente el precio del padre. Serie/IMEI activa el control de series cuando corresponda.`
+      : 'Una fila por producto padre. Usa los mismos datos de la creación: código/Sku, nombre, descripción, nota comercial, categoría, unidad, marca, indicador de variable, moneda, tres precios de venta, costo y serie/IMEI.'],
+    ['Variantes', mode === 'PURCHASE_ORDER'
+      ? 'Una fila por presentación vendible. El SKU variante debe ser único y sus atributos se relacionan desde la hoja Atributos. El precio de compra se informa en Inventario, no aquí.'
+      : 'Una fila por presentación vendible. El SKU variante debe ser único; el costo variante vacío hereda el costo del padre y un costo informado es propio de esa variante.'],
     ['Atributos', mode === 'PURCHASE_ORDER'
       ? 'Una fila por SKU variante + atributo + valor. Los atributos faltantes quedan pendientes y se crean al recepcionar la compra.'
       : 'Una fila por SKU variante + atributo + valor. Los atributos y valores faltantes pueden crearse o reutilizarse al confirmar la importación.'],
     ['Precios', mode === 'PURCHASE_ORDER'
-      ? 'Es opcional y corresponde al precio de venta por lista. Puede quedar vacío: no determina el costo de la orden de compra.'
+      ? `Una fila por variante. Usa Alcance VARIANTE, Código producto y SKU variante. Escribe cada lista en su propia columna: ${priceLists.map((list) => `Precio ${list.name}`).join(', ')}. El ejemplo sobrescribe los precios de la variante APL-IP15-256-NEG; las otras variantes no tienen fila propia y heredarán los precios del padre. El precio del producto padre se registra únicamente en las columnas de precios de la hoja Productos; si una lista queda vacía aquí, la variante heredará el precio del padre. Estos precios se crearán al recepcionar para que Caja pueda vender por cada tipo.`
       : 'PRODUCTO define el precio base heredable. VARIANTE sobrescribe una lista únicamente para el SKU indicado.'],
     ['Inventario', mode === 'PURCHASE_ORDER'
-      ? 'Una fila por SKU variante. Stock inicial es la cantidad solicitada y Costo entrada es el precio unitario de compra que aparecerá en la orden. No se distribuye por bodegas: la única bodega destino es la seleccionada en la orden.'
+      ? 'Una fila por producto/variante de la orden. Código producto y SKU / variante relacionan la línea; Cantidad y Costo unitario de compra son los valores de la línea. Tipo IVA, Base IVA, IVA %, Monto IVA, Retención, Base ret., Ret. % y Monto ret. alimentan la previsualización. No se distribuye por bodegas: la única bodega destino es la seleccionada en la orden.'
       : mode === 'MANAGER'
         ? 'Una fila por SKU variante y ubicación destino. La ubicación debe existir, estar activa y pertenecer al alcance permitido. El producto padre no recibe stock propio cuando tiene variantes.'
         : 'Una fila por SKU variante + bodega. La bodega debe existir, estar activa y pertenecer al alcance permitido. El producto padre no recibe stock propio cuando tiene variantes.'],
     ...(mode === 'PURCHASE_ORDER'
       ? [['Bodega en la orden', 'No agregues una columna Bodega ni valores de bodega en este archivo. Si el archivo intenta distribuir por bodega, se rechazará; se respetará únicamente la bodega destino del formulario de la orden.']]
       : [['Bodegas inválidas', 'La fila se rechaza hasta seleccionar una bodega activa existente en la previsualización. La importación no crea bodegas automáticamente.']]),
-    ['Reimportación', 'MERGE conserva IDs, movimientos y existencias existentes; actualiza datos maestros y agrega variantes nuevas sin duplicar productos o SKUs.'],
+    ...(mode === 'PURCHASE_ORDER' ? [] : [['Reimportación', 'MERGE conserva IDs, movimientos y existencias existentes; actualiza datos maestros y agrega variantes nuevas sin duplicar productos o SKUs.']]),
     ['Valores numéricos', `Usa números sin símbolo de moneda. La moneda del archivo es ${currency}; la tasa aplicada es ${exchangeRate}.`],
-    ['Variable y moneda', 'Variable indica si el producto tendrá filas en Variantes. La moneda se aplica a toda la importación y debe coincidir con la moneda seleccionada en la pantalla de carga.'],
+    [mode === 'PURCHASE_ORDER' ? 'Moneda de la orden' : 'Variable y moneda', mode === 'PURCHASE_ORDER'
+      ? 'La moneda y la tasa de cambio se toman del formulario de la orden y del selector de moneda del archivo. No se repiten por producto, variante ni línea.'
+      : 'Variable indica si el producto tendrá filas en Variantes. La moneda se aplica a toda la importación y debe coincidir con la moneda seleccionada en la pantalla de carga.'],
     ['Categorías', mode === 'PURCHASE_ORDER'
       ? 'Escribe el nombre de la categoría. Si no existe, queda pendiente y se crea como categoría de productos al recepcionar; no se duplica si ya existe.'
       : 'Escribe el nombre de la categoría. Si no existe, se crea automáticamente como categoría de productos al confirmar; no se duplica si ya existe.'],
@@ -151,8 +312,8 @@ export const createCanonicalVariantImportWorkbook = (
   if (mode === 'PURCHASE_ORDER') {
     guideRows.push(
       ['Orden actual', `Proveedor: ${options.context?.supplierName || 'el proveedor seleccionado'} · Bodega destino: ${options.context?.purchaseWarehouseName || 'la bodega de la orden'} · Tipo: ${options.context?.purchaseType || 'INVENTARIO'}.`],
-      ['Cantidad y costo', 'En una Orden de compra, Stock inicial se interpreta como cantidad solicitada y Costo entrada como costo unitario de compra. Si Costo entrada está vacío, se usa Costo variante o Costo del padre como respaldo; para recibir inventario conviene informar el costo de cada variante.'],
-      ['Precios de venta', 'La hoja Precios es opcional y puede quedar vacía. Sus valores no son el costo de compra ni son necesarios para crear la orden.'],
+      ['Cantidad, costo e impuestos', 'En una Orden de compra, Cantidad y Costo unitario de compra son los valores de la línea. Al digitar IVA % en Inventario, Monto IVA se calcula automáticamente: usa Base IVA si la escribes; si queda vacía, usa Cantidad × Costo unitario de compra. La previsualización vuelve a calcularlo y valida el resultado. Retención, Base ret., Ret. % y Monto ret. siguen siendo compatibles. Usa 0 en Retención cuando no aplique. Los archivos antiguos con Stock inicial, Costo entrada o Precio unitario siguen siendo compatibles.'],
+      ['Tipos de precio para Caja', `Para el producto padre, completa únicamente las columnas Precio ${priceLists.map((list) => list.name).join(', Precio ')} de la hoja Productos. Un producto sin variantes usará esos precios directamente. En productos con variantes, una variante sin precio propio en Precios heredará el del padre; para sobrescribirlo, usa la hoja Precios con Alcance VARIANTE + Código producto + SKU variante. Se conservarán en ${currency} con su tasa ${exchangeRate}.`],
       ['Catálogo nuevo', 'Los productos padre, variantes y atributos faltantes quedan pendientes en la orden. No se crean en Inventario al importar ni al guardar la orden; se materializan únicamente cuando la recepción ingresa la cantidad.'],
     );
   }

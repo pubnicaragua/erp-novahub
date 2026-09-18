@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../ui/utils';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
 import { formatDateEs } from '../../utils/dateFormat';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const ACCOUNT_TYPES = [
   { value: 'CHECKING', label: 'Cuenta Corriente' },
@@ -124,6 +125,7 @@ export function BankAccountsView() {
   const handleSave = async () => {
     if (editing ? !canEditBankAccount : !canCreateBankAccount) return;
     if (!form.bankName || !form.accountNumber) { toast.error('Banco y número de cuenta son requeridos'); return; }
+    const actionToken = beginNotificationAction();
     setSaving(true);
     try {
       if (editing) {
@@ -133,10 +135,12 @@ export function BankAccountsView() {
         await api.post('/bank-accounts', form);
         toast.success('Cuenta bancaria creada');
       }
+      completeNotificationAction(actionToken);
       setFormOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al guardar'));
+      failNotificationAction(actionToken);
     } finally {
       setSaving(false);
     }
@@ -144,12 +148,15 @@ export function BankAccountsView() {
 
   const handleDelete = async (id: string) => {
     if (!canDeactivateBankAccount) return;
+    const actionToken = beginNotificationAction();
     try {
       await api.delete(`/bank-accounts/${id}`);
       toast.success('Cuenta bancaria eliminada');
+      completeNotificationAction(actionToken);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al eliminar'));
+      failNotificationAction(actionToken);
     }
   };
 

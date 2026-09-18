@@ -114,7 +114,7 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
       return () => { cancelled = true; };
     }
 
-    invoicesService.getById(invoiceId)
+    invoicesService.getLookupById(invoiceId)
       .then((invoice) => {
         if (!cancelled) {
           setInvoiceDetail(invoice);

@@ -18,6 +18,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
 import { HRCreateViewShell } from './HRCreateViewShell';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   VACATION: 'Vacaciones',
@@ -90,12 +91,15 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
   const handleRecalcVacation = async () => {
     if (!newRequest.employeeId) return;
+    const actionToken = beginNotificationAction();
     try {
       await hrService.recalcVacationBalance(newRequest.employeeId, currentYear);
       await balanceQuery.refetch();
       toast.success('Saldo de vacaciones recalculado');
+      completeNotificationAction(actionToken);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al recalcular');
+      failNotificationAction(actionToken);
     }
   };
 
@@ -122,6 +126,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       return;
     }
 
+    const actionToken = beginNotificationAction();
     try {
       const payload = { ...newRequest, days: computedDays };
       if (editingRequest) {
@@ -130,6 +135,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         await hrService.createLeaveRequest(payload);
       }
       toast.success(editingRequest ? 'Solicitud actualizada' : 'Solicitud creada');
+      completeNotificationAction(actionToken);
       setShowNewForm(false);
       setEditingRequest(null);
       setNewRequest({
@@ -145,6 +151,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear solicitud');
+      failNotificationAction(actionToken);
     }
   };
 
@@ -164,12 +171,15 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   };
 
   const handleApprove = async (id: string) => {
+    const actionToken = beginNotificationAction();
     try {
       await hrService.approveLeaveRequest(id, user?.id || 'system');
       toast.success('Solicitud aprobada');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar solicitud');
+      failNotificationAction(actionToken);
     }
   };
 
@@ -180,13 +190,16 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const confirmReject = async (rejectReason: string) => {
     if (!pendingRejectId) return;
 
+    const actionToken = beginNotificationAction();
     try {
       await hrService.rejectLeaveRequest(pendingRejectId, rejectReason);
       toast.success('Solicitud rechazada');
+      completeNotificationAction(actionToken);
       setPendingRejectId(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al rechazar solicitud');
+      failNotificationAction(actionToken);
     }
   };
 

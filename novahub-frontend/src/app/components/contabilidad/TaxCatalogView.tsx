@@ -10,6 +10,7 @@ import { Plus, Trash2, Save, ShieldAlert, Loader2 } from 'lucide-react'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 import { useAuth } from '../../contexts/AuthContext'
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator'
 
 interface TaxEntry {
   id?: string
@@ -74,37 +75,46 @@ export function TaxCatalogView() {
   const handleCreate = async () => {
     if (!canCreate) return
     if (!newEntry.name || !newEntry.code) { toast.error('Nombre y código requeridos'); return }
+    const actionToken = beginNotificationAction()
     try {
       await contabilidadService.createTaxCatalogEntry(newEntry)
       toast.success('Entrada creada')
+      completeNotificationAction(actionToken)
       setNewEntry({ name: '', code: '', type: 'WITHHOLDING', category: 'IR', rate: 0, baseCalculation: 'LINE_TOTAL', appliesTo: 'ALL', requiresAuth: false, isActive: true })
       await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error')
+      failNotificationAction(actionToken)
     }
   }
 
   const handleUpdate = async (id: string, data: Partial<TaxEntry>) => {
     const isDeactivation = data.isActive === false
     if (isDeactivation ? !canDeactivate : !canEdit) return
+    const actionToken = beginNotificationAction()
     try {
       await contabilidadService.updateTaxCatalogEntry(id, data)
       toast.success('Actualizado')
+      completeNotificationAction(actionToken)
       setEditingId(null)
       await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error')
+      failNotificationAction(actionToken)
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!canDeactivate) return
+    const actionToken = beginNotificationAction()
     try {
       await contabilidadService.deleteTaxCatalogEntry(id)
       toast.success('Eliminado')
+      completeNotificationAction(actionToken)
       await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error')
+      failNotificationAction(actionToken)
     }
   }
 

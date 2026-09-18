@@ -563,6 +563,8 @@ export interface DashboardData {
 export const cajaService = {
   getRegisters: (all: boolean = false, signal?: AbortSignal) =>
     api.get<CashRegister[]>('/caja/registers', { params: all ? { all: 'true' } : undefined, signal }),
+  getRegisterLookup: (signal?: AbortSignal) =>
+    api.get<Pick<CashRegister, 'id' | 'code' | 'name' | 'isActive' | 'warehouseId'>[]>('/caja/registers/lookup', { signal }),
 
   getRegisterAvailability: () =>
     api.get<CashRegisterAvailability>('/caja/registers/status'),

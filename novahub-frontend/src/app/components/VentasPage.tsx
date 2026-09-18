@@ -233,8 +233,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   });
   const customersCatalogQuery = useQuery({
     queryKey: ['sales', 'customers-catalog', tenantKey, 1, 200],
-    queryFn: ({ signal }) => customersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
-    enabled: canViewSalesSection('clientes') && needsCatalogs,
+    queryFn: ({ signal }) => customersService.getLookup({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
+    // El flujo consumidor autoriza el lookup mínimo; no se exige abrir la
+    // pantalla completa de Clientes para facturar, cobrar o devolver.
+    enabled: canViewSalesSection(activeSection) && needsCatalogs,
     placeholderData: keepPreviousData,
   });
   const estimatesQuery = useQuery({
@@ -291,7 +293,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   });
   const productsQuery = useQuery({
     queryKey: ['sales', 'products-catalog', tenantKey, 1, 200],
-    queryFn: () => inventoryService.getProducts({ page: 1, pageSize: 200 }),
+    queryFn: ({ signal }) => inventoryService.getProductLookup({ page: 1, pageSize: 200, purpose: 'SALES' }, signal),
     enabled: canViewSalesSection(activeSection) && needsProducts,
     placeholderData: keepPreviousData,
   });
@@ -302,8 +304,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     placeholderData: keepPreviousData,
   });
   const warehousesQuery = useQuery({
-    queryKey: ['sales', 'warehouses', tenantKey],
-    queryFn: () => inventoryService.getWarehouses(),
+    queryKey: ['sales', 'warehouses', tenantKey, selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getWarehouseCatalog({ branchId: selectedBranchId || user?.clientTenantId || undefined, scopeType: 'BRANCH', page: 1, pageSize: 200 }, signal),
     enabled: canViewSalesSection(activeSection) && needsProducts,
     placeholderData: keepPreviousData,
   });

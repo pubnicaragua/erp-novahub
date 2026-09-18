@@ -27,7 +27,7 @@ type Tab = 'settings' | 'warehouses' | 'subagencies' | 'modes' | 'prefixes' | 'f
 
 export function LogisticsConfig() {
   const { canPerform } = useAuth();
-  const canReadConfig = canPerform('TRACKING_CONFIG', 'read');
+  const canReadConfig = canPerform('TRACKING_CONFIG', 'view');
   const canEditConfig = canPerform('TRACKING_CONFIG', 'edit');
   const canDeleteConfig = canPerform('TRACKING_CONFIG', 'delete');
   const [tab, setTab] = useState<Tab>('settings');
@@ -65,7 +65,7 @@ export function LogisticsConfig() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    suppliersService.getAll({ page: 1, pageSize: 200 } as any)
+    suppliersService.getLookup({ page: 1, pageSize: 200 } as any)
       .then((sup: any) => {
         const payload = sup?.data ?? sup;
         const data = payload?.data ?? payload;

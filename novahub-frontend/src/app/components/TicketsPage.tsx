@@ -94,17 +94,17 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
   const agentsQuery = useTenantQuery<SupportAgent[]>(['support', 'agents'], signal => supportAgentsService.getAll({ status: 'ACTIVE' }, signal), {
     enabled: canViewAgents && (activeTab === 'agents' || activeTab === 'tickets'),
   });
-  const customersQuery = useTenantQuery<any[]>(['support', 'customers'], signal => customersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal).then(asList), {
+  const customersQuery = useTenantQuery<any[]>(['support', 'customers'], signal => customersService.getLookup({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal).then(asList), {
     enabled: canViewTickets && activeTab === 'tickets',
   });
   const categoriesQuery = useTenantQuery<any[]>(['support', 'categories'], signal => supportService.getCategories(signal).then(asList), {
     enabled: canViewTickets && activeTab === 'tickets',
   });
-  const invoicesQuery = useTenantQuery<any[]>(['support', 'invoices', 'paid'], signal => invoicesService.getAll({ page: 1, pageSize: 200, status: 'PAID' }, signal).then(asList), {
-    enabled: canViewTickets && activeTab === 'tickets' && canPerform('SALES_INVOICES', 'view'),
+  const invoicesQuery = useTenantQuery<any[]>(['support', 'invoices', 'paid'], signal => invoicesService.getLookup({ page: 1, pageSize: 200, status: 'PAID' }, signal).then(asList), {
+    enabled: canViewTickets && activeTab === 'tickets',
   });
-  const productsQuery = useTenantQuery<any[]>(['support', 'products'], signal => inventoryService.getProducts({ page: 1, pageSize: 200, includeInactive: false }, signal).then(asList), {
-    enabled: canViewTickets && activeTab === 'tickets' && canPerform('INVENTORY_PRODUCTS', 'view'),
+  const productsQuery = useTenantQuery<any[]>(['support', 'products'], signal => inventoryService.getProductLookup({ page: 1, pageSize: 200, includeInactive: false }, signal).then(asList), {
+    enabled: canViewTickets && activeTab === 'tickets',
   });
 
   const data = {

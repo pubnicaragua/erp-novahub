@@ -21,6 +21,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const PERIODS = [
   { label: 'Este Mes', value: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` },
@@ -77,6 +78,7 @@ export function BudgetItemsView() {
       toast.error('Código, nombre y cuenta son requeridos');
       return;
     }
+    const actionToken = beginNotificationAction();
     setSaving(true);
     try {
       if (editing) {
@@ -86,10 +88,12 @@ export function BudgetItemsView() {
         await contabilidadService.createBudgetItem(form);
         toast.success('Partida creada');
       }
+      completeNotificationAction(actionToken);
       setDialogOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al guardar');
+      failNotificationAction(actionToken);
     } finally { setSaving(false); }
   }
 
@@ -100,12 +104,14 @@ export function BudgetItemsView() {
 
   async function confirmDelete() {
     if (!pendingDeleteId || !canDeactivate) return;
+    const actionToken = beginNotificationAction();
     try {
       await contabilidadService.deleteBudgetItem(pendingDeleteId);
       toast.success('Partida eliminada');
+      completeNotificationAction(actionToken);
       setPendingDeleteId(null);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
-    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); failNotificationAction(actionToken); }
   }
 
   function format(n: number) {

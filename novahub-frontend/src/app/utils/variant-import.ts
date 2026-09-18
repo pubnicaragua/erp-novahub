@@ -47,6 +47,19 @@ export type VariantImportStock = {
   variantSku: string;
   warehouse: string;
   quantity: number;
+  currentStock?: number;
+  importNotice?: string;
+  description?: string;
+  commercialNote?: string;
+  category?: string;
+  taxType?: string;
+  taxBase?: number;
+  taxRate?: number;
+  taxAmount?: number;
+  withholdingType?: string;
+  withholdingBase?: number;
+  withholdingRate?: number;
+  withholdingTotal?: number;
   minStock?: number;
   maxStock?: number;
   unitCost?: number;
@@ -103,7 +116,7 @@ const aliases: Record<string, string[]> = {
   isVariable: ['variable', 'es variable', 'producto variable', 'variantes'],
   priceCurrency: ['moneda', 'moneda precio', 'currency'],
   costPrice: ['costo base', 'costo producto', 'costo variante', 'costo', 'precio costo', 'cost price', 'variant cost'],
-  taxRate: ['tasa iva', 'iva', 'tax rate'],
+  taxRate: ['tasa iva', 'iva', 'iva %', 'tasa de iva', 'tax rate'],
   trackInventory: ['control inventario', 'control de inventario', 'track inventory'],
   brand: ['marca', 'brand'],
   trackBatch: ['lotes', 'control lotes', 'control de lotes', 'track batch'],
@@ -115,7 +128,21 @@ const aliases: Record<string, string[]> = {
   priceListCode: ['lista', 'lista precios', 'codigo lista', 'price list', 'price list code'],
   price: ['precio', 'price'],
   warehouse: ['bodega', 'almacen', 'almacén', 'warehouse'],
-  quantity: ['stock inicial', 'cantidad', 'qty', 'quantity'],
+  quantity: ['cantidad', 'qty', 'quantity', 'stock inicial'],
+  stockInitial: ['stock inicial'],
+  currentStock: ['stock actual', 'existencia', 'current stock'],
+  importNotice: ['aviso vinculo', 'aviso / vinculo', 'vinculo', 'vínculo', 'notice'],
+  lineDescription: ['descripcion', 'descripción', 'description'],
+  lineNote: ['notas', 'nota', 'nota comercial', 'commercial note', 'commercialnote'],
+  lineCategory: ['categoria', 'categoría', 'category'],
+  unitPrice: ['costo unitario de compra', 'costo unitario de compra c', 'costo de compra', 'costo unitario', 'precio unitario', 'precio unitario c', 'unit price'],
+  taxType: ['tipo iva', 'tipo de iva', 'tax type'],
+  taxBase: ['base iva', 'base iva c', 'base de iva', 'tax base'],
+  taxAmount: ['monto iva', 'monto iva c', 'importe iva', 'iva monto', 'tax amount'],
+  withholdingType: ['retencion', 'retención', 'ret', 'tipo retencion', 'tipo de retencion', 'withholding'],
+  withholdingBase: ['base retencion', 'base retencion c', 'base de retencion', 'base ret', 'base ret c', 'withholding base'],
+  withholdingRate: ['ret %', 'ret', 'tasa retencion', 'tasa de retencion', 'withholding rate'],
+  withholdingTotal: ['monto ret', 'monto ret c', 'monto retencion', 'importe retencion', 'ret monto', 'withholding amount'],
   minStock: ['stock minimo', 'stock mínimo', 'min stock'],
   maxStock: ['stock maximo', 'stock máximo', 'max stock'],
   unitCost: ['costo entrada', 'costo ingreso', 'unit cost', 'entry cost'],
@@ -266,20 +293,45 @@ export function parseVariantImportWorkbook(
     }
   }
 
-  const prices: VariantImportPrice[] = objectRows(rawPriceRows).map((row) => {
+  const rawPriceObjects = objectRows(rawPriceRows);
+  const widePriceHeaders = new Set(priceLists.flatMap((list) => [
+    normalize(`Precio ${list.name}`),
+    normalize(list.name),
+    normalize(list.code),
+  ]));
+  const hasWidePriceColumns = rawPriceObjects.some((row) => Object.keys(row).some((header) => widePriceHeaders.has(header)));
+  const prices: VariantImportPrice[] = [];
+  const appendPrice = (row: Record<string, any>, priceListValue: unknown, priceValue: unknown) => {
     const variantSku = textValue(row, 'variantSku') || undefined;
     const rawScope = textValue(row, 'scope').toUpperCase();
     const scope: VariantImportPrice['scope'] = rawScope === 'VARIANTE' || rawScope === 'VARIANT' || Boolean(variantSku)
       ? 'VARIANT'
       : 'PRODUCT';
-    return {
+    prices.push({
       scope,
       productCode: textValue(row, 'productCode'),
       variantSku,
-      priceListCode: resolvePriceListCode(textValue(row, 'priceListCode'), priceLists),
-      price: numberValue(row, 'price') as number,
-    };
-  }).filter((price) => price.productCode || price.variantSku || price.priceListCode);
+      priceListCode: resolvePriceListCode(priceListValue, priceLists),
+      price: Number(priceValue),
+    });
+  };
+
+  for (const row of rawPriceObjects) {
+    if (hasWidePriceColumns) {
+      for (const list of priceLists) {
+        const headers = [normalize(`Precio ${list.name}`), normalize(list.name), normalize(list.code)];
+        const entry = Object.entries(row).find(([header]) => headers.includes(header));
+        if (!entry || String(entry[1] ?? '').trim() === '') continue;
+        appendPrice(row, list.code, entry[1]);
+      }
+      continue;
+    }
+
+    const productCode = textValue(row, 'productCode');
+    const variantSku = textValue(row, 'variantSku');
+    const priceListCode = textValue(row, 'priceListCode');
+    if (productCode || variantSku || priceListCode) appendPrice(row, priceListCode, numberValue(row, 'price'));
+  }
 
   // La primera hoja también contiene los precios padre. La hoja Precios
   // conserva prioridad (permite excepciones por variante), pero los valores
@@ -317,10 +369,23 @@ export function parseVariantImportWorkbook(
     productCode: textValue(row, 'productCode') || undefined,
     variantSku: textValue(row, 'variantSku') || textValue(row, 'productCode'),
     warehouse: textValue(row, 'warehouse'),
-    quantity: numberValue(row, 'quantity') as number,
+    quantity: (numberValue(row, 'quantity') ?? numberValue(row, 'stockInitial')) as number,
+    currentStock: numberValue(row, 'currentStock'),
+    importNotice: textValue(row, 'importNotice') || undefined,
+    description: textValue(row, 'lineDescription') || undefined,
+    commercialNote: textValue(row, 'lineNote') || undefined,
+    category: textValue(row, 'lineCategory') || undefined,
+    taxType: textValue(row, 'taxType') || undefined,
+    taxBase: numberValue(row, 'taxBase'),
+    taxRate: numberValue(row, 'taxRate'),
+    taxAmount: numberValue(row, 'taxAmount'),
+    withholdingType: textValue(row, 'withholdingType') || undefined,
+    withholdingBase: numberValue(row, 'withholdingBase'),
+    withholdingRate: numberValue(row, 'withholdingRate'),
+    withholdingTotal: numberValue(row, 'withholdingTotal'),
     minStock: numberValue(row, 'minStock'),
     maxStock: numberValue(row, 'maxStock'),
-    unitCost: numberValue(row, 'unitCost'),
+    unitCost: numberValue(row, 'unitPrice') ?? numberValue(row, 'unitCost'),
     currency: textValue(row, 'costCurrency').toUpperCase() || undefined,
     exchangeRate: numberValue(row, 'costExchangeRate'),
   })).filter((row) => row.variantSku || row.productCode || row.warehouse);

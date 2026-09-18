@@ -30,7 +30,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from './ui/table';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 import { getApiErrorMessage } from '../services/api';
+import { beginNotificationAction, completeNotificationAction } from '../services/notification-action-coordinator';
+import type { NotificationDomainRefreshDetail } from '../services/notification-domain-refresh';
 import {
   trackingService,
   trackingStatusTone,
@@ -81,6 +84,23 @@ const TRACKING_SIDEBAR_TAB: Record<TrackingTab, string> = {
   config: 'tracking-configuracion',
 };
 
+const TRACKING_NOTIFICATION_TAB: Record<string, TrackingTab> = {
+  tracking: 'transit',
+  transit: 'transit',
+  reception: 'reception',
+  'tracking-recepcion': 'reception',
+  batches: 'batches',
+  'tracking-lotes': 'batches',
+  packages: 'packages',
+  'tracking-paquetes': 'packages',
+  reconciliation: 'reconciliation',
+  'tracking-conciliacion': 'reconciliation',
+  billing: 'billing',
+  'tracking-facturacion': 'billing',
+  config: 'config',
+  'tracking-configuracion': 'config',
+};
+
 interface TrackingPageProps {
   activeSubModule?: string;
   onSubModuleChange?: (subModule?: string) => void;
@@ -119,13 +139,13 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     [canPerform],
   );
   const [tab, setTab] = useState<TrackingTab>('transit');
-  const canReadTransit = canPerform('TRACKING_TRANSIT', 'read');
+  const canReadTransit = canPerform('TRACKING_TRANSIT', 'view');
   const canCreateTransit = canPerform('TRACKING_TRANSIT', 'create');
   const canEditTransit = canPerform('TRACKING_TRANSIT', 'edit');
   const canDeleteTransit = canPerform('TRACKING_TRANSIT', 'delete');
 
   useEffect(() => {
-    const requested = Object.entries(TRACKING_SIDEBAR_TAB).find(([, sidebarId]) => sidebarId === activeSubModule)?.[0] as TrackingTab | undefined;
+    const requested = TRACKING_NOTIFICATION_TAB[String(activeSubModule || '').trim().toLowerCase()];
     if (requested && visibleTabs.some(({ id }) => id === requested)) setTab(requested);
   }, [activeSubModule, visibleTabs]);
 
@@ -143,7 +163,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     onSubModuleChange?.(TRACKING_SIDEBAR_TAB[next]);
   };
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!canReadTransit) {
       setShipments([]);
       setLoading(false);
@@ -154,7 +174,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       const data = await trackingService.list({ search: search || undefined, status: statusFilter || undefined });
       setShipments(data);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'No se pudieron cargar los tickets'));
+      if (!options?.silent) toast.error(getApiErrorMessage(error, 'No se pudieron cargar los tickets'));
     } finally {
       setLoading(false);
     }
@@ -175,6 +195,25 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     }
   }, []);
 
+  const refreshTransitFromNotification = useCallback(async (detail: NotificationDomainRefreshDetail) => {
+    try {
+      await load({ silent: true });
+      if (selected && (detail.targetId === selected.id || detail.sourceId === selected.id)) {
+        const refreshed = await trackingService.findByCode(selected.trackingCode);
+        setSelected(refreshed);
+      }
+    } catch {
+      // La vista conserva su estado y el siguiente ciclo de recuperación podrá reintentar.
+    }
+  }, [load, selected]);
+
+  useNotificationDomainRefresh({
+    module: 'tracking',
+    subModules: ['transit'],
+    onRefresh: refreshTransitFromNotification,
+    enabled: canReadTransit,
+  });
+
   /** Consulta el código de tracking en los providers y muestra el resultado. */
   const handleLookup = useCallback(async (rawCode?: string) => {
     if (!canReadTransit) return;
@@ -183,6 +222,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       setLookupError({ reason: 'EMPTY', message: TRACK_LOOKUP_ERROR_LABELS.EMPTY });
       return;
     }
+    const actionToken = beginNotificationAction();
     setLookupBusy(true);
     setLookupError(null);
     try {
@@ -206,6 +246,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       setLookupError({ reason: 'HTTP_ERROR', message });
       toast.error(message);
     } finally {
+      completeNotificationAction(actionToken);
       setLookupBusy(false);
     }
   }, [canReadTransit, lookupCode, load]);
@@ -223,6 +264,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       toast.error('El código de tracking es obligatorio');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setSaving(true);
       const shipment = await trackingService.create({
@@ -236,6 +278,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo crear el ticket'));
     } finally {
+      completeNotificationAction(actionToken);
       setSaving(false);
     }
   };
@@ -243,6 +286,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   const handleSync = async () => {
     if (!canEditTransit) return;
     if (!selected) return;
+    const actionToken = beginNotificationAction();
     try {
       setSyncing(true);
       const result = await trackingService.sync(selected.trackingCode);
@@ -256,6 +300,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Error al sincronizar'));
     } finally {
+      completeNotificationAction(actionToken);
       setSyncing(false);
     }
   };
@@ -263,6 +308,7 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
   const handleAddEvent = async () => {
     if (!canEditTransit) return;
     if (!selected) return;
+    const actionToken = beginNotificationAction();
     try {
       const event = await trackingService.addEvent(selected.id, {
         status: eventForm.status,
@@ -277,12 +323,15 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       await load();
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo registrar el evento'));
+    } finally {
+      completeNotificationAction(actionToken);
     }
   };
 
   const handleDelete = async () => {
     if (!canDeleteTransit) return;
     if (!selected) return;
+    const actionToken = beginNotificationAction();
     try {
       await trackingService.remove(selected.id);
       toast.success('Ticket eliminado');
@@ -291,6 +340,8 @@ export function TrackingPage({ activeSubModule, onSubModuleChange }: TrackingPag
       await load();
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo eliminar el ticket'));
+    } finally {
+      completeNotificationAction(actionToken);
     }
   };
 

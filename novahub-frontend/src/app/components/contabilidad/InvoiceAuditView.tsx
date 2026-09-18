@@ -18,6 +18,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { invoicesService } from '../../services/ventas.service';
 import { DateField } from '../ui/DateField';
 import { useAuth } from '../../contexts/AuthContext';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 type AuditKind = 'SALE' | 'PURCHASE';
 type AuditStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'ISSUES';
@@ -144,6 +145,7 @@ export function InvoiceAuditView() {
 
   const runAudit = async () => {
     if (!auditModal) return;
+    const actionToken = beginNotificationAction();
     try {
       setAuditModal((m) => (m ? { ...m, saving: true } : m));
       const results = await contabilidadService.auditInvoices({ kind, invoiceIds: auditModal.invoiceIds, observations: auditModal.observations.trim() || undefined });
@@ -152,22 +154,27 @@ export function InvoiceAuditView() {
       const issues = list.filter((r: any) => r.result === 'ISSUES').length;
       if (issues > 0) toast.warning(`${issues} factura(s) con anomalías. Puedes enviarlas a corregir o anularlas.`);
       else toast.success(`${list.length} factura(s) auditadas correctamente`);
+      completeNotificationAction(actionToken);
       setSelected(new Set());
       refreshAll();
     } catch (e: any) {
       setAuditModal((m) => (m ? { ...m, saving: false } : m));
       toast.error(e?.message || 'No se pudo registrar la auditoría');
+      failNotificationAction(actionToken);
     }
   };
 
   const handleSendToCorrect = async (item: any) => {
+    const actionToken = beginNotificationAction();
     try {
       setBusyId(item.id);
       await contabilidadService.sendToCorrect({ kind, invoiceIds: [item.id], observations: 'Enviada a corregir desde auditoría' });
       toast.success(`Factura ${item.number} enviada a corrección`);
+      completeNotificationAction(actionToken);
       refreshAll();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo enviar a corregir');
+      failNotificationAction(actionToken);
     } finally {
       setBusyId(null);
     }
@@ -179,6 +186,7 @@ export function InvoiceAuditView() {
       toast.error('Escribe el motivo del rechazo');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setReviewTarget((t) => (t ? { ...t, saving: true } : t));
       const result = await invoicesService.reviewCancellationRequest(reviewTarget.id, reviewTarget.decision, reviewTarget.reason.trim() || undefined);
@@ -188,10 +196,12 @@ export function InvoiceAuditView() {
       } else {
         toast.success('Solicitud de anulación rechazada');
       }
+      completeNotificationAction(actionToken);
       setReviewTarget(null);
       refreshAll();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo procesar la solicitud');
+      failNotificationAction(actionToken);
       setReviewTarget((t) => (t ? { ...t, saving: false } : t));
     }
   };

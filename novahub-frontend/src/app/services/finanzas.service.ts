@@ -4,8 +4,43 @@ import type {
   JournalEntry, Transaction, PaginatedResponse, ApiFilters,
 } from '../types';
 
+export interface FinanceSourceDocumentLookup {
+  id: string;
+  number: string;
+  date: string;
+  dueDate?: string | null;
+  status: string;
+  total: number;
+  balance: number;
+  currency: string;
+  exchangeRate?: number;
+  customerId?: string | null;
+  customerCode?: string | null;
+  customerName?: string | null;
+  supplierId?: string | null;
+  supplierCode?: string | null;
+  supplierName?: string | null;
+  origin: 'SALES' | 'PURCHASES';
+}
+
+export interface FinanceAccountLookup {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  subtype?: string | null;
+  isActive: boolean;
+  acceptsPostings: boolean;
+}
+
+export const sourceDocumentsService = {
+  getLookup: (filters?: ApiFilters & { origin: 'SALES' | 'PURCHASES'; branchId?: string; warehouseId?: string }, signal?: AbortSignal) =>
+    api.get<PaginatedResponse<FinanceSourceDocumentLookup>>('/financials/source-documents/lookup', { params: filters as any, signal }),
+};
+
 export const accountsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Account>>('/financials/accounts', { params: filters as any, signal }),
+  getLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<FinanceAccountLookup>>('/financials/accounts/lookup', { params: filters as any, signal }),
   getById: (id: string) => api.get<Account>(`/financials/accounts/${id}`),
   create: (data: Partial<Account>) => api.post<Account>('/financials/accounts', data),
   update: (id: string, data: Partial<Account>) => api.patch<Account>(`/financials/accounts/${id}`, data),

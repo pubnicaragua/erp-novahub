@@ -15,6 +15,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { hrService } from '../../services/hr.service';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 // PDF.js worker from CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -257,6 +258,7 @@ export function ImportDataModal({
   const handleProcessPayroll = async () => {
     if (!onBulkProcessPayroll) return;
     setProcessingPayroll(true);
+    const actionToken = beginNotificationAction();
     try {
       let totalSuccess = 0;
       let totalFailed = 0;
@@ -291,8 +293,10 @@ export function ImportDataModal({
       setPayrollResult({ success: totalSuccess, failed: totalFailed });
       onRefresh();
       toast.success(`Nóminas generadas: ${totalSuccess} registros`);
+      completeNotificationAction(actionToken);
     } catch (error: any) {
       toast.error('Error al procesar nóminas');
+      failNotificationAction(actionToken);
     } finally {
       setProcessingPayroll(false);
     }
@@ -703,6 +707,7 @@ export function ImportDataModal({
   const parseFile = useCallback(async (file: File) => {
     setFileName(file.name);
     setParsing(true);
+    const actionToken = type === 'employees' ? beginNotificationAction() : null;
 
     try {
       const buffer = await file.arrayBuffer();
@@ -716,14 +721,16 @@ export function ImportDataModal({
       setStep('preview');
 
       if (result.createdNew) onRefresh();
+      if (actionToken) completeNotificationAction(actionToken);
     } catch (err) {
       console.error('File parse error:', err);
       setErrors(['Error al procesar el archivo.']);
       setStep('preview');
+      if (actionToken) failNotificationAction(actionToken);
     } finally {
       setParsing(false);
     }
-  }, [parseExcel, parsePdf, onRefresh]);
+  }, [parseExcel, parsePdf, onRefresh, type]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -750,15 +757,18 @@ export function ImportDataModal({
   const handleImport = async () => {
     if (errors.length > 0) { toast.error('Corrige los errores antes de importar'); return; }
     setImporting(true);
+    const actionToken = beginNotificationAction();
     try {
       const result = await onImport(parsedData);
       setImportResult(result);
       setStep('result');
       toast.success(`Importación completada: ${result?.success || parsedData.length} registros`);
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (error: any) {
       const msg = error?.response?.data?.message || 'Error durante la importación';
       toast.error(typeof msg === 'string' ? msg : msg[0] || 'Error');
+      failNotificationAction(actionToken);
     } finally {
       setImporting(false);
     }

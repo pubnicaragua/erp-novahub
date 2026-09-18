@@ -32,6 +32,7 @@ import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyV
 import { cn } from './ui/utils';
 import { financeCategoryLabel } from './finanzas/financeChartTheme';
 import { fetchAllReportPages } from '../hooks/useTenantQuery';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../services/notification-action-coordinator';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -430,8 +431,16 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       toast.error('No se puede editar un registro generado automáticamente');
       return;
     }
-    await expensesService.update(id, updates);
-    await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
+    const actionToken = beginNotificationAction();
+    try {
+      await expensesService.update(id, updates);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
+      completeNotificationAction(actionToken);
+    } catch (error) {
+      toast.error('No se pudo actualizar el gasto');
+      failNotificationAction(actionToken);
+      throw error;
+    }
   };
 
   const handleUpdateIncome = async (id: string, updates: any) => {
@@ -440,22 +449,39 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       toast.error('No se puede editar un ingreso generado automáticamente');
       return;
     }
-    await incomeService.update(id, updates);
-    await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
+    const actionToken = beginNotificationAction();
+    try {
+      await incomeService.update(id, updates);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
+      completeNotificationAction(actionToken);
+    } catch (error) {
+      toast.error('No se pudo actualizar el ingreso');
+      failNotificationAction(actionToken);
+      throw error;
+    }
   };
 
   const handleUpdateRecurring = async (id: string, updates: any) => {
-    const isIncome = recurringIncomes.some(r => r.id === id);
-    if (isIncome) {
-      await recurringIncomesService.update(id, updates);
-      await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
-    } else {
-      await recurringExpensesService.update(id, updates);
-      await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
+    const actionToken = beginNotificationAction();
+    try {
+      const isIncome = recurringIncomes.some(r => r.id === id);
+      if (isIncome) {
+        await recurringIncomesService.update(id, updates);
+        await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
+      } else {
+        await recurringExpensesService.update(id, updates);
+        await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
+      }
+      completeNotificationAction(actionToken);
+    } catch (error) {
+      toast.error('No se pudo actualizar el movimiento recurrente');
+      failNotificationAction(actionToken);
+      throw error;
     }
   };
 
   const handleAddRecurring = async (type: 'EXPENSE' | 'INCOME') => {
+    const actionToken = beginNotificationAction();
     try {
       const defaultAccount = await ensureDefaultAccount(type === 'INCOME' ? 'INCOME' : 'EXPENSE');
       const payload: any = {
@@ -478,29 +504,82 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
       }
       toast.success(`Nuevo movimiento ${type === 'INCOME' ? 'de ingreso' : 'de gasto'} recurrente añadido`);
+      completeNotificationAction(actionToken);
     } catch (error) {
       toast.error('Error al crear movimiento recurrente');
+      failNotificationAction(actionToken);
     }
   };
 
   const handleAddIncome = async () => {
+    const actionToken = beginNotificationAction();
     try {
       const defaultAccount = await ensureDefaultAccount('INCOME');
       const newItem = { source: 'Manual', description: '', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, category: 'OTROS', currency: 'NIO' as any, exchangeRate: globalRate, notes: '' };
       await incomeService.create(newItem);
       await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
       toast.success('Nuevo ingreso añadido');
-    } catch (error) { toast.error('Error al crear ingreso'); }
+      completeNotificationAction(actionToken);
+    } catch (error) { toast.error('Error al crear ingreso'); failNotificationAction(actionToken); }
   };
 
   const handleAddExpense = async () => {
+    const actionToken = beginNotificationAction();
     try {
       const defaultAccount = await ensureDefaultAccount('EXPENSE');
       const newItem = { source: 'Manual', description: 'Nuevo Gasto', category: 'OTROS', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, currency: 'NIO' as any, exchangeRate: globalRate, status: 'PENDING' as any, notes: '' };
       await expensesService.create(newItem);
       await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
       toast.success('Nuevo gasto añadido');
-    } catch (error) { toast.error('Error al crear gasto'); }
+      completeNotificationAction(actionToken);
+    } catch (error) { toast.error('Error al crear gasto'); failNotificationAction(actionToken); }
+  };
+
+  const handleDeleteIncome = async (id: string) => {
+    const actionToken = beginNotificationAction();
+    try {
+      await incomeService.delete(id);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
+      toast.success('Ingreso eliminado');
+      completeNotificationAction(actionToken);
+    } catch (error) {
+      toast.error('No se pudo eliminar el ingreso');
+      failNotificationAction(actionToken);
+      throw error;
+    }
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    const actionToken = beginNotificationAction();
+    try {
+      await expensesService.delete(id);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
+      toast.success('Gasto eliminado');
+      completeNotificationAction(actionToken);
+    } catch (error) {
+      toast.error('No se pudo eliminar el gasto');
+      failNotificationAction(actionToken);
+      throw error;
+    }
+  };
+
+  const handleDeleteRecurring = async (id: string, income: boolean) => {
+    const actionToken = beginNotificationAction();
+    try {
+      if (income) {
+        await recurringIncomesService.delete(id);
+        await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
+      } else {
+        await recurringExpensesService.delete(id);
+        await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
+      }
+      toast.success('Eliminado');
+      completeNotificationAction(actionToken);
+    } catch (error) {
+      toast.error('No se pudo eliminar el movimiento recurrente');
+      failNotificationAction(actionToken);
+      throw error;
+    }
   };
 
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
@@ -623,7 +702,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     })}
                     onUpdate={handleUpdateIncome}
                     onAdd={handleAddIncome}
-                    onDelete={async (id) => { await incomeService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] }); toast.success('Ingreso eliminado'); }}
+                    onDelete={handleDeleteIncome}
                     loading={loading}
                     canCreate={false}
                     canEdit={false}
@@ -659,7 +738,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     onDelete={async (id) => {
                       const item = fExpenses.find((e: any) => e.id === id);
                       if (item && !['Manual', 'manual', '', null, undefined].includes(item.source)) { toast.error('No se puede eliminar un registro generado automáticamente'); return; }
-                      await expensesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] }); toast.success('Gasto eliminado');
+                      await handleDeleteExpense(id);
                     }}
                     loading={loading}
                     canCreate={false}
@@ -692,7 +771,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
                           onAdd={() => handleAddRecurring('INCOME')}
-                          onDelete={async (id) => { await recurringIncomesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] }); toast.success('Eliminado'); }}
+                          onDelete={(id) => handleDeleteRecurring(id, true)}
                           loading={loading}
                           canCreate={false}
                           canEdit={false}
@@ -710,7 +789,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
                           onAdd={() => handleAddRecurring('EXPENSE')}
-                          onDelete={async (id) => { await recurringExpensesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] }); toast.success('Eliminado'); }}
+                          onDelete={(id) => handleDeleteRecurring(id, false)}
                           loading={loading}
                           canCreate={false}
                           canEdit={false}
@@ -733,7 +812,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     columns={RECURRING_COLUMNS}
                     onUpdate={handleUpdateRecurring}
                     onAdd={() => handleAddRecurring('INCOME')}
-                    onDelete={async (id) => { await recurringIncomesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] }); toast.success('Eliminado'); }}
+                          onDelete={(id) => handleDeleteRecurring(id, true)}
                     loading={loading}
                     canCreate={canPerform('FINANCIAL_INCOMES_REC', 'create')}
                     canEdit={canPerform('FINANCIAL_INCOMES_REC', 'edit')}

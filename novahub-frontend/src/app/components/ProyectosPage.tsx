@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { ProyectosListView } from './proyectos/ProyectosListView';
 import { ProyectoDetalleView } from './proyectos/ProyectoDetalleView';
+import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 
 interface ProyectosPageProps {
   activeSubModule?: string;
@@ -17,6 +18,15 @@ export const ProyectosPage = (_props: ProyectosPageProps) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
+
+  useNotificationDomainRefresh({
+    module: 'proyectos',
+    subModules: ['proyectos', 'tareas', 'hitos', 'presupuesto', 'costos', 'miembros', 'documentos', 'actividades'],
+    onRefresh: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects'], refetchType: 'active' });
+      void queryClient.invalidateQueries({ queryKey: ['tenant-module', 'projects'], refetchType: 'active' });
+    },
+  });
 
   return (
     <div className="flex flex-1 bg-background w-full">

@@ -15,6 +15,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { cn } from '../ui/utils';
 import { HRViewTutorial } from './HRViewTutorial';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const TEMPLATE_COLUMNS = [
   { key: 'codigo_empleado', label: 'CÓDIGO EMPLEADO', example: 'EMP-001', rule: 'Obligatorio. Código o nombre completo del empleado tal como aparece en el módulo Empleados.' },
@@ -122,12 +123,15 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
       toast.error('Selecciona un empleado');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       await hrService.clockIn({ employeeId: selectedEmployee });
       toast.success('Entrada registrada');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Error al registrar entrada');
+      failNotificationAction(actionToken);
     }
   };
 
@@ -136,12 +140,15 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
       toast.error('Selecciona un empleado');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       await hrService.clockOut({ employeeId: selectedEmployee });
       toast.success('Salida registrada');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Error al registrar salida');
+      failNotificationAction(actionToken);
     }
   };
 
@@ -178,6 +185,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
     setImporting(true);
     setImportProgress(8);
     setImportResult(null);
+    const actionToken = beginNotificationAction();
     try {
       const rows = parsedImportRows.length > 0
         ? parsedImportRows
@@ -186,7 +194,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
         })).rows);
       setImportProgress(22);
       setImportProgress(36);
-      if (rows.length === 0) { toast.error('El archivo no contiene filas'); return; }
+      if (rows.length === 0) { toast.error('El archivo no contiene filas'); failNotificationAction(actionToken); return; }
       const errors: string[] = [];
       const employeeByReference = new Map<string, any>();
       employees.forEach((employee: any) => {
@@ -225,8 +233,10 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
       setImportResult({ total: rows.length, created, skipped, errors: allErrors.slice(0, 12) });
       if (created > 0) onRefresh();
       toast.success(`Importación finalizada: ${created} registros, ${skipped} omitidos`);
+      completeNotificationAction(actionToken);
     } catch (error: any) {
       toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
+      failNotificationAction(actionToken);
     } finally {
       setImporting(false);
       setImportProgress(0);

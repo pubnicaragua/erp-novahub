@@ -23,6 +23,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const statusStyles: Record<string, string> = {
   DRAFT: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -142,6 +143,7 @@ export function ReportesFiscalesView() {
       toast.error('Indica la fecha y hora del envío');
       return;
     }
+    const actionToken = beginNotificationAction();
     try {
       setUploading(type);
       const fileUploaded = await storageService.uploadFile('fiscal-reports', form.file, {
@@ -165,10 +167,12 @@ export function ReportesFiscalesView() {
         notes: form.notes.trim() || null,
       });
       toast.success(`${reportTypeInfo[type].label} registrada como respaldo`);
+      completeNotificationAction(actionToken);
       refreshReports();
       updateForm(type, { file: null, acta: null, notes: '' });
     } catch (e: any) {
       toast.error(e?.message || `Error al registrar el respaldo de ${type}`);
+      failNotificationAction(actionToken);
     } finally {
       setUploading(null);
     }
@@ -176,15 +180,18 @@ export function ReportesFiscalesView() {
 
   const handleDeleteReport = async (report: any) => {
     if (!window.confirm('¿Eliminar este respaldo? Los archivos adjuntos también se eliminarán del almacenamiento.')) return;
+    const actionToken = beginNotificationAction();
     try {
       const result = await contabilidadService.deleteFiscalReport(report.id);
       (result?.fileUris || []).forEach((uri: string) => {
         storageService.deleteFile(uri).catch(() => undefined);
       });
       toast.success('Respaldo eliminado');
+      completeNotificationAction(actionToken);
       refreshReports();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo eliminar el respaldo');
+      failNotificationAction(actionToken);
     }
   };
 

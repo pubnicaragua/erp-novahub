@@ -31,6 +31,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { HRViewTutorial } from './HRViewTutorial';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform, user } = useAuth();
@@ -161,6 +162,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
 
   const handleCreateDepartment = async () => {
     if (!newDeptName.trim()) { toast.error('Ingresa un nombre'); return; }
+    const actionToken = beginNotificationAction();
     try {
       const createdDepartment: any = await hrService.createDepartment({ name: newDeptName.trim() });
       const importRowIndex = pendingImportDepartmentRow;
@@ -170,16 +172,18 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         setNewEmployeeForm((current: any) => ({ ...current, departmentId: createdDepartment.id, positionId: '' }));
       }
       toast.success('Departamento creado');
+      completeNotificationAction(actionToken);
       setNewDeptName('');
       setShowNewDeptModal(false);
       setPendingImportDepartmentRow(null);
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear departamento'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear departamento'); failNotificationAction(actionToken); }
   };
 
   const handleCreatePosition = async () => {
     if (!newPosTitle.trim()) { toast.error('Ingresa un título'); return; }
     if (!newPosDeptId) { toast.error('Selecciona un departamento'); return; }
+    const actionToken = beginNotificationAction();
     try {
       const code = newPosTitle.trim().replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
       const createdPosition: any = await hrService.createPosition({ title: newPosTitle.trim(), departmentId: newPosDeptId, code });
@@ -190,12 +194,13 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         setNewEmployeeForm((current: any) => ({ ...current, positionId: createdPosition.id }));
       }
       toast.success('Puesto creado');
+      completeNotificationAction(actionToken);
       setNewPosTitle('');
       setNewPosDeptId('');
       setShowNewPosModal(false);
       setPendingImportPositionRow(null);
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear puesto'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear puesto'); failNotificationAction(actionToken); }
   };
 
   const toDateInputValue = (value: any) => value ? String(value).slice(0, 10) : '';
@@ -264,14 +269,17 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
 
   const saveEmployeeDepartments = async () => {
     if (!departmentEditorEmployee || !selectedDepartmentIds.length) return;
+    const actionToken = beginNotificationAction();
     try {
       setSavingDepartments(true);
       await hrService.updateEmployeeDepartments(departmentEditorEmployee.id, selectedDepartmentIds, primaryDepartmentId || selectedDepartmentIds[0]);
       toast.success('Departamentos del empleado actualizados');
+      completeNotificationAction(actionToken);
       setDepartmentEditorEmployee(null);
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al actualizar departamentos');
+      failNotificationAction(actionToken);
     } finally {
       setSavingDepartments(false);
     }
@@ -315,6 +323,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       return false;
     }
 
+    const actionToken = beginNotificationAction();
     try {
       // Sanitizar datos antes de enviar
       const sanitizedData = {
@@ -347,24 +356,29 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
 
       await hrService.updateEmployee(id, sanitizedData);
       toast.success('Empleado actualizado correctamente');
+      completeNotificationAction(actionToken);
       setEditingId(null);
       onRefresh();
       return true;
     } catch (error: any) {
       const msg = error?.response?.data?.message || 'Error al actualizar empleado';
       toast.error(Array.isArray(msg) ? msg[0] : msg);
+      failNotificationAction(actionToken);
       return false;
     }
   };
 
   const handleDelete = async (id: string) => {
+    const actionToken = beginNotificationAction();
     try {
       setDeleteLoading(true);
       await hrService.updateEmployee(id, { employmentStatus: 'INACTIVE' });
       toast.success('Empleado desactivado');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (error) {
       toast.error('Error al desactivar empleado');
+      failNotificationAction(actionToken);
     } finally {
       setDeleteLoading(false);
       setPendingDeleteId(null);
@@ -372,30 +386,36 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   };
 
   const handleSubmitApproval = async (id: string) => {
+    const actionToken = beginNotificationAction();
     try {
       await hrService.submitEmployee(id);
       toast.success('Empleado enviado a aprobación');
+      completeNotificationAction(actionToken);
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); failNotificationAction(actionToken); }
   };
 
   const handleApprove = async (id: string) => {
+    const actionToken = beginNotificationAction();
     try {
       await hrService.approveEmployee(id);
       toast.success('Empleado aprobado');
+      completeNotificationAction(actionToken);
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); failNotificationAction(actionToken); }
   };
 
   const handleReject = async () => {
     if (!rejectEmpId || !rejectReason.trim()) return toast.error('Debe indicar el motivo del rechazo');
+    const actionToken = beginNotificationAction();
     try {
       await hrService.rejectEmployee(rejectEmpId, rejectReason);
       toast.success('Empleado rechazado');
+      completeNotificationAction(actionToken);
       setRejectEmpId(null);
       setRejectReason('');
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); failNotificationAction(actionToken); }
   };
 
   const loadChangeLog = async (id: string) => {
@@ -645,6 +665,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     const validRows = importRows.filter((row) => !row._hasError);
     if (!validRows.length) return;
     setImporting(true); setImportProgress(10); setImportResult(null);
+    const actionToken = beginNotificationAction();
     try {
       const response: any = await hrService.bulkImportEmployees(validRows.map((row) => ({
         sourceRow: row.sourceRow, employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email.trim(), phone: row.phone.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, department: row.department, positionId: row.positionId, position: row.position, contractType: row.contractType, salary: Number(row.salary), currency: row.currency, address: row.address || undefined, city: row.city || undefined, state: row.state || undefined, country: row.country || undefined, postalCode: row.postalCode || undefined, emergencyContact: row.emergencyContact || undefined, emergencyPhone: row.emergencyPhone || undefined, nationalId: row.nationalId || undefined, socialSecurityNumber: row.socialSecurityNumber || undefined, probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', employmentStatus: row.employmentStatus || 'ACTIVE', notes: row.notes || undefined,
@@ -656,8 +677,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       // repinten todas las vistas de RR. HH. La actualización continúa aparte.
       void onRefresh();
       setImportProgress(100);
+      completeNotificationAction(actionToken);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo importar empleados');
+      failNotificationAction(actionToken);
     } finally {
       setImporting(false); setImportProgress(0);
     }
@@ -665,18 +688,22 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
 
   const finishEmployeeImport = () => { setImportResult(null); setImportPreviewOpen(false); setImportRows([]); setImportFileName(''); };
   const createDepartmentFromImport = async (index: number, name: string) => {
+    const actionToken = beginNotificationAction();
     try {
       const createdDepartment: any = await hrService.createDepartment({ name: name.trim() });
       setImportRows((current) => validateEmployeeImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, department: createdDepartment.name, departmentId: createdDepartment.id, positionId: '' } : row)));
       toast.success('Departamento creado y asignado a la fila');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al crear departamento');
+      failNotificationAction(actionToken);
       throw error;
     }
   };
 
   const createPositionFromImport = async (index: number, title: string, departmentId: string) => {
+    let actionToken: string | undefined;
     try {
       const normalizedTitle = normalizeImportText(title);
       const existingPosition = positions.find((position: any) =>
@@ -697,12 +724,15 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       }
 
       const code = title.trim().replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
+      actionToken = beginNotificationAction();
       const createdPosition: any = await hrService.createPosition({ title: title.trim(), departmentId, code });
       setImportRows((current) => validateEmployeeImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, position: createdPosition.title, positionId: createdPosition.id } : row)));
       toast.success('Puesto creado y asignado a la fila');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al crear puesto');
+      if (typeof actionToken !== 'undefined') failNotificationAction(actionToken);
       throw error;
     }
   };
@@ -825,6 +855,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     if (error) { toast.error(error); return; }
 
     setSavingEmployee(true);
+    const actionToken = beginNotificationAction();
     try {
       await hrService.createEmployee(buildEmployeePayload({
         ...newEmployeeForm,
@@ -837,6 +868,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         salary: Number(newEmployeeForm.salary),
       }));
       toast.success('Empleado guardado correctamente');
+      completeNotificationAction(actionToken);
       setIsCreateEmployeeModalOpen(false);
       setEditingId(null);
       setEditingPendingId(null);
@@ -845,6 +877,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     } catch (error: any) {
       const msg = error?.response?.data?.message || error?.message || 'Error al crear empleado';
       toast.error(Array.isArray(msg) ? msg[0] : msg);
+      failNotificationAction(actionToken);
     } finally {
       setSavingEmployee(false);
     }
@@ -854,6 +887,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     if (!newRows.length) return;
     setSavingPendingEmployees(true);
     const pendingAtSave = [...newRows];
+    const actionToken = beginNotificationAction();
     try {
       const results = await Promise.allSettled(pendingAtSave.map((row) => hrService.createEmployee(buildEmployeePayload(row))));
       const failedRows = pendingAtSave.filter((_, index) => results[index].status === 'rejected');
@@ -862,6 +896,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       if (createdCount) await onRefresh();
       if (failedRows.length) toast.warning(`${createdCount} empleado(s) guardado(s) y ${failedRows.length} quedaron pendientes por revisar`);
       else toast.success(`${createdCount} empleado(s) creado(s) correctamente`);
+      completeNotificationAction(actionToken);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudieron guardar los empleados');
+      failNotificationAction(actionToken);
     } finally {
       setSavingPendingEmployees(false);
     }

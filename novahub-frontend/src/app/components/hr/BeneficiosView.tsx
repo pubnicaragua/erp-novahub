@@ -19,6 +19,7 @@ import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
 import { cn } from '../ui/utils';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {
   HEALTH: 'bg-destructive/10 text-destructive border-destructive/20',
@@ -63,6 +64,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     if (createInFlightRef.current) return;
     createInFlightRef.current = true;
     setIsCreating(true);
+    const actionToken = beginNotificationAction();
     try {
       const payload = {
         ...form,
@@ -78,12 +80,14 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
         await hrService.createBenefit(payload);
         toast.success('Beneficio creado');
       }
+      completeNotificationAction(actionToken);
       setShowForm(false);
       setEditingId(null);
       setForm({ ...EMPTY_FORM, currency: displayCurrency });
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar beneficio');
+      failNotificationAction(actionToken);
     } finally {
       createInFlightRef.current = false;
       setIsCreating(false);
@@ -91,12 +95,15 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   };
 
   const handleDelete = async (id: string) => {
+    const actionToken = beginNotificationAction();
     try {
       if (id) await hrService.deleteBenefit(id);
       toast.success('Beneficio eliminado');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar beneficio');
+      failNotificationAction(actionToken);
     } finally {
       setPendingDeleteId(null);
     }
@@ -104,12 +111,15 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
 
   const handleRequestPayment = async (benefit: any) => {
     if (!canPerform('HR_BENEFITS', 'approve')) return;
+    const actionToken = beginNotificationAction();
     try {
       await hrService.createPaymentRequest({ requestType: 'BENEFIT', sourceId: benefit.id });
       toast.success('Solicitud de pago enviada a Contabilidad');
+      completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo solicitar el pago');
+      failNotificationAction(actionToken);
     }
   };
 
