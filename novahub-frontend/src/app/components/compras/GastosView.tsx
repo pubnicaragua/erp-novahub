@@ -6,6 +6,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
@@ -957,11 +958,25 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                       <div className="space-y-1">
                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Desde</p>
-                        <Input type="date" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} className="h-9 w-full text-xs sm:w-40" />
+                        <DateField
+                          value={rangeFrom}
+                          onChange={setRangeFrom}
+                          maxDate={rangeTo || undefined}
+                          className="h-9 w-full text-xs sm:w-40"
+                          placeholder="Fecha desde"
+                          title="Fecha desde"
+                        />
                       </div>
                       <div className="space-y-1">
                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Hasta</p>
-                        <Input type="date" value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} className="h-9 w-full text-xs sm:w-40" />
+                        <DateField
+                          value={rangeTo}
+                          onChange={setRangeTo}
+                          minDate={rangeFrom || undefined}
+                          className="h-9 w-full text-xs sm:w-40"
+                          placeholder="Fecha hasta"
+                          title="Fecha hasta"
+                        />
                       </div>
                     </div>
                     <Button

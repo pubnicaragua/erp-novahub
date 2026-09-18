@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Separator } from '../ui/separator';
@@ -130,11 +130,35 @@ export function CambiosPatrimonioView() {
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde" className="sm:w-[180px]" />
+            <DateField
+              value={dateFrom}
+              onChange={(val) => {
+                if (dateTo && val && val > dateTo) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  setDateTo(val);
+                }
+                setDateFrom(val);
+              }}
+              maxDate={dateTo || undefined}
+              placeholder="Desde"
+              className="sm:w-[180px]"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <DateField value={dateTo} onChange={setDateTo} placeholder="Hasta" className="sm:w-[180px]" />
+            <DateField
+              value={dateTo}
+              onChange={(val) => {
+                if (dateFrom && val && val < dateFrom) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  return;
+                }
+                setDateTo(val);
+              }}
+              minDate={dateFrom || undefined}
+              placeholder="Hasta"
+              className="sm:w-[180px]"
+            />
           </div>
           <div className="relative mt-5">
             <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -236,52 +260,75 @@ export function CambiosPatrimonioView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.components && data.components.length > 0 && (
-                    data.components.map((component) => (
-                      <TableRow key={component.key || component.label} className="bg-primary/5 border-t border-primary/20">
-                        <TableCell className="font-mono text-xs text-primary" colSpan={2}>
-                          {component.label}
+                  {data.components && data.components.length > 0 ? (
+                    data.components.map((component) => {
+                      const compRows = filteredRows.filter(r => (r.component || 'OTROS') === component.key);
+                      if (compRows.length === 0 && !searchTerm) return null;
+                      return (
+                        <Fragment key={component.key || component.label}>
+                          <TableRow className="bg-muted/40 font-bold border-t-2 border-border/80">
+                            <TableCell className="text-xs font-black uppercase tracking-wider text-primary" colSpan={2}>
+                              {component.label}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs font-bold text-foreground">
+                              {formatCurrency(component.totalOpening)}
+                            </TableCell>
+                            <TableCell className={cn("text-right font-mono text-xs font-bold", component.totalPeriodChange >= 0 ? "text-emerald-600" : "text-red-600")}>
+                              {component.totalPeriodChange >= 0 ? '+' : ''}{formatCurrency(component.totalPeriodChange)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs font-bold text-foreground">
+                              {formatCurrency(component.totalClosing)}
+                            </TableCell>
+                          </TableRow>
+                          {compRows.map((row, i) => (
+                            <TableRow key={row.accountId || `${component.key}-${i}`} className="hover:bg-muted/30 border-border/30">
+                              <TableCell className="font-mono text-xs pl-6 text-muted-foreground">{row.accountCode || '—'}</TableCell>
+                              <TableCell className="font-medium text-xs pl-6">{row.accountName}</TableCell>
+                              <TableCell className={cn("text-right font-mono text-xs", row.openingBalance >= 0 ? "text-muted-foreground" : "text-red-600")}>
+                                {formatCurrency(row.openingBalance)}
+                              </TableCell>
+                              <TableCell className={cn("text-right font-mono text-xs font-semibold", row.periodChange >= 0 ? "text-emerald-600" : "text-red-600")}>
+                                {row.periodChange >= 0 ? '+' : ''}{formatCurrency(row.periodChange)}
+                              </TableCell>
+                              <TableCell className={cn("text-right font-mono text-xs font-semibold", row.closingBalance >= 0 ? "text-foreground" : "text-red-600")}>
+                                {formatCurrency(row.closingBalance)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </Fragment>
+                      );
+                    })
+                  ) : (
+                    filteredRows.map((row, i) => (
+                      <TableRow key={row.accountId || i} className="hover:bg-muted/30 border-border/30">
+                        <TableCell className="font-mono text-xs">{row.accountCode || '—'}</TableCell>
+                        <TableCell className="font-medium text-xs">{row.accountName}</TableCell>
+                        <TableCell className={cn("text-right font-mono text-xs", row.openingBalance >= 0 ? "text-muted-foreground" : "text-red-600")}>
+                          {formatCurrency(row.openingBalance)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs font-bold text-primary">
-                          {formatCurrency(component.totalOpening)}
+                        <TableCell className={cn("text-right font-mono text-xs font-bold", row.periodChange >= 0 ? "text-emerald-600" : "text-red-600")}>
+                          {row.periodChange >= 0 ? '+' : ''}{formatCurrency(row.periodChange)}
                         </TableCell>
-                        <TableCell className={cn("text-right font-mono text-xs font-bold", component.totalPeriodChange >= 0 ? "text-emerald-600" : "text-red-600")}>
-                          {component.totalPeriodChange >= 0 ? '+' : ''}{formatCurrency(component.totalPeriodChange)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs font-bold text-primary">
-                          {formatCurrency(component.totalClosing)}
+                        <TableCell className={cn("text-right font-mono text-xs font-bold", row.closingBalance >= 0 ? "text-foreground" : "text-red-600")}>
+                          {formatCurrency(row.closingBalance)}
                         </TableCell>
                       </TableRow>
                     ))
                   )}
-                  {filteredRows.map((row, i) => (
-                    <TableRow key={row.accountId || i} className="hover:bg-muted/30 border-border/30">
-                      <TableCell className="font-mono text-xs">{row.accountCode}</TableCell>
-                      <TableCell className="font-medium text-xs">{row.accountName}</TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs", row.openingBalance >= 0 ? "text-emerald-600" : "text-red-600")}>
-                        {formatCurrency(row.openingBalance)}
-                      </TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs font-bold", row.periodChange >= 0 ? "text-emerald-600" : "text-red-600")}>
-                        {row.periodChange >= 0 ? '+' : ''}{formatCurrency(row.periodChange)}
-                      </TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs font-bold", row.closingBalance >= 0 ? "text-emerald-600" : "text-red-600")}>
-                        {formatCurrency(row.closingBalance)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {data.netIncome !== 0 && (
-                    <TableRow className="bg-primary/5 font-bold border-t-2 border-border">
-                      <TableCell className="font-mono text-xs text-muted-foreground">—</TableCell>
-                      <TableCell className="text-xs font-bold uppercase tracking-wider">Resultado del Ejercicio</TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">{formatCurrency(0)}</TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs font-bold", data.netIncome >= 0 ? "text-emerald-600" : "text-red-600")}>
-                        {data.netIncome >= 0 ? '+' : ''}{formatCurrency(data.netIncome)}
-                      </TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs font-bold", data.netIncome >= 0 ? "text-emerald-600" : "text-red-600")}>
-                        {formatCurrency(data.netIncome)}
-                      </TableCell>
-                    </TableRow>
-                  )}
+                  <TableRow className="bg-primary/10 font-black border-t-4 border-double border-primary/40">
+                    <TableCell className="text-xs uppercase tracking-widest text-primary" colSpan={2}>
+                      Total Patrimonio Neto
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs font-black text-foreground">
+                      {formatCurrency(filteredTotalOpening)}
+                    </TableCell>
+                    <TableCell className={cn("text-right font-mono text-xs font-black", (filteredTotalClosing - filteredTotalOpening) >= 0 ? "text-emerald-600" : "text-red-600")}>
+                      {(filteredTotalClosing - filteredTotalOpening) >= 0 ? '+' : ''}{formatCurrency(filteredTotalClosing - filteredTotalOpening)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs font-black text-primary">
+                      {formatCurrency(filteredTotalClosing)}
+                    </TableCell>
+                  </TableRow>
                 </TableBody>
               </Table>
             </div>

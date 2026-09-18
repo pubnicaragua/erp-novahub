@@ -516,13 +516,35 @@ export function DiarioView() {
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Desde
               </Label>
-              <DateField value={filterDateFrom} onChange={setFilterDateFrom} placeholder="Desde" />
+              <DateField
+                value={filterDateFrom}
+                onChange={(val) => {
+                  if (filterDateTo && val && val > filterDateTo) {
+                    toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                    setFilterDateTo(val);
+                  }
+                  setFilterDateFrom(val);
+                }}
+                maxDate={filterDateTo || undefined}
+                placeholder="Desde"
+              />
             </div>
             <div className="min-w-0 space-y-1 sm:min-w-[160px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Hasta
               </Label>
-              <DateField value={filterDateTo} onChange={setFilterDateTo} placeholder="Hasta" />
+              <DateField
+                value={filterDateTo}
+                onChange={(val) => {
+                  if (filterDateFrom && val && val < filterDateFrom) {
+                    toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                    return;
+                  }
+                  setFilterDateTo(val);
+                }}
+                minDate={filterDateFrom || undefined}
+                placeholder="Hasta"
+              />
             </div>
             <div className="min-w-0 space-y-1 sm:min-w-[220px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">

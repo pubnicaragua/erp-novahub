@@ -8,7 +8,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
+import { DateField } from './ui/DateField';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
@@ -181,6 +181,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   };
 
   const clearFilters = () => { setDateFrom(''); setDateTo(''); setActivePreset(''); };
+  const globalDateRange = { start: dateFrom, end: dateTo };
+  const globalDateRangeKey = `${dateFrom}|${dateTo}`;
 
   const filterByDate = (items: any[]) => {
     if (!dateFrom && !dateTo) return items;
@@ -625,8 +627,22 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
           </button>
         ))}
         <div className="hidden h-5 w-px bg-border mx-1 sm:block" />
-        <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActivePreset(''); }} className="h-9 min-w-0 w-full text-xs font-semibold text-foreground sm:w-44" placeholder="Desde" aria-label="Fecha desde" />
-        <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActivePreset(''); }} className="h-9 min-w-0 w-full text-xs font-semibold text-foreground sm:w-44" placeholder="Hasta" aria-label="Fecha hasta" />
+        <DateField
+          value={dateFrom}
+          onChange={(value) => { setDateFrom(value); setActivePreset(''); }}
+          maxDate={dateTo || undefined}
+          className="h-9 min-w-0 w-full text-xs font-semibold text-foreground sm:w-44"
+          placeholder="Desde"
+          title="Fecha desde"
+        />
+        <DateField
+          value={dateTo}
+          onChange={(value) => { setDateTo(value); setActivePreset(''); }}
+          minDate={dateFrom || undefined}
+          className="h-9 min-w-0 w-full text-xs font-semibold text-foreground sm:w-44"
+          placeholder="Hasta"
+          title="Fecha hasta"
+        />
         {(dateFrom || dateTo || activePreset) && (
           <button onClick={clearFilters} className="col-span-2 justify-self-start rounded-lg p-1.5 text-muted-foreground hover:bg-muted sm:col-span-1" title="Limpiar filtros"><X className="size-3.5" /></button>
         )}
@@ -686,7 +702,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <TabsContent value="ingresos" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView 
+                    key={`finance-income-${globalDateRangeKey}`}
                     title="Ingresos"
+                    globalDateRange={globalDateRange}
+                    onClearGlobalDateRange={clearFilters}
                     data={groupedIncomeRows.map((i: any) => ({
                       ...i,
                       isPayment: !['Manual', 'manual', '', null, undefined].includes(i.source),
@@ -719,7 +738,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <TabsContent value="gastos" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView 
+                    key={`finance-expense-${globalDateRangeKey}`}
                     title="Gastos"
+                    globalDateRange={globalDateRange}
+                    onClearGlobalDateRange={clearFilters}
                     data={fExpenses.map((e: any) => ({
                       ...e,
                       isPayment: !['Manual', 'manual', '', null, undefined].includes(e.source),
@@ -766,7 +788,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Ingresos Recurrentes ({fRecurringIncomes.length})</p>
                         <FinanceTableView 
+                          key={`finance-recurring-income-${globalDateRangeKey}`}
                           title=""
+                          globalDateRange={globalDateRange}
+                          onClearGlobalDateRange={clearFilters}
                           data={fRecurringIncomes.map((r: any) => ({ ...r, isPayment: true }))}
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
@@ -784,7 +809,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-rose-600 mb-2">Gastos Recurrentes ({fRecurringExpenses.length})</p>
                         <FinanceTableView 
+                          key={`finance-recurring-expense-${globalDateRangeKey}`}
                           title=""
+                          globalDateRange={globalDateRange}
+                          onClearGlobalDateRange={clearFilters}
                           data={fRecurringExpenses.map((r: any) => ({ ...r, isPayment: true }))}
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
@@ -807,7 +835,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <TabsContent value="ingresos-recurrentes" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView
+                    key={`finance-recurring-income-view-${globalDateRangeKey}`}
                     title="Ingresos recurrentes"
+                    globalDateRange={globalDateRange}
+                    onClearGlobalDateRange={clearFilters}
                     data={fRecurringIncomes.map((r: any) => ({ ...r, isPayment: true }))}
                     columns={RECURRING_COLUMNS}
                     onUpdate={handleUpdateRecurring}
@@ -840,7 +871,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
               <TabsContent value="analisis" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceBalanceView incomes={fIncomes} expenses={fExpenses} recurringIncomes={fRecurringIncomes} recurringExpenses={fRecurringExpenses} />
+                  <FinanceBalanceView key={`finance-analysis-${globalDateRangeKey}`} incomes={fIncomes} expenses={fExpenses} recurringIncomes={fRecurringIncomes} recurringExpenses={fRecurringExpenses} globalDateRange={globalDateRange} onClearGlobalDateRange={clearFilters} />
                 </motion.div>
               </TabsContent>
 
@@ -852,7 +883,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
               <TabsContent value="perdidas" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceLossesView />
+                  <FinanceLossesView key={`finance-losses-${globalDateRangeKey}`} globalDateRange={globalDateRange} onClearGlobalDateRange={clearFilters} />
                 </motion.div>
               </TabsContent>
             </>

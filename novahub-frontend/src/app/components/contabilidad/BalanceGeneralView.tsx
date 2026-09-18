@@ -306,11 +306,35 @@ export function BalanceGeneralView() {
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde (inicio del período)" className="sm:w-[200px]" />
+            <DateField
+              value={dateFrom}
+              onChange={(val) => {
+                if (date && val && val > date) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  setDate(val);
+                }
+                setDateFrom(val);
+              }}
+              maxDate={date || undefined}
+              placeholder="Desde (inicio del período)"
+              className="sm:w-[200px]"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Al corte</label>
-            <DateField value={date} onChange={setDate} placeholder="Fecha del balance" className="sm:w-[180px]" />
+            <DateField
+              value={date}
+              onChange={(val) => {
+                if (dateFrom && val && val < dateFrom) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  return;
+                }
+                setDate(val);
+              }}
+              minDate={dateFrom || undefined}
+              placeholder="Fecha del balance"
+              className="sm:w-[180px]"
+            />
           </div>
           <div className="relative mt-5">
             <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />

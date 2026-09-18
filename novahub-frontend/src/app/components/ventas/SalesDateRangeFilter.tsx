@@ -1,5 +1,5 @@
-import { CalendarDays, X } from 'lucide-react';
-import { Input } from '../ui/input';
+import { X } from 'lucide-react';
+import { DateField } from '../ui/DateField';
 
 interface SalesDateRangeFilterProps {
   dateFrom?: string;
@@ -15,13 +15,25 @@ export function SalesDateRangeFilter({ dateFrom = '', dateTo = '', onChange }: S
     <div className="flex flex-wrap items-start gap-x-3 gap-y-3 pt-0 sm:items-center sm:gap-2" data-toolbar-role="filters">
       <label className="relative flex w-full min-w-0 flex-col gap-1 sm:h-10 sm:w-auto sm:flex-row sm:items-center sm:gap-0">
         <span className="text-[9px] font-black uppercase tracking-widest text-foreground/75 sm:pointer-events-none sm:absolute sm:-top-3 sm:left-1">Desde</span>
-        <Input type="date" value={dateFrom} onChange={(event) => onChange(event.target.value, dateTo)} className="h-10 w-full pr-10 text-foreground font-semibold [&::-webkit-calendar-picker-indicator]:opacity-0 sm:w-[170px]" aria-label="Fecha desde" />
-        <CalendarDays className="pointer-events-none absolute right-3 top-[calc(50%+0.4rem)] size-4 -translate-y-1/2 text-primary sm:top-1/2" aria-hidden="true" />
+        <DateField
+          value={dateFrom}
+          onChange={(value) => onChange(value, dateTo)}
+          maxDate={dateTo || undefined}
+          className="h-10 w-full text-foreground font-semibold sm:w-[170px]"
+          placeholder="Fecha desde"
+          title="Fecha desde"
+        />
       </label>
       <label className="relative flex w-full min-w-0 flex-col gap-1 sm:h-10 sm:w-auto sm:flex-row sm:items-center sm:gap-0">
         <span className="text-[9px] font-black uppercase tracking-widest text-foreground/75 sm:pointer-events-none sm:absolute sm:-top-3 sm:left-1">Hasta</span>
-        <Input type="date" value={dateTo} onChange={(event) => onChange(dateFrom, event.target.value)} className="h-10 w-full pr-10 text-foreground font-semibold [&::-webkit-calendar-picker-indicator]:opacity-0 sm:w-[170px]" aria-label="Fecha hasta" />
-        <CalendarDays className="pointer-events-none absolute right-3 top-[calc(50%+0.4rem)] size-4 -translate-y-1/2 text-primary sm:top-1/2" aria-hidden="true" />
+        <DateField
+          value={dateTo}
+          onChange={(value) => onChange(dateFrom, value)}
+          minDate={dateFrom || undefined}
+          className="h-10 w-full text-foreground font-semibold sm:w-[170px]"
+          placeholder="Fecha hasta"
+          title="Fecha hasta"
+        />
       </label>
       {hasFilters && (
         <button

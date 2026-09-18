@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { Badge } from '../ui/badge';
 import {
   ArrowUpRight, ArrowDownRight, Scale, TrendingUp, TrendingDown,
@@ -32,6 +32,8 @@ interface FinanceBalanceViewProps {
   expenses: any[];
   recurringIncomes: any[];
   recurringExpenses: any[];
+  globalDateRange?: { start: string; end: string };
+  onClearGlobalDateRange?: () => void;
 }
 
 type ViewType = 'general' | 'solo-ingresos' | 'solo-gastos' | 'recurrentes';
@@ -49,14 +51,17 @@ function sortByRecentRegistration(items: any[]): any[] {
   });
 }
 
-export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurringExpenses }: FinanceBalanceViewProps) {
+export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurringExpenses, globalDateRange, onClearGlobalDateRange }: FinanceBalanceViewProps) {
   const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const canExport = canPerform('FINANCIAL_ANALYSIS', 'export') || canPerform('FINANCIAL_BALANCE', 'export');
   const { themeConfig } = useTheme();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
 
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [dateRange, setDateRange] = useState(() => ({
+    start: globalDateRange?.start || '',
+    end: globalDateRange?.end || '',
+  }));
   const [viewType, setViewType] = useState<ViewType>('general');
 
   const filterByDate = (items: any[]) => {
@@ -1057,16 +1062,30 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
           <div className="flex gap-4 w-full sm:w-auto justify-center">
             <div className="flex flex-col gap-1.5 flex-1 sm:flex-none">
               <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest text-center sm:text-left pl-1">Desde</label>
-              <Input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({...p, start: e.target.value}))} className="h-9 w-full sm:w-[150px] bg-background/50 border-border/40 focus:border-primary/50 text-center" />
+              <DateField
+                value={dateRange.start}
+                onChange={(value) => setDateRange(p => ({ ...p, start: value }))}
+                maxDate={dateRange.end || undefined}
+                className="h-9 w-full sm:w-[150px] bg-background/50 border-border/40 focus:border-primary/50 text-center"
+                placeholder="Fecha inicio"
+                title="Fecha inicio"
+              />
             </div>
             <div className="flex flex-col gap-1.5 flex-1 sm:flex-none">
               <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest text-center sm:text-left pl-1">Hasta</label>
-              <Input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({...p, end: e.target.value}))} className="h-9 w-full sm:w-[150px] bg-background/50 border-border/40 focus:border-primary/50 text-center" />
+              <DateField
+                value={dateRange.end}
+                onChange={(value) => setDateRange(p => ({ ...p, end: value }))}
+                minDate={dateRange.start || undefined}
+                className="h-9 w-full sm:w-[150px] bg-background/50 border-border/40 focus:border-primary/50 text-center"
+                placeholder="Fecha fin"
+                title="Fecha fin"
+              />
             </div>
           </div>
 
           {(dateRange.start || dateRange.end) && (
-            <button onClick={() => setDateRange({start:'',end:''})} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all">
+            <button onClick={() => { setDateRange({ start: '', end: '' }); if (globalDateRange?.start || globalDateRange?.end) onClearGlobalDateRange?.(); }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all">
               <X className="size-3" /> Limpiar
             </button>
           )}

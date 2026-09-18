@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { TrendingDown, PackageX, BookOpenCheck } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { Button } from '../ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { toast } from 'sonner';
@@ -41,13 +41,18 @@ const accountsForRow = (row: any) => {
   return row?.account ? [row.account] : [];
 };
 
-export function FinanceLossesView() {
+interface FinanceLossesViewProps {
+  globalDateRange?: { start: string; end: string };
+  onClearGlobalDateRange?: () => void;
+}
+
+export function FinanceLossesView({ globalDateRange, onClearGlobalDateRange }: FinanceLossesViewProps) {
   const { user, canPerform } = useAuth();
   const canViewInventory = canPerform('INVENTORY', 'view');
   const { baseCurrency, displayMode, formatExplicitAmount, formatConvertedAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'current';
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(globalDateRange?.start || '');
+  const [dateTo, setDateTo] = useState(globalDateRange?.end || '');
   const [page, setPage] = useState(1);
 
   const lossesQuery = useQuery({
@@ -103,9 +108,23 @@ export function FinanceLossesView() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-8 w-36 text-[10px]" aria-label="Desde" />
-          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-8 w-36 text-[10px]" aria-label="Hasta" />
-          <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }}>
+          <DateField
+            value={dateFrom}
+            onChange={(value) => { setDateFrom(value); setPage(1); }}
+            maxDate={dateTo || undefined}
+            className="h-9 w-36 text-[10px]"
+            placeholder="Desde"
+            title="Desde"
+          />
+          <DateField
+            value={dateTo}
+            onChange={(value) => { setDateTo(value); setPage(1); }}
+            minDate={dateFrom || undefined}
+            className="h-9 w-36 text-[10px]"
+            placeholder="Hasta"
+            title="Hasta"
+          />
+          <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); if (globalDateRange?.start || globalDateRange?.end) onClearGlobalDateRange?.(); }}>
             Limpiar
           </Button>
         </div>

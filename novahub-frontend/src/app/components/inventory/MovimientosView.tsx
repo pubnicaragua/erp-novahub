@@ -5,6 +5,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -376,23 +377,23 @@ export function MovimientosView({ movements, warehouses, pagination, onExportDat
             </SelectContent>
           </Select>
           <div className="flex min-w-0 items-center gap-1.5">
-            <Input
+            <DateField
               id="movement-date-from"
-              type="date"
               value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); onDateChange?.(e.target.value, dateTo); }}
-              aria-label="Fecha desde"
+              onChange={(value) => { setDateFrom(value); onDateChange?.(value, dateTo); }}
+              maxDate={dateTo || undefined}
               title="Fecha desde"
+              placeholder="Desde"
               className="inventory-date-filter h-10 w-full rounded-xl px-3 text-xs font-medium sm:w-36"
             />
             <span className="text-muted-foreground text-xs">–</span>
-            <Input
+            <DateField
               id="movement-date-to"
-              type="date"
               value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); onDateChange?.(dateFrom, e.target.value); }}
-              aria-label="Fecha hasta"
+              onChange={(value) => { setDateTo(value); onDateChange?.(dateFrom, value); }}
+              minDate={dateFrom || undefined}
               title="Fecha hasta"
+              placeholder="Hasta"
               className="inventory-date-filter h-10 w-full rounded-xl px-3 text-xs font-medium sm:w-36"
             />
           </div>

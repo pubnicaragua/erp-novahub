@@ -3,7 +3,7 @@ import { AlertTriangle, BarChart3, Download, FileText, Loader2, RefreshCw, Walle
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
-import { Input } from '../../ui/input';
+import { DateField } from '../../ui/DateField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { useAuth } from '../../../contexts/AuthContext';
 import { cajaService, type HistoricalCashReport as HistoricalCashReportData, type HistoricalCashSessionDetail } from '../../../services/caja.service';
@@ -136,8 +136,24 @@ export function HistoricalCashReport({ initialRegisterId, canExport = true }: { 
           </div>
         </CardHeader>
         <CardContent className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-          <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Desde<Input type="date" value={filters.dateFrom} onChange={(event) => updateFilter('dateFrom', event.target.value)} /></label>
-          <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Hasta<Input type="date" value={filters.dateTo} onChange={(event) => updateFilter('dateTo', event.target.value)} /></label>
+          <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Desde
+            <DateField
+              value={filters.dateFrom}
+              onChange={(value) => updateFilter('dateFrom', value)}
+              maxDate={filters.dateTo || undefined}
+              placeholder="Fecha desde"
+              title="Fecha desde"
+            />
+          </label>
+          <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Hasta
+            <DateField
+              value={filters.dateTo}
+              onChange={(value) => updateFilter('dateTo', value)}
+              minDate={filters.dateFrom || undefined}
+              placeholder="Fecha hasta"
+              title="Fecha hasta"
+            />
+          </label>
           <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Sucursal
             <Select value={filters.branchId || 'ALL'} onValueChange={(value) => updateFilter('branchId', value === 'ALL' ? '' : value)}><SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todas</SelectItem>{report.options.branches.map((branch) => <SelectItem key={branch.id} value={branch.id}>{branch.name} ({branch.code})</SelectItem>)}</SelectContent></Select>
           </label>

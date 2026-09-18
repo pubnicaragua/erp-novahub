@@ -612,7 +612,19 @@ export function BalanceComprobacionView() {
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
               Desde
             </label>
-            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Fecha inicial" className="w-full" />
+            <DateField
+              value={dateFrom}
+              onChange={(val) => {
+                if (dateTo && val && val > dateTo) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  setDateTo(val);
+                }
+                setDateFrom(val);
+              }}
+              maxDate={dateTo || undefined}
+              placeholder="Fecha inicial"
+              className="w-full"
+            />
           </div>
 
           {/* Fecha Hasta */}
@@ -620,7 +632,19 @@ export function BalanceComprobacionView() {
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
               Hasta
             </label>
-            <DateField value={dateTo} onChange={setDateTo} placeholder="Fecha final" className="w-full" />
+            <DateField
+              value={dateTo}
+              onChange={(val) => {
+                if (dateFrom && val && val < dateFrom) {
+                  toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                  return;
+                }
+                setDateTo(val);
+              }}
+              minDate={dateFrom || undefined}
+              placeholder="Fecha final"
+              className="w-full"
+            />
           </div>
         </div>
 
