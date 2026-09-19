@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -7,16 +8,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import {
   Search, Filter, RefreshCw, X, ArrowDownUp,
   ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, BookOpen, Loader2,
+  Download, FileSpreadsheet, FileText,
 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { referenceTypeLabel } from '../../utils/accountingLabels';
 import { DateField } from '../ui/DateField';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { generateLedgerPDF } from '../../utils/pdfGenerator';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 // import { motion } from 'motion/react';
 
 interface LedgerEntry {
@@ -74,6 +81,8 @@ function journalStatusLabel(value?: string): string {
 }
 
 export function LibroMayorView() {
+  const { user, canPerform } = useAuth();
+  const { baseCurrency, formatAmount } = useCurrency();
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -85,6 +94,8 @@ export function LibroMayorView() {
   const [selectedEntry, setSelectedEntry] = useState<LedgerEntry | null>(null);
   const [selectedJournal, setSelectedJournal] = useState<any | null>(null);
   const [journalLoading, setJournalLoading] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const ledgerParams = useMemo(() => ({
     ...(filterAccountId ? { accountId: filterAccountId } : {}),
@@ -172,6 +183,110 @@ export function LibroMayorView() {
   const totalDebits = filteredEntries.reduce((s, e) => s + e.debit, 0);
   const totalCredits = filteredEntries.reduce((s, e) => s + e.credit, 0);
 
+  const canExport = canPerform('ACCOUNTING_LEDGER', 'export') || canPerform('ACCOUNTING_LEDGER', 'read');
+
+  const selectedAccountName = useMemo(() => {
+    if (!filterAccountId) return undefined;
+    const acc = accounts.find((a) => a.id === filterAccountId);
+    return acc ? `${acc.code} - ${acc.name}` : undefined;
+  }, [filterAccountId, accounts]);
+
+  const handleExportPDF = async () => {
+    if (orderedEntries.length === 0) {
+      toast.error('No hay movimientos en el libro mayor para exportar');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      const exportRows = orderedEntries.map((e) => ({
+        date: formatAccountingDate(e.date),
+        accountCode: e.accountCode,
+        accountName: e.accountName,
+        accountType: accountTypeLabel(e.accountType),
+        description: e.description || '-',
+        reference: e.reference || '-',
+        debit: e.debit || 0,
+        credit: e.credit || 0,
+        balance: e.balance || 0,
+      }));
+
+      await generateLedgerPDF({
+        rows: exportRows,
+        tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub',
+        tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
+        dateFrom: filterDateFrom,
+        dateTo: filterDateTo,
+        accountName: selectedAccountName,
+        totals: {
+          debitos: formatCurrency(totalDebits),
+          creditos: formatCurrency(totalCredits),
+          saldo: formatCurrency(totalDebits - totalCredits),
+        },
+      });
+      toast.success(`PDF exportado con ${orderedEntries.length} movimiento(s)`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al exportar a PDF');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    if (orderedEntries.length === 0) {
+      toast.error('No hay movimientos en el libro mayor para exportar');
+      return;
+    }
+    setExportingExcel(true);
+    try {
+      const rows = orderedEntries.map((e) => ({
+        Fecha: formatAccountingDate(e.date),
+        Código: e.accountCode,
+        Cuenta: e.accountName,
+        Tipo: accountTypeLabel(e.accountType),
+        Descripción: e.description || '-',
+        Referencia: e.reference || '-',
+        Débito: e.debit || 0,
+        Crédito: e.credit || 0,
+        Saldo: e.balance || 0,
+      }));
+
+      const workbook = XLSX.utils.book_new();
+      const detailSheet = XLSX.utils.json_to_sheet(rows);
+      detailSheet['!cols'] = [
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 30 },
+        { wch: 14 },
+        { wch: 40 },
+        { wch: 20 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 16 },
+      ];
+      XLSX.utils.book_append_sheet(workbook, detailSheet, 'Libro Mayor');
+
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ['Reporte', 'Libro Mayor'],
+        ['Cuenta filtrada', selectedAccountName || 'Todas las cuentas'],
+        ['Desde', filterDateFrom || 'Inicio'],
+        ['Hasta', filterDateTo || 'Actual'],
+        ['Total movimientos', orderedEntries.length],
+        ['Total débitos', totalDebits],
+        ['Total créditos', totalCredits],
+        ['Saldo neto', totalDebits - totalCredits],
+      ]);
+      summarySheet['!cols'] = [{ wch: 20 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');
+
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['libro_mayor'], 'xlsx', filterDateFrom, filterDateTo));
+      toast.success(`Excel exportado con ${orderedEntries.length} movimiento(s)`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al exportar a Excel');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   function clearFilters() {
     setFilterAccountId('');
     setFilterDateFrom('');
@@ -200,6 +315,28 @@ export function LibroMayorView() {
             Libro <span className="text-primary">Mayor</span>
           </h2>
         </div>
+        {canExport && (
+          <div className="flex items-center gap-2 self-start lg:self-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={orderedEntries.length === 0 || exportingPdf || exportingExcel} className="gap-1.5">
+                  {exportingPdf || exportingExcel ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                  Exportar
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportPDF} disabled={exportingPdf} className="cursor-pointer gap-2">
+                  <FileText className="size-4 text-rose-500" />
+                  Exportar a PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportExcel} disabled={exportingExcel} className="cursor-pointer gap-2">
+                  <FileSpreadsheet className="size-4 text-emerald-600" />
+                  Exportar a Excel (.xlsx)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5">
