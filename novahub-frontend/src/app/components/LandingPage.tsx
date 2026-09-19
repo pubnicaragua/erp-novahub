@@ -264,7 +264,11 @@ export default function LandingPage() {
         const lightbox = document.createElement('div');
         lightbox.className = 'landing-image-lightbox';
         lightbox.innerHTML = `<img src="${screenshot.getAttribute('src')}" alt="Vista ampliada de NovaHub ERP" />`;
-        lightbox.addEventListener('click', () => lightbox.remove());
+        lightbox.addEventListener('click', () => {
+          lightbox.remove();
+          document.body.style.overflow = '';
+        });
+        document.body.style.overflow = 'hidden';
         document.body.append(lightbox);
       });
     }

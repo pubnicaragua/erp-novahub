@@ -236,3 +236,136 @@
   box-shadow: 0 40px 100px rgba(0, 0, 0, 0.45);
   cursor: zoom-out;
 }
+
+/* Final visual corrections: stable white chrome, compact rhythm and one
+   predictable mountain treatment across the landing. */
+#novahub-landing > header,
+#novahub-landing > footer {
+  background: var(--nova-blanco) !important;
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing > header > div:first-child > div > a[href*='whatsapp'],
+#novahub-landing > header > div:first-child > div > a[href='/login'] {
+  background: var(--nova-verde) !important;
+  color: var(--nova-blanco) !important;
+  border-radius: 999px;
+  padding: 0.8rem 1.35rem;
+  box-shadow: 0 12px 26px -16px rgba(1, 66, 44, 0.65);
+}
+
+#novahub-landing > footer .bg-white {
+  display: flex !important;
+  width: 250px !important;
+  height: 82px !important;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--nova-menta) !important;
+  border-radius: 1rem !important;
+  background: var(--nova-blanco) !important;
+  padding: 0.75rem 1rem !important;
+  box-shadow: 0 16px 36px -28px rgba(1, 66, 44, 0.45) !important;
+}
+
+#novahub-landing > footer .bg-white img {
+  object-position: center !important;
+}
+
+#novahub-landing > footer,
+#novahub-landing > footer a,
+#novahub-landing > footer p,
+#novahub-landing > footer span {
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing > footer p[class*='text-[#5ce1d5]'] {
+  color: var(--nova-verde) !important;
+}
+
+#novahub-landing > footer a:hover {
+  color: var(--nova-verde) !important;
+}
+
+#novahub-landing main > section:not(#inicio) {
+  padding-top: clamp(4rem, 6vw, 5.5rem) !important;
+  padding-bottom: clamp(4rem, 6vw, 5.5rem) !important;
+}
+
+#novahub-landing main > section:not(:first-child)::before {
+  top: -34px;
+  height: 42px;
+  opacity: 0.82;
+}
+
+#novahub-landing #flujo::before,
+#novahub-landing #producto::before,
+#novahub-landing main > section[class*='bg-[#071b18]']::before {
+  top: -48px;
+  height: 56px;
+  opacity: 1;
+}
+
+#novahub-landing .landing-image-lightbox {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: auto;
+  align-items: center;
+  justify-items: center;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+#novahub-landing .landing-image-lightbox img {
+  width: min(1180px, calc(100vw - 3rem));
+  max-width: 100%;
+  max-height: calc(100dvh - 3rem);
+  margin: auto;
+}
+
+@media (max-width: 1023px) {
+  #novahub-landing > header nav {
+    border-color: var(--nova-menta) !important;
+    background: var(--nova-blanco) !important;
+    box-shadow: 0 18px 34px -26px rgba(1, 66, 44, 0.6);
+  }
+
+  #novahub-landing > header nav a {
+    color: var(--nova-bosque) !important;
+  }
+
+  #novahub-landing > header nav a:hover {
+    background: var(--nova-menta) !important;
+    color: var(--nova-bosque) !important;
+  }
+
+  #novahub-landing main > section:not(#inicio) {
+    padding-top: 3.75rem !important;
+    padding-bottom: 3.75rem !important;
+  }
+}
+
+/* The lightbox is appended to body, so its viewport rules cannot depend on
+   #novahub-landing being an ancestor. */
+body > .landing-image-lightbox {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  display: grid !important;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: auto;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+body > .landing-image-lightbox img {
+  width: min(1180px, calc(100vw - 3rem));
+  max-width: 100%;
+  max-height: calc(100dvh - 3rem);
+  margin: auto;
+}
