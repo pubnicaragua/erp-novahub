@@ -6,6 +6,7 @@
   --nova-menta: #C8E6D0;
   --nova-blanco: #FFFFFF;
   font-family: 'Montserrat', 'Acumin Pro', ui-sans-serif, system-ui, sans-serif;
+  scroll-behavior: smooth;
 }
 
 #novahub-landing .landing-serif {
@@ -438,6 +439,22 @@ body > .landing-image-lightbox img {
 
 #novahub-landing #catalogo-modulos::before {
   background: var(--nova-menta);
+  -webkit-mask-image: none;
+  mask-image: none;
+  clip-path: polygon(0 68%, 8% 42%, 16% 63%, 25% 28%, 35% 67%, 45% 38%, 55% 70%, 66% 30%, 76% 64%, 87% 36%, 100% 62%, 100% 100%, 0 100%);
+}
+
+#novahub-landing img[alt^='Vista de facturación'] {
+  display: block;
+  height: auto !important;
+  max-width: 100%;
+  object-fit: contain !important;
+  object-position: center !important;
+  transform: none !important;
+}
+
+#novahub-landing img[alt^='Vista de facturación']:hover {
+  transform: scale(1.015) !important;
 }
 
 body > .landing-image-lightbox .landing-image-lightbox-close {
@@ -461,4 +478,23 @@ body > .landing-image-lightbox .landing-image-lightbox-close {
 
 body > .landing-image-lightbox .landing-image-lightbox-close:hover {
   background: var(--nova-verde);
+}
+
+@keyframes landing-hero-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+#novahub-landing .landing-hero-demo > .relative {
+  animation: landing-hero-float 7s ease-in-out infinite;
+}
+
+#novahub-landing .landing-hero-demo:hover > .relative {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #novahub-landing .landing-hero-demo > .relative {
+    animation: none;
+  }
 }
