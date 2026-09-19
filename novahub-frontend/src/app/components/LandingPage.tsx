@@ -37,7 +37,6 @@ const ease = [0.22, 1, 0.36, 1] as const;
 const NAV_LINKS = [
   { label: 'Producto', href: '#producto' },
   { label: 'Módulos', href: '#catalogo-modulos' },
-  { label: 'Giros', href: '#giros' },
   { label: 'Cómo funciona', href: '#flujo' },
 ] as const;
 
@@ -106,7 +105,7 @@ function Header() {
 }
 
 function HeroSection() {
-  return <section id="inicio" className="relative isolate min-h-[790px] overflow-hidden bg-[#071b18] pt-28 text-white lg:min-h-[850px] lg:pt-36">
+  return <section id="inicio" className="relative isolate min-h-[790px] overflow-hidden bg-[#01422C] pt-28 text-white lg:min-h-[850px] lg:pt-36">
     <div className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(92,225,213,.06)_1px,transparent_1px),linear-gradient(90deg,rgba(92,225,213,.06)_1px,transparent_1px)] [background-size:72px_72px]" /><div className="pointer-events-none absolute -left-40 top-24 size-[560px] rounded-full bg-[#0eaa77]/20 blur-[120px]" /><div className="pointer-events-none absolute right-[-180px] top-[-140px] size-[600px] rounded-full bg-[#24d9d0]/15 blur-[130px]" /><div className="pointer-events-none absolute bottom-[-260px] left-1/3 size-[600px] rounded-full bg-[#0eaa77]/10 blur-[120px]" />
     <div className="relative mx-auto grid max-w-[1280px] items-center gap-16 px-5 pb-24 sm:px-8 lg:grid-cols-[.9fr_1.1fr] lg:gap-8 lg:px-10 lg:pb-32">
       <div className="max-w-[650px]"><Reveal><div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#5ce1d5]/25 bg-[#5ce1d5]/[.07] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#9af5e9]"><span className="size-1.5 animate-pulse rounded-full bg-[#5ce1d5]" /> ERP diseñado para operar mejor</div><h1 className="max-w-[730px] text-[clamp(3.2rem,7vw,6.75rem)] font-black leading-[.9] tracking-[-0.07em] text-white">El control de tu negocio, <span className="text-[#5ce1d5]">en una sola señal.</span></h1><p className="mt-7 max-w-[580px] text-base leading-7 text-white/60 sm:text-lg">Ventas, inventario, caja, contabilidad y operación conectados en un ERP hecho para empresas que quieren crecer sin improvisar.</p><div className="mt-9 flex flex-col gap-3 sm:flex-row"><PrimaryButton href={WHATSAPP_URL} dark>Quiero ver NovaHub</PrimaryButton><a href="#producto" className="group inline-flex items-center justify-center gap-3 rounded-full border border-white/15 px-6 py-3.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/80 transition hover:border-[#5ce1d5]/60 hover:text-white">Explorar el sistema <ArrowDownRight className="size-4 transition group-hover:translate-x-0.5 group-hover:translate-y-0.5" /></a></div><div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40"><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> NIO y USD</span><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> Multisucursal</span><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> Soporte local</span></div></Reveal></div>
@@ -136,12 +135,18 @@ function ModulesSection() {
 function ModuleCatalogSection() {
   const [activeCategory, setActiveCategory] = useState<ModuleCategory>('Todos');
   const [query, setQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(9);
   const normalizedQuery = query.trim().toLocaleLowerCase('es');
   const visibleModules = LANDING_MODULES.filter((item) => {
     const matchesCategory = activeCategory === 'Todos' || item.category === activeCategory;
     const searchableText = `${item.module} ${item.submodule} ${item.features.join(' ')} ${item.advantage}`.toLocaleLowerCase('es');
     return matchesCategory && (!normalizedQuery || searchableText.includes(normalizedQuery));
   });
+  const displayedModules = visibleModules.slice(0, visibleCount);
+
+  useEffect(() => {
+    setVisibleCount(9);
+  }, [activeCategory, query]);
 
   return <section id="catalogo-modulos" className="bg-[#C8E6D0]/35 px-5 py-24 sm:px-8 lg:px-10 lg:py-36">
     <div className="mx-auto max-w-[1280px]">
@@ -170,8 +175,9 @@ function ModuleCatalogSection() {
           </div>
         </div>
 
-        {visibleModules.length > 0 ? <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {visibleModules.map((item, index) => {
+        {visibleModules.length > 0 ? <>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {displayedModules.map((item, index) => {
             const Icon = item.icon;
             return <Reveal key={`${item.module}-${item.submodule}`} delay={Math.min(index * .015, .18)}>
               <article className="landing-module-card group flex h-full flex-col rounded-[22px] border border-[#C8E6D0] bg-white p-5 transition duration-300 hover:-translate-y-1 hover:border-[#74C044]">
@@ -186,7 +192,10 @@ function ModuleCatalogSection() {
               </article>
             </Reveal>;
           })}
-        </div> : <div className="py-16 text-center"><p className="text-lg font-bold text-[#01422C]">No encontramos ese módulo.</p><button type="button" onClick={() => setQuery('')} className="mt-3 text-sm font-semibold text-[#74C044] underline underline-offset-4">Limpiar búsqueda</button></div>}
+          </div>
+          {visibleModules.length > visibleCount && <div className="mt-8 flex justify-center"><button type="button" onClick={() => setVisibleCount((count) => count + 9)} className="group inline-flex items-center gap-3 rounded-full border border-[#01422C] bg-[#01422C] px-6 py-3.5 text-[11px] font-extrabold uppercase tracking-[.16em] text-white transition hover:-translate-y-0.5 hover:bg-[#74C044] hover:text-white">Ver más funcionalidades <ArrowDownRight className="size-4 transition-transform group-hover:translate-y-0.5" /></button></div>}
+          {visibleCount > 9 && visibleModules.length > 9 && <div className="mt-3 flex justify-center"><button type="button" onClick={() => setVisibleCount(9)} className="text-[10px] font-bold uppercase tracking-[.16em] text-[#315f4d] underline underline-offset-4 hover:text-[#01422C]">Mostrar menos</button></div>}
+        </> : <div className="py-16 text-center"><p className="text-lg font-bold text-[#01422C]">No encontramos ese módulo.</p><button type="button" onClick={() => setQuery('')} className="mt-3 text-sm font-semibold text-[#74C044] underline underline-offset-4">Limpiar búsqueda</button></div>}
       </div>
     </div>
   </section>;

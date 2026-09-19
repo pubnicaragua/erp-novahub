@@ -480,6 +480,37 @@ body > .landing-image-lightbox .landing-image-lightbox-close:hover {
   background: var(--nova-verde);
 }
 
+/* Final palette and section-edge pass. Keep the hero on the exact NovaHub
+   Bosque token and use one smooth organic edge instead of mixed zigzags. */
+#novahub-landing #inicio {
+  background-color: #01422C !important;
+}
+
+#novahub-landing #catalogo-modulos::before,
+#novahub-landing #giros::before {
+  top: -48px;
+  height: 58px;
+  background: #edf7f1 !important;
+  clip-path: none;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C100 64 170 48 270 70 C380 96 455 30 570 62 C690 98 780 38 900 70 C1015 98 1110 30 1230 62 C1325 84 1380 72 1440 54 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C100 64 170 48 270 70 C380 96 455 30 570 62 C690 98 780 38 900 70 C1015 98 1110 30 1230 62 C1325 84 1380 72 1440 54 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+#novahub-landing #giros::before {
+  background: #f8fbfa !important;
+}
+
+#novahub-landing #catalogo-modulos {
+  background-color: #edf7f1 !important;
+}
+
+#novahub-landing main > section[class*='bg-[#071b18]']::before {
+  top: -44px;
+  height: 54px;
+}
+
 @keyframes landing-hero-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-5px); }
