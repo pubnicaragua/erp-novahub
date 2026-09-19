@@ -27,7 +27,7 @@ import facturacionCajaDemo from '../../assets/landing/facturacion-caja-demo.png'
 import { LandingChatModal } from './LandingChatModal';
 import { NovaHubLogo } from './NovaHubLogo';
 import { buildDownloadFileName } from '../utils/exportFileNames';
-import novahubLogotipo from '../../assets/branding/novahub-logotipo.png';
+import novahubLogotipo from '../../assets/branding/novahub-logotipo-transparent.png';
 import '../../styles/landing.css';
 
 const WHATSAPP_URL = 'https://wa.me/50588241003?text=Hola%2C%20quiero%20conocer%20NovaHub%20ERP';
@@ -39,7 +39,6 @@ const NAV_LINKS = [
   { label: 'Módulos', href: '#catalogo-modulos' },
   { label: 'Giros', href: '#giros' },
   { label: 'Cómo funciona', href: '#flujo' },
-  { label: 'Precios', href: '#precios' },
 ] as const;
 
 const MODULES = [
@@ -239,6 +238,25 @@ function MobileCTA() {
 }
 
 export default function LandingPage() {
+  useEffect(() => {
+    const landing = document.querySelector('#novahub-landing');
+    if (!landing) return;
+    landing.querySelector('#precios')?.remove();
+    landing.querySelectorAll("a[href='#precios']").forEach((link) => link.remove());
+    landing.querySelectorAll("a[href='/login']").forEach((link) => {
+      link.setAttribute('href', WHATSAPP_URL);
+      link.textContent = link.closest('header') ? 'Empezar ahora' : 'Contactarnos';
+    });
+    const screenshot = landing.querySelector('img[alt^="Vista de facturación"]');
+    const visual = screenshot?.parentElement?.parentElement?.parentElement;
+    if (visual && !visual.querySelector('.landing-hero-tagline')) {
+      const tagline = document.createElement('p');
+      tagline.className = 'landing-hero-tagline';
+      tagline.textContent = 'Crece con NovaHub.';
+      visual.append(tagline);
+    }
+  }, []);
   useEffect(() => { document.title = 'NovaHub ERP | Vende más, controla mejor y crece con NovaHub'; const heroTitle = document.querySelector('#novahub-landing h1'); if (heroTitle) { heroTitle.innerHTML = 'Vende más. <br />Controla mejor. <span class="landing-serif font-medium italic tracking-[-.05em] text-[#C8E6D0]">Crece con NovaHub.</span>'; const heroCopy = heroTitle.parentElement; const eyebrow = heroCopy?.querySelector('div.mb-6'); if (eyebrow) eyebrow.innerHTML = '<span class="size-1.5 animate-pulse rounded-full bg-[#5ce1d5]"></span> ERP para empresas que quieren crecer'; const subhead = heroTitle.nextElementSibling; if (subhead) subhead.textContent = 'Ventas, inventario, caja, contabilidad y operación conectados en un ERP diseñado para que tomes decisiones con claridad.'; } }, []);
+  useEffect(() => { document.querySelector('#novahub-landing h1 .landing-serif')?.remove(); }, []);
   return <div id="novahub-landing" className="min-h-screen overflow-x-hidden bg-white text-[#01422C] antialiased selection:bg-[#C8E6D0] selection:text-[#01422C]"><Header /><main><HeroSection /><SignalStrip /><ConnectedOperation /><ProductSection /><ModulesSection /><ModuleCatalogSection /><IndustriesSection /><PricingSection /><TrustSection /><FinalCTA /></main><Footer /><MobileCTA /><LandingChatModal /></div>;
 }

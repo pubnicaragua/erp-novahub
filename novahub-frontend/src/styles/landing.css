@@ -70,3 +70,72 @@
   font-weight: 500;
   letter-spacing: -0.035em;
 }
+
+/* Commercial landing refinements: one dark NovaHub canvas, organic section breaks, and the real wordmark. */
+#novahub-landing header,
+#novahub-landing footer {
+  background-color: var(--nova-bosque) !important;
+}
+
+#novahub-landing header > div > a[aria-label*='NovaHub'] > span:first-child,
+#novahub-landing header > div > a[aria-label*='NovaHub'] > span:last-child {
+  display: none;
+}
+
+#novahub-landing header > div > a[aria-label*='NovaHub']::before {
+  content: '';
+  display: block;
+  width: 148px;
+  height: 42px;
+  background: url('/novahub-logotipo-transparent.png') center / contain no-repeat;
+}
+
+#novahub-landing footer .bg-white {
+  width: 230px !important;
+  height: 76px !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+#novahub-landing footer .bg-white img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+
+#novahub-landing #precios,
+#novahub-landing a[href='#precios'],
+#novahub-landing #contacto button {
+  display: none !important;
+}
+
+#novahub-landing main > section:not(:first-child) {
+  position: relative;
+  isolation: isolate;
+}
+
+#novahub-landing main > section:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -48px;
+  left: 0;
+  width: 100%;
+  height: 56px;
+  background: inherit;
+  clip-path: polygon(0 74%, 10% 32%, 22% 68%, 35% 12%, 48% 72%, 62% 26%, 76% 68%, 88% 20%, 100% 62%, 100% 100%, 0 100%);
+}
+
+#novahub-landing .landing-hero-tagline {
+  margin: 1.25rem auto 0;
+  color: var(--nova-menta);
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(1.8rem, 3vw, 3rem);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  text-align: center;
+}
