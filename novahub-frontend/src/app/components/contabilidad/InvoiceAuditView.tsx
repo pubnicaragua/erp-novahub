@@ -66,6 +66,7 @@ export function InvoiceAuditView() {
 
   const [auditModal, setAuditModal] = useState<{ invoiceIds: string[]; observations: string; results: AuditResult[] | null; saving: boolean } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ invoiceId: string; number: string; reason: string; saving: boolean } | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ id: string; number: string; decision: 'APPROVE' | 'REJECT'; reason: string; saving: boolean } | null>(null);
 
   const listQuery = useQuery({
@@ -152,7 +153,7 @@ export function InvoiceAuditView() {
       const list = Array.isArray(results) ? results : Array.isArray((results as any)?.results) ? (results as any).results : [];
       setAuditModal((m) => (m ? { ...m, results: list, saving: false } : m));
       const issues = list.filter((r: any) => r.result === 'ISSUES').length;
-      if (issues > 0) toast.warning(`${issues} factura(s) con anomalías. Puedes enviarlas a corregir o anularlas.`);
+      if (issues > 0) toast.warning(`${issues} factura(s) con anomalías. Puedes enviarlas a corregir o anularlas directamente.`);
       else toast.success(`${list.length} factura(s) auditadas correctamente`);
       completeNotificationAction(actionToken);
       setSelected(new Set());
@@ -177,6 +178,38 @@ export function InvoiceAuditView() {
       failNotificationAction(actionToken);
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const openCancelDialog = (item: { invoiceId?: string; id?: string; number?: string }) => {
+    const invoiceId = item.invoiceId || item.id;
+    if (!invoiceId) return;
+    setCancelTarget({ invoiceId, number: item.number || 'Factura', reason: '', saving: false });
+  };
+
+  const cancelAuditedInvoice = async () => {
+    if (!cancelTarget) return;
+    const actionToken = beginNotificationAction();
+    try {
+      setCancelTarget((target) => (target ? { ...target, saving: true } : target));
+      const result = await contabilidadService.cancelAuditedInvoice({
+        kind,
+        invoiceId: cancelTarget.invoiceId,
+        reason: cancelTarget.reason.trim() || undefined,
+      });
+      const journalReversed = Boolean((result as any)?.journalReversed);
+      toast.success(journalReversed
+        ? 'Factura anulada, saldo actualizado y asiento revertido'
+        : 'Factura anulada y saldo actualizado');
+      completeNotificationAction(actionToken);
+      setCancelTarget(null);
+      setAuditModal(null);
+      setSelected(new Set());
+      refreshAll();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo anular la factura');
+      failNotificationAction(actionToken);
+      setCancelTarget((target) => (target ? { ...target, saving: false } : target));
     }
   };
 
@@ -241,7 +274,7 @@ export function InvoiceAuditView() {
           <div>
             <h3 className="text-sm font-black uppercase tracking-widest">Auditoría de Facturas</h3>
             <p className="text-[10px] text-muted-foreground">
-              Valida facturas, envía anomalías a corrección y procesa solicitudes de anulación. La factura corregida se crea nuevamente en su módulo; no se reemite sobre la misma.
+              Valida líneas, IVA, retenciones, totales y saldos; permite corregir o anular directamente las facturas con anomalías.
             </p>
           </div>
         </div>
@@ -409,6 +442,11 @@ export function InvoiceAuditView() {
                               <Button variant="ghost" size="icon" className="size-8 rounded-lg text-sky-600 hover:bg-sky-500/10 hover:text-sky-600" disabled={busyId === item.id} onClick={() => handleSendToCorrect(item)} title="Enviar a corregir">
                                 {busyId === item.id ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                               </Button>
+                              {canPerform('ACCOUNTING_INVOICE_AUDIT', 'approve') && (
+                                <Button variant="ghost" size="icon" className="size-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => openCancelDialog(item)} title="Anular y revertir">
+                                  <Ban className="size-3.5" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -538,10 +576,17 @@ export function InvoiceAuditView() {
                     <div key={result.invoiceId} className="rounded-xl border border-border/50 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <span className="font-mono text-xs font-bold">{result.number}</span>
-                        <Badge className={cn('gap-1 rounded-lg text-[9px] font-black uppercase tracking-widest', approved ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20')}>
-                          {approved ? <CheckCircle2 className="size-3" /> : <FileWarning className="size-3" />}
-                          {approved ? 'Sin anomalías' : 'Con anomalías'}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className={cn('gap-1 rounded-lg text-[9px] font-black uppercase tracking-widest', approved ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20')}>
+                            {approved ? <CheckCircle2 className="size-3" /> : <FileWarning className="size-3" />}
+                            {approved ? 'Sin anomalías' : 'Con anomalías'}
+                          </Badge>
+                          {!approved && canPerform('ACCOUNTING_INVOICE_AUDIT', 'approve') && (
+                            <Button size="sm" className="h-7 rounded-lg bg-destructive px-2.5 text-[9px] font-black uppercase tracking-widest text-destructive-foreground hover:bg-destructive/90" onClick={() => openCancelDialog(result)}>
+                              <Ban className="mr-1 size-3" /> Anular y revertir
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div className="space-y-1">
                         {result.checks.map((check) => (
@@ -576,6 +621,34 @@ export function InvoiceAuditView() {
                 </Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !cancelTarget?.saving) setCancelTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black uppercase tracking-tight">¿Anular factura {cancelTarget?.number}?</DialogTitle>
+            <DialogDescription className="text-xs">
+              La factura se marcará como anulada desde el flujo contable. También se actualizará el saldo, se revertirá inventario/caja cuando corresponda y se intentará revertir su asiento contable.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Motivo de anulación (opcional)</Label>
+            <textarea
+              value={cancelTarget?.reason || ''}
+              onChange={(e) => setCancelTarget((target) => (target ? { ...target, reason: e.target.value } : target))}
+              rows={3}
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary/50"
+              placeholder="Ej: Diferencia en IVA detectada durante auditoría…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" disabled={cancelTarget?.saving} onClick={() => setCancelTarget(null)}>Cancelar</Button>
+            <Button className="gap-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={cancelTarget?.saving} onClick={cancelAuditedInvoice}>
+              {cancelTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
+              Anular y revertir
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

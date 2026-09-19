@@ -23,10 +23,12 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { LANDING_MODULES, MODULE_CATEGORIES, type ModuleCategory } from './landingModules';
 import facturacionCajaDemo from '../../assets/landing/facturacion-caja-demo.png';
-import novahubWordmarkLight from '../../assets/landing/novahub-wordmark-light.png';
 import { LandingChatModal } from './LandingChatModal';
+import { NovaHubLogo } from './NovaHubLogo';
 import { buildDownloadFileName } from '../utils/exportFileNames';
+import '../../styles/landing.css';
 
 const WHATSAPP_URL = 'https://wa.me/50588241003?text=Hola%2C%20quiero%20conocer%20NovaHub%20ERP';
 const EXCHANGE_RATE = 36.5;
@@ -34,6 +36,7 @@ const ease = [0.22, 1, 0.36, 1] as const;
 
 const NAV_LINKS = [
   { label: 'Producto', href: '#producto' },
+  { label: 'Módulos', href: '#catalogo-modulos' },
   { label: 'Giros', href: '#giros' },
   { label: 'Cómo funciona', href: '#flujo' },
   { label: 'Precios', href: '#precios' },
@@ -94,7 +97,7 @@ function Header() {
 
   return <header className={`fixed inset-x-0 top-0 z-40 transition duration-300 ${scrolled ? 'bg-[#071b18]/90 shadow-[0_10px_40px_-25px_rgba(0,0,0,.8)] backdrop-blur-xl' : 'bg-transparent'}`}>
     <div className="mx-auto flex h-[76px] max-w-[1280px] items-center justify-between px-5 sm:px-8 lg:px-10">
-      <a href="#inicio" className="flex items-center gap-3" aria-label="NovaHub ERP, inicio"><img src={novahubWordmarkLight} alt="NovaHub ERP" className="h-9 w-auto object-contain" /></a>
+      <a href="#inicio" className="flex items-center gap-3" aria-label="NovaHub ERP, inicio"><span className="flex size-10 items-center justify-center rounded-xl bg-white p-1.5 shadow-[0_10px_24px_-16px_rgba(1,66,44,.8)]"><NovaHubLogo size={30} /></span><span className="hidden text-sm font-extrabold tracking-[-.03em] text-white sm:block">Nova<span className="text-[#74C044]">Hub</span></span></a>
       <nav className="hidden items-center gap-7 lg:flex" aria-label="Navegación principal">{NAV_LINKS.map((link) => <a key={link.href} href={link.href} className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/65 transition hover:text-[#5ce1d5]">{link.label}</a>)}</nav>
       <div className="hidden items-center gap-5 sm:flex"><a href="/login" className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/70 transition hover:text-white">Iniciar sesión</a><PrimaryButton href={WHATSAPP_URL} dark className="px-5 py-3">Agendar demo</PrimaryButton></div>
       <button type="button" onClick={() => setMenuOpen((value) => !value)} className="rounded-full border border-white/15 p-2.5 text-white lg:hidden" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}>{menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}</button>
@@ -129,6 +132,65 @@ function ProductSection() {
 
 function ModulesSection() {
   return <section className="bg-[#071b18] px-5 py-24 text-white sm:px-8 lg:px-10 lg:py-36"><div className="mx-auto max-w-[1280px]"><Reveal><div className="grid items-end gap-8 lg:grid-cols-[.8fr_1.2fr]"><div><Kicker dark>Todo lo que tu equipo necesita</Kicker><h2 className="max-w-[520px] text-4xl font-black leading-[.98] tracking-[-.06em] sm:text-6xl">Menos fricción. <span className="text-[#5ce1d5]">Más avance.</span></h2></div><p className="max-w-[520px] text-base leading-7 text-white/55">Empieza con lo esencial y agrega capacidades cuando tu empresa las necesite. El sistema crece contigo, no te obliga a cambiar de operación.</p></div></Reveal><div className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{MODULES.map((module, index) => { const Icon = module.icon; const tone = module.tone === 'cyan' ? 'text-[#5ce1d5] bg-[#5ce1d5]/10' : module.tone === 'green' ? 'text-[#6ef0bd] bg-[#6ef0bd]/10' : module.tone === 'amber' ? 'text-[#ffd166] bg-[#ffd166]/10' : module.tone === 'violet' ? 'text-[#c9b6ff] bg-[#c9b6ff]/10' : module.tone === 'blue' ? 'text-[#91c7ff] bg-[#91c7ff]/10' : 'text-[#ff9eae] bg-[#ff9eae]/10'; return <Reveal key={module.title} delay={index * .05}><a href={WHATSAPP_URL} className="group block h-full rounded-[22px] border border-white/10 bg-white/[.045] p-6 transition duration-300 hover:-translate-y-1 hover:border-[#5ce1d5]/45 hover:bg-white/[.08]"><div className="flex items-start justify-between"><span className={`flex size-11 items-center justify-center rounded-2xl ${tone}`}><Icon className="size-5" /></span><ArrowRight className="size-4 text-white/20 transition group-hover:translate-x-1 group-hover:text-[#5ce1d5]" /></div><h3 className="mt-8 text-xl font-extrabold tracking-[-.03em]">{module.title}</h3><p className="mt-2 max-w-[270px] text-sm leading-6 text-white/48">{module.body}</p></a></Reveal>; })}</div></div></section>;
+}
+
+function ModuleCatalogSection() {
+  const [activeCategory, setActiveCategory] = useState<ModuleCategory>('Todos');
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLocaleLowerCase('es');
+  const visibleModules = LANDING_MODULES.filter((item) => {
+    const matchesCategory = activeCategory === 'Todos' || item.category === activeCategory;
+    const searchableText = `${item.module} ${item.submodule} ${item.features.join(' ')} ${item.advantage}`.toLocaleLowerCase('es');
+    return matchesCategory && (!normalizedQuery || searchableText.includes(normalizedQuery));
+  });
+
+  return <section id="catalogo-modulos" className="bg-[#C8E6D0]/35 px-5 py-24 sm:px-8 lg:px-10 lg:py-36">
+    <div className="mx-auto max-w-[1280px]">
+      <Reveal>
+        <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-[720px]">
+            <Kicker>Todo lo que NovaHub puede hacer</Kicker>
+            <h2 className="text-4xl font-black leading-[.98] tracking-[-.06em] text-[#01422C] sm:text-6xl">Módulos que se entienden. <span className="landing-serif font-medium italic text-[#74C044]">Ventajas que se sienten.</span></h2>
+            <p className="mt-6 max-w-[650px] text-base leading-7 text-[#315f4d]">Explora las capacidades de NovaHub por área. Cada módulo está pensado para resolver una necesidad concreta y conectar el resultado con el resto de tu negocio.</p>
+          </div>
+          <div className="flex shrink-0 items-end gap-6 border-l border-[#01422C]/15 pl-6">
+            <div><strong className="block text-4xl font-black tracking-[-.06em] text-[#01422C]">{LANDING_MODULES.length}+</strong><span className="text-[10px] font-bold uppercase tracking-[.16em] text-[#315f4d]">capacidades</span></div>
+            <div><strong className="block text-4xl font-black tracking-[-.06em] text-[#01422C]">{MODULE_CATEGORIES.length - 1}</strong><span className="text-[10px] font-bold uppercase tracking-[.16em] text-[#315f4d]">áreas</span></div>
+          </div>
+        </div>
+      </Reveal>
+
+      <div className="mt-12 rounded-[30px] border border-[#01422C]/10 bg-white/80 p-3 shadow-[0_28px_70px_-48px_rgba(1,66,44,.6)] backdrop-blur sm:p-5">
+        <div className="flex flex-col gap-4 border-b border-[#C8E6D0] pb-5 lg:flex-row lg:items-center lg:justify-between">
+          <label className="relative block w-full lg:max-w-[330px]">
+            <span className="sr-only">Buscar módulo</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar módulo o función" className="w-full rounded-full border border-[#C8E6D0] bg-white px-5 py-3 text-sm text-[#01422C] outline-none placeholder:text-[#6f917f] focus:border-[#74C044]" />
+          </label>
+          <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Filtrar módulos por área">
+            {MODULE_CATEGORIES.map((category) => <button key={category} type="button" role="tab" aria-selected={activeCategory === category} onClick={() => setActiveCategory(category)} className={`whitespace-nowrap rounded-full border px-4 py-2.5 text-[10px] font-bold uppercase tracking-[.12em] transition ${activeCategory === category ? 'border-[#01422C] bg-[#01422C] text-white' : 'border-[#C8E6D0] bg-white text-[#315f4d] hover:border-[#74C044] hover:text-[#01422C]'}`}>{category}</button>)}
+          </div>
+        </div>
+
+        {visibleModules.length > 0 ? <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {visibleModules.map((item, index) => {
+            const Icon = item.icon;
+            return <Reveal key={`${item.module}-${item.submodule}`} delay={Math.min(index * .015, .18)}>
+              <article className="landing-module-card group flex h-full flex-col rounded-[22px] border border-[#C8E6D0] bg-white p-5 transition duration-300 hover:-translate-y-1 hover:border-[#74C044]">
+                <div className="flex items-start justify-between gap-4">
+                  <span className="flex size-10 items-center justify-center rounded-2xl bg-[#C8E6D0]/70 text-[#01422C]"><Icon className="size-4.5" /></span>
+                  <span className="rounded-full bg-[#C8E6D0]/50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[.12em] text-[#01422C]">{item.category}</span>
+                </div>
+                <p className="mt-6 text-[10px] font-bold uppercase tracking-[.16em] text-[#74C044]">{item.module}</p>
+                <h3 className="mt-2 text-lg font-extrabold leading-tight tracking-[-.03em] text-[#01422C]">{item.submodule}</h3>
+                <ul className="mt-4 space-y-2 text-sm leading-5 text-[#315f4d]">{item.features.map((feature) => <li key={feature} className="flex gap-2"><Check className="mt-0.5 size-3.5 shrink-0 text-[#74C044]" />{feature}</li>)}</ul>
+                <div className="mt-5 border-t border-[#C8E6D0] pt-4"><p className="text-[9px] font-bold uppercase tracking-[.15em] text-[#74C044]">Ventaja</p><p className="mt-1 text-sm leading-5 text-[#01422C]">{item.advantage}</p></div>
+              </article>
+            </Reveal>;
+          })}
+        </div> : <div className="py-16 text-center"><p className="text-lg font-bold text-[#01422C]">No encontramos ese módulo.</p><button type="button" onClick={() => setQuery('')} className="mt-3 text-sm font-semibold text-[#74C044] underline underline-offset-4">Limpiar búsqueda</button></div>}
+      </div>
+    </div>
+  </section>;
 }
 
 function IndustriesSection() {
@@ -167,7 +229,7 @@ function FinalCTA() {
 }
 
 function Footer() {
-  return <footer className="bg-[#061511] px-5 py-14 text-white sm:px-8 lg:px-10"><div className="mx-auto max-w-[1280px]"><div className="grid gap-12 md:grid-cols-[1.2fr_.8fr_.8fr] lg:gap-24"><div><img src={novahubWordmarkLight} alt="NovaHub ERP" className="h-10 w-auto object-contain" /><p className="mt-6 max-w-[340px] text-sm leading-6 text-white/45">Una forma más clara de vender, controlar y hacer crecer tu empresa.</p><a href={WHATSAPP_URL} className="mt-7 inline-flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.17em] text-[#5ce1d5]">Hablar con NovaHub <ArrowRight className="size-4" /></a></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#5ce1d5]">Explorar</p><div className="mt-5 flex flex-col gap-3 text-sm text-white/48"><a href="#producto" className="transition hover:text-white">Producto</a><a href="#giros" className="transition hover:text-white">Giros de negocio</a><a href="#precios" className="transition hover:text-white">Precios</a><a href="/login" className="transition hover:text-white">Iniciar sesión</a></div></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#5ce1d5]">Confianza</p><div className="mt-5 flex flex-col gap-3 text-sm text-white/48"><a href="#confianza" className="transition hover:text-white">Seguridad y datos</a><a href="#contacto" className="transition hover:text-white">Soporte en español</a><a href="#contacto" className="transition hover:text-white">Solicitar información</a></div></div></div><div className="mt-14 flex flex-col justify-between gap-4 border-t border-white/10 pt-6 text-[10px] text-white/30 sm:flex-row"><span>© {new Date().getFullYear()} NovaHub ERP. Todos los derechos reservados.</span><span>Diseñado para empresas que quieren avanzar.</span></div></div></footer>;
+  return <footer className="bg-[#061511] px-5 py-14 text-white sm:px-8 lg:px-10"><div className="mx-auto max-w-[1280px]"><div className="grid gap-12 md:grid-cols-[1.2fr_.8fr_.8fr] lg:gap-24"><div><div className="flex size-12 items-center justify-center rounded-2xl bg-white p-2"><NovaHubLogo size={34} /></div><p className="mt-6 max-w-[340px] text-sm leading-6 text-white/45">Una forma más clara de vender, controlar y hacer crecer tu empresa.</p><a href={WHATSAPP_URL} className="mt-7 inline-flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.17em] text-[#5ce1d5]">Hablar con NovaHub <ArrowRight className="size-4" /></a></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#5ce1d5]">Explorar</p><div className="mt-5 flex flex-col gap-3 text-sm text-white/48"><a href="#producto" className="transition hover:text-white">Producto</a><a href="#giros" className="transition hover:text-white">Giros de negocio</a><a href="#precios" className="transition hover:text-white">Precios</a><a href="/login" className="transition hover:text-white">Iniciar sesión</a></div></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#5ce1d5]">Confianza</p><div className="mt-5 flex flex-col gap-3 text-sm text-white/48"><a href="#confianza" className="transition hover:text-white">Seguridad y datos</a><a href="#contacto" className="transition hover:text-white">Soporte en español</a><a href="#contacto" className="transition hover:text-white">Solicitar información</a></div></div></div><div className="mt-14 flex flex-col justify-between gap-4 border-t border-white/10 pt-6 text-[10px] text-white/30 sm:flex-row"><span>© {new Date().getFullYear()} NovaHub ERP. Todos los derechos reservados.</span><span>Diseñado para empresas que quieren avanzar.</span></div></div></footer>;
 }
 
 function MobileCTA() {
@@ -178,5 +240,5 @@ function MobileCTA() {
 
 export default function LandingPage() {
   useEffect(() => { document.title = 'NovaHub ERP | El control de tu negocio, en una sola señal'; }, []);
-  return <div id="novahub-landing" className="min-h-screen overflow-x-hidden bg-white text-[#0c3d31] antialiased selection:bg-[#5ce1d5]/30 selection:text-[#0c3d31]"><Header /><main><HeroSection /><SignalStrip /><ConnectedOperation /><ProductSection /><ModulesSection /><IndustriesSection /><PricingSection /><TrustSection /><FinalCTA /></main><Footer /><MobileCTA /><LandingChatModal /></div>;
+  return <div id="novahub-landing" className="min-h-screen overflow-x-hidden bg-white text-[#01422C] antialiased selection:bg-[#C8E6D0] selection:text-[#01422C]"><Header /><main><HeroSection /><SignalStrip /><ConnectedOperation /><ProductSection /><ModulesSection /><ModuleCatalogSection /><IndustriesSection /><PricingSection /><TrustSection /><FinalCTA /></main><Footer /><MobileCTA /><LandingChatModal /></div>;
 }
