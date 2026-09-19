@@ -139,3 +139,100 @@
   letter-spacing: -0.045em;
   text-align: center;
 }
+
+/* Static brand chrome: the official green wordmark needs a light canvas. */
+#novahub-landing header,
+#novahub-landing footer {
+  background-color: var(--nova-blanco) !important;
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing header a,
+#novahub-landing header button {
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing header button {
+  border-color: var(--nova-menta) !important;
+}
+
+#novahub-landing header > div > a[aria-label*='NovaHub']::before {
+  filter: saturate(1.05) brightness(1.05);
+}
+
+#novahub-landing footer a,
+#novahub-landing footer p,
+#novahub-landing footer span {
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing footer a:hover {
+  color: var(--nova-verde) !important;
+}
+
+#novahub-landing footer .border-t {
+  border-color: var(--nova-menta) !important;
+}
+
+#novahub-landing main > section[class*='bg-white'],
+#novahub-landing main > section[class*='bg-[#f8fbfa]'] {
+  --nova-edge: #ffffff;
+}
+
+#novahub-landing main > section[class*='bg-[#C8E6D0]'] {
+  --nova-edge: rgba(200, 230, 208, 0.35);
+}
+
+#novahub-landing main > section[class*='bg-[#071b18]'],
+#novahub-landing main > section[class*='bg-[#0c3d31]'] {
+  --nova-edge: var(--nova-bosque);
+}
+
+#novahub-landing main > section:not(:first-child)::before {
+  top: -62px;
+  z-index: 0;
+  height: 70px;
+  background: var(--nova-edge, var(--nova-bosque));
+  clip-path: none;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 84 C100 64 160 42 250 72 C360 100 430 15 560 62 C680 108 760 37 880 70 C1000 102 1110 25 1230 58 C1320 84 1380 78 1440 55 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 84 C100 64 160 42 250 72 C360 100 430 15 560 62 C680 108 760 37 880 70 C1000 102 1110 25 1230 58 C1320 84 1380 78 1440 55 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+#novahub-landing main > section:not(:first-child) > * {
+  position: relative;
+  z-index: 1;
+}
+
+#novahub-landing img[alt^='Vista de facturación'] {
+  cursor: zoom-in;
+  transform: scale(1.035);
+  transform-origin: center;
+  transition: transform 350ms ease;
+}
+
+#novahub-landing img[alt^='Vista de facturación']:hover {
+  transform: scale(1.07);
+}
+
+#novahub-landing .landing-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: rgba(1, 18, 13, 0.82);
+  backdrop-filter: blur(14px);
+}
+
+#novahub-landing .landing-image-lightbox img {
+  width: min(1180px, 94vw);
+  max-height: 88vh;
+  border: 1px solid rgba(200, 230, 208, 0.5);
+  border-radius: 1.25rem;
+  object-fit: contain;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.45);
+  cursor: zoom-out;
+}

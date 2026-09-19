@@ -241,19 +241,32 @@ export default function LandingPage() {
   useEffect(() => {
     const landing = document.querySelector('#novahub-landing');
     if (!landing) return;
+    landing.querySelectorAll('span').forEach((span) => {
+      if (span.textContent?.trim() === 'capacidades') span.textContent = 'funcionalidades';
+    });
     landing.querySelector('#precios')?.remove();
     landing.querySelectorAll("a[href='#precios']").forEach((link) => link.remove());
     landing.querySelectorAll("a[href='/login']").forEach((link) => {
       link.setAttribute('href', WHATSAPP_URL);
       link.textContent = link.closest('header') ? 'Empezar ahora' : 'Contactarnos';
     });
-    const screenshot = landing.querySelector('img[alt^="Vista de facturación"]');
+    const screenshot = landing.querySelector<HTMLImageElement>('img[alt^="Vista de facturación"]');
     const visual = screenshot?.parentElement?.parentElement?.parentElement;
     if (visual && !visual.querySelector('.landing-hero-tagline')) {
       const tagline = document.createElement('p');
       tagline.className = 'landing-hero-tagline';
       tagline.textContent = 'Crece con NovaHub.';
       visual.append(tagline);
+    }
+    if (screenshot && !screenshot.dataset.zoomReady) {
+      screenshot.dataset.zoomReady = 'true';
+      screenshot.addEventListener('click', () => {
+        const lightbox = document.createElement('div');
+        lightbox.className = 'landing-image-lightbox';
+        lightbox.innerHTML = `<img src="${screenshot.getAttribute('src')}" alt="Vista ampliada de NovaHub ERP" />`;
+        lightbox.addEventListener('click', () => lightbox.remove());
+        document.body.append(lightbox);
+      });
     }
   }, []);
   useEffect(() => { document.title = 'NovaHub ERP | Vende más, controla mejor y crece con NovaHub'; const heroTitle = document.querySelector('#novahub-landing h1'); if (heroTitle) { heroTitle.innerHTML = 'Vende más. <br />Controla mejor. <span class="landing-serif font-medium italic tracking-[-.05em] text-[#C8E6D0]">Crece con NovaHub.</span>'; const heroCopy = heroTitle.parentElement; const eyebrow = heroCopy?.querySelector('div.mb-6'); if (eyebrow) eyebrow.innerHTML = '<span class="size-1.5 animate-pulse rounded-full bg-[#5ce1d5]"></span> ERP para empresas que quieren crecer'; const subhead = heroTitle.nextElementSibling; if (subhead) subhead.textContent = 'Ventas, inventario, caja, contabilidad y operación conectados en un ERP diseñado para que tomes decisiones con claridad.'; } }, []);
