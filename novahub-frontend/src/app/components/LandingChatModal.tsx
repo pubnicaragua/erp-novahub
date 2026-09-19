@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageCircle, X, Send, ArrowRight } from 'lucide-react';
+import { X, Send, ArrowRight } from 'lucide-react';
 import { getApiUrl } from '../services/api';
+import { NovaHubLogo } from './NovaHubLogo';
 
 interface Message {
   id: string;
@@ -176,7 +177,7 @@ export function LandingChatModal() {
           animate={{ scale: [1, 1.12, 1] }}
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
         >
-          <MessageCircle className="size-7" />
+          <NovaHubLogo size={34} className="rounded-full bg-white p-1" />
         </motion.div>
         <motion.div
           animate={{ scale: [1, 1.8], opacity: [0.4, 0] }}
@@ -199,7 +200,7 @@ export function LandingChatModal() {
             <div className="flex items-center justify-between bg-gradient-to-r from-[#22c55e] to-[#16a34a] px-5 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex size-10 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                  <MessageCircle className="size-5 text-white" />
+                  <NovaHubLogo size={24} className="rounded-full bg-white p-1" />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white">NovaHub ERP</h3>
