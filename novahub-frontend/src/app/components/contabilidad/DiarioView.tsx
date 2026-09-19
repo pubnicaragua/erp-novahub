@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { cn } from '../ui/utils';
 import type { JournalEntry } from '../../types';
 import type { ChartAccount } from '../../types/accounting';
@@ -24,6 +25,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { REFERENCE_TYPES, accountingDescriptionLabel, referenceTypeLabel } from '../../utils/accountingLabels';
+import { generateJournalPDF } from '../../utils/pdfGenerator';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { Loader2 } from 'lucide-react';
 import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
@@ -111,7 +115,7 @@ interface PreviewRow {
 }
 
 export function DiarioView() {
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const { baseCurrency, formatAmount } = useCurrency();
   const [filterStatus, setFilterStatus] = useState('POSTED');
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -125,6 +129,9 @@ export function DiarioView() {
   const journalPageSize = 10000;
 
   const [viewJournalId, setViewJournalId] = useState<string | null>(null);
+
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
@@ -168,6 +175,132 @@ export function DiarioView() {
   const journals = accountingList(journalsQuery.data) as JournalEntry[];
   const viewJournal = journalDetailQuery.data || null;
   const formatCurrency = (value: number) => formatAmount(Number(value || 0), baseCurrency);
+
+  const canExport = canPerform('ACCOUNTING_JOURNAL', 'export') || canPerform('ACCOUNTING_JOURNAL', 'read');
+
+  const handleExportPDF = async () => {
+    if (journals.length === 0) {
+      toast.error('No hay asientos contables para exportar');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      const exportRows = journals.map((j) => {
+        const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
+        const totalCred = j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0;
+        return {
+          number: j.number,
+          date: formatAccountingDate(j.date),
+          description: accountingDescriptionLabel(j.description),
+          status: j.status,
+          debit: totalDeb,
+          credit: totalCred,
+          referenceType: referenceTypeLabel((j as any).referenceType),
+          referenceNumber: referenceDisplay(j),
+        };
+      });
+
+      const totalDebitsSum = journals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0), 0);
+      const totalCreditsSum = journals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0), 0);
+
+      await generateJournalPDF({
+        rows: exportRows,
+        tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub',
+        tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
+        dateFrom: filterDateFrom,
+        dateTo: filterDateTo,
+        filterStatus,
+        totals: {
+          debitos: formatAmount(totalDebitsSum, baseCurrency),
+          creditos: formatAmount(totalCreditsSum, baseCurrency),
+        },
+      });
+      toast.success(`PDF exportado con ${journals.length} asiento(s)`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al exportar a PDF');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    if (journals.length === 0) {
+      toast.error('No hay asientos contables para exportar');
+      return;
+    }
+    setExportingExcel(true);
+    try {
+      const excelRows: any[] = [];
+      journals.forEach((j) => {
+        const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
+        const totalCred = j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0;
+        excelRows.push({
+          '# Asiento': j.number,
+          Fecha: formatAccountingDate(j.date),
+          Descripción: accountingDescriptionLabel(j.description),
+          Estado: journalStatusLabel(j.status),
+          'Débito Total': totalDeb,
+          'Crédito Total': totalCred,
+          'Tipo Referencia': referenceTypeLabel((j as any).referenceType) || '-',
+          Referencia: referenceDisplay(j),
+          'Cantidad Líneas': j.lines?.length || 0,
+        });
+
+        if (j.lines && j.lines.length > 0) {
+          j.lines.forEach((l) => {
+            excelRows.push({
+              '# Asiento': `  ↳ ${j.number}`,
+              Fecha: formatAccountingDate(j.date),
+              Descripción: `    Línea: ${l.account?.code ? `${l.account.code} - ${l.account.name}` : l.description || '-'}`,
+              Estado: journalStatusLabel(j.status),
+              'Débito Total': Number(l.debit || 0),
+              'Crédito Total': Number(l.credit || 0),
+              'Tipo Referencia': referenceTypeLabel((j as any).referenceType) || '-',
+              Referencia: referenceDisplay(j),
+              'Cantidad Líneas': '',
+            });
+          });
+        }
+      });
+
+      const totalDebitsSum = journals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0), 0);
+      const totalCreditsSum = journals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0), 0);
+
+      const workbook = XLSX.utils.book_new();
+      const detailSheet = XLSX.utils.json_to_sheet(excelRows);
+      detailSheet['!cols'] = [
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 45 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 20 },
+        { wch: 22 },
+        { wch: 14 },
+      ];
+      XLSX.utils.book_append_sheet(workbook, detailSheet, 'Libro Diario');
+
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ['Reporte', 'Libro Diario'],
+        ['Estado filtrado', filterStatus || 'Todos'],
+        ['Desde', filterDateFrom || 'Inicio'],
+        ['Hasta', filterDateTo || 'Actual'],
+        ['Total asientos', journals.length],
+        ['Total débitos', totalDebitsSum],
+        ['Total créditos', totalCreditsSum],
+      ]);
+      summarySheet['!cols'] = [{ wch: 20 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');
+
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['libro_diario'], 'xlsx', filterDateFrom, filterDateTo));
+      toast.success(`Excel exportado con ${journals.length} asiento(s)`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al exportar a Excel');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
   const journalGridCols = viewJournal
     ? '48px 1fr 1.15fr 0.85fr 1.35fr 1.35fr 1fr 1.35fr 84px'
     : '48px 1fr 2.2fr 0.85fr 1fr 1fr 1fr 1.35fr 84px';
@@ -466,13 +599,36 @@ export function DiarioView() {
             Libro <span className="text-primary">Diario</span>
           </h2>
         </div>
-        <Button
-          onClick={() => setImportOpen(true)}
-          className="gap-1.5 self-start lg:self-auto"
-        >
-          <Upload className="size-4" />
-          Importar asientos
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+          {canExport && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={journals.length === 0 || exportingPdf || exportingExcel} className="gap-1.5">
+                  {exportingPdf || exportingExcel ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                  Exportar
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportPDF} disabled={exportingPdf} className="cursor-pointer gap-2">
+                  <FileText className="size-4 text-rose-500" />
+                  Exportar a PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportExcel} disabled={exportingExcel} className="cursor-pointer gap-2">
+                  <FileSpreadsheet className="size-4 text-emerald-600" />
+                  Exportar a Excel (.xlsx)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          <Button
+            onClick={() => setImportOpen(true)}
+            className="gap-1.5"
+          >
+            <Upload className="size-4" />
+            Importar asientos
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

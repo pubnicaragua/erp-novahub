@@ -2262,6 +2262,119 @@ export async function generateTrialBalancePDF({
   return doc;
 }
 
+/* Genera el reporte PDF del Libro Diario. */
+export async function generateJournalPDF({
+  rows,
+  tenantName,
+  tenantLogo,
+  dateFrom,
+  dateTo,
+  filterStatus,
+  totals,
+}: {
+  rows: Array<{
+    number: string;
+    date: string;
+    description: string;
+    status: string;
+    debit: number;
+    credit: number;
+    referenceType: string;
+    referenceNumber: string;
+  }>;
+  tenantName: string;
+  tenantLogo?: string | null;
+  dateFrom?: string;
+  dateTo?: string;
+  filterStatus?: string;
+  totals?: Record<string, unknown>;
+}) {
+  const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
+  const statusLabel = filterStatus && filterStatus !== 'ALL' ? ` · Estado: ${filterStatus}` : '';
+  const title = `Libro Diario${period ? ` · ${period}` : ''}${statusLabel}`;
+  const formatAmount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatStatus = (value: unknown) => {
+    const s = String(value || '').toUpperCase();
+    return s === 'DRAFT' ? 'BORRADOR' : s === 'POSTED' ? 'CONTABILIZADO' : s === 'VOIDED' ? 'ANULADO' : s;
+  };
+  const doc = await generateConfiguredReportTemplate({
+    targetKey: 'contabilidad.journal',
+    title,
+    tenantName,
+    tenantLogo,
+    rows,
+    columns: [
+      { header: '# Asiento', value: row => row.number },
+      { header: 'Fecha', value: row => row.date },
+      { header: 'Descripción', value: row => row.description },
+      { header: 'Estado', value: row => formatStatus(row.status) },
+      { header: 'Debe', value: row => formatAmount(row.debit), align: 'right' },
+      { header: 'Haber', value: row => formatAmount(row.credit), align: 'right' },
+      { header: 'Ref. Tipo', value: row => row.referenceType || '-' },
+      { header: 'Referencia', value: row => row.referenceNumber || '-' },
+    ],
+    totals,
+    fileName: buildDateFilteredPdfFileName(['libro_diario'], 'pdf', dateFrom, dateTo),
+  });
+  return doc;
+}
+
+/** Genera el reporte PDF del Libro Mayor. */
+export async function generateLedgerPDF({
+  rows,
+  tenantName,
+  tenantLogo,
+  dateFrom,
+  dateTo,
+  accountName,
+  totals,
+}: {
+  rows: Array<{
+    date: string;
+    accountCode: string;
+    accountName: string;
+    accountType: string;
+    description: string;
+    reference: string;
+    debit: number;
+    credit: number;
+    balance: number;
+  }>;
+  tenantName: string;
+  tenantLogo?: string | null;
+  dateFrom?: string;
+  dateTo?: string;
+  accountName?: string;
+  totals?: Record<string, unknown>;
+}) {
+  const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
+  const filterAcc = accountName ? ` · Cuenta: ${accountName}` : '';
+  const title = `Libro Mayor${period ? ` · ${period}` : ''}${filterAcc}`;
+  const formatAmount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const doc = await generateConfiguredReportTemplate({
+    targetKey: 'contabilidad.ledger',
+    title,
+    tenantName,
+    tenantLogo,
+    rows,
+    columns: [
+      { header: 'Fecha', value: row => row.date },
+      { header: 'Código', value: row => row.accountCode },
+      { header: 'Cuenta', value: row => row.accountName },
+      { header: 'Tipo', value: row => row.accountType || '-' },
+      { header: 'Descripción', value: row => row.description },
+      { header: 'Referencia', value: row => row.reference || '-' },
+      { header: 'Débito', value: row => formatAmount(row.debit), align: 'right' },
+      { header: 'Crédito', value: row => formatAmount(row.credit), align: 'right' },
+      { header: 'Saldo', value: row => formatAmount(row.balance), align: 'right' },
+    ],
+    totals,
+    fileName: buildDateFilteredPdfFileName(['libro_mayor'], 'pdf', dateFrom, dateTo),
+  });
+  return doc;
+}
+
+
 export async function generateProductLabelsPDF({ products, configs, tenantName, tenantLogo }: {
   products: any[];
   configs: Map<string, { productId: string; quantity: number; showName: boolean; showPrice: boolean; showCompany: boolean; showDate: boolean }>;
