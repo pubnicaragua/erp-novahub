@@ -419,4 +419,174 @@ export const LANDING_MODULES: LandingModule[] = [
     features: ['Lotes y vencimientos', 'Recetas y pacientes', 'Inventario y trazabilidad'],
     advantage: 'Más seguridad para productos sensibles y decisiones de reposición.',
   },
+  {
+    category: 'Operación', module: 'Ventas', submodule: 'Donación de facturas', icon: Receipt,
+    features: ['Registro de facturas donadas', 'Documentos y beneficiarios', 'Trazabilidad de la operación'],
+    advantage: 'Registra operaciones especiales sin perder respaldo ni control.',
+  },
+  {
+    category: 'Operación', module: 'Ventas', submodule: 'Auditoría y reversión de facturas', icon: ClipboardCheck,
+    features: ['Detección de anomalías', 'Anulación y reversión controlada', 'Historial de cambios'],
+    advantage: 'Corrige una operación con evidencia y sin romper el saldo contable.',
+  },
+  {
+    category: 'Operación', module: 'Ventas', submodule: 'Comisiones y vendedores', icon: Users,
+    features: ['Asignación por vendedor', 'Cálculo de comisiones', 'Seguimiento por periodo'],
+    advantage: 'Conoce quién vende, cuánto genera y qué debe recibir.',
+  },
+  {
+    category: 'Operación', module: 'Compras', submodule: 'Recepción parcial y conciliación', icon: Package,
+    features: ['Recepciones parciales', 'Comparación contra orden', 'Diferencias de cantidad y costo'],
+    advantage: 'Recibe lo que llegó y deja pendiente lo que todavía falta.',
+  },
+  {
+    category: 'Operación', module: 'Compras', submodule: 'Anticipos y saldos de proveedores', icon: CircleDollarSign,
+    features: ['Registro de anticipos', 'Aplicación a documentos', 'Saldos actualizados'],
+    advantage: 'Evita pagar dos veces y conoce el compromiso real con cada proveedor.',
+  },
+  {
+    category: 'Operación', module: 'Inventario', submodule: 'Transferencias entre bodegas', icon: Truck,
+    features: ['Solicitudes de traslado', 'Envío y recepción', 'Existencias por origen y destino'],
+    advantage: 'Mueve inventario entre bodegas manteniendo responsables y trazabilidad.',
+  },
+  {
+    category: 'Operación', module: 'Inventario', submodule: 'Lotes, series y vencimientos', icon: Tag,
+    features: ['Control por lote o serie', 'Fechas de vencimiento', 'Trazabilidad de salida'],
+    advantage: 'Sabe exactamente qué producto entró, dónde está y cuándo vence.',
+  },
+  {
+    category: 'Operación', module: 'Inventario', submodule: 'Costos y valorización', icon: CircleDollarSign,
+    features: ['Costo de compra', 'Valorización de existencias', 'Margen por producto'],
+    advantage: 'El inventario deja de ser una cantidad y se convierte en una lectura financiera.',
+  },
+  {
+    category: 'Operación', module: 'Inventario', submodule: 'Conteos físicos', icon: ClipboardCheck,
+    features: ['Conteos por bodega', 'Diferencias encontradas', 'Ajustes autorizados'],
+    advantage: 'Compara el sistema con la realidad antes de tomar decisiones.',
+  },
+  {
+    category: 'Operación', module: 'Inventario', submodule: 'Inventario consignado por cliente', icon: Users,
+    features: ['Marca asociada a cliente', 'Filtros por cliente y marca', 'Reportes de venta e inventario'],
+    advantage: 'Entrega visibilidad a consignatarios sin exponer el resto de la empresa.',
+  },
+  {
+    category: 'Finanzas', module: 'Finanzas', submodule: 'Cuentas bancarias y movimientos', icon: CircleDollarSign,
+    features: ['Cuentas y saldos', 'Ingresos y egresos', 'Movimientos por periodo'],
+    advantage: 'La liquidez se entiende desde una sola vista.',
+  },
+  {
+    category: 'Finanzas', module: 'Finanzas', submodule: 'Cobranzas y antigüedad de saldos', icon: Receipt,
+    features: ['Pendientes por cliente', 'Vencimientos y abonos', 'Antigüedad de cartera'],
+    advantage: 'Prioriza la cobranza con información clara y actualizada.',
+  },
+  {
+    category: 'Finanzas', module: 'Finanzas', submodule: 'Presupuestos y centros de costo', icon: BarChart3,
+    features: ['Presupuesto por área', 'Centros de costo', 'Comparación real contra plan'],
+    advantage: 'Mide dónde se está usando el dinero y contra qué objetivo.',
+  },
+  {
+    category: 'Finanzas', module: 'Finanzas', submodule: 'Calendario financiero', icon: CalendarDays,
+    features: ['Vencimientos próximos', 'Cobros y pagos programados', 'Vista por semana o mes'],
+    advantage: 'Anticipa compromisos antes de que se conviertan en urgencias.',
+  },
+  {
+    category: 'Finanzas', module: 'Contabilidad', submodule: 'Libro diario', icon: FileText,
+    features: ['Asientos y comprobantes', 'Débitos y créditos', 'Filtros por fecha y sucursal'],
+    advantage: 'Cada movimiento queda documentado en el origen contable.',
+  },
+  {
+    category: 'Finanzas', module: 'Contabilidad', submodule: 'Libro mayor', icon: FileText,
+    features: ['Movimientos por cuenta', 'Saldos acumulados', 'Auxiliares contables'],
+    advantage: 'Pasa del comprobante a la historia completa de cada cuenta.',
+  },
+  {
+    category: 'Finanzas', module: 'Contabilidad', submodule: 'Balanza por nivel y sucursal', icon: BarChart3,
+    features: ['Niveles del plan de cuentas', 'Filtros por sucursal', 'Exportación a Excel y PDF'],
+    advantage: 'Revisa que la contabilidad esté cuadrada con el detalle que necesitas.',
+  },
+  {
+    category: 'Finanzas', module: 'Contabilidad', submodule: 'Estado de resultados comparativo', icon: BarChart3,
+    features: ['Ingresos, costos y gastos', 'Utilidad del periodo', 'Comparativos históricos'],
+    advantage: 'Entiende si el negocio está ganando y qué está moviendo el resultado.',
+  },
+  {
+    category: 'Finanzas', module: 'Contabilidad', submodule: 'Balance general comparativo', icon: Scale,
+    features: ['Activos, pasivos y patrimonio', 'Cortes por periodo', 'Comparación de saldos'],
+    advantage: 'Conoce la posición financiera de la empresa en cada cierre.',
+  },
+  {
+    category: 'Finanzas', module: 'Contabilidad', submodule: 'Depreciación de activos fijos', icon: Building2,
+    features: ['Métodos y vida útil', 'Cálculo de depreciación', 'Movimientos del activo'],
+    advantage: 'El valor de tus equipos acompaña correctamente a la contabilidad.',
+  },
+  {
+    category: 'Finanzas', module: 'Contabilidad', submodule: 'Asientos automáticos', icon: Receipt,
+    features: ['Ventas y compras', 'Caja, bancos e inventario', 'Reglas contables configurables'],
+    advantage: 'Reduce digitación repetida y mantiene conectada la operación con contabilidad.',
+  },
+  {
+    category: 'Finanzas', module: 'Contabilidad', submodule: 'Cierres mensuales y fiscales', icon: ClipboardCheck,
+    features: ['Pre-cierre y revisión', 'Bloqueo de periodos', 'Traslado de saldos'],
+    advantage: 'Cierra con orden y evita cambios accidentales en periodos terminados.',
+  },
+  {
+    category: 'Finanzas', module: 'Reportes', submodule: 'Reportes por cliente y marca', icon: BarChart3,
+    features: ['Ventas por cliente', 'Inventario por marca', 'Filtros y detalle operativo'],
+    advantage: 'Responde rápido qué se vendió, a quién y con qué marca.',
+  },
+  {
+    category: 'Finanzas', module: 'Reportes', submodule: 'Exportación Excel, PDF y datos estructurados', icon: FileText,
+    features: ['Excel para análisis', 'PDF para compartir', 'Formatos estructurados'],
+    advantage: 'Lleva la información de NovaHub al formato que tu equipo necesita.',
+  },
+  {
+    category: 'Personas y gestión', module: 'Recursos Humanos', submodule: 'Comisiones y liquidaciones', icon: CircleDollarSign,
+    features: ['Variables por colaborador', 'Cálculo de comisiones', 'Historial de pagos'],
+    advantage: 'Conecta desempeño, variables y pagos en un solo proceso.',
+  },
+  {
+    category: 'Personas y gestión', module: 'Actividades', submodule: 'Reservas y citas configurables', icon: CalendarDays,
+    features: ['Tipos de cita', 'Disponibilidad y responsables', 'Confirmaciones y recordatorios'],
+    advantage: 'Una agenda adaptable a clínicas, talleres, servicios y equipos.',
+  },
+  {
+    category: 'Personas y gestión', module: 'Actividades', submodule: 'Recordatorios y seguimiento', icon: Bell,
+    features: ['Tareas pendientes', 'Fechas límite', 'Alertas automáticas'],
+    advantage: 'El equipo sabe qué sigue y cuándo debe atenderlo.',
+  },
+  {
+    category: 'Personas y gestión', module: 'Proyectos', submodule: 'Presupuestos y costos de proyecto', icon: FolderKanban,
+    features: ['Presupuesto por proyecto', 'Costos y materiales', 'Rentabilidad acumulada'],
+    advantage: 'Controla el proyecto desde la promesa comercial hasta el costo real.',
+  },
+  {
+    category: 'Plataforma', module: 'Nova Suite', submodule: 'Líneas corporativas y WhatsApp', icon: Headphones,
+    features: ['Líneas por empresa o área', 'WhatsApp para equipos', 'Conversaciones vinculadas al cliente'],
+    advantage: 'Nova Premium centraliza las líneas corporativas que tu operación necesita.',
+  },
+  {
+    category: 'Plataforma', module: 'Nova Suite', submodule: 'Plantillas y notificaciones automáticas', icon: Bell,
+    features: ['Plantillas por evento', 'WhatsApp y correo', 'Envíos automáticos'],
+    advantage: 'Comunica avances, cobros y confirmaciones sin perseguir cada operación.',
+  },
+  {
+    category: 'Plataforma', module: 'Configuración', submodule: 'Documentos editables y branding', icon: Settings,
+    features: ['Facturas configurables', 'Logotipo y colores', 'PDF por empresa'],
+    advantage: 'Cada documento conserva la identidad y las reglas comerciales de tu empresa.',
+  },
+  {
+    category: 'Enterprise', module: 'Enterprise', submodule: 'Webhooks y eventos de negocio', icon: Code2,
+    features: ['Eventos de ventas e inventario', 'Webhooks configurables', 'Automatizaciones externas'],
+    advantage: 'Conecta NovaHub con procesos que viven fuera del ERP.',
+  },
+  {
+    category: 'Enterprise', module: 'Portal de clientes', submodule: 'Dashboard por marca', icon: LayoutDashboard,
+    features: ['Acceso por usuario', 'Ventas e inventario filtrados', 'Reportes por marca asignada'],
+    advantage: 'Cada cliente ve únicamente la información de sus marcas.',
+  },
+  {
+    category: 'Verticales', module: 'Servicios', submodule: 'Agenda universal por giro', icon: CalendarDays,
+    features: ['Citas para clínicas y talleres', 'Reservas para servicios', 'Configuración por negocio'],
+    advantage: 'Un mismo motor de agenda se adapta al lenguaje de cada empresa.',
+  },
 ];

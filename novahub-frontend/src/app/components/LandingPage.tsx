@@ -27,7 +27,7 @@ import facturacionCajaDemo from '../../assets/landing/facturacion-caja-demo.png'
 import { LandingChatModal } from './LandingChatModal';
 import { NovaHubLogo } from './NovaHubLogo';
 import { buildDownloadFileName } from '../utils/exportFileNames';
-import novahubLogotipo from '../../assets/branding/novahub-logotipo.png';
+import novahubLogotipo from '../../assets/branding/novahub-logotipo-transparent.png';
 import '../../styles/landing.css';
 
 const WHATSAPP_URL = 'https://wa.me/50588241003?text=Hola%2C%20quiero%20conocer%20NovaHub%20ERP';
@@ -37,9 +37,7 @@ const ease = [0.22, 1, 0.36, 1] as const;
 const NAV_LINKS = [
   { label: 'Producto', href: '#producto' },
   { label: 'Módulos', href: '#catalogo-modulos' },
-  { label: 'Giros', href: '#giros' },
   { label: 'Cómo funciona', href: '#flujo' },
-  { label: 'Precios', href: '#precios' },
 ] as const;
 
 const MODULES = [
@@ -99,19 +97,19 @@ function Header() {
     <div className="mx-auto flex h-[76px] max-w-[1280px] items-center justify-between px-5 sm:px-8 lg:px-10">
       <a href="#inicio" className="flex items-center gap-3" aria-label="NovaHub ERP, inicio"><span className="flex size-10 items-center justify-center rounded-xl bg-white p-1.5 shadow-[0_10px_24px_-16px_rgba(1,66,44,.8)]"><NovaHubLogo size={30} /></span><span className="hidden text-sm font-extrabold tracking-[-.03em] text-white sm:block">Nova<span className="text-[#74C044]">Hub</span></span></a>
       <nav className="hidden items-center gap-7 lg:flex" aria-label="Navegación principal">{NAV_LINKS.map((link) => <a key={link.href} href={link.href} className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/65 transition hover:text-[#5ce1d5]">{link.label}</a>)}</nav>
-       <div className="hidden items-center gap-5 sm:flex"><a href="/login" className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/70 transition hover:text-white">Iniciar sesión</a></div>
+       <div className="hidden items-center gap-5 sm:flex"><a href={WHATSAPP_URL} className="rounded-full bg-[#74C044] px-5 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-white transition hover:-translate-y-0.5 hover:bg-[#01422C]">Empezar ahora</a></div>
       <button type="button" onClick={() => setMenuOpen((value) => !value)} className="rounded-full border border-white/15 p-2.5 text-white lg:hidden" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}>{menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}</button>
     </div>
-    <AnimatePresence>{menuOpen && <motion.nav initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="border-t border-white/10 bg-[#071b18]/95 px-5 py-4 backdrop-blur-xl lg:hidden"><div className="mx-auto flex max-w-[1280px] flex-col gap-1">{NAV_LINKS.map((link) => <a key={link.href} href={link.href} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 text-xs font-bold uppercase tracking-[0.15em] text-white/75 hover:bg-white/5 hover:text-[#5ce1d5]">{link.label}</a>)}<a href="/login" className="mt-2 rounded-xl border border-white/10 px-3 py-3 text-center text-xs font-bold uppercase tracking-[0.15em] text-white/75">Iniciar sesión</a></div></motion.nav>}</AnimatePresence>
+    <AnimatePresence>{menuOpen && <motion.nav initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="border-t border-[#C8E6D0] bg-white px-5 py-4 shadow-[0_18px_34px_-26px_rgba(1,66,44,.6)] lg:hidden"><div className="mx-auto flex max-w-[1280px] flex-col gap-1">{NAV_LINKS.map((link) => <a key={link.href} href={link.href} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 text-xs font-bold uppercase tracking-[0.15em] text-[#01422C] hover:bg-[#C8E6D0] hover:text-[#01422C]">{link.label}</a>)}<a href={WHATSAPP_URL} className="mt-2 rounded-xl bg-[#74C044] px-3 py-3 text-center text-xs font-bold uppercase tracking-[0.15em] text-white transition hover:bg-[#01422C]">Empezar ahora</a></div></motion.nav>}</AnimatePresence>
   </header>;
 }
 
 function HeroSection() {
-  return <section id="inicio" className="relative isolate min-h-[790px] overflow-hidden bg-[#071b18] pt-28 text-white lg:min-h-[850px] lg:pt-36">
+  return <section id="inicio" className="relative isolate min-h-[790px] overflow-hidden bg-[#01422C] pt-28 text-white lg:min-h-[850px] lg:pt-36">
     <div className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(92,225,213,.06)_1px,transparent_1px),linear-gradient(90deg,rgba(92,225,213,.06)_1px,transparent_1px)] [background-size:72px_72px]" /><div className="pointer-events-none absolute -left-40 top-24 size-[560px] rounded-full bg-[#0eaa77]/20 blur-[120px]" /><div className="pointer-events-none absolute right-[-180px] top-[-140px] size-[600px] rounded-full bg-[#24d9d0]/15 blur-[130px]" /><div className="pointer-events-none absolute bottom-[-260px] left-1/3 size-[600px] rounded-full bg-[#0eaa77]/10 blur-[120px]" />
     <div className="relative mx-auto grid max-w-[1280px] items-center gap-16 px-5 pb-24 sm:px-8 lg:grid-cols-[.9fr_1.1fr] lg:gap-8 lg:px-10 lg:pb-32">
       <div className="max-w-[650px]"><Reveal><div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#5ce1d5]/25 bg-[#5ce1d5]/[.07] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#9af5e9]"><span className="size-1.5 animate-pulse rounded-full bg-[#5ce1d5]" /> ERP diseñado para operar mejor</div><h1 className="max-w-[730px] text-[clamp(3.2rem,7vw,6.75rem)] font-black leading-[.9] tracking-[-0.07em] text-white">El control de tu negocio, <span className="text-[#5ce1d5]">en una sola señal.</span></h1><p className="mt-7 max-w-[580px] text-base leading-7 text-white/60 sm:text-lg">Ventas, inventario, caja, contabilidad y operación conectados en un ERP hecho para empresas que quieren crecer sin improvisar.</p><div className="mt-9 flex flex-col gap-3 sm:flex-row"><PrimaryButton href={WHATSAPP_URL} dark>Quiero ver NovaHub</PrimaryButton><a href="#producto" className="group inline-flex items-center justify-center gap-3 rounded-full border border-white/15 px-6 py-3.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/80 transition hover:border-[#5ce1d5]/60 hover:text-white">Explorar el sistema <ArrowDownRight className="size-4 transition group-hover:translate-x-0.5 group-hover:translate-y-0.5" /></a></div><div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40"><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> NIO y USD</span><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> Multisucursal</span><span className="flex items-center gap-2"><Check className="size-3.5 text-[#5ce1d5]" /> Soporte local</span></div></Reveal></div>
-       <motion.div initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .8, delay: .12, ease }} className="relative lg:pl-8"><div className="absolute -inset-10 rounded-[3rem] bg-[#5ce1d5]/10 blur-3xl" /><div className="relative rounded-[28px] border border-white/15 bg-white/[.07] p-2 shadow-[0_40px_100px_-35px_rgba(0,0,0,.9)] backdrop-blur-sm sm:p-3"><div className="flex items-center border-b border-white/10 px-3 py-3 sm:px-4"><div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#ff7c73]" /><span className="size-2 rounded-full bg-[#ffd166]" /><span className="size-2 rounded-full bg-[#5ce1d5]" /></div></div><div className="overflow-hidden rounded-b-[20px] bg-[#f5faf8]"><img src={facturacionCajaDemo} alt="Vista de facturación y caja de NovaHub ERP" className="h-auto w-full object-cover object-top" /></div></div></motion.div>
+       <motion.div initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .8, delay: .12, ease }} className="landing-hero-demo relative lg:pl-8"><div className="absolute -inset-10 rounded-[3rem] bg-[#5ce1d5]/10 blur-3xl" /><div className="relative rounded-[28px] border border-white/15 bg-white/[.07] p-2 shadow-[0_40px_100px_-35px_rgba(0,0,0,.9)] backdrop-blur-sm sm:p-3"><div className="flex items-center border-b border-white/10 px-3 py-3 sm:px-4"><div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#ff7c73]" /><span className="size-2 rounded-full bg-[#ffd166]" /><span className="size-2 rounded-full bg-[#5ce1d5]" /></div></div><div className="overflow-hidden rounded-b-[20px] bg-[#f5faf8]"><img src={facturacionCajaDemo} alt="Vista de facturación y caja de NovaHub ERP" className="h-auto w-full object-contain object-center" /></div></div></motion.div>
     </div><div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-[#f8fbfa] to-transparent" />
   </section>;
 }
@@ -137,12 +135,18 @@ function ModulesSection() {
 function ModuleCatalogSection() {
   const [activeCategory, setActiveCategory] = useState<ModuleCategory>('Todos');
   const [query, setQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(9);
   const normalizedQuery = query.trim().toLocaleLowerCase('es');
   const visibleModules = LANDING_MODULES.filter((item) => {
     const matchesCategory = activeCategory === 'Todos' || item.category === activeCategory;
     const searchableText = `${item.module} ${item.submodule} ${item.features.join(' ')} ${item.advantage}`.toLocaleLowerCase('es');
     return matchesCategory && (!normalizedQuery || searchableText.includes(normalizedQuery));
   });
+  const displayedModules = visibleModules.slice(0, visibleCount);
+
+  useEffect(() => {
+    setVisibleCount(9);
+  }, [activeCategory, query]);
 
   return <section id="catalogo-modulos" className="bg-[#C8E6D0]/35 px-5 py-24 sm:px-8 lg:px-10 lg:py-36">
     <div className="mx-auto max-w-[1280px]">
@@ -171,8 +175,9 @@ function ModuleCatalogSection() {
           </div>
         </div>
 
-        {visibleModules.length > 0 ? <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {visibleModules.map((item, index) => {
+        {visibleModules.length > 0 ? <>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {displayedModules.map((item, index) => {
             const Icon = item.icon;
             return <Reveal key={`${item.module}-${item.submodule}`} delay={Math.min(index * .015, .18)}>
               <article className="landing-module-card group flex h-full flex-col rounded-[22px] border border-[#C8E6D0] bg-white p-5 transition duration-300 hover:-translate-y-1 hover:border-[#74C044]">
@@ -187,7 +192,10 @@ function ModuleCatalogSection() {
               </article>
             </Reveal>;
           })}
-        </div> : <div className="py-16 text-center"><p className="text-lg font-bold text-[#01422C]">No encontramos ese módulo.</p><button type="button" onClick={() => setQuery('')} className="mt-3 text-sm font-semibold text-[#74C044] underline underline-offset-4">Limpiar búsqueda</button></div>}
+          </div>
+          {visibleModules.length > visibleCount && <div className="mt-8 flex justify-center"><button type="button" onClick={() => setVisibleCount((count) => count + 9)} className="group inline-flex items-center gap-3 rounded-full border border-[#01422C] bg-[#01422C] px-6 py-3.5 text-[11px] font-extrabold uppercase tracking-[.16em] text-white transition hover:-translate-y-0.5 hover:bg-[#74C044] hover:text-white">Ver más funcionalidades <ArrowDownRight className="size-4 transition-transform group-hover:translate-y-0.5" /></button></div>}
+          {visibleCount > 9 && visibleModules.length > 9 && <div className="mt-3 flex justify-center"><button type="button" onClick={() => setVisibleCount(9)} className="text-[10px] font-bold uppercase tracking-[.16em] text-[#315f4d] underline underline-offset-4 hover:text-[#01422C]">Mostrar menos</button></div>}
+        </> : <div className="py-16 text-center"><p className="text-lg font-bold text-[#01422C]">No encontramos ese módulo.</p><button type="button" onClick={() => setQuery('')} className="mt-3 text-sm font-semibold text-[#74C044] underline underline-offset-4">Limpiar búsqueda</button></div>}
       </div>
     </div>
   </section>;
@@ -229,7 +237,7 @@ function FinalCTA() {
 }
 
 function Footer() {
-  return <footer className="bg-[#061511] px-5 py-14 text-white sm:px-8 lg:px-10"><div className="mx-auto max-w-[1280px]"><div className="grid gap-12 md:grid-cols-[1.2fr_.8fr_.8fr] lg:gap-24"><div><div className="flex h-14 w-40 items-center justify-center overflow-hidden rounded-xl bg-white px-2"><img src={novahubLogotipo} alt="NovaHub" className="h-full w-full object-contain" /></div><p className="mt-6 max-w-[340px] text-sm leading-6 text-white/45">Una forma más clara de vender, controlar y hacer crecer tu empresa.</p><a href={WHATSAPP_URL} className="mt-7 inline-flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.17em] text-[#5ce1d5]">Hablar con NovaHub <ArrowRight className="size-4" /></a></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#5ce1d5]">Explorar</p><div className="mt-5 flex flex-col gap-3 text-sm text-white/48"><a href="#producto" className="transition hover:text-white">Producto</a><a href="#giros" className="transition hover:text-white">Giros de negocio</a><a href="#precios" className="transition hover:text-white">Precios</a><a href="/login" className="transition hover:text-white">Iniciar sesión</a></div></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#5ce1d5]">Confianza</p><div className="mt-5 flex flex-col gap-3 text-sm text-white/48"><a href="#confianza" className="transition hover:text-white">Seguridad y datos</a><a href="#contacto" className="transition hover:text-white">Soporte en español</a><a href="#contacto" className="transition hover:text-white">Solicitar información</a></div></div></div><div className="mt-14 flex flex-col justify-between gap-4 border-t border-white/10 pt-6 text-[10px] text-white/30 sm:flex-row"><span>© {new Date().getFullYear()} NovaHub ERP. Todos los derechos reservados.</span><span>Diseñado para empresas que quieren avanzar.</span></div></div></footer>;
+  return <footer className="bg-white px-5 py-12 text-[#01422C] sm:px-8 lg:px-10"><div className="mx-auto max-w-[1280px]"><div className="grid gap-10 md:grid-cols-[1.2fr_.8fr_.8fr] lg:gap-24"><div><div className="flex h-[82px] w-[250px] items-center justify-center overflow-hidden rounded-2xl border border-[#C8E6D0] bg-white px-4 shadow-[0_16px_36px_-28px_rgba(1,66,44,.45)]"><img src={novahubLogotipo} alt="NovaHub" className="h-full w-full object-contain" /></div><p className="mt-5 max-w-[340px] text-sm leading-6 text-[#58766e]">Una forma más clara de vender, controlar y hacer crecer tu empresa.</p><a href={WHATSAPP_URL} className="mt-6 inline-flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.17em] text-[#74C044] transition hover:text-[#01422C]">Hablar con NovaHub <ArrowRight className="size-4" /></a></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#74C044]">Explorar</p><div className="mt-4 flex flex-col gap-3 text-sm text-[#58766e]"><a href="#producto" className="transition hover:text-[#74C044]">Producto</a><a href="#giros" className="transition hover:text-[#74C044]">Giros de negocio</a><a href={WHATSAPP_URL} className="transition hover:text-[#74C044]">Contactarnos</a></div></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-[#74C044]">Confianza</p><div className="mt-4 flex flex-col gap-3 text-sm text-[#58766e]"><a href="#confianza" className="transition hover:text-[#74C044]">Seguridad y datos</a><a href="#contacto" className="transition hover:text-[#74C044]">Soporte en español</a><a href={WHATSAPP_URL} className="transition hover:text-[#74C044]">Solicitar información</a></div></div></div><div className="mt-10 flex flex-col justify-between gap-4 border-t border-[#C8E6D0] pt-5 text-[10px] text-[#6d8980] sm:flex-row"><span>© {new Date().getFullYear()} NovaHub ERP. Todos los derechos reservados.</span><span>Diseñado para empresas que quieren avanzar.</span></div></div></footer>;
 }
 
 function MobileCTA() {
@@ -239,6 +247,46 @@ function MobileCTA() {
 }
 
 export default function LandingPage() {
+  useEffect(() => {
+    const landing = document.querySelector('#novahub-landing');
+    if (!landing) return;
+    landing.querySelectorAll('span').forEach((span) => {
+      if (span.textContent?.trim() === 'capacidades') span.textContent = 'funcionalidades';
+    });
+    landing.querySelector('#precios')?.remove();
+    landing.querySelectorAll("a[href='#precios']").forEach((link) => link.remove());
+    landing.querySelectorAll("a[href='/login']").forEach((link) => {
+      link.setAttribute('href', WHATSAPP_URL);
+      link.textContent = link.closest('header') ? 'Empezar ahora' : 'Contactarnos';
+    });
+    const screenshot = landing.querySelector<HTMLImageElement>('img[alt^="Vista de facturación"]');
+    const visual = screenshot?.parentElement?.parentElement?.parentElement;
+    if (visual && !visual.querySelector('.landing-hero-tagline')) {
+      const tagline = document.createElement('p');
+      tagline.className = 'landing-hero-tagline';
+      tagline.textContent = 'Crece con NovaHub.';
+      visual.append(tagline);
+    }
+    if (screenshot && !screenshot.dataset.zoomReady) {
+      screenshot.dataset.zoomReady = 'true';
+      screenshot.addEventListener('click', () => {
+        const lightbox = document.createElement('div');
+        lightbox.className = 'landing-image-lightbox';
+        lightbox.innerHTML = `<button type="button" class="landing-image-lightbox-close" aria-label="Cerrar vista ampliada">×</button><img src="${screenshot.getAttribute('src')}" alt="Vista ampliada de NovaHub ERP" />`;
+        const closeLightbox = () => {
+          lightbox.remove();
+          document.body.style.overflow = '';
+        };
+        lightbox.querySelector('.landing-image-lightbox-close')?.addEventListener('click', closeLightbox);
+        lightbox.addEventListener('click', (event) => {
+          if (event.target === lightbox) closeLightbox();
+        });
+        document.body.style.overflow = 'hidden';
+        document.body.append(lightbox);
+      });
+    }
+  }, []);
   useEffect(() => { document.title = 'NovaHub ERP | Vende más, controla mejor y crece con NovaHub'; const heroTitle = document.querySelector('#novahub-landing h1'); if (heroTitle) { heroTitle.innerHTML = 'Vende más. <br />Controla mejor. <span class="landing-serif font-medium italic tracking-[-.05em] text-[#C8E6D0]">Crece con NovaHub.</span>'; const heroCopy = heroTitle.parentElement; const eyebrow = heroCopy?.querySelector('div.mb-6'); if (eyebrow) eyebrow.innerHTML = '<span class="size-1.5 animate-pulse rounded-full bg-[#5ce1d5]"></span> ERP para empresas que quieren crecer'; const subhead = heroTitle.nextElementSibling; if (subhead) subhead.textContent = 'Ventas, inventario, caja, contabilidad y operación conectados en un ERP diseñado para que tomes decisiones con claridad.'; } }, []);
+  useEffect(() => { document.querySelector('#novahub-landing h1 .landing-serif')?.remove(); }, []);
   return <div id="novahub-landing" className="min-h-screen overflow-x-hidden bg-white text-[#01422C] antialiased selection:bg-[#C8E6D0] selection:text-[#01422C]"><Header /><main><HeroSection /><SignalStrip /><ConnectedOperation /><ProductSection /><ModulesSection /><ModuleCatalogSection /><IndustriesSection /><PricingSection /><TrustSection /><FinalCTA /></main><Footer /><MobileCTA /><LandingChatModal /></div>;
 }

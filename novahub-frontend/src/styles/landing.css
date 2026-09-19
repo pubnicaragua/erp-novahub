@@ -6,6 +6,7 @@
   --nova-menta: #C8E6D0;
   --nova-blanco: #FFFFFF;
   font-family: 'Montserrat', 'Acumin Pro', ui-sans-serif, system-ui, sans-serif;
+  scroll-behavior: smooth;
 }
 
 #novahub-landing .landing-serif {
@@ -69,4 +70,462 @@
   font-style: italic;
   font-weight: 500;
   letter-spacing: -0.035em;
+}
+
+/* Commercial landing refinements: one dark NovaHub canvas, organic section breaks, and the real wordmark. */
+#novahub-landing header,
+#novahub-landing footer {
+  background-color: var(--nova-bosque) !important;
+}
+
+#novahub-landing header > div > a[aria-label*='NovaHub'] > span:first-child,
+#novahub-landing header > div > a[aria-label*='NovaHub'] > span:last-child {
+  display: none;
+}
+
+#novahub-landing header > div > a[aria-label*='NovaHub']::before {
+  content: '';
+  display: block;
+  width: 148px;
+  height: 42px;
+  background: url('/novahub-logotipo-transparent.png') center / contain no-repeat;
+}
+
+#novahub-landing footer .bg-white {
+  width: 230px !important;
+  height: 76px !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+#novahub-landing footer .bg-white img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+
+#novahub-landing #precios,
+#novahub-landing a[href='#precios'],
+#novahub-landing #contacto button {
+  display: none !important;
+}
+
+#novahub-landing main > section:not(:first-child) {
+  position: relative;
+  isolation: isolate;
+}
+
+#novahub-landing main > section:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -48px;
+  left: 0;
+  width: 100%;
+  height: 56px;
+  background: inherit;
+  clip-path: polygon(0 74%, 10% 32%, 22% 68%, 35% 12%, 48% 72%, 62% 26%, 76% 68%, 88% 20%, 100% 62%, 100% 100%, 0 100%);
+}
+
+#novahub-landing .landing-hero-tagline {
+  margin: 1.25rem auto 0;
+  color: var(--nova-menta);
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(1.8rem, 3vw, 3rem);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  text-align: center;
+}
+
+/* Static brand chrome: the official green wordmark needs a light canvas. */
+#novahub-landing header,
+#novahub-landing footer {
+  background-color: var(--nova-blanco) !important;
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing header a,
+#novahub-landing header button {
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing header button {
+  border-color: var(--nova-menta) !important;
+}
+
+#novahub-landing header > div > a[aria-label*='NovaHub']::before {
+  filter: saturate(1.05) brightness(1.05);
+}
+
+#novahub-landing footer a,
+#novahub-landing footer p,
+#novahub-landing footer span {
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing footer a:hover {
+  color: var(--nova-verde) !important;
+}
+
+#novahub-landing footer .border-t {
+  border-color: var(--nova-menta) !important;
+}
+
+#novahub-landing main > section[class*='bg-white'],
+#novahub-landing main > section[class*='bg-[#f8fbfa]'] {
+  --nova-edge: #ffffff;
+}
+
+#novahub-landing main > section[class*='bg-[#C8E6D0]'] {
+  --nova-edge: rgba(200, 230, 208, 0.35);
+}
+
+#novahub-landing main > section[class*='bg-[#071b18]'],
+#novahub-landing main > section[class*='bg-[#0c3d31]'] {
+  --nova-edge: var(--nova-bosque);
+}
+
+#novahub-landing main > section:not(:first-child)::before {
+  top: -62px;
+  z-index: 0;
+  height: 70px;
+  background: var(--nova-edge, var(--nova-bosque));
+  clip-path: none;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 84 C100 64 160 42 250 72 C360 100 430 15 560 62 C680 108 760 37 880 70 C1000 102 1110 25 1230 58 C1320 84 1380 78 1440 55 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 84 C100 64 160 42 250 72 C360 100 430 15 560 62 C680 108 760 37 880 70 C1000 102 1110 25 1230 58 C1320 84 1380 78 1440 55 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+#novahub-landing main > section:not(:first-child) > * {
+  position: relative;
+  z-index: 1;
+}
+
+#novahub-landing img[alt^='Vista de facturación'] {
+  cursor: zoom-in;
+  transform: scale(1.035);
+  transform-origin: center;
+  transition: transform 350ms ease;
+}
+
+#novahub-landing img[alt^='Vista de facturación']:hover {
+  transform: scale(1.07);
+}
+
+#novahub-landing .landing-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: rgba(1, 18, 13, 0.82);
+  backdrop-filter: blur(14px);
+}
+
+#novahub-landing .landing-image-lightbox img {
+  width: min(1180px, 94vw);
+  max-height: 88vh;
+  border: 1px solid rgba(200, 230, 208, 0.5);
+  border-radius: 1.25rem;
+  object-fit: contain;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.45);
+  cursor: zoom-out;
+}
+
+/* Final visual corrections: stable white chrome, compact rhythm and one
+   predictable mountain treatment across the landing. */
+#novahub-landing > header,
+#novahub-landing > footer {
+  background: var(--nova-blanco) !important;
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing > header > div:first-child > div > a[href*='whatsapp'],
+#novahub-landing > header > div:first-child > div > a[href='/login'] {
+  background: var(--nova-verde) !important;
+  color: var(--nova-blanco) !important;
+  border-radius: 999px;
+  padding: 0.8rem 1.35rem;
+  box-shadow: 0 12px 26px -16px rgba(1, 66, 44, 0.65);
+}
+
+#novahub-landing > header > div:first-child > div > a[href*='whatsapp']:hover,
+#novahub-landing > header > div:first-child > div > a[href='/login']:hover {
+  background: var(--nova-bosque) !important;
+  color: var(--nova-blanco) !important;
+}
+
+#novahub-landing > footer .bg-white {
+  display: flex !important;
+  width: 250px !important;
+  height: 82px !important;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--nova-menta) !important;
+  border-radius: 1rem !important;
+  background: var(--nova-blanco) !important;
+  padding: 0.75rem 1rem !important;
+  box-shadow: 0 16px 36px -28px rgba(1, 66, 44, 0.45) !important;
+}
+
+#novahub-landing > footer .bg-white img {
+  object-position: center !important;
+}
+
+#novahub-landing > footer,
+#novahub-landing > footer a,
+#novahub-landing > footer p,
+#novahub-landing > footer span {
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing > footer p[class*='text-[#5ce1d5]'] {
+  color: var(--nova-verde) !important;
+}
+
+#novahub-landing > footer a:hover {
+  color: var(--nova-verde) !important;
+}
+
+#novahub-landing main > section:not(#inicio) {
+  padding-top: clamp(4rem, 6vw, 5.5rem) !important;
+  padding-bottom: clamp(4rem, 6vw, 5.5rem) !important;
+}
+
+#novahub-landing main > section:not(:first-child)::before {
+  top: -34px;
+  height: 42px;
+  opacity: 0.82;
+  z-index: 2;
+  pointer-events: none;
+}
+
+#novahub-landing #flujo::before,
+#novahub-landing #producto::before,
+#novahub-landing main > section[class*='bg-[#071b18]']::before {
+  top: -48px;
+  height: 56px;
+  opacity: 1;
+}
+
+#novahub-landing .landing-image-lightbox {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: auto;
+  align-items: center;
+  justify-items: center;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+#novahub-landing .landing-image-lightbox img {
+  width: min(1180px, calc(100vw - 3rem));
+  max-width: 100%;
+  max-height: calc(100dvh - 3rem);
+  margin: auto;
+}
+
+@media (max-width: 1023px) {
+  #novahub-landing > header nav {
+    border-color: var(--nova-menta) !important;
+    background: var(--nova-blanco) !important;
+    box-shadow: 0 18px 34px -26px rgba(1, 66, 44, 0.6);
+  }
+
+  #novahub-landing > header nav a {
+    color: var(--nova-bosque) !important;
+  }
+
+  #novahub-landing > header nav a:hover {
+    background: var(--nova-menta) !important;
+    color: var(--nova-bosque) !important;
+  }
+
+  #novahub-landing main > section:not(#inicio) {
+    padding-top: 3.75rem !important;
+    padding-bottom: 3.75rem !important;
+  }
+}
+
+/* The lightbox is appended to body, so its viewport rules cannot depend on
+   #novahub-landing being an ancestor. */
+body > .landing-image-lightbox {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  display: grid !important;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: auto;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+body > .landing-image-lightbox img {
+  width: min(1180px, calc(100vw - 3rem));
+  max-width: 100%;
+  max-height: calc(100dvh - 3rem);
+  margin: auto;
+}
+
+#novahub-landing main > section:not(#inicio),
+#novahub-landing > footer {
+  border-top: 0 !important;
+}
+
+#novahub-landing > footer {
+  position: relative;
+  isolation: isolate;
+}
+
+#novahub-landing > footer::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: -42px;
+  left: 0;
+  width: 100%;
+  height: 50px;
+  pointer-events: none;
+  background: var(--nova-blanco);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C120 55 180 50 300 74 C420 98 500 38 620 66 C760 98 830 42 960 70 C1090 96 1190 40 1320 68 C1370 78 1410 74 1440 58 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C120 55 180 50 300 74 C420 98 500 38 620 66 C760 98 830 42 960 70 C1090 96 1190 40 1320 68 C1370 78 1410 74 1440 58 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+#novahub-landing > footer > * {
+  position: relative;
+  z-index: 3;
+}
+
+/* Decorative rings/glows must stay out of document flow. The content layer
+   remains above the mountain without turning these ornaments into spacing. */
+#novahub-landing main > section:not(:first-child) > .pointer-events-none.absolute {
+  position: absolute !important;
+  z-index: 0 !important;
+}
+
+#novahub-landing > header > div:first-child > div > a[href*='whatsapp']:hover,
+#novahub-landing > header > div:first-child > div > a[href='/login']:hover,
+#novahub-landing > header nav a[href*='whatsapp']:hover {
+  background: var(--nova-verde) !important;
+  color: var(--nova-blanco) !important;
+}
+
+#novahub-landing #catalogo-modulos,
+#novahub-landing #giros {
+  --nova-edge: var(--nova-menta);
+}
+
+#novahub-landing #catalogo-modulos::before,
+#novahub-landing #giros::before,
+#novahub-landing #contacto::before {
+  top: -52px;
+  height: 64px;
+  opacity: 1;
+}
+
+#novahub-landing #catalogo-modulos::before {
+  background: var(--nova-menta);
+  -webkit-mask-image: none;
+  mask-image: none;
+  clip-path: polygon(0 68%, 8% 42%, 16% 63%, 25% 28%, 35% 67%, 45% 38%, 55% 70%, 66% 30%, 76% 64%, 87% 36%, 100% 62%, 100% 100%, 0 100%);
+}
+
+#novahub-landing img[alt^='Vista de facturación'] {
+  display: block;
+  height: auto !important;
+  max-width: 100%;
+  object-fit: contain !important;
+  object-position: center !important;
+  transform: none !important;
+}
+
+#novahub-landing img[alt^='Vista de facturación']:hover {
+  transform: scale(1.015) !important;
+}
+
+body > .landing-image-lightbox .landing-image-lightbox-close {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(1, 66, 44, 0.9);
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+
+body > .landing-image-lightbox .landing-image-lightbox-close:hover {
+  background: var(--nova-verde);
+}
+
+/* Final palette and section-edge pass. Keep the hero on the exact NovaHub
+   Bosque token and use one smooth organic edge instead of mixed zigzags. */
+#novahub-landing #inicio {
+  background-color: #01422C !important;
+}
+
+#novahub-landing #catalogo-modulos::before,
+#novahub-landing #giros::before {
+  top: -48px;
+  height: 58px;
+  background: #edf7f1 !important;
+  clip-path: none;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C100 64 170 48 270 70 C380 96 455 30 570 62 C690 98 780 38 900 70 C1015 98 1110 30 1230 62 C1325 84 1380 72 1440 54 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 82 C100 64 170 48 270 70 C380 96 455 30 570 62 C690 98 780 38 900 70 C1015 98 1110 30 1230 62 C1325 84 1380 72 1440 54 L1440 100 L0 100 Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+#novahub-landing #giros::before {
+  background: #f8fbfa !important;
+}
+
+#novahub-landing #catalogo-modulos {
+  background-color: #edf7f1 !important;
+}
+
+#novahub-landing main > section[class*='bg-[#071b18]']::before {
+  top: -44px;
+  height: 54px;
+}
+
+@keyframes landing-hero-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+#novahub-landing .landing-hero-demo > .relative {
+  animation: landing-hero-float 7s ease-in-out infinite;
+}
+
+#novahub-landing .landing-hero-demo:hover > .relative {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #novahub-landing .landing-hero-demo > .relative {
+    animation: none;
+  }
 }

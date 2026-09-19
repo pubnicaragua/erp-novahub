@@ -44,7 +44,7 @@ export function LandingChatModal() {
   const [lead, setLead] = useState<LeadData | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', company: '', message: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', company: '', industry: '', message: '' });
   const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -63,8 +63,8 @@ export function LandingChatModal() {
   }, []);
 
   const handleSubmitForm = async () => {
-    if (!formData.name.trim()) {
-      setError('Escribe tu nombre para que podamos atenderte.');
+    if (!formData.name.trim() || !formData.industry.trim()) {
+      setError('Indica tu nombre y a qué se dedica tu empresa para poder orientarte mejor.');
       return;
     }
     setLoading(true);
@@ -224,10 +224,11 @@ export function LandingChatModal() {
                   <input aria-label="Email" type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
                   <input aria-label="Teléfono o WhatsApp" type="tel" placeholder="Teléfono / WhatsApp" value={formData.phone} onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
                   <input aria-label="Empresa" type="text" placeholder="Empresa" value={formData.company} onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  <input aria-label="Rubro o actividad de la empresa" required type="text" placeholder="¿A qué se dedica tu empresa? *" value={formData.industry} onChange={(e) => setFormData(prev => ({ ...prev, industry: e.target.value }))} onKeyPress={handleKeyPress} className="w-full rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
                   <textarea aria-label="Necesidad de tu negocio" placeholder="¿Qué necesitas ordenar en tu negocio?" value={formData.message} onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))} rows={2} className="w-full resize-none rounded-xl border border-[#d1fae5] px-4 py-3 text-sm text-[#174a3a] placeholder-[#84a1ad] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
                 </div>
                 {error && <p role="alert" className="mt-3 rounded-xl border border-[#ffd8cf] bg-[#fff5f2] px-3 py-2.5 text-xs leading-5 text-[#a84f3b]">{error}</p>}
-                <button onClick={handleSubmitForm} disabled={!formData.name.trim() || loading} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#22c55e] to-[#16a34a] px-4 py-3.5 text-sm font-bold text-white shadow-[0_8px_20px_-8px_rgba(34,197,94,.5)] transition-all hover:shadow-[0_12px_25px_-8px_rgba(34,197,94,.6)] disabled:opacity-50">
+                <button onClick={handleSubmitForm} disabled={!formData.name.trim() || !formData.industry.trim() || loading} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#22c55e] to-[#16a34a] px-4 py-3.5 text-sm font-bold text-white shadow-[0_8px_20px_-8px_rgba(34,197,94,.5)] transition-all hover:shadow-[0_12px_25px_-8px_rgba(34,197,94,.6)] disabled:opacity-50">
                   {loading ? 'Conectando...' : 'Hablar con un asesor'} <ArrowRight className="size-4" />
                 </button>
                 <p className="mt-3 text-center text-[10px] text-[#84a1ad]">
