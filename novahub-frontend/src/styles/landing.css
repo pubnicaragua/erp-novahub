@@ -409,6 +409,37 @@ body > .landing-image-lightbox img {
   z-index: 3;
 }
 
+/* Decorative rings/glows must stay out of document flow. The content layer
+   remains above the mountain without turning these ornaments into spacing. */
+#novahub-landing main > section:not(:first-child) > .pointer-events-none.absolute {
+  position: absolute !important;
+  z-index: 0 !important;
+}
+
+#novahub-landing > header > div:first-child > div > a[href*='whatsapp']:hover,
+#novahub-landing > header > div:first-child > div > a[href='/login']:hover,
+#novahub-landing > header nav a[href*='whatsapp']:hover {
+  background: var(--nova-verde) !important;
+  color: var(--nova-blanco) !important;
+}
+
+#novahub-landing #catalogo-modulos,
+#novahub-landing #giros {
+  --nova-edge: var(--nova-menta);
+}
+
+#novahub-landing #catalogo-modulos::before,
+#novahub-landing #giros::before,
+#novahub-landing #contacto::before {
+  top: -52px;
+  height: 64px;
+  opacity: 1;
+}
+
+#novahub-landing #catalogo-modulos::before {
+  background: var(--nova-menta);
+}
+
 body > .landing-image-lightbox .landing-image-lightbox-close {
   position: fixed;
   top: 1rem;
