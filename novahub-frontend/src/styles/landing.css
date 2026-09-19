@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,500;1,500;1,600&display=swap');
+
+#novahub-landing {
+  --nova-bosque: #01422C;
+  --nova-verde: #74C044;
+  --nova-menta: #C8E6D0;
+  --nova-blanco: #FFFFFF;
+  font-family: 'Montserrat', 'Acumin Pro', ui-sans-serif, system-ui, sans-serif;
+}
+
+#novahub-landing .landing-serif {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+#novahub-landing .landing-module-card {
+  box-shadow: 0 16px 40px -30px rgba(1, 66, 44, 0.55);
+}
+
+#novahub-landing .landing-module-card:focus-visible,
+#novahub-landing button:focus-visible,
+#novahub-landing a:focus-visible {
+  outline: 3px solid var(--nova-verde);
+  outline-offset: 3px;
+}
+
+/* Keep the existing landing structure, but bring its main accents back to the
+   NovaHub palette while the smaller legacy surfaces are gradually refactored. */
+#novahub-landing .bg-\[\#071b18\],
+#novahub-landing .bg-\[\#0c3d31\],
+#novahub-landing .bg-\[\#061511\] {
+  background-color: var(--nova-bosque) !important;
+}
+
+#novahub-landing .bg-\[\#0eaa77\],
+#novahub-landing .bg-\[\#12b77a\],
+#novahub-landing .bg-\[\#16b978\] {
+  background-color: var(--nova-verde) !important;
+}
+
+#novahub-landing .bg-\[\#5ce1d5\] {
+  background-color: var(--nova-menta) !important;
+}
+
+#novahub-landing .text-\[\#0c3d31\],
+#novahub-landing .text-\[\#071b18\] {
+  color: var(--nova-bosque) !important;
+}
+
+#novahub-landing .text-\[\#0eaa77\],
+#novahub-landing .text-\[\#0a9f7b\],
+#novahub-landing .text-\[\#12b77a\],
+#novahub-landing .text-\[\#16b978\] {
+  color: var(--nova-verde) !important;
+}
+
+#novahub-landing .text-\[\#5ce1d5\],
+#novahub-landing .text-\[\#9af5e9\],
+#novahub-landing .text-\[\#8cf4e7\] {
+  color: var(--nova-menta) !important;
+}
+
+#novahub-landing .border-\[\#0eaa77\],
+#novahub-landing .border-\[\#5ce1d5\] {
+  border-color: var(--nova-verde) !important;
+}
