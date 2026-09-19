@@ -1429,9 +1429,8 @@ export interface TimeOff {
   createdAt: string;
 }
 
-// ---- Activities & Tasks ----
-export type ActivityType = 'call' | 'meeting' | 'email' | 'task' | 'deadline' | 'CALL' | 'MEETING' | 'EMAIL' | 'TASK' | 'DEADLINE';
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type ActivityType = 'call' | 'meeting' | 'email' | 'task' | 'deadline' | 'event' | 'CALL' | 'MEETING' | 'EMAIL' | 'TASK' | 'DEADLINE' | 'EVENT';
+export type TaskStatus = 'pending' | 'in_progress' | 'waiting_approval' | 'completed' | 'cancelled' | 'PENDING' | 'IN_PROGRESS' | 'WAITING_APPROVAL' | 'COMPLETED' | 'CANCELLED';
 
 export interface Activity {
   id: string;
@@ -1572,9 +1571,82 @@ export interface Document {
   uploadedById: string;
 }
 
-export interface Task { id: string; title: string; description?: string; status: TaskStatus; priority: Priority; dueDate?: string; assignedTo?: string; createdAt: string; updatedAt: string; }
-export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; guestEmails?: string[]; cost?: number; income?: number; currency?: string; exchangeRate?: number; baseCost?: number | null; baseIncome?: number | null; expenseId?: string; incomeId?: string; status?: 'PENDING' | 'COMPLETED' | 'CANCELLED' | string; createdAt: string; }
-export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; createdAt: string; }
+export interface ActivitySubtask {
+  id: string;
+  activityId: string;
+  title: string;
+  isCompleted: boolean;
+  completedAt?: string;
+  completedBy?: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActivityTimeEntry {
+  id: string;
+  activityId: string;
+  userId: string;
+  user?: { id: string; name: string; email?: string };
+  description?: string;
+  startedAt: string;
+  endedAt?: string;
+  durationSeconds: number;
+  isManual: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: Priority;
+  dueDate?: string;
+  assignedTo?: string;
+  assignedToId?: string;
+  assignedUser?: { id: string; name: string; email?: string };
+  assignments?: Array<{ id: string; userId?: string; user?: { id: string; name: string; email?: string } }>;
+  parentActivityId?: string | null;
+  recurrentRule?: { frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY'; interval?: number; endAfterOccurrences?: number } | null;
+  approvalNotes?: string | null;
+  rejectedReason?: string | null;
+  rejectedAt?: string | null;
+  rejectedById?: string | null;
+  rejectedBy?: { id: string; name: string } | null;
+  subtasks?: ActivitySubtask[];
+  timeEntries?: ActivityTimeEntry[];
+  evidences?: Array<{ id: string; fileName: string; fileUrl: string; fileSize?: number; uploadedAt: string; uploadedBy?: string }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Event {
+  id: string;
+  title: string;
+  description?: string;
+  startDate: string;
+  endDate: string;
+  location?: string;
+  attendees?: string[];
+  guestEmails?: string[];
+  cost?: number;
+  income?: number;
+  currency?: string;
+  exchangeRate?: number;
+  baseCost?: number | null;
+  baseIncome?: number | null;
+  expenseId?: string;
+  incomeId?: string;
+  status?: 'PENDING' | 'COMPLETED' | 'CANCELLED' | string;
+  meetingUrl?: string | null;
+  meetingPlatform?: string | null;
+  meetingId?: string | null;
+  meetingData?: any;
+  createdAt: string;
+}
+export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; scope?: string; targetId?: string; activityId?: string; createdAt: string; }
 export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; activityId?: string; fileUrl?: string; fileName?: string; fileSize?: number; }
 
 export interface Contract { id: string; number: string; title: string; clientId: string; startDate: string; endDate: string; value: number; currency?: Currency; exchangeRate?: number; status: string; createdAt: string; }

@@ -5,7 +5,8 @@ import { Event } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Search, CalendarDays, DollarSign, TrendingUp, TrendingDown, Copy, Mail, Users, Eye, CheckCircle2, Loader2 } from 'lucide-react';
+import { Plus, Search, CalendarDays, DollarSign, TrendingUp, TrendingDown, Copy, Mail, Users, Eye, CheckCircle2, Loader2, Video, Download, Share2, QrCode, Phone, ExternalLink } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { eventsService } from '../../services/actividades.service';
 import { incomeService, expensesService, accountsService } from '../../services/finanzas.service';
 import { contabilidadService } from '../../services/contabilidad.service';
@@ -85,6 +86,55 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
     title: '', description: '', location: '', startDate: '', endDate: '', cost: '', income: '', guestEmails: '', expenseAccountId: '', incomeAccountId: '',
   });
   const [invitation, setInvitation] = useState<{ text: string; guests: string[] } | null>(null);
+  const [qrModalEvent, setQrModalEvent] = useState<Event | null>(null);
+  const [meetingLoadingId, setMeetingLoadingId] = useState<string | null>(null);
+
+  const handleScheduleMeeting = async (event: Event, platform: 'GOOGLE_MEET' | 'TEAMS' | 'ZOOM') => {
+    try {
+      setMeetingLoadingId(String(event.id));
+      const updated = await eventsService.scheduleMeeting(String(event.id), platform);
+      toast.success(`Videollamada agendada con ${platform}`);
+      if (selectedEvent?.id === event.id) {
+        setSelectedEvent(updated);
+      }
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Error al agendar videollamada');
+    } finally {
+      setMeetingLoadingId(null);
+    }
+  };
+
+  const handleDownloadIcs = async (event: Event) => {
+    try {
+      await eventsService.downloadIcs(String(event.id), event.title);
+      toast.success('Archivo .ics descargado');
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al descargar archivo de calendario');
+    }
+  };
+
+  const handleSendInvitations = async (event: Event) => {
+    try {
+      await eventsService.sendInvitations(String(event.id));
+      toast.success('Invitaciones enviadas a la bandeja de notificaciones');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Error al enviar invitaciones');
+    }
+  };
+
+  const handleShareWhatsapp = (event: Event) => {
+    const text = encodeURIComponent(
+      `Invitación a Evento: ${event.title}\n\n` +
+      `Inicio: ${event.startDate ? new Date(event.startDate).toLocaleString('es-NI') : 'Por definir'}\n` +
+      `Fin:* ${event.endDate ? new Date(event.endDate).toLocaleString('es-NI') : 'Por definir'}\n` +
+      (event.location ? `Ubicación: ${event.location}\n` : '') +
+      (event.meetingUrl ? `Enlace Reunión: ${event.meetingUrl}\n` : '') +
+      (event.description ? `\nDetalles: ${event.description}\n` : '') +
+      `\n¡Te esperamos!`
+    );
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
   const accountsQuery = useTenantQuery<any[]>(['finance', 'accounts-lookup'], () => fetchAllReportPages((filters) => accountsService.getLookup(filters), { page: 1, pageSize: 200 }), {
     enabled: canViewAccounts,
   });
@@ -460,13 +510,53 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           onRowClick={(row) => setSelectedEvent(row)}
           isLoading={loading} 
           onRowDelete={canPerformEventAction('delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined}
-          actions={(row: Event) => (
-            <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-              <Button type="button" variant="ghost" size="icon" title="Ver detalle del evento" aria-label="Ver detalle del evento" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedEvent(row)}><Eye className="size-4" /></Button>
-              {!completedEventIds.has(String(row.id)) && String(row.status || '').toUpperCase() !== 'COMPLETED' && canCompleteEvent && <Button type="button" variant="ghost" size="icon" title="Completar evento y generar asiento" aria-label="Completar evento y generar asiento" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" disabled={completingEventId === String(row.id)} onClick={() => { setSelectedEvent(null); void handleCompleteEvent(row); }}>{completingEventId === String(row.id) ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}</Button>}
-            </div>
-          )}
-          actionsWidth="w-36"
+          actions={(row: Event) => {
+            const isCompleted = completedEventIds.has(String(row.id)) || String(row.status || '').toUpperCase() === 'COMPLETED';
+            return (
+              <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                <Button type="button" variant="ghost" size="icon" title="Ver detalle del evento" aria-label="Ver detalle del evento" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedEvent(row)}><Eye className="size-4" /></Button>
+                
+                {/* Download .ics */}
+                <Button type="button" variant="ghost" size="icon" title="Descargar .ics" aria-label="Descargar .ics" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => handleDownloadIcs(row)}><Download className="size-4" /></Button>
+                
+                {/* Share WhatsApp */}
+                <Button type="button" variant="ghost" size="icon" title="Compartir en WhatsApp" aria-label="Compartir en WhatsApp" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" onClick={() => handleShareWhatsapp(row)}><Phone className="size-4" /></Button>
+
+                {/* QR Code */}
+                <Button type="button" variant="ghost" size="icon" title="Ver Código QR" aria-label="Ver Código QR" className="size-8 rounded-lg text-blue-600 hover:bg-blue-500/10" onClick={() => setQrModalEvent(row)}><QrCode className="size-4" /></Button>
+
+                {/* Schedule direct Meeting if not completed */}
+                {!isCompleted && canPerformEventAction('edit') && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="ghost" size="icon" title="Agendar videollamada" aria-label="Agendar videollamada" className="size-8 rounded-lg text-purple-600 hover:bg-purple-500/10" disabled={meetingLoadingId === String(row.id)}>
+                        {meetingLoadingId === String(row.id) ? <Loader2 className="size-4 animate-spin" /> : <Video className="size-4" />}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={() => handleScheduleMeeting(row, 'GOOGLE_MEET')}>
+                        <span className="font-medium">Google Meet</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleScheduleMeeting(row, 'TEAMS')}>
+                        <span className="font-medium">Microsoft Teams</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleScheduleMeeting(row, 'ZOOM')}>
+                        <span className="font-medium">Zoom Meeting</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+
+                {/* Complete Event */}
+                {!isCompleted && canCompleteEvent && (
+                  <Button type="button" variant="ghost" size="icon" title="Completar evento y generar asiento" aria-label="Completar evento y generar asiento" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" disabled={completingEventId === String(row.id)} onClick={() => { setSelectedEvent(null); void handleCompleteEvent(row); }}>
+                    {completingEventId === String(row.id) ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                  </Button>
+                )}
+              </div>
+            );
+          }}
+          actionsWidth="w-56"
         />
       </Card>
 
@@ -480,7 +570,61 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         linkedIncomeAccount={eventIncomeAccountQuery.data}
         linkedExpenseJournal={eventExpenseJournalQuery.data?.[0]}
         linkedIncomeJournal={eventIncomeJournalQuery.data?.[0]}
-        extraActions={selectedEvent && !completedEventIds.has(String(selectedEvent.id)) && String(selectedEvent.status || '').toUpperCase() !== 'COMPLETED' && canCompleteEvent ? <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={completingEventId === String(selectedEvent.id)} onClick={() => { const event = selectedEvent; setSelectedEvent(null); void handleCompleteEvent(event); }}><CheckCircle2 className="mr-2 size-4" />Completar evento</Button> : undefined}
+        extraActions={
+          selectedEvent ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl"
+                onClick={() => handleDownloadIcs(selectedEvent)}
+              >
+                <Download className="mr-1.5 size-4" /> .ics
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                onClick={() => handleShareWhatsapp(selectedEvent)}
+              >
+                <Phone className="mr-1.5 size-4" /> WhatsApp
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-blue-500/30 text-blue-600 hover:bg-blue-500/10"
+                onClick={() => setQrModalEvent(selectedEvent)}
+              >
+                <QrCode className="mr-1.5 size-4" /> QR
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-primary/30 text-primary hover:bg-primary/10"
+                onClick={() => handleSendInvitations(selectedEvent)}
+              >
+                <Mail className="mr-1.5 size-4" /> Enviar Invitaciones
+              </Button>
+              {!completedEventIds.has(String(selectedEvent.id)) &&
+                String(selectedEvent.status || '').toUpperCase() !== 'COMPLETED' &&
+                canCompleteEvent && (
+                  <Button
+                    type="button"
+                    className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
+                    disabled={completingEventId === String(selectedEvent.id)}
+                    onClick={() => {
+                      const event = selectedEvent;
+                      setSelectedEvent(null);
+                      void handleCompleteEvent(event);
+                    }}
+                  >
+                    <CheckCircle2 className="mr-2 size-4" />
+                    Completar evento
+                  </Button>
+                )}
+            </div>
+          ) : undefined
+        }
         onDelete={canPerformEventAction('delete') && selectedEvent ? async () => {
           try {
             await eventsService.delete(String(selectedEvent.id));
@@ -518,15 +662,15 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
                       value={costReason}
                       onChange={(value) => {
                         const reason = EVENT_COST_REASONS.find((item) => item.value === value);
-                        const account = accountOptions.find((candidate: any) => String(candidate?.code) === reason?.accountCode && candidate?.isActive !== false);
                         setCostReason(value);
-                        if (account) setNewEvent((current) => ({ ...current, expenseAccountId: String(account.id) }));
+                        if (!reason?.accountCode) return;
+                        const matched = activeAccountOptions.find((candidate: any) => String(candidate?.code) === reason.accountCode);
+                        if (matched) setNewEvent((current) => ({ ...current, expenseAccountId: String(matched.id) }));
                       }}
-                      placeholder="Seleccionar motivo del costo"
-                      searchPlaceholder="Buscar motivo..."
+                      placeholder="Selecciona el motivo contable del costo"
+                      searchPlaceholder="Buscar motivo"
                       emptyMessage="No se encontraron motivos"
                       maxVisibleOptions={costReasonComboboxOptions.length}
-                      disabled={!accountOptions.length}
                       className="h-11 rounded-xl bg-background"
                     />
                     <p className="text-[10px] text-muted-foreground">Es un dato de referencia. Al elegirlo, propone automáticamente la cuenta de gasto asociada.</p>
@@ -536,7 +680,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
                     <Combobox
                       options={accountComboboxOptions}
                       value={newEvent.expenseAccountId}
-                      onChange={value => { setNewEvent(current => ({ ...current, expenseAccountId: value })); setCostReason(''); }}
+                      onChange={value => setNewEvent(current => ({ ...current, expenseAccountId: value }))}
                       placeholder={activeAccountOptions.length ? 'Seleccionar cuenta de gasto' : accountOptions.length ? 'No hay cuentas activas disponibles' : 'Configura una cuenta en Finanzas'}
                       searchPlaceholder="Buscar por código o nombre"
                       emptyMessage="No se encontraron cuentas"
@@ -585,6 +729,59 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8">
             <Button variant="outline" onClick={() => setInvitation(null)}>Cerrar</Button>
             <Button onClick={async () => { if (!invitation) return; try { await navigator.clipboard.writeText(invitation.text); toast.success('Invitación copiada'); } catch { toast.error('No se pudo copiar; selecciona el texto manualmente.'); } }}><Copy className="mr-2 size-4" /> Copiar invitación</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* QR Code Dialog */}
+      <Dialog open={Boolean(qrModalEvent)} onOpenChange={(open) => { if (!open) setQrModalEvent(null); }}>
+        <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto !max-w-md rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl">
+          <DialogHeader className="border-b border-border/50 bg-gradient-to-br from-blue-500/10 via-background to-background px-6 py-5 sm:px-8">
+            <DialogTitle className="flex items-center gap-2 font-black tracking-tight">
+              <QrCode className="size-5 text-blue-600" /> Código QR del Evento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 px-6 py-6 sm:px-8 text-center flex flex-col items-center">
+            {qrModalEvent && (
+              <>
+                <div className="rounded-2xl border border-border/60 bg-white p-4 shadow-md inline-block">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                      qrModalEvent.meetingUrl ||
+                      `${window.location.origin}/activities/events/${qrModalEvent.id}`
+                    )}`}
+                    alt="Código QR del Evento"
+                    className="size-48 object-contain"
+                  />
+                </div>
+                <div className="text-left w-full space-y-1">
+                  <h4 className="font-bold text-sm text-foreground">{qrModalEvent.title}</h4>
+                  <p className="text-xs text-muted-foreground">
+                    {qrModalEvent.meetingUrl
+                      ? `Enlace a videollamada (${qrModalEvent.meetingPlatform || 'Online'})`
+                      : 'Enlace al evento en NovaHub ERP'}
+                  </p>
+                  <p className="text-[11px] font-mono text-muted-foreground truncate bg-muted/30 p-2 rounded-lg">
+                    {qrModalEvent.meetingUrl || `${window.location.origin}/activities/events/${qrModalEvent.id}`}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8">
+            <Button variant="outline" onClick={() => setQrModalEvent(null)}>
+              Cerrar
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!qrModalEvent) return;
+                const link = qrModalEvent.meetingUrl || `${window.location.origin}/activities/events/${qrModalEvent.id}`;
+                await navigator.clipboard.writeText(link);
+                toast.success('Enlace copiado al portapapeles');
+              }}
+            >
+              <Copy className="mr-1.5 size-4" /> Copiar Enlace
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

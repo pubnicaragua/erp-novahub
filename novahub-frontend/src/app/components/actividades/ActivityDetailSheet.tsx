@@ -8,6 +8,8 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { cn } from '../ui/utils';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { SubtasksManager } from './SubtasksManager';
+import { TimeTracker } from './TimeTracker';
 
 export type ActivityDetailKind = 'task' | 'event' | 'reminder' | 'log';
 
@@ -23,6 +25,7 @@ interface ActivityDetailSheetProps {
   linkedExpenseJournal?: any;
   linkedIncomeJournal?: any;
   extraActions?: ReactNode;
+  onUpdate?: () => void;
   onDelete?: () => void | Promise<void>;
   onOpenChange: (open: boolean) => void;
 }
@@ -58,7 +61,7 @@ const getTaskDisplayStatus = (item: any) => {
 
 const translatedLabels: Record<string, string> = {
   LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', URGENT: 'Urgente',
-  PENDING: 'Pendiente', IN_PROGRESS: 'En progreso', COMPLETED: 'Completada', CANCELLED: 'Cancelada', OVERDUE: 'Vencida',
+  PENDING: 'Pendiente', IN_PROGRESS: 'En progreso', WAITING_APPROVAL: 'Por aprobar', COMPLETED: 'Completada', CANCELLED: 'Cancelada', OVERDUE: 'Vencida',
   SENT: 'Enviado', SNOOZED: 'Pospuesto',
   CREATE: 'Creación', UPDATE: 'Actualización', DELETE: 'Eliminación', UPLOAD: 'Carga de archivo', READ: 'Consulta', LOGIN: 'Inicio de sesión', EXPORT: 'Exportación', APPROVE: 'Aprobación', COMPLETE: 'Cierre',
   TASK: 'Tarea', EVENT: 'Evento', CALL: 'Llamada', MEETING: 'Reunión', EMAIL: 'Correo', DEADLINE: 'Fecha límite',
@@ -104,15 +107,23 @@ function StatusBadge({ value, kind }: { value: any; kind: ActivityDetailKind }) 
       ? 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400'
       : normalized === 'PENDING' || normalized === 'SNOOZED'
         ? 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400'
-        : normalized === 'IN_PROGRESS' || normalized === 'UPDATE'
-          ? 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+        : normalized === 'WAITING_APPROVAL'
+          ? 'border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400'
+          : normalized === 'IN_PROGRESS' || normalized === 'UPDATE'
+            ? 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400'
       : kind === 'event' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-primary/20 bg-primary/10 text-primary';
   return <Badge variant="outline" className={cn('border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest', tone)}>{formatLabel(value)}</Badge>;
 }
 
-function TaskDetails({ item }: { item: any }) {
+function TaskDetails({ item, onUpdate }: { item: any; onUpdate?: () => void }) {
   const assignments = item.assignments || [];
   const evidence = item.evidences?.[0];
+  const subtasks = item.subtasks || [];
+  const timeEntries = item.timeEntries || [];
+  const completedSubtasks = subtasks.filter((s: any) => s.isCompleted).length;
+  const totalSeconds = timeEntries.reduce((acc: number, entry: any) => acc + (Number(entry.durationSeconds) || 0), 0);
+  const totalHours = (totalSeconds / 3600).toFixed(1);
+
   const displayStatus = getTaskDisplayStatus(item);
   const isOverdue = displayStatus === 'OVERDUE';
   return (
@@ -123,12 +134,45 @@ function TaskDetails({ item }: { item: any }) {
         <DetailItem label="Vencimiento" value={<span className={isOverdue ? 'text-rose-600 dark:text-rose-400' : undefined}>{formatDate(item.dueDate)}{isOverdue && ' · Vencida'}</span>} icon={Clock3} />
         <DetailItem label="Creada" value={formatDate(item.createdAt)} icon={CalendarDays} />
       </div>
+
+      {item.rejectedReason && (
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
+          <p className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Motivo de rechazo</p>
+          <p className="mt-1 text-sm font-semibold text-rose-700 dark:text-rose-300">{item.rejectedReason}</p>
+          {item.rejectedBy?.name && <p className="mt-1 text-xs text-muted-foreground">Rechazado por: {item.rejectedBy.name} el {formatDate(item.rejectedAt)}</p>}
+        </div>
+      )}
+
+      {item.approvalNotes && (
+        <div className="rounded-2xl border border-purple-500/30 bg-purple-500/10 p-4">
+          <p className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400">Notas de envío a aprobación</p>
+          <p className="mt-1 text-sm font-semibold text-purple-700 dark:text-purple-300">{item.approvalNotes}</p>
+        </div>
+      )}
+
       <DetailSection title="Seguimiento" icon={Info}>
         <div className="grid gap-3 sm:grid-cols-2"><DetailItem label="Tipo de actividad" value={formatLabel(item.type || 'TASK')} icon={FileText} /><DetailItem label="Responsables" value={`${assignments.length} ${assignments.length === 1 ? 'persona asignada' : 'personas asignadas'}`} icon={Users} /><DetailItem label="Responsable principal" value={assignments[0]?.user?.name || assignments[0]?.user?.email || (assignments.length ? 'Responsable asignado' : 'Sin asignar')} icon={Users} /><DetailItem label="Última actualización" value={formatDate(item.updatedAt || item.createdAt)} icon={CalendarClock} /></div>
       </DetailSection>
       <DetailSection title="Descripción" icon={FileText}>
         <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Esta tarea no tiene una descripción.'}</p>
       </DetailSection>
+
+      <DetailSection title="Checklist y Subtareas" icon={CheckCircle2}>
+        <SubtasksManager
+          taskId={String(item.id)}
+          subtasks={subtasks}
+          onSubtasksChange={() => onUpdate?.()}
+        />
+      </DetailSection>
+
+      <DetailSection title="Control de Tiempo" icon={Clock3}>
+        <TimeTracker
+          taskId={String(item.id)}
+          timeEntries={timeEntries}
+          onEntriesChange={() => onUpdate?.()}
+        />
+      </DetailSection>
+
       <DetailSection title="Responsables" icon={Users}>
         {assignments.length > 0 ? <div className="flex flex-wrap gap-2">{assignments.map((assignment: any) => <Badge key={assignment.id || assignment.userId} variant="secondary" className="rounded-lg px-2.5 py-1 text-xs">{assignment.user?.name || assignment.user?.email || assignment.userId || 'Usuario'}</Badge>)}</div> : <p className="text-sm text-muted-foreground">Sin usuarios asignados.</p>}
       </DetailSection>
@@ -174,6 +218,19 @@ function EventDetails({ item, accounts = [], linkedExpense, linkedIncome, linked
         <DetailItem label="Ubicación" value={item.location} icon={MapPin} />
         <DetailItem label="Invitados" value={item.guestEmails?.length || item.attendees?.length || 0} icon={Users} />
       </div>
+
+      {item.meetingUrl && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wider text-primary">Videollamada ({item.meetingPlatform || 'Online'})</p>
+            <p className="mt-0.5 truncate text-xs font-mono text-muted-foreground">{item.meetingUrl}</p>
+          </div>
+          <a href={item.meetingUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-90">
+            Unirse
+          </a>
+        </div>
+      )}
+
       <DetailSection title="Ficha del evento" icon={Info}><div className="grid gap-3 sm:grid-cols-2"><DetailItem label="Tipo" value={formatLabel(item.type || 'EVENT')} icon={CalendarDays} /><DetailItem label="Duración" value={duration ? `${Math.floor(duration / 60)} h ${duration % 60 ? `${duration % 60} min` : ''}` : 'No especificada'} icon={Clock3} /><DetailItem label="Creado" value={formatDate(item.createdAt)} icon={CalendarClock} /><DetailItem label="Moneda" value={item.currency || 'USD'} icon={DollarSign} /></div></DetailSection>
       <DetailSection title="Descripción y notas" icon={FileText}><p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Este evento no tiene notas adicionales.'}</p></DetailSection>
       <DetailSection title="Resumen financiero" icon={DollarSign}>
@@ -245,7 +302,7 @@ function DetailSection({ title, icon: Icon, children }: { title: string; icon: a
   return <Card className="space-y-3 rounded-2xl border-border/50 bg-card/80 p-4 shadow-sm"><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><Icon className="size-4 text-primary" /> {title}</h3>{children}</Card>;
 }
 
-export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense, linkedIncome, linkedExpenseAccount, linkedIncomeAccount, linkedExpenseJournal, linkedIncomeJournal, extraActions, onDelete, onOpenChange }: ActivityDetailSheetProps) {
+export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense, linkedIncome, linkedExpenseAccount, linkedIncomeAccount, linkedExpenseJournal, linkedIncomeJournal, extraActions, onUpdate, onDelete, onOpenChange }: ActivityDetailSheetProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const config = labels[kind];
   const title = item?.title || (kind === 'log' ? formatLabel(item?.entity) : item?.entity) || config.singular;
@@ -264,7 +321,7 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
           {(extraActions || onDelete) && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}{onDelete && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => setDeleteOpen(true)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}</div>}
         </SheetHeader>
-        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} />}{item && kind === 'event' && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
+        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} />}{item && kind === 'event' && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>

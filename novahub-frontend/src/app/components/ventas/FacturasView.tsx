@@ -1283,7 +1283,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const isInvoiceCancellableFromList = (invoice: Partial<Invoice>) => {
     const status = String(invoice.status || '').toUpperCase();
-    return !['PAID', 'PARTIAL', 'CANCELLED', 'CREDIT'].includes(status) && Number(invoice.amountPaid || 0) <= 0.01;
+    return status === 'PAID';
   };
 
   const handleDownloadInvoicePdf = async (invoice: Invoice, format: PdfDownloadFormat = 'configured') => {
@@ -2176,7 +2176,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             const rowsToCancel = data.filter((invoice) => ids.includes(invoice.id) && isInvoiceCancellableFromList(invoice));
             const skippedCount = ids.length - rowsToCancel.length;
             if (!rowsToCancel.length) {
-              toast.error('Las facturas pagadas o con pagos parciales no se pueden anular desde esta vista');
+              toast.error('Solo las facturas pagadas pueden solicitar anulación contable');
               return;
             }
             if (skippedCount > 0) {
