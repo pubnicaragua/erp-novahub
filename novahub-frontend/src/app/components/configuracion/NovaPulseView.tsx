@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { getApiErrorMessage } from '../../services/api';
 import { novaPulseService, type NovaPulseConfig, type NovaPulseRecipient } from '../../services/nova-pulse.service';
+import { NovaHubLogo } from '../NovaHubLogo';
 
 const DEFAULT_CONFIG: NovaPulseConfig = {
   id: '', enabled: false, timezone: 'America/Managua', sendTime: '07:00', frequency: 'DAILY', customDays: [],
@@ -135,7 +136,7 @@ export function NovaPulseView({ canEdit, canSend }: { canEdit: boolean; canSend:
     <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.09] via-background to-background shadow-sm">
       <CardContent className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between lg:p-8">
         <div className="flex items-start gap-4">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"><MessageCircle className="size-7" /></div>
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-primary/20 ring-1 ring-primary/20"><NovaHubLogo size={42} className="rounded-xl" /></div>
           <div><div className="mb-1 flex flex-wrap items-center gap-2"><p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Nova Pulse</p><Badge variant="outline" className="border-primary/30 text-primary">WhatsApp ejecutivo</Badge></div><h2 className="text-2xl font-black tracking-tight">Resumen de tu negocio</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Recibí automáticamente por WhatsApp un resumen ejecutivo de tu empresa.</p></div>
         </div>
         <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/75 px-4 py-3"><div><p className="text-xs font-bold text-muted-foreground">Estado del resumen</p><p className="font-bold">{config.enabled ? 'Activo' : 'Pausado'}</p></div><Switch checked={config.enabled} onCheckedChange={(enabled) => setConfig((current) => ({ ...current, enabled }))} disabled={!canEdit} /></div>

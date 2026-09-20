@@ -1,5 +1,6 @@
 import { MapPinned, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 import mapUrl from '../../../maps/diseñoui_mapas_freelancers.html?url';
 
 export function FuerzaComercialPage() {
@@ -7,7 +8,7 @@ export function FuerzaComercialPage() {
   const isSuperAdmin = user?.role === 'superadmin';
   const isAuthorizedCollaborator = user?.userType === 'collaborator' && hasAccess('fuerza-comercial');
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}`;
+  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(isotipoUrl)}`;
 
   if (!isSuperAdmin && !isAuthorizedCollaborator) {
     return (

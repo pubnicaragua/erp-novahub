@@ -18,11 +18,11 @@ import {
   Settings2,
   ShieldAlert,
   ShoppingCart,
-  Sparkles,
   Store,
   TrendingDown,
   WalletCards,
 } from 'lucide-react';
+import { NovaHubLogo } from './NovaHubLogo';
 import {
   Area,
   AreaChart,
@@ -423,10 +423,6 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     window.dispatchEvent(new CustomEvent('open-erp-chat', { detail: { message, context: { source: 'executive-dashboard', periodFrom: range?.start, periodTo: range?.end } } }));
   };
 
-  const openNovaChat = (message: string) => {
-    askNova(message);
-  };
-
   const productRows = useMemo(() => {
     if (productTab === 'noSaleProducts') return (performance.noSaleProducts || []).slice(0, 6);
     if (productTab === 'leastSelling') return (performance.leastSelling || []).slice(0, 6);
@@ -455,7 +451,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
           </Select>
           <Button variant="outline" className="executive-toolbar-button" onClick={() => void exportDashboard()} disabled={isExporting || currentQuery.isFetching}><FileDown className="size-4" /> {isExporting ? 'Exportando…' : 'Exportar'}</Button>
           <Button variant="outline" className="executive-toolbar-button" onClick={() => { setDraftPreferences(preferences); setConfigOpen(true); }}><Settings2 className="size-4" /> Configurar</Button>
-          <Button className="executive-toolbar-button" onClick={() => askNova()}><Sparkles className="size-4" /> Preguntar a Nova</Button>
+          <Button className="executive-toolbar-button" onClick={() => askNova()}><NovaHubLogo size={17} className="rounded-full bg-white p-0.5" /> Preguntar a Nova</Button>
           <Button variant="outline" size="icon" className="executive-toolbar-icon" onClick={() => void currentQuery.refetch()} aria-label="Actualizar dashboard"><RefreshCw className={`size-4 ${currentQuery.isFetching ? 'animate-spin' : ''}`} /></Button>
         </div>
       </header>
@@ -501,14 +497,14 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         {canViewInventory && <section className="executive-insights-panel" aria-labelledby="nova-insights-title">
           <div className="executive-insights-heading">
             <div>
-              <span className="executive-section-kicker"><Sparkles /> Nova encontró esto hoy</span>
+              <span className="executive-section-kicker"><NovaHubLogo size={17} className="rounded-full bg-white p-0.5" /> Nova detectó estas señales</span>
               <h2 id="nova-insights-title">Datos que necesitan una decisión</h2>
             </div>
             <span className="executive-panel-caption">Inventario · actualización automática</span>
           </div>
           {inventoryQuery.isPending ? <div className="executive-insights-loading"><Loader2 className="animate-spin" /> Calculando capital, vencimientos y rotación…</div> : inventoryQuery.isError ? <div className="executive-insights-loading">No se pudo consultar el análisis de inventario. El resto del dashboard sigue disponible.</div> : <>
             <div className="executive-insights-grid">
-              <article className="executive-insight-card is-danger">
+              {(safeNumber(expirySummary.totalLots) > 0 || safeNumber(expirySummary.atRiskCost) > 0) && <article className="executive-insight-card is-danger">
                 <div className="executive-insight-icon"><Clock3 /></div>
                 <div className="executive-insight-copy">
                   <span>Productos por vencer</span>
@@ -516,8 +512,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
                   <small>{safeNumber(expirySummary.expiredLots)} vencidos · {safeNumber(expirySummary.criticalLots)} críticos en los próximos 7 días.</small>
                 </div>
                 <button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'expiring' })}>Ver lotes <ArrowUpRight /></button>
-              </article>
-              <article className="executive-insight-card is-warning">
+              </article>}
+              {(safeNumber(inventorySummary.stuckProductsCount) > 0 || safeNumber(inventorySummary.stuckInventoryValue) > 0) && <article className="executive-insight-card is-warning">
                 <div className="executive-insight-icon"><Banknote /></div>
                 <div className="executive-insight-copy">
                   <span>Capital inmovilizado</span>
@@ -525,8 +521,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
                   <small>{safeNumber(inventorySummary.stuckProductsCount)} productos sin salidas de inventario en 90 días.</small>
                 </div>
                 <button type="button" onClick={() => setProductTab('noSaleProducts')}>Ver productos <ArrowUpRight /></button>
-              </article>
-              <article className="executive-insight-card is-info">
+              </article>}
+              {(alertCount > 0 || safeNumber(inventorySummary.lowStockValue) > 0) && <article className="executive-insight-card is-info">
                 <div className="executive-insight-icon"><Package /></div>
                 <div className="executive-insight-copy">
                   <span>Reposición prioritaria</span>
@@ -534,20 +530,10 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
                   <small>{safeNumber(alertCount)} productos con agotado, mínimo o reordenación detectada.</small>
                 </div>
                 <button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'low' })}>Revisar stock <ArrowUpRight /></button>
-              </article>
-              {safeNumber(kpis.totalExpenses) === 0 && <article className="executive-insight-card is-neutral">
-                <div className="executive-insight-icon"><CircleHelp /></div>
-                <div className="executive-insight-copy">
-                  <span>Calidad de datos</span>
-                  <strong>Sin gastos registrados</strong>
-                  <small>No se puede interpretar este período como rentabilidad real hasta registrar los gastos.</small>
-                </div>
-                <button type="button" onClick={() => navigate('finanzas', { subModule: 'egresos' })}>Registrar gasto <ArrowUpRight /></button>
               </article>}
             </div>
             <div className="executive-insights-footer">
-              <span><strong>{safeNumber(expirySummary.atRiskUnits).toLocaleString('es-NI')}</strong> unidades con vencimiento dentro de 30 días · <strong>{safeNumber(inventorySummary.productsWithoutCost)}</strong> niveles sin costo configurado.</span>
-              <Button variant="outline" size="sm" onClick={() => openNovaChat('Analiza el inventario por vencer, el capital inmovilizado y la reposición prioritaria de hoy.')}><Sparkles className="size-3.5" /> Preguntar a Nova</Button>
+              <span>{(safeNumber(expirySummary.atRiskUnits) || safeNumber(inventorySummary.productsWithoutCost)) > 0 ? <><strong>{safeNumber(expirySummary.atRiskUnits).toLocaleString('es-NI')}</strong> unidades con vencimiento dentro de 30 días · <strong>{safeNumber(inventorySummary.productsWithoutCost)}</strong> niveles sin costo configurado.</> : 'No hay hallazgos de inventario que requieran una decisión en este período.'}</span>
             </div>
             {expiryItems.length > 0 && <div className="executive-expiry-list" aria-label="Lotes por vencer">
               {expiryItems.slice(0, 5).map((item: any) => <button type="button" key={`${item.id}-${item.lotId}`} onClick={() => openProduct({ id: item.productId, name: item.productName, code: item.productCode })}>

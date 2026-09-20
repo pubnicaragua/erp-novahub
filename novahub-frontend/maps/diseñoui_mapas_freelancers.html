@@ -33,6 +33,7 @@ button,input,select,textarea{font:inherit}
 .kpi:hover,.kpi.active{border-color:#4fc39d;box-shadow:0 5px 14px rgba(8,120,90,.12);transform:translateY(-1px)}
 .kpi b{display:block;font-size:17px;line-height:1}
 .kpi span{display:block;font-size:7.5px;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:4px}
+.seller-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:-4px 0 12px;padding:8px;border:1px solid #cfe6dc;border-radius:13px;background:#eff8f4}.seller-summary[hidden]{display:none}.seller-summary b{display:block;font-size:12px;line-height:1.1}.seller-summary span{display:block;margin-top:3px;color:var(--muted);font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px}
 .search-row{display:flex;gap:6px;align-items:stretch;margin-bottom:5px}
 .search{position:relative;flex:1;min-width:0}
 .search input{width:100%;height:42px;border:1px solid var(--line);border-radius:13px;padding:0 42px 0 12px;background:white;outline:none;font-size:11px}
@@ -151,15 +152,22 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <h1>Mapa comercial ERP · Managua</h1>
   <p>Managua, Ciudad Sandino y Veracruz con enfoque comercial, filtros rápidos y uso cómodo en celular.</p>
   <div class="live"><span class="dot"></span><span id="liveStatus">Base inicial cargada. Lista para consultar Google Places…</span></div>
+  <div class="live" id="offlineStatus"><span class="dot"></span><span id="offlineStatusText">Preparando sincronización offline…</span></div>
  </div>
  <div class="scroll">
-  <div class="kpis">
+ <div class="kpis">
    <div class="kpi" data-pipeline="found"><b id="foundCount">0</b><span>Encontrados</span></div>
    <div class="kpi" data-pipeline="selected"><b id="selectedCount">0</b><span>Seleccionados</span></div>
    <div class="kpi" data-pipeline="kanban"><b id="kanbanCount">0</b><span>En Kanban</span></div>
    <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
-   <div class="kpi" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
-  </div>
+  <div class="kpi" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
+ </div>
+ <div class="seller-summary" id="sellerSummary" hidden>
+  <div><b id="sellerProspects">0</b><span>Prospectos propios</span></div>
+  <div><b id="sellerQuotes">0</b><span>Cotizaciones</span></div>
+  <div><b id="sellerAccepted">0</b><span>Aceptadas</span></div>
+  <div><b id="sellerQuotedValue">—</b><span>Valor cotizado</span></div>
+ </div>
 
   <div class="search-row">
    <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar en Google Places">⌕</button></div>
@@ -241,8 +249,13 @@ function readStore(key, fallback){
 }
 const followups = readStore('novaManaguaFollowupsV4', {});
 const commercialState = readStore('novaFuerzaComercialV1', {});
+const OFFLINE_DB_NAME = 'nova-force-sales-offline-v1';
+const OFFLINE_STORE = 'outbox';
+let offlineDbPromise = null;
+let flushingOutbox = false;
 const mapQuery = new URLSearchParams(location.search);
 const API_BASE = (mapQuery.get('api') || localStorage.getItem('novaApiBase') || 'http://localhost:3000/api').replace(/\/$/, '');
+const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const GOOGLE_PAGE_DELAY = 2000;
 const GOOGLE_MAX_PAGES = 3;
@@ -306,6 +319,9 @@ function markerSvg(b){
   const state=stateClass(b);
   const ring=state==='interested'?'#0b9d68':state==='visited'?'#84d795':state==='kanban'?'#12aa7b':state==='selected'?'#3287e8':state==='discarded'?'#86958f':'#9cacaa';
   const fill=b.priority==='A'?'#08785a':b.priority==='B'?'#eea13d':'#83928d';
+  if(NOVAHUB_ISOTIPO_URL){
+    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(42,42),anchor:new google.maps.Point(21,21)};
+  }
   return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 42 42"><circle cx="21" cy="21" r="18" fill="white" stroke="${ring}" stroke-width="3"/><rect x="7" y="7" width="28" height="28" rx="9" fill="${fill}"/><path d="M14 13v16M28 13v16M14 13l14 14" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><path d="M14 29l14-16" fill="none" stroke="#8df1be" stroke-width="3.2" stroke-linecap="round"/></svg>`),scaledSize:new google.maps.Size(42,42),anchor:new google.maps.Point(21,21)};
 }
 function clusterSvg(count){
@@ -364,6 +380,74 @@ async function forceSalesRequest(path, options={}){
   const text=await response.text();
   return text ? JSON.parse(text) : null;
 }
+function openOfflineDb(){
+  if(!('indexedDB' in window)) return Promise.resolve(null);
+  if(offlineDbPromise) return offlineDbPromise;
+  offlineDbPromise=new Promise((resolve,reject)=>{
+    const request=indexedDB.open(OFFLINE_DB_NAME,1);
+    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains(OFFLINE_STORE))request.result.createObjectStore(OFFLINE_STORE,{keyPath:'sourceKey'})};
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>{offlineDbPromise=null;reject(request.error || new Error('IndexedDB no disponible'))};
+  });
+  return offlineDbPromise;
+}
+function offlineTransaction(mode, operation){
+  return openOfflineDb().then(db=>new Promise((resolve,reject)=>{
+    if(!db){resolve(null);return}
+    const tx=db.transaction(OFFLINE_STORE,mode); const store=tx.objectStore(OFFLINE_STORE);
+    let result;
+    try{result=operation(store)}catch(error){reject(error);return}
+    if(result?.onsuccess!==undefined){result.onsuccess=()=>resolve(result.result);result.onerror=()=>reject(result.error)}
+    else{tx.oncomplete=()=>resolve(result)}
+    tx.onerror=()=>reject(tx.error);
+  }));
+}
+async function saveOfflineProspect(b, evidenceFile){
+  const entry={sourceKey:keyOf(b),payload:prospectPayload(b),evidence:evidenceFile?{name:evidenceFile.name,type:evidenceFile.type,size:evidenceFile.size,blob:evidenceFile}:null,queuedAt:new Date().toISOString()};
+  try{
+    if(!await openOfflineDb()) return false;
+    await offlineTransaction('readwrite',store=>store.put(entry));
+    return true;
+  }catch(error){
+    console.warn('No se pudo guardar la cola offline',error);
+    return false;
+  }
+}
+async function removeOfflineProspect(sourceKey){
+  try{await offlineTransaction('readwrite',store=>store.delete(sourceKey))}catch(error){console.warn('No se pudo limpiar la cola offline',error)}
+}
+async function readOfflineProspects(){
+  try{return (await offlineTransaction('readonly',store=>store.getAll())) || []}catch(error){console.warn('No se pudo leer la cola offline',error);return []}
+}
+async function uploadEvidence(file){
+  const metadata=await forceSalesRequest('/storage/uploads/force-sales-evidence',{method:'POST',body:JSON.stringify({fileName:file.name,mimeType:file.type || 'application/octet-stream',size:file.size})});
+  if(!metadata?.signedUrl || !metadata?.uri) throw new Error('El ERP no autorizó la subida de evidencia');
+  const upload=await fetch(metadata.signedUrl,{method:'PUT',headers:{'Content-Type':file.type || 'application/octet-stream'},body:file});
+  if(!upload.ok) throw new Error('No se pudo subir la evidencia al almacenamiento');
+  return metadata;
+}
+async function flushOutbox(){
+  if(flushingOutbox || !navigator.onLine || !localStorage.getItem('nh-auth-token')) return;
+  flushingOutbox=true;
+  try{
+    const entries=await readOfflineProspects();
+    for(const entry of entries){
+      const payload={...(entry.payload || {})};
+      try{
+        if(entry.evidence?.blob && !payload.evidenceUri){
+          const uploaded=await uploadEvidence(entry.evidence.blob);
+          payload.evidenceUri=uploaded.uri;
+          const business=businesses.find(item=>keyOf(item)===entry.sourceKey);
+          if(business){const state=stateOf(business);state.evidenceUri=uploaded.uri;state.evidencePending=false;persistCommercial()}
+        }
+        const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[payload]})});
+        const saved=result?.prospects?.[0];
+        if(saved){const business=businesses.find(item=>keyOf(item)===entry.sourceKey);if(business)stateOf(business).remoteId=saved.id}
+        await removeOfflineProspect(entry.sourceKey);
+      }catch(error){console.warn('La cola offline seguirá pendiente',error)}
+    }
+  }finally{flushingOutbox=false}
+}
 function prospectPayload(b){
   const c=stateOf(b);
   return {
@@ -373,16 +457,30 @@ function prospectPayload(b){
     priority:b.priority || 'C', selected:Boolean(c.selected), stage:stageToApi(statusOf(b)),
     discardedReason:c.discardReason || null, assignedToId:c.assignedToId || null,
     visitedAt:c.visitedAt || null, visitLat:c.visitLat ?? null, visitLng:c.visitLng ?? null,
-    notes:(followups[b.id] || {}).note || null, evidenceName:c.evidenceName || null, evidenceType:c.evidenceType || null,
+    notes:(followups[b.id] || {}).note || null, evidenceName:c.evidenceName || null, evidenceType:c.evidenceType || null, evidenceUri:c.evidenceUri || null,
     whatsappPhone:c.whatsappPhone || b.phone || null,
     whatsappOptIn:c.whatsappOptIn === undefined ? undefined : Boolean(c.whatsappOptIn),
     whatsappOptInSource:c.whatsappOptInSource || null,
   };
 }
-async function syncProspects(list){
+async function syncProspects(list, evidenceFile=null){
   const prospects=list.filter(Boolean).map(prospectPayload);
-  if(!prospects.length || !localStorage.getItem('nh-auth-token')) return null;
+  let pendingEvidence=evidenceFile;
+  if(!prospects.length) return null;
+  if(!navigator.onLine || !localStorage.getItem('nh-auth-token')){
+    const queued=await Promise.all(list.filter(Boolean).map(item=>saveOfflineProspect(item,evidenceFile)));
+    if(queued.every(Boolean)) toast('Guardado offline · se sincronizará al recuperar conexión');
+    return null;
+  }
   try{
+    if(pendingEvidence){
+      const uploaded=await uploadEvidence(pendingEvidence);
+      const business=list[0]; const state=stateOf(business);
+      state.evidenceUri=uploaded.uri; state.evidencePending=false;
+      prospects[0].evidenceUri=uploaded.uri;
+      persistCommercial();
+      pendingEvidence=null;
+    }
     const result=await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects})});
     (result?.prospects || []).forEach(prospect=>{
       const business=list.find(item=>keyOf(item)===prospect.sourceKey);
@@ -390,7 +488,12 @@ async function syncProspects(list){
     });
     persistCommercial();
     return result;
-  }catch(e){console.warn('Fuerza Comercial local: no se pudo sincronizar con el ERP',e);return null}
+  }catch(e){
+    console.warn('Fuerza Comercial local: no se pudo sincronizar con el ERP',e);
+    const queued=await Promise.all(list.filter(Boolean).map(item=>saveOfflineProspect(item,pendingEvidence)));
+    if(queued.every(Boolean)) toast('Cambios guardados offline · se sincronizarán automáticamente');
+    return null;
+  }
 }
 function remoteBusiness(prospect){
   const id=prospect.googlePlaceId ? `google-${prospect.googlePlaceId}` : `remote-${prospect.id}`;
@@ -403,7 +506,7 @@ async function loadRemoteProspects(){
     if(!Array.isArray(data)) return;
     remoteProspects=data.map(prospect=>{
       const business=remoteBusiness(prospect); const key=keyOf(business); const current=commercialState[key] || {};
-      commercialState[key]={...current,remoteId:prospect.id,selected:Boolean(prospect.selected),kanban:true,stage:stageToUi(prospect.stage),discarded:stageToUi(prospect.stage)==='Descartado',discardReason:prospect.discardedReason || current.discardReason,visitedAt:prospect.visitedAt || current.visitedAt,visitLat:prospect.visitLat ?? current.visitLat,visitLng:prospect.visitLng ?? current.visitLng,whatsappPhone:prospect.phone || current.whatsappPhone,whatsappOptIn:Boolean(prospect.whatsappOptIn),whatsappOptInSource:prospect.whatsappOptInSource || current.whatsappOptInSource};
+      commercialState[key]={...current,remoteId:prospect.id,selected:Boolean(prospect.selected),kanban:true,stage:stageToUi(prospect.stage),discarded:stageToUi(prospect.stage)==='Descartado',discardReason:prospect.discardedReason || current.discardReason,visitedAt:prospect.visitedAt || current.visitedAt,visitLat:prospect.visitLat ?? current.visitLat,visitLng:prospect.visitLng ?? current.visitLng,evidenceName:prospect.evidenceName || current.evidenceName,evidenceType:prospect.evidenceType || current.evidenceType,evidenceUri:prospect.evidenceUri || current.evidenceUri,whatsappPhone:prospect.phone || current.whatsappPhone,whatsappOptIn:Boolean(prospect.whatsappOptIn),whatsappOptInSource:prospect.whatsappOptInSource || current.whatsappOptInSource};
       return business;
     });
     persistCommercial(); mergeBusinesses(); populateFilters(); render();
@@ -419,6 +522,23 @@ function updatePipelineKpis(){
   document.getElementById('interestedCount').textContent=businesses.filter(isInterested).length;
   document.querySelectorAll('.kpi[data-pipeline]').forEach(el=>el.classList.toggle('active',el.dataset.pipeline===pipelineFilter));
   document.getElementById('selectionSummary').textContent=`${businesses.filter(isSelected).length} seleccionados`;
+}
+function formatSellerTotals(totals){
+  return (Array.isArray(totals) ? totals : []).map(item => `${item.currency} ${Number(item.total || 0).toLocaleString('es-NI',{minimumFractionDigits:2,maximumFractionDigits:2})}`).join(' · ') || '—';
+}
+async function loadSellerSummary(){
+  if(!localStorage.getItem('nh-auth-token'))return;
+  try{
+    const summary=await forceSalesRequest('/force-sales/summary');
+    const total=Number(summary?.prospects?.total || 0);
+    const quoteTotals=Array.isArray(summary?.quotes?.totals) ? summary.quotes.totals : [];
+    const acceptedTotals=Array.isArray(summary?.quotes?.accepted) ? summary.quotes.accepted : [];
+    document.getElementById('sellerProspects').textContent=String(total);
+    document.getElementById('sellerQuotes').textContent=String(quoteTotals.reduce((sum,item)=>sum + Number(item.count || 0),0));
+    document.getElementById('sellerAccepted').textContent=String(acceptedTotals.reduce((sum,item)=>sum + Number(item.count || 0),0));
+    document.getElementById('sellerQuotedValue').textContent=formatSellerTotals(quoteTotals);
+    document.getElementById('sellerSummary').hidden=false;
+  }catch(error){console.warn('No se pudo cargar el resumen comercial',error)}
 }
 function nearestZone(lat,lng){
   let best='Managua', d=Infinity;
@@ -567,7 +687,8 @@ function popupHtml(b){
       <textarea id="nt-${sid}" placeholder="Contacto, tamaño, necesidad, decisión...">${esc(f.note||'')}</textarea>
       <label>Evidencia opcional</label>
       <input id="ev-${sid}" type="file" accept="image/*,.pdf">
-      ${c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}</div>` : ''}
+      ${c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</div>` : ''}
+      ${c.evidenceUri ? `<button type="button" onclick="openEvidence('${b.id}')">Abrir evidencia guardada</button>` : ''}
       <button onclick="saveFollowup('${b.id}')">Guardar seguimiento</button>
       <label>WhatsApp y consentimiento</label>
       <input id="wa-${sid}" type="tel" value="${esc(c.whatsappPhone || b.phone || '')}" placeholder="+505 8888 8888">
@@ -619,7 +740,16 @@ function discardBusiness(id){
   localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render();syncProspects([b]);toast('Negocio descartado');
 }
 window.discardBusiness = discardBusiness;
-window.saveFollowup = function(id){
+window.openEvidence = async function(id){
+  const b=findBusiness(id); const c=b && stateOf(b);
+  if(!c?.evidenceUri){toast('La evidencia todavía no está sincronizada');return}
+  try{
+    const result=await forceSalesRequest('/storage/resolve',{method:'POST',body:JSON.stringify({uri:c.evidenceUri})});
+    if(!result?.url) throw new Error('URL no disponible');
+    window.open(result.url,'_blank','noopener,noreferrer');
+  }catch(error){console.warn(error);toast('No se pudo abrir la evidencia')}
+};
+window.saveFollowup = async function(id){
   const sid = safeId(id);
   const b = findBusiness(id);
   if(!b) return;
@@ -631,11 +761,14 @@ window.saveFollowup = function(id){
     updatedAt: new Date().toISOString()
   };
   const c=stateOf(b); c.stage=status; c.discarded=status==='Descartado'; if(status==='Visitado'&&!c.visitedAt)c.visitedAt=new Date().toISOString();
+  const file=document.getElementById('ev-' + sid)?.files?.[0];
+  const validFile=file && file.size <= 10 * 1024 * 1024 ? file : null;
+  if(file && !validFile){toast('La evidencia supera el límite de 10 MB');return}
+  if(validFile){c.evidenceName=validFile.name;c.evidenceType=validFile.type;c.evidencePending=true}
   localStorage.setItem('novaManaguaFollowupsV4', JSON.stringify(followups));
   persistCommercial();
-  syncProspects([b]);
-  const file=document.getElementById('ev-' + sid)?.files?.[0];
-  if(file && file.size <= 1500000){const reader=new FileReader();reader.onload=()=>{c.evidenceName=file.name;c.evidenceType=file.type;c.evidenceData=reader.result;persistCommercial();toast('Seguimiento y evidencia guardados')};reader.readAsDataURL(file)}else toast(file ? 'Seguimiento guardado · evidencia supera 1.5 MB' : 'Seguimiento guardado');
+  await syncProspects([b],validFile);
+  if(!validFile)toast('Seguimiento guardado');
   render();
 };
 window.saveWhatsAppConsent = async function(id){
@@ -1035,6 +1168,13 @@ document.getElementById('bulkVisit').addEventListener('click',visitSelected);
 document.getElementById('bulkWhatsApp').addEventListener('click',sendSelectedWhatsApp);
 document.getElementById('bulkDiscard').addEventListener('click',discardSelected);
 map.on('zoomend', applyLabels);
+function updateOfflineStatus(){
+  const label=document.getElementById('offlineStatusText');
+  if(!label)return;
+  label.textContent=navigator.onLine?'Conectado · los cambios se sincronizan con NovaHub':'Modo offline · cambios, ubicación y evidencias quedan en cola local';
+}
+window.addEventListener('online',()=>{updateOfflineStatus();flushOutbox();loadRemoteProspects()});
+window.addEventListener('offline',updateOfflineStatus);
 
 const sheet = document.getElementById('sheet');
 const toggle = document.getElementById('mobileSheetToggle');
@@ -1048,7 +1188,8 @@ updateToggle();
 
 populateFilters();
 render();
-setTimeout(() => loadRemoteProspects().finally(() => loadGooglePlaces(false)), 450);
+updateOfflineStatus();
+setTimeout(() => loadSellerSummary().finally(() => loadRemoteProspects().finally(() => flushOutbox().finally(() => loadGooglePlaces(false)))), 450);
 </script>
 </body>
 </html>

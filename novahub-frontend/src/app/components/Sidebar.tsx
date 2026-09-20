@@ -103,6 +103,7 @@ interface MenuItem {
   submenu?: SubMenuItem[];
   section?: string;
   superadminOnly?: boolean;
+  platformPermission?: string;
 }
 
 // La matriz de permisos y el sidebar deben consultar el mismo catálogo.
@@ -421,7 +422,7 @@ const platformMenuItems: MenuItem[] = [
     label: 'Fuerza Comercial',
     icon: <MapPinned className="size-5" />,
     section: 'NovaHub Platform',
-    superadminOnly: true,
+    platformPermission: 'PLATFORM_FORCE_SALES',
   },
   {
     id: 'suscripciones',
@@ -499,7 +500,13 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
   }
 
   const activeMenuArray = (user?.isPlatformAdmin ? platformMenuItems : menuItems).filter(
-    (item) => !item.superadminOnly || user?.role === 'superadmin'
+    (item) => (
+      (!item.superadminOnly || user?.role === 'superadmin')
+      && (!item.platformPermission
+        || user?.role === 'superadmin'
+        || user?.platformPermissions.includes(item.platformPermission)
+        || (item.id === 'fuerza-comercial' && user?.platformPermissions.includes('PLATFORM_QUOTES')))
+    )
   );
 
   const toggleMenu = (id: string) => {

@@ -774,13 +774,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Fuerza Comercial es una superficie cerrada: solo Super Admin y
     // colaboradores expresamente habilitados pueden verla.
     if (module === 'fuerza-comercial') {
-      if (user.isPlatformAdmin) return user.role === 'superadmin';
+      if (user.isPlatformAdmin) {
+        return user.role === 'superadmin'
+          || (user.role === 'platform_quote_user'
+            && (user.platformPermissions.includes('PLATFORM_QUOTES') || user.platformPermissions.includes('PLATFORM_FORCE_SALES')));
+      }
       if (user.userType !== 'collaborator') return false;
     }
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
-      if (user.role === 'platform_quote_user') return module === 'suscripciones' && user.platformPermissions.includes('PLATFORM_QUOTES');
+      if (user.role === 'platform_quote_user') {
+        if (module === 'suscripciones') return user.platformPermissions.includes('PLATFORM_QUOTES');
+        if (module === 'fuerza-comercial') return user.platformPermissions.includes('PLATFORM_QUOTES') || user.platformPermissions.includes('PLATFORM_FORCE_SALES');
+        return false;
+      }
       if (module === 'guia-implementacion') return user.role === 'superadmin';
       // La consola de SuperAdmin expone la auditoría como vista propia; no
       // debe conservar el módulo general de Configuración ni sus subpáginas.
