@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Send, X } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -62,6 +62,92 @@ function buildGuides(videos: any[]): ChatGuide[] {
 
 function needsGuidesFor(content: string) {
   return /(cómo|como|dónde|donde|configur|registr|usar|módulo|modulo|manual|ayuda)/i.test(content);
+}
+
+function renderNovaInline(value: string): ReactNode {
+  const clean = value
+    .replace(/<br\s*\/?>(\s*)/gi, '$1')
+    .replace(/<\/?(?:p|div|span|table|thead|tbody|tr|th|td)[^>]*>/gi, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim();
+  const tokens = clean.split(/(\*\*[^*]+\*\*|`[^`]+`|(?<!\*)\*[^*]+\*(?!\*))/g);
+  return tokens.map((token, index) => {
+    if (token.startsWith('**') && token.endsWith('**')) return <strong key={index}>{token.slice(2, -2)}</strong>;
+    if (token.startsWith('`') && token.endsWith('`')) return <code key={index} className="rounded bg-muted px-1 py-0.5 text-[.9em]">{token.slice(1, -1)}</code>;
+    if (token.startsWith('*') && token.endsWith('*')) return <em key={index}>{token.slice(1, -1)}</em>;
+    return <span key={index}>{token}</span>;
+  });
+}
+
+function isTableSeparator(line: string) {
+  return /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function tableCells(line: string) {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return trimmed.split('|').map((cell) => cell.trim());
+}
+
+function NovaFormattedMessage({ content }: { content: string }) {
+  const lines = content.replace(/\r\n?/g, '\n').replace(/<br\s*\/?>(\s*)/gi, '\n$1').split('\n');
+  const blocks: ReactNode[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index].trim();
+    if (!line) { index += 1; continue; }
+
+    if (line.startsWith('```')) {
+      const code: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith('```')) { code.push(lines[index]); index += 1; }
+      if (index < lines.length) index += 1;
+      blocks.push(<pre key={`code-${index}`} className="overflow-x-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100"><code>{code.join('\n')}</code></pre>);
+      continue;
+    }
+
+    if (line.includes('|') && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
+      const headers = tableCells(line);
+      index += 2;
+      const rows: string[][] = [];
+      while (index < lines.length && lines[index].trim().includes('|')) { rows.push(tableCells(lines[index])); index += 1; }
+      blocks.push(
+        <div key={`table-${index}`} className="overflow-x-auto rounded-xl border border-border/60">
+          <table className="min-w-full text-left text-xs"><thead className="bg-muted/60"><tr>{headers.map((header, cellIndex) => <th key={cellIndex} className="px-3 py-2 font-bold">{renderNovaInline(header)}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex} className="border-t border-border/50">{headers.map((_, cellIndex) => <td key={cellIndex} className="px-3 py-2 align-top">{renderNovaInline(row[cellIndex] || '')}</td>)}</tr>)}</tbody></table>
+        </div>,
+      );
+      continue;
+    }
+
+    if (/^(?:[-*•])\s+/.test(line)) {
+      const items: string[] = [];
+      while (index < lines.length && /^(?:[-*•])\s+/.test(lines[index].trim())) { items.push(lines[index].trim().replace(/^(?:[-*•])\s+/, '')); index += 1; }
+      blocks.push(<ul key={`ul-${index}`} className="list-disc space-y-1 pl-5">{items.map((item, itemIndex) => <li key={itemIndex}>{renderNovaInline(item)}</li>)}</ul>);
+      continue;
+    }
+
+    if (/^\d+[.)]\s+/.test(line)) {
+      const items: string[] = [];
+      while (index < lines.length && /^\d+[.)]\s+/.test(lines[index].trim())) { items.push(lines[index].trim().replace(/^\d+[.)]\s+/, '')); index += 1; }
+      blocks.push(<ol key={`ol-${index}`} className="list-decimal space-y-1 pl-5">{items.map((item, itemIndex) => <li key={itemIndex}>{renderNovaInline(item)}</li>)}</ol>);
+      continue;
+    }
+
+    if (/^#{1,4}\s+/.test(line) || /^\*\*.+\*\*$/.test(line)) {
+      const heading = line.replace(/^#{1,4}\s+/, '').replace(/^\*\*(.+)\*\*$/, '$1');
+      blocks.push(<h4 key={`heading-${index}`} className="font-bold text-foreground">{renderNovaInline(heading)}</h4>);
+      index += 1;
+      continue;
+    }
+
+    const paragraph: string[] = [line];
+    index += 1;
+    while (index < lines.length && lines[index].trim() && !lines[index].trim().startsWith('```') && !/^(?:[-*•])\s+/.test(lines[index].trim()) && !/^\d+[.)]\s+/.test(lines[index].trim())) {
+      if (lines[index].includes('|') && index + 1 < lines.length && isTableSeparator(lines[index + 1])) break;
+      paragraph.push(lines[index].trim()); index += 1;
+    }
+    blocks.push(<p key={`paragraph-${index}`}>{renderNovaInline(paragraph.join(' '))}</p>);
+  }
+  return <div className="space-y-2">{blocks}</div>;
 }
 
 export function FloatingChat() {
@@ -159,7 +245,7 @@ export function FloatingChat() {
     </motion.button>
     <AnimatePresence>{open && <motion.div initial={{ opacity: 0, y: 24, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.96 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }} className="fixed right-4 bottom-24 z-50 flex h-[70vh] max-h-[640px] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-border/60 bg-background shadow-2xl shadow-black/40">
       <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-primary via-primary to-emerald-600 p-4 text-primary-foreground"><div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_55%)]" /><div className="relative flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-white p-1.5 ring-1 ring-white/40"><NovaHubLogo size={28} className="rounded-full" /></div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-black uppercase tracking-wider">Nova AI</h3><p className="truncate text-[11px] font-medium text-primary-foreground/75">Asistente empresarial con tus datos</p></div><button type="button" onClick={() => setOpen(false)} className="flex size-8 items-center justify-center rounded-lg bg-white/10 text-primary-foreground/90 transition-colors hover:bg-white/25" aria-label="Cerrar chat"><X className="size-4" /></button></div></div>
-      <div ref={scrollRef} className="scrollbar-overlay flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4">{messages.map((message) => <div key={message.id} className={cn('flex w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}><div className={cn('max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm', message.role === 'user' ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md border border-border/50 bg-background text-foreground')}>{message.content}</div></div>)}{typing && <div className="flex w-full justify-start"><div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-border/50 bg-background px-4 py-3 text-xs text-muted-foreground shadow-sm"><span className="size-1.5 animate-pulse rounded-full bg-primary" /><span>{ACTIVITY_STEPS[activityIndex]}</span></div></div>}</div>
+      <div ref={scrollRef} className="scrollbar-overlay flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4">{messages.map((message) => <div key={message.id} className={cn('flex w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}><div className={cn('max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm', message.role === 'user' ? 'whitespace-pre-wrap rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md border border-border/50 bg-background text-foreground')}>{message.role === 'bot' ? <NovaFormattedMessage content={message.content} /> : message.content}</div></div>)}{typing && <div className="flex w-full justify-start"><div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-border/50 bg-background px-4 py-3 text-xs text-muted-foreground shadow-sm"><span className="size-1.5 animate-pulse rounded-full bg-primary" /><span>{ACTIVITY_STEPS[activityIndex]}</span></div></div>}</div>
       {messages.length <= 1 && !typing && <div className="shrink-0 space-y-1.5 border-t border-border/40 px-3 pt-2.5 pb-1.5"><p className="px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Pregúntale a Nova</p>{SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" onClick={() => void sendMessage(suggestion)} className="flex w-full items-center gap-2 rounded-xl border border-border/40 bg-muted/40 px-3 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"><NovaHubLogo size={14} className="shrink-0 rounded-full" />{suggestion}</button>)}</div>}
       <div className="flex shrink-0 items-center gap-2 border-t border-border/40 bg-background p-3"><Input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void sendMessage(input); } }} placeholder="Pregunta por tus datos…" className="h-11 rounded-2xl border-border/50 bg-muted/30 focus:bg-background" disabled={typing} /><Button type="button" onClick={() => void sendMessage(input)} disabled={!input.trim() || typing} className="size-11 shrink-0 rounded-2xl bg-gradient-to-br from-primary to-emerald-600 text-primary-foreground shadow-lg shadow-primary/30" aria-label="Enviar pregunta"><Send className="size-4" /></Button></div>
     </motion.div>}</AnimatePresence>

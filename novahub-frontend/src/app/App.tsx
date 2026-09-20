@@ -483,7 +483,7 @@ function DashboardLayout() {
         </main>
       </div>
       <Toaster position="top-right" />
-      <FloatingChat />
+      {currentModule !== 'fuerza-comercial' && <FloatingChat />}
     </div>
   );
 }
