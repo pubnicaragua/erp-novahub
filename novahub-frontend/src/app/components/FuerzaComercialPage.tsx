@@ -3,12 +3,13 @@ import { useAuth } from '../contexts/AuthContext';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 import mapUrl from '../../../maps/diseñoui_mapas_freelancers.html?url';
 
-export function FuerzaComercialPage() {
+export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void }) {
   const { user, hasAccess } = useAuth();
   const isSuperAdmin = user?.role === 'superadmin';
   const isAuthorizedCollaborator = user?.userType === 'collaborator' && hasAccess('fuerza-comercial');
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(isotipoUrl)}`;
+  const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
+  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(isotipoUrl)}&view=${view}`;
 
   if (!isSuperAdmin && !isAuthorizedCollaborator) {
     return (

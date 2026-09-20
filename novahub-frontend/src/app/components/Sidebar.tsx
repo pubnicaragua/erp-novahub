@@ -312,6 +312,11 @@ const menuItems: MenuItem[] = [
     label: 'Fuerza Comercial',
     icon: <MapPinned className="size-5" />,
     section: 'Comercial',
+    submenu: [
+      { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
+      { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
+      { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
+    ],
   },
   {
     id: 'tickets', 
@@ -423,6 +428,11 @@ const platformMenuItems: MenuItem[] = [
     icon: <MapPinned className="size-5" />,
     section: 'NovaHub Platform',
     platformPermission: 'PLATFORM_FORCE_SALES',
+    submenu: [
+      { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
+      { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
+      { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
+    ],
   },
   {
     id: 'suscripciones',
@@ -590,11 +600,14 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     tracking: 'TRACKING',
     configuracion: 'CONFIGURATION',
     auditoria: 'AUDIT_LOGS',
+    'fuerza-comercial': 'FORCE_SALES',
   };
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
     const parentMod = PARENT_MODULE_MAP[parentId] || (parentId === 'inventario' ? 'INVENTORY' : null);
+    const isForceSalesPlatformUser = parentId === 'fuerza-comercial'
+      && (user?.isPlatformAdmin || user?.platformPermissions.includes('PLATFORM_FORCE_SALES') || user?.platformPermissions.includes('PLATFORM_QUOTES'));
     
     // Check if parent or any of its submodules is active
     let isParentOrSubmoduleActive = false;
@@ -610,11 +623,11 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       }
     }
     
-    if (parentMod && !isAlwaysAvailableSystemMenu && !isParentOrSubmoduleActive) return false;
+    if (parentMod && !isAlwaysAvailableSystemMenu && !isParentOrSubmoduleActive && !isForceSalesPlatformUser) return false;
 
     const requiredModules = SUBMENU_MODULE_REQUIREMENTS[`${parentId}:${subId}`] || SUBMENU_MODULE_REQUIREMENTS[subId];
     if (!requiredModules || requiredModules.length === 0) {
-      return parentMod ? canPerform(parentMod, 'view') : false;
+      return parentMod ? canPerform(parentMod, 'view') || isForceSalesPlatformUser : false;
     }
 
     const hasRequired = requiredModules.some(mod => user.enabledModules.includes(mod));

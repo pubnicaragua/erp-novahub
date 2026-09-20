@@ -105,6 +105,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .quick-heading{font-size:9px;font-weight:800;color:#123f35;margin-bottom:4px}.evidence-preview{display:flex;align-items:center;gap:7px;margin:3px 0 6px;padding:5px;border:1px solid #dce8e3;border-radius:8px;background:#f7fbf9}.evidence-preview[hidden]{display:none}.evidence-preview img{width:42px;height:42px;object-fit:cover;border-radius:6px}.evidence-preview span{font-size:8px;color:#526a60;line-height:1.35}.advanced-crm{margin-top:7px;border-top:1px solid #e4ece9;padding-top:7px}.advanced-crm summary{cursor:pointer;color:#0b7155;font-size:8px;font-weight:800}.advanced-crm .advanced-content{padding-top:6px}
 .bulkbar{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:10px 0 3px;padding:8px;border-radius:12px;background:#edf7f2;border:1px solid #d5e9e1}.bulkbar b{font-size:9px;margin-right:auto}.bulkbar button{border:0;border-radius:8px;padding:6px 7px;background:white;color:#0b7155;font-size:8px;font-weight:800;cursor:pointer}.bulkbar button:hover{background:#d7f0e6}.item-actions{display:flex;gap:5px;margin-top:7px}.item-actions button{flex:1;padding:6px 4px}.item.selected-item{border-color:#4a9be4;background:#f5faff}.item.kanban-item{border-color:#77caa7}.item .check{accent-color:#08785a;width:15px;height:15px;margin-top:4px}
 .toast{position:fixed;z-index:2000;left:50%;bottom:22px;transform:translate(-50%,18px);opacity:0;background:#153d35;color:white;padding:10px 13px;border-radius:11px;font-size:9px;transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
+.quick-capture{position:fixed;z-index:1900;left:calc(var(--sheet) + 18px);bottom:18px;width:min(360px,calc(100vw - var(--sheet) - 36px));padding:15px;border:1px solid #bfe2d4;border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 18px 45px rgba(12,53,43,.24)}.quick-capture[hidden]{display:none}.quick-capture h2{margin:0;font-size:14px}.quick-capture p{margin:4px 0 10px;color:#6c7c77;font-size:9px}.quick-capture input{width:100%;height:40px;border:1px solid #dce8e3;border-radius:10px;padding:0 10px;font-size:11px;outline:none}.quick-capture input:focus{border-color:#12aa7b;box-shadow:0 0 0 3px rgba(18,170,123,.12)}.quick-capture-actions{display:flex;gap:7px;margin-top:10px}.quick-capture-actions button{flex:1;border:0;border-radius:10px;padding:10px 8px;font-size:9px;font-weight:800;cursor:pointer}.quick-capture-actions .cancel{background:#edf5f1;color:#537068}.quick-capture-actions .save{background:#08785a;color:white}
+.primary-float{background:#08785a;color:white;border-color:#08785a}.standalone-view #map{display:none}.standalone-view .sidebar{left:0;top:0;bottom:0;width:100%;border:0;border-radius:0;box-shadow:none}.standalone-view .sidebar .scroll{width:min(1180px,100%);margin:0 auto}.standalone-view .fabbar,.standalone-view .quick-capture{display:none}
 .sheetHandle{display:none}
 @media(max-width:820px){
  :root{--sheet:100%}
@@ -113,6 +115,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .sidebar{top:auto;left:0;right:0;bottom:0;width:100%;height:min(68dvh,620px);border-radius:22px 22px 0 0;border-right:0;border-top:1px solid rgba(15,72,57,.13);box-shadow:0 -14px 38px rgba(16,53,44,.19);transition:height .2s ease,border-radius .2s ease;will-change:height;touch-action:pan-y}
  .sidebar.dragging{transition:none}
  .sidebar.workspace-view{top:auto;height:min(86dvh,760px);border-radius:22px 22px 0 0}
+ .standalone-view .sidebar.workspace-view{top:0;height:100dvh;border-radius:0}
  .sidebar.workspace-view.collapsed{height:126px}
  .sidebar.collapsed{height:126px}
  .sidebar.collapsed .scroll,.sidebar.collapsed .brand p,.sidebar.collapsed .live{display:none}
@@ -240,11 +243,18 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <div class="fabbar">
  <div class="float" id="summary">Managua · Fuerza Comercial</div>
  <button class="float" id="locateMe" type="button">◎ Mi ubicación</button>
+ <button class="float primary-float" id="newPoint" type="button">＋ Nuevo punto</button>
  <button class="float" id="mobileSheetToggle" type="button">Filtros ↑</button>
 </div>
 <div class="legend"><b>Potencial Nova Hub</b><div class="lr"><i class="ld" style="background:#08785a"></i>A · visita prioritaria</div><div class="lr"><i class="ld" style="background:#eea13d"></i>B · prospecto viable</div><div class="lr"><i class="ld" style="background:#83928d"></i>C · validar operación</div><div class="lr"><i class="ld" style="background:#2364d2"></i>Vendedor activo · últimos 10 min</div></div>
 <div class="toast" id="toast"></div>
 <input id="quickEvidenceInput" type="file" accept="image/*,.pdf" capture="environment" hidden>
+<div class="quick-capture" id="quickCapture" hidden>
+ <h2>Nuevo negocio en este punto</h2>
+ <p id="quickCaptureLocation">Coordenada capturada</p>
+ <input id="quickCaptureName" type="text" maxlength="180" placeholder="Nombre del negocio (opcional)">
+ <div class="quick-capture-actions"><button class="cancel" id="quickCaptureCancel" type="button">Cancelar</button><button class="save" id="quickCaptureSave" type="button">Guardar y abrir cámara</button></div>
+</div>
 
 <script>
 window.__novaShowMapError = function(message){
@@ -269,6 +279,7 @@ function readStore(key, fallback){
 }
 const followups = readStore('novaManaguaFollowupsV4', {});
 const commercialState = readStore('novaFuerzaComercialV1', {});
+const localPoints = readStore('novaFuerzaLocalPointsV1', []);
 const OFFLINE_DB_NAME = 'nova-force-sales-offline-v1';
 const OFFLINE_STORE = 'outbox';
 let offlineDbPromise = null;
@@ -280,7 +291,6 @@ const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const GOOGLE_PAGE_DELAY = 2000;
 const GOOGLE_MAX_PAGES = 3;
 
-let osm = [];
 let googlePlaces = [];
 let remoteProspects = [];
 let businesses = [...seed];
@@ -288,7 +298,8 @@ let filtered = [];
 let selectedZone = 'Todos';
 let labelMode = 'smart';
 let pipelineFilter = 'all';
-let activeView = 'map';
+const initialView = ['map','kanban','history'].includes(mapQuery.get('view') || '') ? mapQuery.get('view') : 'map';
+let activeView = initialView;
 let googleSearchRun = 0;
 let markerById = new Map();
 let userLocationMarker = null;
@@ -344,6 +355,10 @@ const map = {
   flyTo(coords, zoom){googleMap.panTo({lat:coords[0],lng:coords[1]});googleMap.setZoom(zoom)},
   on(event, handler){return google.maps.event.addListener(googleMap,event==='zoomend'?'zoom_changed':event,handler)}
 };
+googleMap.addListener('click', event => {
+  if(activeView !== 'map' || !event.latLng)return;
+  createQuickPointAt(event.latLng.lat(), event.latLng.lng());
+});
 function svgDataUrl(svg){return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg)}
 function markerSvg(b){
   const state=stateClass(b);
@@ -578,34 +593,6 @@ function nearestZone(lat,lng){
   Object.entries(centers).forEach(([n,c])=>{const x=(lat-c[0])**2+(lng-c[1])**2; if(x<d){d=x;best=n}});
   return best;
 }
-function classify(tags){
-  const raw = [tags.shop,tags.amenity,tags.office,tags.craft,tags.tourism,tags.healthcare,tags.industrial].filter(Boolean).join(' ');
-  const x = norm(raw);
-  const rules = [
-    [['hardware','building materials','doityourself','paint'],'Ferretería / construcción'],
-    [['supermarket','wholesale','department store','mall','marketplace'],'Comercio / distribución'],
-    [['pharmacy'],'Farmacia'],
-    [['clinic','hospital','doctors','dentist','laboratory'],'Salud / clínica'],
-    [['veterinary'],'Veterinaria'],
-    [['fuel'],'Combustible / estación'],
-    [['car repair','car parts','tyres','car wash'],'Automotriz / taller'],
-    [['hotel','hostel','guest house','motel'],'Hospedaje'],
-    [['restaurant','fast food'],'Restaurante'],
-    [['cafe'],'Cafetería'],
-    [['bank','microfinance','money transfer'],'Finanzas'],
-    [['school','college','university','kindergarten'],'Educación'],
-    [['accountant','lawyer','company','logistics','insurance'],'Servicios profesionales'],
-    [['electronics','computer','mobile phone'],'Tecnología / comercio'],
-    [['furniture','interior decoration'],'Hogar / decoración'],
-    [['bakery','butcher','convenience','general'],'Comercio minorista'],
-    [['industrial'],'Industria'],
-    [['craft'],'Taller / artesanía'],
-    [['beauty','hairdresser'],'Belleza / servicios'],
-    [['bar','pub'],'Bar / restaurante']
-  ];
-  for(const [keys, label] of rules) if(keys.some(k => x.includes(norm(k)))) return label;
-  return raw ? raw.replaceAll('_',' ') : 'Comercio / servicios';
-}
 function scoreFor(cat, tags={}){
   const x = norm(cat + ' ' + Object.values(tags).join(' '));
   const hi = ['ferreteria','construccion','distribucion','industria','finanzas','combustible','farmacia','clinica','veterinaria','educacion','hospedaje','automotriz','tecnologia','supermercado','mayorista','centro comercial'];
@@ -615,37 +602,12 @@ function scoreFor(cat, tags={}){
   if(tags.website || tags['contact:website']) s += 3;
   return Math.min(s, 95);
 }
-function osmBiz(el){
-  const t = el.tags || {};
-  const lat = el.lat ?? el.center?.lat;
-  const lng = el.lon ?? el.center?.lon;
-  if(!t.name || lat == null || lng == null) return null;
-  const category = classify(t);
-  const score = scoreFor(category, t);
-  const zone = nearestZone(lat, lng);
-  return {
-    id:`osm-${el.type}-${el.id}`,
-    name:t.name,
-    zone,
-    category,
-    address:[t['addr:street'],t['addr:housenumber'],t['addr:suburb']].filter(Boolean).join(' ') || t['addr:full'] || 'Ubicación pública OpenStreetMap',
-    source:'OpenStreetMap',
-    sourceUrl:`https://www.openstreetmap.org/${el.type}/${el.id}`,
-    lat,lng,
-    precision:'Coordenada pública OpenStreetMap',
-    score,
-    priority: score >= 78 ? 'A' : score >= 60 ? 'B' : 'C',
-    owner:'Fuerza Comercial',
-    phone:t.phone || t['contact:phone'] || '',
-    website:t.website || t['contact:website'] || ''
-  };
-}
 function mergeBusinesses(){
   const m = new Map();
-  [...seed, ...osm, ...googlePlaces, ...remoteProspects].forEach(b => {
+  [...seed, ...localPoints, ...googlePlaces, ...remoteProspects].forEach(b => {
     const key = norm(b.name) + '|' + norm(b.zone);
     if(!m.has(key)) m.set(key, b);
-    else if(b.source === 'Google Places' || b.source === 'OpenStreetMap'){
+    else if(b.source === 'Google Places'){
       const old = m.get(key);
       const source = old.source === b.source ? b.source : `${old.source} + ${b.source}`;
       m.set(key, {...old, ...b, source});
@@ -740,6 +702,62 @@ function popupHtml(b){
   </div>`;
 }
 function findBusiness(id){return businesses.find(x=>x.id===id)}
+let pendingPointCoords = null;
+function openQuickPointAt(lat,lng,source='mapa'){
+  pendingPointCoords={lat:Number(lat),lng:Number(lng)};
+  const panel=document.getElementById('quickCapture');
+  const nameInput=document.getElementById('quickCaptureName');
+  const location=document.getElementById('quickCaptureLocation');
+  if(!panel || !nameInput || !location)return;
+  location.textContent=`${source === 'ubicación actual' ? 'Ubicación actual' : 'Punto seleccionado'} · ${pendingPointCoords.lat.toFixed(6)}, ${pendingPointCoords.lng.toFixed(6)}`;
+  nameInput.value='';
+  panel.hidden=false;
+  window.setTimeout(()=>nameInput.focus(),80);
+}
+function openQuickPointFromDevice(){
+  if(!navigator.geolocation){toast('Este dispositivo no permite obtener ubicación');return}
+  toast('Obteniendo tu ubicación…');
+  navigator.geolocation.getCurrentPosition(position=>{
+    showUserLocation(position.coords);
+    googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
+    googleMap.setZoom(17);
+    openQuickPointAt(position.coords.latitude,position.coords.longitude,'ubicación actual');
+  },()=>toast('Activa el permiso de ubicación para marcar el negocio'),{enableHighAccuracy:true,timeout:10000,maximumAge:0});
+}
+function saveQuickPoint(){
+  if(!pendingPointCoords)return;
+  const nameInput=document.getElementById('quickCaptureName');
+  const coords={...pendingPointCoords};
+  const name=(nameInput?.value || '').trim() || 'Negocio capturado en visita';
+  pendingPointCoords=null;
+  createQuickPointAt(coords.lat,coords.lng,name);
+}
+function createQuickPointAt(lat,lng,customName='Negocio capturado en visita'){
+  const coords={lat:Number(lat),lng:Number(lng)};
+  if(!Number.isFinite(coords.lat)||!Number.isFinite(coords.lng))return;
+  const id=`quick-${Date.now()}`;
+  const name=customName || 'Negocio capturado en visita';
+  const now=new Date().toISOString();
+  const business={id,name,zone:nearestZone(coords.lat,coords.lng),category:'Prospecto por validar',address:`Punto capturado · ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`,source:'Captura móvil NovaHub',sourceUrl:'',lat:coords.lat,lng:coords.lng,precision:'Coordenada exacta capturada por el vendedor',score:0,priority:'C',owner:'Fuerza Comercial',phone:'',website:'',rating:null,reviews:0};
+  localPoints.unshift(business);
+  localStorage.setItem('novaFuerzaLocalPointsV1',JSON.stringify(localPoints.slice(0,2000)));
+  const c=stateOf(business); Object.assign(c,{selected:true,kanban:true,stage:'Nuevo',visitedAt:now,visitLat:business.lat,visitLng:business.lng});
+  followups[business.id]={status:'Visitado',updatedAt:now,note:'Punto creado desde el mapa'};
+  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));
+  persistCommercial();
+  mergeBusinesses(); populateFilters();
+  document.getElementById('quickCapture').hidden=true;
+  pendingPointCoords=null;
+  activeView='map';
+  updateView(); render();
+  map.flyTo([business.lat,business.lng],17);
+  toast('Punto registrado · abre la cámara para agregar evidencia');
+  requestEvidenceCapture(business.id);
+  syncProspects([business]);
+}
+document.getElementById('newPoint').addEventListener('click',openQuickPointFromDevice);
+document.getElementById('quickCaptureCancel').addEventListener('click',()=>{document.getElementById('quickCapture').hidden=true;pendingPointCoords=null});
+document.getElementById('quickCaptureSave').addEventListener('click',saveQuickPoint);
 function toggleSelected(id, value){
   const b=findBusiness(id); if(!b) return;
   stateOf(b).selected = value === undefined ? !isSelected(b) : value;
@@ -980,6 +998,7 @@ function renderHistory(){
 function updateView(){
   const list=document.getElementById('list'); const board=document.getElementById('kanbanBoard'); const history=document.getElementById('historyView'); const toggle=document.getElementById('kanbanToggle');
   const mapView=activeView==='map'; const kanban=activeView==='kanban';
+  document.body.classList.toggle('standalone-view',!mapView);
   if(list)list.hidden=!mapView;
   if(board)board.hidden=!kanban;
   if(history)history.hidden=mapView||kanban;
@@ -1057,30 +1076,6 @@ function populateFilters(){
   const cur = sel.value;
   sel.innerHTML = '<option value="all">Todos los rubros</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
   if(cats.includes(cur)) sel.value = cur;
-}
-async function fetchTimeout(url, opts={}, ms=50000){
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), ms);
-  try { return await fetch(url, {...opts, signal:c.signal}); }
-  finally { clearTimeout(t); }
-}
-const boxes = [
-  ['Managua', '12.06,-86.34,12.20,-86.17'],
-  ['Ciudad Sandino', '12.11,-86.40,12.22,-86.30'],
-  ['Veracruz', '11.99,-86.24,12.11,-86.12']
-];
-function queryFor(bbox){
-  return `[out:json][timeout:120];
-  (
-    nwr["name"]["shop"](${bbox});
-    nwr["name"]["office"](${bbox});
-    nwr["name"]["craft"](${bbox});
-    nwr["name"]["tourism"](${bbox});
-    nwr["name"]["healthcare"](${bbox});
-    nwr["name"]["industrial"](${bbox});
-    nwr["name"]["amenity"~"restaurant|cafe|fast_food|bar|pub|clinic|hospital|pharmacy|bank|microfinance|marketplace|fuel|car_rental|car_wash|driving_school|dentist|veterinary|school|college|university|kindergarten|cinema|theatre|events_venue|internet_cafe|coworking_space"](${bbox});
-  );
-  out center tags;`;
 }
 function placesCategory(types=[],name=''){
   const x=norm([...types,name].join(' '));
@@ -1189,71 +1184,6 @@ async function searchGooglePlaces(query='', options={}){
   }finally{[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});if(btn)btn.textContent='↻ Actualizar Google Places'}
 }
 function loadGooglePlaces(force=false){return searchGooglePlaces('',{force})}
-async function loadOSM(force=false){
-  const key = 'novaManaguaOSMCacheV4';
-  if(!force){
-    try{
-      const c = JSON.parse(localStorage.getItem(key) || 'null');
-      if(c && Date.now() - c.savedAt < 5*86400000 && Array.isArray(c.data)){
-        osm = c.data;
-        mergeBusinesses();
-        populateFilters();
-        render();
-        document.getElementById('liveStatus').textContent = `${osm.length} negocios OSM en caché + ${seed.length} registros base.`;
-        return;
-      }
-    }catch(e){}
-  }
-  const btn = document.getElementById('refresh');
-  btn.disabled = true;
-  btn.textContent = 'Consultando…';
-  const endpoints = [
-    'https://overpass.private.coffee/api/interpreter',
-    'https://overpass-api.de/api/interpreter',
-    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
-  ];
-  let all = [];
-  for(const [zone, bbox] of boxes){
-    document.getElementById('liveStatus').textContent = `Consultando ${zone} en OpenStreetMap…`;
-    let got = null;
-    for(const ep of endpoints){
-      try{
-        const r = await fetchTimeout(ep, {
-          method:'POST',
-          headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-          body:'data=' + encodeURIComponent(queryFor(bbox))
-        }, 52000);
-        if(!r.ok) throw new Error('HTTP ' + r.status);
-        const j = await r.json();
-        if(j.elements && j.elements.length){
-          got = j.elements;
-          break;
-        }
-      }catch(e){}
-    }
-    if(got) all.push(...got);
-  }
-  if(all.length){
-    const seen = new Set();
-    osm = all.filter(e => {
-      const k = e.type + '-' + e.id;
-      if(seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    }).map(osmBiz).filter(Boolean);
-    localStorage.setItem(key, JSON.stringify({savedAt:Date.now(), data:osm}));
-    mergeBusinesses();
-    populateFilters();
-    render();
-    document.getElementById('liveStatus').textContent = `Actualizado: ${osm.length} negocios OSM + ${seed.length} base; ${businesses.length} únicos.`;
-    toast('Mapa actualizado');
-  }else{
-    document.getElementById('liveStatus').textContent = 'No se pudo conectar con OpenStreetMap. Se mantiene la base inicial.';
-    toast('Usando base inicial');
-  }
-  btn.disabled = false;
-  btn.textContent = '↻ Actualizar Google Places';
-}
 function exportCSV(){
   const rows = [['Empresa','Zona','Rubro','Prioridad','Puntaje','Dirección','Latitud','Longitud','Precisión','Fuente','Responsable','Estado','Próximo contacto','Notas','WhatsApp','Opt-in WhatsApp','Fuente opt-in','URL fuente']];
   filtered.forEach(b => {
@@ -1422,7 +1352,6 @@ render();
 updateOfflineStatus();
 setTimeout(() => loadSellerSummary().finally(() => loadRemoteProspects().finally(() => flushOutbox().finally(() => {
   loadGooglePlaces(false);
-  window.setTimeout(()=>loadOSM(false),600);
   loadSellerPresence();
 }))), 450);
 </script>
