@@ -125,7 +125,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const [productBrandFilters, setProductBrandFilters] = useState<Record<string, string>>({});
   const [productScope, setProductScope] = useState<'branch' | 'linkedWarehouses'>('branch');
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
-  const [productTarget, setProductTarget] = useState<{ id?: string; code?: string; stockFilter?: 'all' | 'available' | 'low' | 'out' } | null>(null);
+  const [productTarget, setProductTarget] = useState<{ id?: string; code?: string; stockFilter?: 'all' | 'available' | 'low' | 'out' | 'expiring' } | null>(null);
   const productListIsActive = ['productos', 'servicios'].includes(activeTab);
   const [summaryLoadAllowed, setSummaryLoadAllowed] = useState(false);
 
@@ -219,6 +219,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           ? 'out'
           : detail.stockFilter === 'low' || detail.filter === 'low'
             ? 'low'
+            : detail.stockFilter === 'expiring' || detail.filter === 'expiring'
+              ? 'expiring'
             : 'all',
       });
       if (detail.productCode) updateSearch('productos', String(detail.productCode));

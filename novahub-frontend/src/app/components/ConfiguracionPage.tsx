@@ -9,7 +9,7 @@ import {
   Trash2, Edit2, Shield,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MapPinned, ChevronDown,
-  BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe
+  BookOpen, Landmark, Scale, GraduationCap, LifeBuoy, Utensils, Ship, Globe, MessageCircle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -48,6 +48,7 @@ import { optimizeImageFile } from '../utils/image-optimization';
 import { FastColorInput } from './ui/FastColorInput';
 import { AuditoriaPage } from './AuditoriaPage';
 import { THEME_PRESETS, type ThemePreset } from '../constants/themePresets';
+import { NovaPulseView } from './configuracion/NovaPulseView';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -553,6 +554,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'seguridad', label: 'Seguridad', icon: KeyRound, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'auditoria', label: 'Logs y auditoría', icon: Activity, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'nova-pulse', label: 'Nova Pulse', icon: MessageCircle, scenario: ['superadmin', 'partner', 'client'] },
 ];
 
 const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
@@ -561,6 +563,7 @@ const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
   seguridad: 'CONFIG_SECURITY',
   auditoria: 'AUDIT_LOGS',
   currency: 'CONFIG_CURRENCY',
+  'nova-pulse': 'CONFIG_NOVA_PULSE',
 };
 
 export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
@@ -590,6 +593,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const canEditPdf = canPerform('CONFIG_PDF', 'edit');
   const canCreatePdf = canPerform('CONFIG_PDF', 'create');
   const canDeletePdf = canPerform('CONFIG_PDF', 'delete');
+  const canEditNovaPulse = canPerform('CONFIG_NOVA_PULSE', 'edit');
+  const canSendNovaPulse = canPerform('CONFIG_NOVA_PULSE', 'send');
 
   // La API de suscripciones devuelve el alcance efectivo de la sucursal
   // (grupo + unidad). Mientras carga, usamos el alcance de la sesión para no
@@ -1515,6 +1520,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               />
             </div>
           </motion.div>
+        </TabsContent>
+
+        <TabsContent value="nova-pulse" className="space-y-6 mt-0">
+          <NovaPulseView canEdit={canEditNovaPulse} canSend={canSendNovaPulse} />
         </TabsContent>
 
         {/* ══════════ TAB: PERSONALIZACIÓN PDF ══════════ */}

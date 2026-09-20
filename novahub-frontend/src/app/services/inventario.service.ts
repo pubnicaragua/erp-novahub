@@ -92,7 +92,7 @@ export const inventoryService = {
 
   // ==================== LOTS ====================
   getLots: () => api.get<any[]>('/inventory/lots'),
-  createLot: (data: { productId: string; number: string; expirationDate?: Date }) => api.post<any>('/inventory/lots', data),
+  createLot: (data: { productId: string; number: string; expirationDate?: string; manufactureDate?: string; warehouseId?: string; variantId?: string; quantity?: number; minStock?: number; maxStock?: number }) => api.post<any>('/inventory/lots', data),
   deleteLot: (id: string) => api.delete(`/inventory/lots/${id}`),
 
   // ==================== SERIES ====================
@@ -134,6 +134,10 @@ export const inventoryService = {
   getLowStockProducts: () => api.get<any[]>('/inventory/dashboard/low-stock'),
   getReplenishmentReport: (period: 'weekly' | 'biweekly' | 'monthly' = 'weekly', signal?: AbortSignal) =>
     api.get<any>('/inventory/stock/replenishment-report', { params: { period }, signal }),
+  getExpiryAlerts: (days = 30, signal?: AbortSignal) =>
+    api.get<any>('/inventory/dashboard/expiry-alerts', { params: { days }, signal }),
+  getDashboardInsights: (signal?: AbortSignal) =>
+    api.get<any>('/inventory/dashboard/insights', { signal }),
 
   // ==================== ATTRIBUTES ====================
   getAttributes: (signal?: AbortSignal) => api.get<any[]>('/inventory/attributes', { signal }),

@@ -4,6 +4,7 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'edit', label: 'Editar', description: 'Permite modificar los datos de un registro existente.' },
   { key: 'delete', label: 'Eliminar', description: 'Permite eliminar, inhabilitar, cancelar, rechazar o revertir según la vista.' },
   { key: 'approve', label: 'Aprobar', description: 'Permite aprobar o avanzar el flujo: enviar a otra vista, confirmar/procesar, convertir, aplicar o registrar pagos.' },
+  { key: 'send', label: 'Enviar', description: 'Permite iniciar envíos manuales o pruebas desde la vista.' },
   { key: 'import', label: 'Importar', description: 'Permite cargar registros desde archivos o cargas masivas.' },
   { key: 'export', label: 'Exportar', description: 'Permite descargar o exportar información de la vista.' },
   { key: 'manage', label: 'Administrar caja', description: 'Permite mostrar y usar el botón para crear, editar y configurar cajas registradoras.' },
@@ -259,6 +260,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   CONFIG_USERS: ['read', 'create', 'edit', 'delete'],
   CONFIG_ROLES: ['read', 'create', 'edit', 'delete'],
   CONFIG_DEPARTMENTS: ['read', 'create', 'edit', 'delete'],
+  CONFIG_NOVA_PULSE: ['read', 'edit', 'send'],
   CONFIG_DOMAINS: ['read'],
 };
 

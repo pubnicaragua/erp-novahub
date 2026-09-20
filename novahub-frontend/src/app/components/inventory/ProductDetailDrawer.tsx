@@ -230,6 +230,7 @@ export function ProductDetailDrawer({
   const { baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
   const canEditStockLevels = canPerform('INVENTORY_ADJUSTMENTS', 'create');
+  const canCreateLots = canPerform('INVENTORY_PRODUCTS', 'create');
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -238,6 +239,9 @@ export function ProductDetailDrawer({
   const [expandedImageOpen, setExpandedImageOpen] = useState(false);
   const [levelDrafts, setLevelDrafts] = useState<Record<string, { minStock: string; maxStock: string }>>({});
   const [savingLevelId, setSavingLevelId] = useState<string | null>(null);
+  const [lotDraft, setLotDraft] = useState({ number: '', expirationDate: '', manufactureDate: '', warehouseId: '', quantity: '' });
+  const [savingLot, setSavingLot] = useState(false);
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
 
   // Sincroniza los borradores de min/max cuando cambia el detalle del producto
   useEffect(() => {
@@ -357,7 +361,7 @@ export function ProductDetailDrawer({
       cancelled = true;
       controller.abort();
     };
-  }, [productId]);
+  }, [productId, detailRefreshKey]);
 
   // ------------------------------------------------------------------
   // Resetear tab a 'general' cada vez que cambia el producto
@@ -377,6 +381,16 @@ export function ProductDetailDrawer({
   const itemLabel = isService ? 'servicio' : 'producto';
   const itemLabelCap = isService ? 'Servicio' : 'Producto';
   const canViewInventoryCost = canPerform(isService ? 'INVENTORY_SERVICES' : 'INVENTORY_PRODUCTS', 'viewCost');
+
+  useEffect(() => {
+    if (!productId) {
+      setLotDraft({ number: '', expirationDate: '', manufactureDate: '', warehouseId: '', quantity: '' });
+      return;
+    }
+    const defaultWarehouseId = String(warehouses[0]?.id || '');
+    if (!defaultWarehouseId) return;
+    setLotDraft((previous) => previous.warehouseId ? previous : ({ ...previous, warehouseId: defaultWarehouseId }));
+  }, [productId, warehouses]);
 
   const baseCostPrice = Number(product?.costPrice ?? product?.cost ?? 0);
   const servicePrice = (() => {
@@ -573,6 +587,40 @@ export function ProductDetailDrawer({
         item.productId === product.id || item.product?.id === product.id,
     );
   }, [product, series]);
+
+  const createLotWithStock = async () => {
+    if (!product?.id || !canCreateLots) return;
+    const number = lotDraft.number.trim();
+    const quantity = Number(lotDraft.quantity || 0);
+    const variantId = String(product?.variants?.[0]?.id || '');
+    if (!number) return toast.error('Indica el número del lote.');
+    if (!lotDraft.expirationDate) return toast.error('Indica la fecha de vencimiento.');
+    if (!lotDraft.warehouseId) return toast.error('Selecciona la bodega.');
+    if (!Number.isFinite(quantity) || quantity <= 0) return toast.error('Indica una cantidad inicial mayor que cero.');
+    if (!variantId) return toast.error('Este producto no tiene una variante asignada.');
+    setSavingLot(true);
+    const actionToken = beginNotificationAction();
+    try {
+      await inventoryService.createLot({
+        productId: String(product.id),
+        number,
+        expirationDate: lotDraft.expirationDate,
+        manufactureDate: lotDraft.manufactureDate || undefined,
+        warehouseId: lotDraft.warehouseId,
+        variantId,
+        quantity,
+      });
+      toast.success('Lote registrado y agregado al inventario');
+      setLotDraft((previous) => ({ ...previous, number: '', expirationDate: '', manufactureDate: '', quantity: '' }));
+      setDetailRefreshKey((value) => value + 1);
+      completeNotificationAction(actionToken);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el lote');
+      failNotificationAction(actionToken);
+    } finally {
+      setSavingLot(false);
+    }
+  };
 
   // ------------------------------------------------------------------
   // Render
@@ -936,6 +984,26 @@ export function ProductDetailDrawer({
                       Total: {totalStockByWarehouse}
                     </Badge>
                   </div>
+
+                  {!isService && canCreateLots && (
+                    <Card className="border-primary/20 bg-primary/5 p-4">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-bold">Registrar lote y vencimiento</p>
+                          <p className="text-xs text-muted-foreground">El stock inicial queda vinculado al lote para aplicar FEFO.</p>
+                        </div>
+                        <Badge variant="outline" className="border-primary/30 text-primary">FEFO</Badge>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        <div className="space-y-1 lg:col-span-1"><Label className="text-[10px] uppercase tracking-wider">Lote</Label><Input value={lotDraft.number} onChange={(event) => setLotDraft((previous) => ({ ...previous, number: event.target.value }))} placeholder="L-2026-001" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] uppercase tracking-wider">Vencimiento</Label><Input type="date" value={lotDraft.expirationDate} onChange={(event) => setLotDraft((previous) => ({ ...previous, expirationDate: event.target.value }))} /></div>
+                        <div className="space-y-1"><Label className="text-[10px] uppercase tracking-wider">Fabricación</Label><Input type="date" value={lotDraft.manufactureDate} onChange={(event) => setLotDraft((previous) => ({ ...previous, manufactureDate: event.target.value }))} /></div>
+                        <div className="space-y-1"><Label className="text-[10px] uppercase tracking-wider">Bodega</Label><select value={lotDraft.warehouseId} onChange={(event) => setLotDraft((previous) => ({ ...previous, warehouseId: event.target.value }))} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Seleccionar</option>{warehouses.map((warehouse: any) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></div>
+                        <div className="space-y-1"><Label className="text-[10px] uppercase tracking-wider">Cantidad inicial</Label><Input type="number" min={0} value={lotDraft.quantity} onChange={(event) => setLotDraft((previous) => ({ ...previous, quantity: event.target.value }))} placeholder="0" /></div>
+                      </div>
+                      <div className="mt-3 flex justify-end"><Button type="button" size="sm" onClick={() => void createLotWithStock()} disabled={savingLot}>{savingLot ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Check className="mr-2 size-4" />}Registrar lote</Button></div>
+                    </Card>
+                  )}
 
                   {isService ? (
                     <EmptyState

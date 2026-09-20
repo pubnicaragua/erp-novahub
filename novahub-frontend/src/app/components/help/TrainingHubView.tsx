@@ -64,6 +64,41 @@ const PDF_GUIDES = [
   },
 ];
 
+const OPERATIONAL_GUIDES = [
+  {
+    id: 'inventory-expiry',
+    title: 'Guía: control de lotes, vencimientos y FEFO',
+    description: 'Cómo prevenir pérdidas por vencimiento, medir el capital comprometido y actuar desde el dashboard.',
+    module: 'INVENTORY',
+    sections: [
+      {
+        title: '1. Cuando haces el pedido',
+        body: 'Consulta el consumo histórico, el stock mínimo y la reposición sugerida. La decisión debe considerar la demanda real y el capital que quedaría inmovilizado, no solo la cantidad de unidades.',
+      },
+      {
+        title: '2. Cuando recibes la mercadería',
+        body: 'Registra el número de lote y la fecha de vencimiento. NovaHub calcula las unidades disponibles, el costo de adquisición comprometido y el valor de venta potencial para que puedas detectar una fecha corta antes de almacenarla.',
+      },
+      {
+        title: '3. Mientras el producto está en el estante',
+        body: 'El dashboard muestra los lotes vencidos y los que vencen en los próximos 30 días. También presenta cuánto dinero está comprometido y permite revisar los productos sin salidas de inventario durante 90 días.',
+      },
+      {
+        title: '4. En el mostrador',
+        body: 'Las salidas de venta aplican FEFO: se descuenta primero el lote con vencimiento más cercano y el movimiento queda registrado en el kardex con su lote. Así la existencia y la trazabilidad siguen la misma lógica.',
+      },
+      {
+        title: 'Qué notifica NovaHub',
+        body: 'Cada día se consolida una alerta para los usuarios con permiso de inventario cuando existen lotes vencidos o próximos a vencer. La alerta incluye cantidades, nivel de urgencia y valor comprometido para evitar notificaciones repetidas por cada lote.',
+      },
+      {
+        title: 'Qué queda fuera de esta guía',
+        body: 'El modo offline no forma parte de este flujo. El control de vencimientos, el cálculo económico, el dashboard y las notificaciones requieren conexión con el ERP y sus datos actuales.',
+      },
+    ],
+  },
+];
+
 export function TrainingHubView() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'superadmin';
@@ -78,6 +113,7 @@ export function TrainingHubView() {
   const [editingVideo, setEditingVideo] = useState<any | null>(null);
   const [showVideoInfo, setShowVideoInfo] = useState(true);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null);
   
   const [uploadData, setUploadData] = useState({
     title: '',
@@ -301,6 +337,40 @@ export function TrainingHubView() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </section>
+      )}
+
+      {OPERATIONAL_GUIDES.length > 0 && (activeCategory === 'ALL' || OPERATIONAL_GUIDES.some((guide) => guide.module === activeCategory)) && (
+        <section className="space-y-3" aria-labelledby="operational-guides-title">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-primary">Procedimientos NovaHub</p>
+              <h2 id="operational-guides-title" className="text-2xl font-black uppercase italic tracking-tight">Guías operativas</h2>
+            </div>
+            <p className="text-xs text-muted-foreground">Procesos explicados con el dato y la acción que corresponde.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4">
+            {OPERATIONAL_GUIDES.filter((guide) => activeCategory === 'ALL' || guide.module === activeCategory).map((guide) => {
+              const isOpen = selectedGuideId === guide.id;
+              return <Card key={guide.id} className="overflow-hidden rounded-3xl border-primary/20 bg-gradient-to-br from-primary/10 to-transparent shadow-sm">
+                <CardContent className="p-0">
+                  <button type="button" onClick={() => setSelectedGuideId(isOpen ? null : guide.id)} className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-primary/5">
+                    <span className="flex min-w-0 items-start gap-3">
+                      <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary"><Package className="size-6" /></span>
+                      <span className="min-w-0"><strong className="block font-black uppercase italic tracking-tight">{guide.title}</strong><span className="mt-1 block text-sm leading-relaxed text-muted-foreground">{guide.description}</span></span>
+                    </span>
+                    <ChevronRight className={`size-5 shrink-0 text-primary transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                  </button>
+                  {isOpen && <div className="grid gap-3 border-t border-primary/15 p-5 sm:grid-cols-2">
+                    {guide.sections.map((section) => <article key={section.title} className="rounded-2xl border border-border/50 bg-background/60 p-4">
+                      <h3 className="text-sm font-black">{section.title}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{section.body}</p>
+                    </article>)}
+                  </div>}
+                </CardContent>
+              </Card>;
+            })}
           </div>
         </section>
       )}

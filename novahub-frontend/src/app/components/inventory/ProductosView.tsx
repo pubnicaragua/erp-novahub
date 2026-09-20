@@ -215,7 +215,7 @@ interface ProductosViewProps {
   itemType?: 'PRODUCT' | 'SERVICE';
   isSidebarCollapsed?: boolean;
   targetProductId?: string | null;
-  initialStockFilter?: 'all' | 'available' | 'low' | 'out';
+  initialStockFilter?: 'all' | 'available' | 'low' | 'out' | 'expiring';
   productStatusFilter?: ProductStatusFilter;
   onProductStatusFilterChange?: (value: ProductStatusFilter) => void;
   onClearTargetProduct?: () => void;
@@ -1078,7 +1078,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
     return ids;
   }, [branches]);
-  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>(initialStockFilter || 'all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out' | 'expiring'>(initialStockFilter || 'all');
+  const [expiryRows, setExpiryRows] = useState<any[]>([]);
+  const [expiryLoading, setExpiryLoading] = useState(false);
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
   const [warehouseDetail, setWarehouseDetail] = useState<any | null>(null);
@@ -1172,6 +1174,23 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   useEffect(() => {
     if (initialStockFilter) setStockFilter(initialStockFilter);
   }, [initialStockFilter]);
+
+  useEffect(() => {
+    if (initialStockFilter !== 'expiring' || isServiceView) {
+      setExpiryRows([]);
+      return;
+    }
+    let active = true;
+    setExpiryLoading(true);
+    inventoryService.getExpiryAlerts(30).then((response: any) => {
+      if (active) setExpiryRows(Array.isArray(response?.data?.items) ? response.data.items : Array.isArray(response?.items) ? response.items : []);
+    }).catch(() => {
+      if (active) setExpiryRows([]);
+    }).finally(() => {
+      if (active) setExpiryLoading(false);
+    });
+    return () => { active = false; };
+  }, [initialStockFilter, isServiceView]);
 
   useEffect(() => {
     if (!targetProductId) return;
@@ -1752,7 +1771,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const matchesType = pType === catalogItemType;
     const stock = getProductStock(p);
     const stockThreshold = getProductStockMinimum(p);
-    const matchesKpiStock = stockFilter === 'all'
+    const matchesKpiStock = stockFilter === 'all' || stockFilter === 'expiring'
       || (stockFilter === 'available' && pType === 'PRODUCT' && stock > stockThreshold)
       || (stockFilter === 'available' && pType === 'PRODUCT' && stockThreshold <= 0 && stock > 0)
       || (stockFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
@@ -3846,6 +3865,23 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             />
           ))}
         </div>
+        {stockFilter === 'expiring' && !isServiceView && (
+          <div className="mt-4 overflow-hidden rounded-2xl border border-amber-500/30 bg-amber-500/5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 px-4 py-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Control FEFO</p>
+                <h3 className="text-sm font-black">Lotes vencidos o próximos a vencer</h3>
+              </div>
+              <span className="text-xs font-bold text-muted-foreground">{expiryLoading ? 'Calculando…' : `${expiryRows.length} lotes visibles`}</span>
+            </div>
+            {expiryRows.length > 0 ? <div className="divide-y divide-amber-500/10">
+              {expiryRows.slice(0, 8).map((row: any) => <button key={`${row.id}-${row.lotId}`} type="button" onClick={() => setHighlightedProductId(row.productId)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-amber-500/10">
+                <span className="min-w-0"><strong className="block truncate text-xs">{row.productName}</strong><small className="mt-0.5 block text-[10px] text-muted-foreground">Lote {row.lotNumber} · {row.warehouseName}</small></span>
+                <span className={`shrink-0 text-[10px] font-black ${row.status === 'EXPIRED' ? 'text-red-600' : 'text-amber-700'}`}>{row.status === 'EXPIRED' ? 'Vencido' : `${Math.max(0, Number(row.daysToExpire || 0))} días`} · {Number(row.atRiskCost || 0).toLocaleString('es-NI', { style: 'currency', currency: row.currency || 'NIO' })}</span>
+              </button>)}
+            </div> : <div className="px-4 py-4 text-xs text-muted-foreground">No hay lotes con existencias dentro del horizonte de 30 días.</div>}
+          </div>
+        )}
         {!isServiceView && selectedBranchId && (() => {
           const selectedBranch = (branches || []).find((b: any) => b.id === selectedBranchId) || null;
           const linkedWarehouses = displayWarehouseOptions.filter((w: any) => branchWarehouseIdSet.has(w.id));

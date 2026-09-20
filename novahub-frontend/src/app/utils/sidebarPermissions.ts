@@ -429,6 +429,7 @@ export const INTERNAL_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION', subscription: false },
   { id: 'AUDIT_LOGS', label: 'Logs y auditoría', parent: 'CONFIGURATION', subscription: false },
   { id: 'CONFIG_CURRENCY', label: 'Moneda y Cambio', parent: 'CONFIGURATION', subscription: false },
+  { id: 'CONFIG_NOVA_PULSE', label: 'Nova Pulse', parent: 'CONFIGURATION', subscription: false },
 
   // Mi Empresa
   { id: 'CONFIG_COMPANY', label: 'Datos generales', parent: 'MY_COMPANY', subscription: false },
@@ -458,7 +459,7 @@ export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
 /** Permisos internos que siguen existiendo, pero se gobiernan desde su vista padre. */
 export const SIDEBAR_PERMISSION_PARENT_ALIASES: Record<string, string[]> = {
   MY_COMPANY: ['MY_COMPANY', 'CONFIG_COMPANY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DEPARTMENTS', 'CONFIG_DOMAINS', 'SUBSCRIPTIONS'],
-  CONFIGURATION: ['CONFIGURATION', 'CONFIG_BRANDING', 'CONFIG_SECURITY', 'AUDIT_LOGS', 'CONFIG_CURRENCY', 'CONFIG_PDF'],
+  CONFIGURATION: ['CONFIGURATION', 'CONFIG_BRANDING', 'CONFIG_SECURITY', 'AUDIT_LOGS', 'CONFIG_CURRENCY', 'CONFIG_PDF', 'CONFIG_NOVA_PULSE'],
 };
 
 /** Alias de lectura para roles guardados antes de separar las vistas. */

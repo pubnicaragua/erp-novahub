@@ -220,7 +220,7 @@ const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
   'CONFIGURATION', 'MY_COMPANY', 'SUBSCRIPTIONS',
   'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_SECURITY',
   'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
-  'CONFIG_DEPARTMENTS', 'AUDIT_LOGS',
+  'CONFIG_DEPARTMENTS', 'CONFIG_NOVA_PULSE', 'AUDIT_LOGS',
 ]);
 
 const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
@@ -794,7 +794,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const platformConfigurationModules = [
         'CONFIGURATION', 'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF',
         'CONFIG_SECURITY', 'CONFIG_ROLES', 'CONFIG_USERS', 'CONFIG_CURRENCY',
-        'CONFIG_DOMAINS', 'CONFIG_DEPARTMENTS', 'AUDIT_LOGS',
+        'CONFIG_DOMAINS', 'CONFIG_DEPARTMENTS', 'CONFIG_NOVA_PULSE', 'AUDIT_LOGS',
       ];
       if (module === 'qa-console') return user.role === 'superadmin';
       if (platformConfigurationModules.includes(String(module).toUpperCase())) return true;
