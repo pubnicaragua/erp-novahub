@@ -8,8 +8,9 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const isSuperAdmin = user?.role === 'superadmin';
   const isAuthorizedCollaborator = user?.userType === 'collaborator' && hasAccess('fuerza-comercial');
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
-  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(isotipoUrl)}&view=${view}`;
+  const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(isotipoUrl)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
 
   if (!isSuperAdmin && !isAuthorizedCollaborator) {
     return (
@@ -26,7 +27,7 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   }
 
   return (
-    <section className="relative h-full min-h-[calc(100vh-4rem)] overflow-hidden bg-[#e8f0ed]">
+    <section className="relative h-[calc(100dvh-4rem)] min-h-0 overflow-hidden bg-[#e8f0ed]">
       <div className="pointer-events-none absolute left-4 top-4 z-10 hidden items-center gap-2 rounded-2xl border border-white/70 bg-white/90 px-3 py-2 text-xs font-bold text-[#123f35] shadow-lg backdrop-blur md:flex">
         <MapPinned className="size-4 text-[#08785a]" />
         NovaHub Force · Google Maps
@@ -34,9 +35,9 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
       <iframe
         title="Fuerza Comercial NovaHub"
         src={mapSrc}
-        allow="geolocation"
+        allow="geolocation; fullscreen"
         referrerPolicy="strict-origin-when-cross-origin"
-        className="block h-full min-h-[calc(100vh-4rem)] w-full border-0"
+        className="block h-full min-h-0 w-full border-0"
       />
     </section>
   );
