@@ -10,12 +10,12 @@
 <style>
 :root{
  --ink:#11241f;--muted:#6c7c77;--line:#dce8e3;--green:#08785a;--green2:#12aa7b;--amber:#eea13d;--gray:#83928d;--panel:#fbfdfc;
- --sheet:420px;
+ --sheet:420px;--nova-vh:100vh;--nova-sheet-height:620px;--nova-workspace-height:760px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;font-family:Poppins,system-ui,sans-serif;background:#e8f0ed;color:var(--ink)}
+html,body{margin:0;height:100%;min-height:100%;overflow:hidden;font-family:Poppins,system-ui,sans-serif;background:#e8f0ed;color:var(--ink);-webkit-text-size-adjust:100%;overscroll-behavior:none}
 button,input,select,textarea{font:inherit}
-#map{position:fixed;top:0;right:0;bottom:0;left:var(--sheet);width:calc(100vw - var(--sheet));height:100vh;min-height:320px;z-index:1}
+#map{position:fixed;top:0;right:0;bottom:0;left:var(--sheet);width:calc(100vw - var(--sheet));height:var(--nova-vh);min-height:320px;z-index:1;transform:translateZ(0);-webkit-transform:translateZ(0)}
 .map-status{position:fixed;z-index:950;left:calc(var(--sheet) + 50%);top:50%;transform:translate(-50%,-50%);width:min(430px,calc(100% - var(--sheet) - 32px));padding:18px 20px;border:1px solid rgba(8,120,90,.18);border-radius:16px;background:rgba(255,255,255,.97);box-shadow:0 18px 45px rgba(12,53,43,.18);color:var(--ink);text-align:center}.map-status[hidden]{display:none}.map-status b{display:block;font-size:13px;margin-bottom:6px}.map-status span{display:block;font-size:10px;line-height:1.55;color:var(--muted)}
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sheet);background:rgba(251,253,252,.985);border-right:1px solid rgba(16,71,57,.11);display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(12,53,43,.16);z-index:1000}
 .brand{padding:18px;background:radial-gradient(circle at 82% 12%,rgba(96,225,178,.28),transparent 34%),linear-gradient(145deg,#0b2f29,#08705a);color:white}
@@ -90,7 +90,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .ma{background:var(--green)}.mb{background:var(--amber)}.mc{background:var(--gray)}
 .marker.selected{--marker-ring:#3287e8}.marker.kanban{--marker-ring:#12aa7b}.marker.visited{--marker-ring:#84d795}.marker.interested{--marker-ring:#0b9d68}.marker.discarded{--marker-ring:#86958f;opacity:.62}
 .cluster-brand{width:42px;height:42px;border-radius:15px;background:#123f35;border:3px solid #b4f4d8;color:white;display:flex;align-items:center;justify-content:center;gap:3px;box-shadow:0 6px 15px rgba(12,53,43,.28);font-size:10px;font-weight:900}.cluster-brand span{font-size:13px;color:#8df1be}.cluster-brand b{font-size:11px}
-.nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Poppins,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
+.nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Poppins,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-presence-marker{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#2364d2;border:3px solid white;box-shadow:0 5px 14px rgba(19,57,116,.35);overflow:hidden;color:#fff;font:800 10px/1 Poppins,Arial,sans-serif}.nova-presence-marker img{width:100%;height:100%;object-fit:cover}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
 .fabbar{position:fixed;z-index:900;left:calc(var(--sheet) + 14px);top:14px;display:flex;gap:7px}
 .float{border:1px solid rgba(25,77,63,.12);background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:12px;padding:8px 10px;font-size:9px;font-weight:600;color:#294c42;box-shadow:0 7px 22px rgba(18,57,47,.13)}
 .legend{position:fixed;z-index:900;right:15px;bottom:18px;background:rgba(255,255,255,.96);border:1px solid rgba(28,87,69,.12);border-radius:13px;padding:10px 11px;font-size:8px;box-shadow:0 10px 26px rgba(16,56,45,.15)}
@@ -117,12 +117,12 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .sheetHandle{display:none}
 @media(max-width:820px){
  :root{--sheet:100%}
- #map{top:0;right:0;bottom:0;left:0;width:100vw;height:100dvh;touch-action:pan-x pan-y}
+ #map{top:0;right:0;bottom:0;left:0;width:100vw;height:var(--nova-vh);touch-action:pan-x pan-y}
  .map-status{left:16px;right:16px;top:76px;transform:none;width:auto}
- .sidebar{top:auto;left:0;right:0;bottom:0;width:100%;height:min(68dvh,620px);border-radius:22px 22px 0 0;border-right:0;border-top:1px solid rgba(15,72,57,.13);box-shadow:0 -14px 38px rgba(16,53,44,.19);transition:height .2s ease,border-radius .2s ease;will-change:height;touch-action:pan-y}
+ .sidebar{top:auto;left:0;right:0;width:100%;height:min(68vh,620px);height:var(--nova-sheet-height);border-radius:22px 22px 0 0;border-right:0;border-top:1px solid rgba(15,72,57,.13);box-shadow:0 -14px 38px rgba(16,53,44,.19);transition:height .2s ease,border-radius .2s ease;will-change:height;touch-action:pan-y;-webkit-overflow-scrolling:touch}
  .sidebar.dragging{transition:none}
- .sidebar.workspace-view{top:auto;height:min(86dvh,760px);border-radius:22px 22px 0 0}
- .standalone-view .sidebar.workspace-view{top:0;height:100dvh;border-radius:0}
+ .sidebar.workspace-view{top:auto;height:min(86vh,760px);height:var(--nova-workspace-height);border-radius:22px 22px 0 0}
+ .standalone-view .sidebar.workspace-view{top:0;height:var(--nova-vh);border-radius:0}
  .sidebar.workspace-view.collapsed{height:126px}
  .sidebar.collapsed{height:126px}
  .sidebar.collapsed .scroll,.sidebar.collapsed .brand p,.sidebar.collapsed .live{display:none}
@@ -149,6 +149,13 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .toast{bottom:145px}
  .popup{min-width:0;max-width:calc(100vw - 42px)}.popup h3{font-size:15px}.grid{font-size:9px}.crm label{font-size:8px}.crm select,.crm input,.crm textarea{font-size:10px;padding:8px}.crm textarea{height:52px}.crm button{font-size:9.5px;padding:9px}.advanced-crm summary{font-size:9px}
  .quick-capture{left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 12px);width:auto}.fullscreen-float{font-size:12px}.workspace-heading b{font-size:15px}
+}
+@supports (-webkit-touch-callout:none){
+ html,body{min-height:-webkit-fill-available}
+ .scroll{-webkit-overflow-scrolling:touch}
+ .sidebar{padding-bottom:env(safe-area-inset-bottom)}
+ .fabbar{padding-top:env(safe-area-inset-top)}
+ .quick-capture{padding-bottom:calc(15px + env(safe-area-inset-bottom))}
 }
 @media(max-width:390px){
  .filters{grid-template-columns:1fr}
@@ -410,6 +417,22 @@ const OFFLINE_STORE = 'outbox';
 let offlineDbPromise = null;
 let flushingOutbox = false;
 const mapQuery = new URLSearchParams(location.search);
+let viewportResizeTimer = null;
+function syncNovaViewport(){
+  const height=Math.max(320,Math.round(window.visualViewport?.height || window.innerHeight || 0));
+  const root=document.documentElement;
+  root.style.setProperty('--nova-vh',`${height}px`);
+  root.style.setProperty('--nova-sheet-height',`${Math.min(Math.round(height*.68),620)}px`);
+  root.style.setProperty('--nova-workspace-height',`${Math.min(Math.round(height*.86),760)}px`);
+}
+function scheduleNovaViewportSync(){
+  window.clearTimeout(viewportResizeTimer);
+  viewportResizeTimer=window.setTimeout(syncNovaViewport,120);
+}
+syncNovaViewport();
+window.addEventListener('resize',scheduleNovaViewportSync,{passive:true});
+window.addEventListener('orientationchange',scheduleNovaViewportSync,{passive:true});
+window.visualViewport?.addEventListener('resize',scheduleNovaViewportSync,{passive:true});
 const API_BASE = (mapQuery.get('api') || localStorage.getItem('novaApiBase') || 'http://localhost:3000/api').replace(/\/$/, '');
 const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 const CURRENT_USER_ID = mapQuery.get('userId') || '';
@@ -471,6 +494,8 @@ let presenceWatchId = null;
 let presenceWatchRequested = false;
 let lastPresenceSentAt = 0;
 let presenceSyncInFlight = false;
+let presenceRequestInFlight = false;
+let lastSentPresenceCoords = null;
 let remoteProspectsLoading = false;
 let lastRemoteProspectsSignature = '';
 let legacyCatalogSyncInFlight = false;
@@ -1373,8 +1398,20 @@ function showUserLocation(coords){
   startPresenceWatch();
   syncSellerPresence(coords);
 }
-function presenceSvg(initials){
-  return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><circle cx="24" cy="24" r="20" fill="#2364d2" stroke="white" stroke-width="4"/><text x="24" y="29" text-anchor="middle" font-family="Poppins,Arial" font-size="13" font-weight="800" fill="white">${esc(initials || 'V')}</text></svg>`),scaledSize:new google.maps.Size(48,48),anchor:new google.maps.Point(24,24)};
+function presenceContent(row){
+  const wrapper=document.createElement('div');
+  wrapper.className='nova-presence-marker';
+  wrapper.title=row.name || 'Vendedor';
+  if(row.avatar){
+    const image=document.createElement('img');
+    image.src=String(row.avatar);
+    image.alt=row.name || 'Vendedor';
+    image.addEventListener('error',()=>{image.remove();wrapper.textContent=row.initials || 'V'}, {once:true});
+    wrapper.appendChild(image);
+  }else{
+    wrapper.textContent=row.initials || 'V';
+  }
+  return wrapper;
 }
 function renderPresence(rows){
   const activeIds=new Set();
@@ -1388,9 +1425,12 @@ function renderPresence(rows){
     if(marker){
       marker.setPosition({lat,lng});
       marker.title=title;
+      const avatarKey=String(row.avatar || '');
+      if(marker._avatarKey!==avatarKey){marker.content=presenceContent(row);marker._avatarKey=avatarKey}
       setNovaMarkerMap(marker,googleMap);
     }else{
-      marker=createMapMarker({map:googleMap,position:{lat,lng},title,icon:presenceSvg(row.initials),zIndex:1300});
+      marker=createMapMarker({map:googleMap,position:{lat,lng},title,content:presenceContent(row),zIndex:1300});
+      marker._avatarKey=String(row.avatar || '');
       presenceMarkers.set(id,marker);
     }
   });
@@ -1410,17 +1450,37 @@ function startPresenceWatch(){
   );
 }
 async function loadSellerPresence(){
-  if(activeView!=='map'||document.visibilityState!=='visible'||!localStorage.getItem('nh-auth-token'))return;
+  if(activeView!=='map'||document.visibilityState!=='visible'||!localStorage.getItem('nh-auth-token')||presenceRequestInFlight)return;
+  presenceRequestInFlight=true;
   try{renderPresence(await forceSalesRequest('/force-sales/presence'));}
   catch(error){console.warn('No se pudo actualizar la presencia comercial',error)}
+  finally{presenceRequestInFlight=false}
+}
+function distanceBetweenPresencePoints(a,b){
+  if(!a||!b)return Number.POSITIVE_INFINITY;
+  const earthRadius=6371000;
+  const dLat=(b.lat-a.lat)*Math.PI/180;
+  const dLng=(b.lng-a.lng)*Math.PI/180;
+  const lat1=a.lat*Math.PI/180;
+  const lat2=b.lat*Math.PI/180;
+  const sinLat=Math.sin(dLat/2); const sinLng=Math.sin(dLng/2);
+  const h=sinLat*sinLat+Math.cos(lat1)*Math.cos(lat2)*sinLng*sinLng;
+  return 2*earthRadius*Math.asin(Math.sqrt(h));
 }
 async function syncSellerPresence(coords){
   if(!presenceSharingEnabled || !localStorage.getItem('nh-auth-token'))return;
   const now=Date.now();
-  if(presenceSyncInFlight || now-lastPresenceSentAt<10000)return;
-  lastPresenceSentAt=now;
+  const point={lat:Number(coords.latitude),lng:Number(coords.longitude)};
+  const moved=distanceBetweenPresencePoints(lastSentPresenceCoords,point)>=12;
+  // Enviar un heartbeat corto mantiene la presencia viva; un desplazamiento
+  // real se publica inmediatamente aunque aún no haya vencido el intervalo.
+  if(presenceSyncInFlight || (!moved && now-lastPresenceSentAt<4500))return;
   presenceSyncInFlight=true;
-  try{await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:coords.latitude,lng:coords.longitude,accuracy:coords.accuracy,heading:coords.heading})});}
+  try{
+    await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:coords.latitude,lng:coords.longitude,accuracy:coords.accuracy,heading:coords.heading})});
+    lastPresenceSentAt=Date.now();
+    lastSentPresenceCoords=point;
+  }
   catch(error){console.warn('No se pudo sincronizar la presencia comercial',error)}
   finally{presenceSyncInFlight=false}
 }
@@ -1966,7 +2026,7 @@ window.setInterval(()=>{
       lastRemoteRefreshAt=Date.now();
       loadRemoteProspects();
     }
-  },4000);
+  },3000);
 
 const sheet = document.getElementById('sheet');
 const toggle = document.getElementById('mobileSheetToggle');

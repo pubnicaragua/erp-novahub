@@ -301,7 +301,7 @@ interface AuthContextType {
   switchIdentity: (userId: string) => Promise<void>;
   refreshEnabledModules: () => Promise<void>;
   /** Recarga permisos efectivos desde el backend sin reutilizar el perfil anterior. */
-  refreshProfile: () => Promise<void>;
+  refreshProfile: (options?: { force?: boolean }) => Promise<void>;
   /** Incrementa cada vez que una sesión autenticada debe iniciar navegación limpia. */
   sessionStartVersion: number;
   isLoading: boolean;
@@ -684,12 +684,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = user !== null;
 
-  const refreshProfile = useCallback(async () => {
+  const refreshProfile = useCallback(async (options: { force?: boolean } = {}) => {
     if (!user || !localStorage.getItem('nh-auth-token')) return;
     const now = Date.now();
     // A role/department change should be visible quickly without turning every
     // focus event into a burst of profile requests.
-    if (now - profileRefreshAtRef.current < 15_000) return;
+    if (!options.force && now - profileRefreshAtRef.current < 15_000) return;
     profileRefreshAtRef.current = now;
     try {
       const response = await api.get<any>('/auth/profile');
