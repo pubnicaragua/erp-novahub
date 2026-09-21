@@ -43,6 +43,7 @@ import { useTenantQuery } from '../hooks/useTenantQuery';
 import { cajaService } from '../services/caja.service';
 import { inventoryService } from '../services/inventario.service';
 import { safeGetItem, safeSetItem } from '../services/safe-storage';
+import type { PdfTemplateChart } from '../services/pdf-template-definition';
 import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
@@ -50,10 +51,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { DateField } from './ui/DateField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { BLOCKS, changeLabel, chartRows, dashboardRange, DEFAULT_PREFERENCES, INDICATORS, normalizePreferences, type DashboardBlock, type DashboardPeriod, type DashboardPreferences, type IndicatorDefinition } from './dashboard/executive-model';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
-import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../utils/pdfGenerator';
+import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import './dashboard/executive-dashboard.css';
 
 const ProductDetailDrawer = lazy(() => import('./inventory/ProductDetailDrawer').then((module) => ({ default: module.ProductDetailDrawer })));
@@ -291,11 +292,11 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     value: safeNumber(item.total),
   })).reverse(), [registers]);
   const inventoryChart = useMemo(() => {
-    const counts = alerts.reduce<Record<string, number>>((result, item: any) => {
+    const counts = alerts.reduce((result: Record<string, number>, item: any) => {
       const key = item.status === 'SIN_STOCK' ? 'Sin stock' : item.status === 'STOCK_BAJO' ? 'Stock bajo' : 'Reordenar';
       result[key] = (result[key] || 0) + 1;
       return result;
-    }, {});
+    }, {} as Record<string, number>);
     return Object.entries(counts).map(([name, value], index) => ({ name, value, fill: CHART_COLORS[index + 2] || CHART_COLORS[0] }));
   }, [alerts]);
 
@@ -325,51 +326,63 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     }
     setIsExporting(true);
     try {
-      const rows = preferences.indicators.map((id) => {
+      const selectedKpis = preferences.indicators.map((id) => {
         const definition = INDICATORS.find((item) => item.id === id);
         const value = indicatorValue(id, kpis, performance, data);
         return { label: definition?.label || id, value: typeof value === 'number' ? money(value) : String(value), detail: definition?.description || '' };
       });
+      const sections: Array<{ id: string; title: string; headers: string[]; rows: Array<Array<string | number | null | undefined>>; widths?: number[] }> = [
+        { id: 'dashboard-kpis', title: 'Indicadores seleccionados', headers: ['Indicador', 'Valor', 'Detalle'], rows: selectedKpis.map(item => [item.label, item.value, item.detail]), widths: [22, 18, 60] },
+      ];
+      const charts: PdfTemplateChart[] = [];
+      if (preferences.blocks.includes('trend')) {
+        charts.push({ id: 'dashboard.trend', title: 'Ventas y gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), series: [{ label: 'Ventas', values: trend.map(item => safeNumber(item.revenue)), color: CHART_COLORS[0] }, { label: 'Gastos', values: trend.map(item => safeNumber(item.expenses)), color: '#f59e0b' }] });
+      }
+      if (preferences.blocks.includes('attention')) {
+        const attentionRows: Array<Array<string | number>> = [['Órdenes abiertas', safeNumber(kpis.pendingOrders), 'Seguimiento comercial y despacho']];
+        if (canViewInventory) {
+          attentionRows.push(['Productos con alertas', alertCount, 'Agotados, bajo mínimo o por reordenar']);
+          attentionRows.push(['Productos sin ventas', safeNumber(kpis.noSaleProductsCount ?? performance.noSaleProducts?.length), 'Con existencias disponibles']);
+          charts.push({ id: 'dashboard.attention', title: 'Estado del inventario', type: 'donut', labels: inventoryChart.length ? inventoryChart.map(item => item.name) : ['Sin alertas'], values: inventoryChart.length ? inventoryChart.map(item => safeNumber(item.value)) : [0], colors: inventoryChart.length ? inventoryChart.map(item => item.fill) : [CHART_COLORS[0]] });
+        }
+        sections.push({ id: 'dashboard-attention', title: 'Atención requerida', headers: ['Prioridad', 'Cantidad', 'Detalle'], rows: attentionRows, widths: [28, 14, 58] });
+      }
+      if (preferences.blocks.includes('products') && canViewInventory) {
+        charts.push({ id: 'dashboard.products-sales', title: 'Productos más vendidos', type: 'bar', labels: productSalesChart.map((item: { name: string; value: number }) => item.name), values: productSalesChart.map((item: { name: string; value: number }) => safeNumber(item.value)), colors: CHART_COLORS });
+        charts.push({ id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: productMarginChart.map((item: { name: string; value: number }) => item.name), values: productMarginChart.map((item: { name: string; value: number }) => safeNumber(item.value)), colors: CHART_COLORS });
+        const productsById = new Map<string, any>();
+        [...(performance.topSelling || []), ...(performance.topMargin || [])].forEach((item: any) => {
+          const key = getProductId(item) || getProductName(item);
+          const current = productsById.get(key) || { name: getProductName(item), units: 0, revenue: 0, profit: 0 };
+          current.units = Math.max(current.units, safeNumber(item.totalQty));
+          current.revenue = Math.max(current.revenue, safeNumber(item.totalRevenue));
+          current.profit = Math.max(current.profit, safeNumber(item.profit));
+          productsById.set(key, current);
+        });
+        const productRows = [...productsById.values()].map(item => [item.name, item.units, money(item.revenue), money(item.profit)]);
+        sections.push({ id: 'dashboard-products', title: 'Desempeño de productos', headers: ['Producto', 'Unidades', 'Venta pagada', 'Utilidad de referencia'], rows: productRows, widths: [42, 14, 22, 22] });
+      }
+      if (preferences.blocks.includes('registers')) {
+        charts.push({ id: 'dashboard.registers', title: 'Ventas por caja', type: 'bar', labels: registerChart.map((item: { name: string; value: number }) => item.name), values: registerChart.map((item: { name: string; value: number }) => safeNumber(item.value)), colors: [CHART_COLORS[4], CHART_COLORS[1], CHART_COLORS[2]] });
+        sections.push({ id: 'dashboard-registers', title: 'Ventas por caja', headers: ['Caja', 'Operaciones', 'Ventas pagadas'], rows: registers.slice(0, 8).map((item: any) => [item.registerName || item.registerCode || 'Caja', safeNumber(item.count), money(safeNumber(item.total))]), widths: [44, 20, 36] });
+      }
+      if (preferences.blocks.includes('transactions')) {
+        sections.push({ id: 'dashboard-transactions', title: 'Actividad reciente', headers: ['Documento', 'Fecha', 'Origen', 'Cliente', 'Monto', 'Estado'], rows: transactions.slice(0, 12).map((item: any, index: number) => [item.number || `Factura ${index + 1}`, item.date ? new Date(item.date).toLocaleDateString('es-NI') : '—', item.register?.name || item.origin || 'Factura de venta', item.customer || 'Cliente general', money(safeNumber(item.sourceTotal ?? item.total)), formatTransactionStatus(item.status)]), widths: [16, 13, 19, 22, 15, 15] });
+      }
       const fileName = buildDatedDownloadFileName(['resumen_gestion'], 'pdf');
-      const configured = await generateConfiguredReportTemplate({
+      const configured = await generateConfiguredReportSectionsPDF({
         targetKey: 'dashboard.tenant-overview',
         title: 'Resumen de gestión',
         tenantName: user?.tenantName || user?.clientTenant?.name || 'Mi Empresa',
         tenantLogo: user?.clientTenant?.logo || '',
-        rows,
-        columns: [
-          { header: 'Indicador', value: (row) => row.label },
-          { header: 'Valor', value: (row) => row.value },
-          { header: 'Detalle', value: (row) => row.detail },
-        ],
+        periodLabel: rangeLabel,
+        kpis: selectedKpis,
+        charts,
+        dashboardPreferences: { indicators: [...preferences.indicators], blocks: [...preferences.blocks] },
+        sections,
         fileName,
       });
-      if (configured) {
-        toast.success('Resumen exportado en PDF');
-        return;
-      }
-
-      const { default: jsPDF } = await import('jspdf');
-      const settings = await getPdfDesignSettings('dashboard.tenant-overview');
-      const doc = new jsPDF(pdfDesignPaper(settings));
-      const pageWidth = doc.internal.pageSize.getWidth();
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(18);
-      doc.text('Resumen de gestión', pageWidth / 2, 20, { align: 'center' });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(110);
-      doc.text(`Período: ${rangeLabel} · Generado: ${new Date().toLocaleDateString('es-NI')}`, pageWidth / 2, 28, { align: 'center' });
-      doc.setTextColor(0);
-      let y = 44;
-      for (const row of rows) {
-        doc.setFont('helvetica', 'bold');
-        doc.text(row.label, 22, y);
-        doc.setFont('helvetica', 'normal');
-        doc.text(row.value, 105, y);
-        y += 7;
-      }
-      doc.save(fileName);
+      if (!configured) throw new Error('No se pudo preparar el reporte del dashboard.');
       toast.success('Resumen exportado en PDF');
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo exportar el resumen');
@@ -377,7 +390,6 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       setIsExporting(false);
     }
   };
-
   const navigate = (module: Module, detail?: Record<string, unknown>) => {
     onNavigate?.(module);
     window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module, ...(detail || {}) } }));

@@ -1,14 +1,11 @@
 import ExcelJS from 'exceljs';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import type {
   CustomerPortalInventoryRow,
   CustomerPortalInventoryVariant,
   CustomerPortalSummary,
 } from '../services/customer-portal.service';
-import { getBase64Image } from './reportExportUtils';
-import { getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor } from './pdfGenerator';
-import { buildDatedDownloadFileName, buildDatedPdfFileName } from './exportFileNames';
+import { generateConfiguredReportSectionsPDF } from './pdfGenerator';
+import { buildDatedDownloadFileName } from './exportFileNames';
 
 type PortalSalesRow = Record<string, any>;
 
@@ -308,158 +305,55 @@ export async function exportCustomerPortalExcel(options: CustomerPortalExportOpt
   downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), buildDatedDownloadFileName(['portal_cliente', options.customerName, 'completo'], 'xlsx'));
 }
 
-function addPdfHeader(doc: jsPDF, options: CustomerPortalExportOptions, primary: [number, number, number], text: [number, number, number], logo?: string | null) {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 12;
-  let x = margin;
-  if (logo) {
-    try {
-      doc.addImage(logo, 'PNG', margin, 10, 18, 18, undefined, 'FAST');
-      x += 23;
-    } catch {
-      // El reporte continúa aunque el logo no sea compatible con jsPDF.
-    }
-  }
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  doc.setTextColor(...primary);
-  doc.text(options.tenantName || 'NovaHub', x, 17);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...text);
-  doc.text(`${options.customerName} · Portal de cliente · Generado: ${new Date().toLocaleString('es-NI')}`, x, 23);
-  doc.setDrawColor(...primary);
-  doc.setLineWidth(0.5);
-  doc.line(margin, 30, pageWidth - margin, 30);
-}
-
 export async function exportCustomerPortalPdf(options: CustomerPortalExportOptions) {
-  const settings = await getPdfDesignSettings('reportes.sales');
-  const primary = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
-  const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
-  const line = pdfDesignColor(settings.lineColor, [226, 232, 240]);
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 12;
   const totals = inventoryTotals(options.inventory);
   const variantCount = options.inventory.reduce((total, product) => total + (product.variants?.length || 0), 0);
-  let logo: string | null = null;
-  const logoSource = getPdfTemplateLogo(settings, options.tenantLogo, 'reportes.sales');
-  if (logoSource) logo = logoSource.startsWith('data:') ? logoSource : await getBase64Image(logoSource);
-
-  const tableStyles = {
-    font: 'helvetica',
-    fontSize: 7,
-    cellPadding: 1.8,
-    textColor: text,
-    lineColor: line,
-    lineWidth: 0.15,
-    overflow: 'linebreak' as const,
-  };
-  const headStyles = { fillColor: primary, textColor: [255, 255, 255] as [number, number, number], fontStyle: 'bold' as const, halign: 'center' as const };
-
-  addPdfHeader(doc, options, primary, text, logo);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(...text);
-  doc.text('Resumen', margin, 42);
-  autoTable(doc, {
-    startY: 47,
-    margin: { left: margin, right: margin },
-    head: [['Indicador', 'Valor']],
-    body: [
-      ['Ventas de hoy', options.money(numberValue(options.summary.today.sales), options.summary.currency)],
-      ['Ventas del mes', options.money(numberValue(options.summary.month.sales), options.summary.currency)],
-      ['Total facturado', options.money(numberValue(options.summary.totalInvoiced), options.summary.currency)],
-      ['Total pagado', options.money(numberValue(options.summary.totalPaid), options.summary.currency)],
-      ['Saldo pendiente', options.money(numberValue(options.summary.pendingBalance), options.summary.currency)],
-      ['Devoluciones', options.money(numberValue(options.summary.returnsTotal), options.summary.currency)],
-      ['Notas de crédito', options.money(numberValue(options.summary.creditNotesTotal), options.summary.currency)],
-      ['Productos / variantes', `${options.inventory.length} / ${variantCount}`],
-      ['Unidades físicas / disponibles', `${quantityLabel(totals.quantity)} / ${quantityLabel(totals.available)}`],
-      ['Valor del inventario', options.money(totals.inventoryValue, options.currency)],
-      ['Valor disponible', options.money(totals.availableInventoryValue, options.currency)],
-    ],
-    theme: 'grid',
-    styles: tableStyles,
-    headStyles,
-    columnStyles: { 0: { cellWidth: 70, fontStyle: 'bold' }, 1: { halign: 'right' } },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-  });
-
-  doc.addPage('a4', 'landscape');
-  addPdfHeader(doc, options, primary, text, logo);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(...text);
-  doc.text('Inventario detallado', margin, 42);
-  const inventoryRows = inventoryExportRows(options.inventory).map((row) => [
-    `${row[0]}\n${row[1]}`,
-    `${row[3]}\n${row[4]}`,
+  const summaryRows = [
+    ['Ventas de hoy', options.money(numberValue(options.summary.today.sales), options.summary.currency), `${numberValue(options.summary.today.invoices).toLocaleString('es-NI')} facturas`],
+    ['Ventas del mes', options.money(numberValue(options.summary.month.sales), options.summary.currency), `${numberValue(options.summary.month.invoices).toLocaleString('es-NI')} facturas`],
+    ['Total facturado', options.money(numberValue(options.summary.totalInvoiced), options.summary.currency), 'Acumulado atribuido al cliente'],
+    ['Total pagado', options.money(numberValue(options.summary.totalPaid), options.summary.currency), 'Pagos recibidos'],
+    ['Saldo pendiente', options.money(numberValue(options.summary.pendingBalance), options.summary.currency), 'Facturas con saldo'],
+    ['Devoluciones', options.money(numberValue(options.summary.returnsTotal), options.summary.currency), 'Monto atribuido'],
+    ['Notas de crédito', options.money(numberValue(options.summary.creditNotesTotal), options.summary.currency), 'Monto atribuido'],
+    ['Productos / variantes', `${options.inventory.length} / ${variantCount}`, 'Inventario visible'],
+    ['Unidades físicas / disponibles', `${quantityLabel(totals.quantity)} / ${quantityLabel(totals.available)}`, `${quantityLabel(totals.reserved)} reservadas`],
+    ['Valor del inventario', options.money(totals.inventoryValue, options.currency), 'Costo configurado'],
+    ['Valor disponible', options.money(totals.availableInventoryValue, options.currency), 'Costo de unidades disponibles'],
+  ];
+  const inventoryRows = inventoryExportRows(options.inventory).map(row => [
+    `${row[0]} / ${row[1]}`,
+    `${row[3]} / ${row[4]}`,
     row[5],
     row[6],
-    options.money(numberValue(row[7]), options.currency),
-    options.money(numberValue(row[8]), options.currency),
     quantityLabel(row[9]),
-    quantityLabel(row[10]),
     quantityLabel(row[11]),
-    options.money(numberValue(row[12]), options.currency),
     options.money(numberValue(row[13]), options.currency),
   ]);
-  autoTable(doc, {
-    startY: 47,
-    margin: { left: margin, right: margin, bottom: 14 },
-    head: [['Producto / código', 'Variante / SKU', 'Atributos', 'Bodegas', 'Costo base', 'Costo configurado', 'Unid.', 'Res.', 'Disp.', 'Valor inventario', 'Valor disponible']],
-    body: inventoryRows.length ? inventoryRows : [['Sin inventario', '—', '—', '—', options.money(0, options.currency), options.money(0, options.currency), '0', '0', '0', options.money(0, options.currency), options.money(0, options.currency)]],
-    theme: 'grid',
-    styles: { ...tableStyles, fontSize: 6.2 },
-    headStyles: { ...headStyles, fontSize: 6.2 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 0: { cellWidth: 31 }, 1: { cellWidth: 28 }, 2: { cellWidth: 31 }, 3: { cellWidth: 47 }, 4: { halign: 'right', cellWidth: 20 }, 5: { halign: 'right', cellWidth: 24 }, 6: { halign: 'right', cellWidth: 12 }, 7: { halign: 'right', cellWidth: 12 }, 8: { halign: 'right', cellWidth: 12 }, 9: { halign: 'right', cellWidth: 22 }, 10: { halign: 'right', cellWidth: 22 } },
-  });
-  const inventoryEndY = Number((doc as any).lastAutoTable?.finalY || 47) + 7;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(...primary);
-  doc.text(`Totales: ${quantityLabel(totals.quantity)} unidades físicas · ${quantityLabel(totals.available)} disponibles · ${options.money(totals.inventoryValue, options.currency)}`, margin, Math.min(inventoryEndY, pageHeight - 10));
-
-  doc.addPage('a4', 'landscape');
-  addPdfHeader(doc, options, primary, text, logo);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(...text);
-  doc.text('Ventas y facturas', margin, 42);
-  const salesRows = salesExportRows(options.sales).map((row) => [
-    row[0],
-    row[1],
-    row[2],
-    row[3],
+  const salesRows = salesExportRows(options.sales).map(row => [
+    row[0], row[1], row[2], row[3],
     options.money(numberValue(row[5]), String(row[6])),
-    String(row[6]),
     options.money(numberValue(row[7]), String(row[6])),
     options.money(numberValue(row[8]), String(row[6])),
-    options.money(numberValue(row[9]), options.currency),
   ]);
-  autoTable(doc, {
-    startY: 47,
-    margin: { left: margin, right: margin, bottom: 14 },
-    head: [['Fecha', 'Factura', 'Estado', 'Productos', 'Total atribuido', 'Moneda', 'Pagado', 'Saldo', `Total base (${options.currency})`]],
-    body: salesRows.length ? salesRows : [['—', '—', '—', 'No hay ventas atribuidas', options.money(0, options.currency), options.currency, options.money(0, options.currency), options.money(0, options.currency), options.money(0, options.currency)]],
-    theme: 'grid',
-    styles: { ...tableStyles, fontSize: 6.8 },
-    headStyles: { ...headStyles, fontSize: 6.8 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 25 }, 2: { cellWidth: 23 }, 3: { cellWidth: 82 }, 4: { halign: 'right', cellWidth: 27 }, 5: { cellWidth: 16 }, 6: { halign: 'right', cellWidth: 25 }, 7: { halign: 'right', cellWidth: 25 }, 8: { halign: 'right', cellWidth: 30 } },
+  const generatedAt = new Date().toLocaleDateString('es-NI');
+  return generateConfiguredReportSectionsPDF({
+    targetKey: 'portal.customer-summary',
+    title: 'Resumen del portal de clientes',
+    tenantName: options.tenantName || 'NovaHub',
+    tenantLogo: options.tenantLogo,
+    periodLabel: `${options.customerName} · ${options.currency} · Generado ${generatedAt}`,
+    fileName: buildDatedDownloadFileName(['portal_cliente', options.customerName, 'completo'], 'pdf'),
+    kpis: [
+      { label: 'VENTAS DE HOY', value: options.money(numberValue(options.summary.today.sales), options.summary.currency), detail: `${numberValue(options.summary.today.invoices).toLocaleString('es-NI')} facturas` },
+      { label: 'VENTAS DEL MES', value: options.money(numberValue(options.summary.month.sales), options.summary.currency), detail: `${numberValue(options.summary.month.invoices).toLocaleString('es-NI')} facturas` },
+      { label: 'UNIDADES DISPONIBLES', value: quantityLabel(totals.available), detail: `${options.inventory.length} productos · ${variantCount} variantes` },
+      { label: 'SALDO PENDIENTE', value: options.money(numberValue(options.summary.pendingBalance), options.summary.currency), detail: 'Facturas con saldo pendiente' },
+    ],
+    sections: [
+      { id: 'portal-summary', title: 'Resumen de cuenta', headers: ['Indicador', 'Valor', 'Detalle'], rows: summaryRows, widths: [28, 22, 50] },
+      { id: 'portal-inventory', title: 'Inventario atribuido', headers: ['Producto / código', 'Variante / SKU', 'Atributos', 'Bodegas', 'Unid.', 'Disponibles', 'Valor disponible'], rows: inventoryRows.length ? inventoryRows : [['Sin inventario', '—', '—', '—', '0', '0', options.money(0, options.currency)]], widths: [20, 18, 15, 22, 7, 9, 13] },
+      { id: 'portal-sales', title: 'Ventas y facturas', headers: ['Fecha', 'Factura', 'Estado', 'Productos', 'Total', 'Pagado', 'Saldo'], rows: salesRows.length ? salesRows : [['—', '—', '—', 'No hay ventas atribuidas', options.money(0, options.currency), options.money(0, options.currency), options.money(0, options.currency)]], widths: [10, 12, 13, 28, 12, 12, 13] },
+    ],
   });
-
-  const pageCount = doc.getNumberOfPages();
-  for (let page = 1; page <= pageCount; page += 1) {
-    doc.setPage(page);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`${options.tenantName || 'NovaHub'} · ${options.customerName} · Página ${page} de ${pageCount}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
-  }
-  doc.save(buildDatedPdfFileName(['portal_cliente', options.customerName, 'completo']));
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Building2, Check, FileCog, Info, Link2, Loader2, RefreshCw, RotateCcw, Unlink2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { getApiErrorMessage } from '../../services/api';
 import {

@@ -14,7 +14,7 @@ import type { Supplier, EntityStatus } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 
 export function ProveedoresPage() {
   const { canPerform } = useAuth();

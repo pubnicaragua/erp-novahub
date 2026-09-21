@@ -16,7 +16,7 @@ import { usersService } from '../../services/users.service';
 import { projectsService, type ProjectMilestone, type ProjectTask } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { TASK_STATUS_META, PRIORITY_META, TASK_STATUS_OPTIONS, PRIORITY_OPTIONS, formatDate, fromLocalDate, toLocalDate } from './shared';
 

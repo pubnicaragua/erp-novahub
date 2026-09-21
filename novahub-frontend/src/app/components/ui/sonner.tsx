@@ -1,12 +1,36 @@
-import { Toaster as Sonner, ToasterProps } from "sonner";
+import { useEffect, useState } from "react";
+import { Toaster as Sonner, useSonner, type ToasterProps } from "sonner";
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const getAppTheme = (): 'light' | 'dark' =>
+  typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+
+const Toaster = ({ className, style, toastOptions, visibleToasts, ...props }: ToasterProps) => {
+  const { toasts } = useSonner();
+  const [theme, setTheme] = useState(getAppTheme);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncTheme = () => setTheme(getAppTheme());
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+    syncTheme();
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <Sonner
-      theme="system"
-      className="toaster group erp-toaster"
-      style={
-        {
+      {...props}
+      theme={theme}
+      expand
+      closeButton
+      toastOptions={{
+        ...toastOptions,
+        closeButton: true,
+        closeButtonAriaLabel: 'Cerrar notificación',
+      }}
+      visibleToasts={Math.max(3, visibleToasts || 0, toasts.length)}
+      className={['toaster', 'group', 'erp-toaster', className].filter(Boolean).join(' ')}
+      style={{
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
@@ -22,9 +46,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--info-bg": "oklch(0.92 0.05 250)",
           "--info-text": "oklch(0.25 0.08 250)",
           "--info-border": "oklch(0.75 0.1 250)",
-        } as React.CSSProperties
-      }
-      {...props}
+          ...style,
+        } as React.CSSProperties}
     />
   );
 };

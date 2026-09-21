@@ -14,7 +14,7 @@ import {
 import { Combobox } from '../ui/Combobox';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { api } from '../../services/api';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { ViewConnectionsDialog, type ViewConnection } from './ViewConnectionsDialog';
 

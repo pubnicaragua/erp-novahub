@@ -22,7 +22,7 @@ import { FinanceLossesView } from './finanzas/FinanceLossesView';
 import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
 import { FinancialJournalView } from './finanzas/FinancialJournalView';
 import { contabilidadService } from '../services/contabilidad.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { motion } from 'motion/react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';

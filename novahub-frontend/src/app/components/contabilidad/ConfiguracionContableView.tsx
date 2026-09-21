@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { Combobox } from '../ui/Combobox'
 import { cn } from '../ui/utils'
-import { toast } from 'sonner'
+import { toast } from '@/app/services/toast'
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator'
 import { ChevronDown, ChevronUp, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 import { BankAccountsView } from './BankAccountsView'

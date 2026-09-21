@@ -6,7 +6,7 @@ import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '../ui/dialog';
 import { Label } from '../ui/label';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';

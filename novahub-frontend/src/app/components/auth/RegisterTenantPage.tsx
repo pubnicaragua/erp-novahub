@@ -16,7 +16,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { cn } from '../ui/utils';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { authService, type ModuleRecommendationsResponse } from '../../services/auth.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { normalizeEmail } from '../../utils/accountValidation';

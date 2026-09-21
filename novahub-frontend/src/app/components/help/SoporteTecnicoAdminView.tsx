@@ -9,7 +9,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { soporteTecnicoService } from '../../services/soporte-tecnico.service';
 import { cn } from '../ui/utils';

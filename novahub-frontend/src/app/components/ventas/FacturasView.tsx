@@ -11,7 +11,7 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { invoicesService, paymentsService } from '../../services/ventas.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import type { Invoice, Customer, Product, PaymentReceived, SalesPaginationControls } from '../../types';

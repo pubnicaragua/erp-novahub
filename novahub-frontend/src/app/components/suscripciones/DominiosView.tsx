@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
 import { cn } from '../ui/utils'
-import { toast } from 'sonner'
+import { toast } from '@/app/services/toast'
 import { useAuth } from '../../contexts/AuthContext'
 
 export function DominiosView() {

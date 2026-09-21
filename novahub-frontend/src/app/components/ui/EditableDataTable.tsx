@@ -13,7 +13,7 @@ import { Pencil, Trash2, Ban, Copy, ChevronLeft, ChevronRight, ChevronsLeft, Che
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './dialog';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';

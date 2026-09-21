@@ -15,7 +15,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchFixedAssetDetails, exportFixedAssetsExcel } from './fixedAssetsExport';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface AssetSummary {

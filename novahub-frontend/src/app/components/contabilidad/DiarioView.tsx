@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { FileText, Send, Ban, Search, RotateCcw, X, ArrowDownLeft, ArrowUpRight, Upload, Download, CalendarRange, FileSpreadsheet, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ClipboardList, Loader2, PackageSearch, Send, Warehouse } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { api, getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { Badge } from '../ui/badge';

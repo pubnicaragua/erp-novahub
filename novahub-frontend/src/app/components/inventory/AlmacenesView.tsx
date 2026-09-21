@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { inventoryService } from '../../services/inventario.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cajaService, type CashRegister } from '../../services/caja.service';

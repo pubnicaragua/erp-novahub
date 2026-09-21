@@ -9,7 +9,7 @@ import { Label } from '../ui/label';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';

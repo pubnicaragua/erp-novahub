@@ -7,7 +7,7 @@ import { Button } from './button';
 import { CalendarDays } from 'lucide-react';
 import { cn } from './utils';
 import { es } from 'date-fns/locale';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 
 interface DateFieldProps {
   /** Valor en formato yyyy-mm-dd. */

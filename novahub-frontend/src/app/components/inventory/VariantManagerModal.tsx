@@ -6,7 +6,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { inventoryService } from '../../services/inventario.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { ProductVariant } from '../../types/variants';
 import { useAuth } from '../../contexts/AuthContext';

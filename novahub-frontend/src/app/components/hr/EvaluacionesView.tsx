@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';

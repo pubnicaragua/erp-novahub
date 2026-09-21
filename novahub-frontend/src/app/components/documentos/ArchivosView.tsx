@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, HardDrive, File as FileIcon, Image as ImageIcon, FileArchive } from 'lucide-react';
 import { filesService } from '../../services/documentos.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';

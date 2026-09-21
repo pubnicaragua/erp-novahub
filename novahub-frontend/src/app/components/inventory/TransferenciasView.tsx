@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from '../ui/checkbox';
 import { Combobox } from '../ui/Combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { inventoryService } from '../../services/inventario.service';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';

@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import { cn } from '../ui/utils';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { legalService, type LegalCase, type LegalReminder } from '../../services/legal.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { LegalChatPanel } from './LegalChatPanel';

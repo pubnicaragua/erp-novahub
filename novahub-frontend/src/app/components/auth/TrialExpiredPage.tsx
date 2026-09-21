@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Clock, Sparkles, CheckCircle2, ArrowUpRight, Send, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { api } from '../../services/api';
 
 interface TrialExpiredPageProps {

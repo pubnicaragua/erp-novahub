@@ -16,7 +16,7 @@ import {
   Truck,
   X,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from './ui/button';

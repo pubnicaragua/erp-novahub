@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { Eye, KeyRound, Loader2, Mail, Pencil, Save, Users } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { tenantsService } from '../../services/tenants.service';
 import { storageService } from '../../services/storage.service';
 import { getPasswordError, isValidEmail } from '../../utils/accountValidation';

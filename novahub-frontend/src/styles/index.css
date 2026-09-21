@@ -914,6 +914,52 @@ th .column-filter-menu .column-filter-icon,
   opacity: 1 !important;
 }
 
+/* Sonner normally layers non-front cards behind the first toast. Keep every
+   active message in a readable vertical stack and contain large bursts in a
+   scrollable tray instead of letting them cover the ERP workspace. */
+.erp-toaster[data-sonner-toaster] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: min(var(--width), calc(100vw - 2rem));
+  max-height: min(70vh, 560px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--primary) 55%, transparent) transparent;
+}
+
+.erp-toaster[data-sonner-toaster] [data-sonner-toast][data-expanded='true'] {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  transform: none;
+}
+
+.erp-toaster[data-sonner-toaster]::-webkit-scrollbar {
+  width: 6px;
+}
+
+.erp-toaster[data-sonner-toaster]::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--primary) 55%, transparent);
+  background-clip: padding-box;
+}
+
+@media (max-width: 640px) {
+  .erp-toaster[data-sonner-toaster] {
+    gap: 10px;
+    max-height: min(60vh, 420px);
+  }
+}
+
 /* El portal público se renderiza fuera del shell del ERP y combina utilidades
    históricas de slate con colores de marca configurables. Mantener una pila de
    fuentes estable y cubrir también slate-200 evita que una regla de color
@@ -1764,7 +1810,7 @@ th .column-filter-menu .column-filter-icon,
   .subscriptions-module,
   .reports-module,
   .manager-shell
-) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]) {
+) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]):not([data-table-content-sized="true"]) {
   min-width: 0;
   max-width: 100%;
   min-height: 36rem;
@@ -1808,7 +1854,7 @@ th .column-filter-menu .column-filter-icon,
   .subscriptions-module,
   .reports-module,
   .manager-shell
-) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]) > table > thead {
+) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]):not([data-table-content-sized="true"]) > table > thead {
   position: sticky;
   top: 0;
   z-index: 50;
@@ -1848,7 +1894,7 @@ th .column-filter-menu .column-filter-icon,
   .subscriptions-module,
   .reports-module,
   .manager-shell
-) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]) > table > thead > tr > th {
+) :where(.overflow-x-auto, .overflow-auto, .sales-responsive-table):has(> table):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-import-preview-horizontal-scroller]):not([data-table-content-sized="true"]) > table > thead > tr > th {
   background: var(--card) !important;
   background-color: var(--card) !important;
 }

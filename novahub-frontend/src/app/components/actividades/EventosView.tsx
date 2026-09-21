@@ -13,7 +13,7 @@ import { incomeService, expensesService, accountsService } from '../../services/
 import { contabilidadService } from '../../services/contabilidad.service';
 import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
 import { useCurrency, type Currency } from '../../contexts/CurrencyContext';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Download, Image as ImageIcon, Loader2, X } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Button } from './button';
 import { Dialog, DialogContent, DialogTitle } from './dialog';
 

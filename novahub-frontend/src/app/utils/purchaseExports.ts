@@ -1,9 +1,9 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { generateFastGlobalReportPDF, getGlobalReportSettings, getPdfDesign, getPdfDesignSettings, getPdfTemplateLogo, isVirtualSystemDefaultDesign, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { generateFastGlobalReportPDF, getGlobalReportSettings, getPdfDesign, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget } from '../services/pdf-document-catalog';
-import { createDefaultTemplateDefinition, sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
+import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { buildPdfFileName } from './exportFileNames';
 import { pdfStatusLabel } from './pdfStatus';
@@ -55,6 +55,7 @@ export interface PurchasePdfListColumn {
 }
 
 const standardPaper = (format: PdfDownloadFormat) => {
+  if (format === 'roll-80') return 'ROLL-80';
   if (format === 'A4') return 'A4';
   if (format === 'legal') return 'LEGAL';
   if (format === 'oficio') return 'OFICIO';
@@ -71,29 +72,6 @@ const purchaseLineDescription = (line: PurchasePdfLine) => {
   return line.secondary ? `${description}\n${line.secondary}` : description;
 };
 const isRoll = (format: PdfDownloadFormat) => format === 'roll-58' || format === 'roll-80';
-const isStatusColumn = (column: PurchasePdfListColumn) => /estado|status/i.test(column.label);
-const purchaseListValue = (column: PurchasePdfListColumn, row: any) => {
-  const value = column.value(row);
-  return isStatusColumn(column) ? pdfStatusLabel(value) : valueText(value);
-};
-
-const purchaseListColumnWidths = (columns: PurchasePdfListColumn[]) => {
-  const weights = columns.map((column) => {
-    if (column.width) return column.width;
-    const label = column.label.toLowerCase();
-    if (/descrip|detalle|concepto/.test(label)) return 2;
-    if (/proveedor|nombre|direcci[oó]n/.test(label)) return 1.7;
-    if (/categor[ií]a/.test(label)) return 0.85;
-    if (/referencia|orden|solicitud|factura|c[oó]digo|documento/.test(label)) return 1.2;
-    if (/total|monto|pagado|comprometido|saldo|precio/.test(label)) return 1;
-    if (/fecha/.test(label)) return 0.75;
-    if (/estado/.test(label)) return 0.65;
-    if (/m[eé]todo|tipo|[íi]tems|cantidad|frecuencia/.test(label)) return 0.6;
-    return 1;
-  });
-  const total = weights.reduce((sum, weight) => sum + weight, 0) || 1;
-  return weights.map((weight) => (weight / total) * 100);
-};
 
 const isVirtualPdfDesign = (design: any) => Boolean(
   !design
@@ -193,7 +171,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
   const settings = overrideSettings || await getPdfDesignSettings(targetKey);
   const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
   const resolvedLogo = configuredLogo || (typeof document.supplierData?.logo === 'string' ? document.supplierData.logo : undefined);
-  if (!isRoll(format) && configuredDesign?.layoutZones?.definition && !isVirtualSystemDefaultDesign(configuredDesign)) {
+  if (format !== 'roll-58') {
     const paperSettings = withPaperFormat(settings, format);
     const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...paperSettings };
     const fieldData = Object.fromEntries((document.fields || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
@@ -222,7 +200,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
       ],
       ...fieldData,
     };
-    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildPdfFileName([document.title, document.number || 'sin_numero'], format), save: true });
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign?.layoutZones?.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildPdfFileName([document.title, document.number || 'sin_numero'], format), save: true });
     return rendered.doc;
   }
   const doc = isRoll(format)

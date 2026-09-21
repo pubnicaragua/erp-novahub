@@ -19,7 +19,7 @@ import {
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import type { Customer } from '../../types';
 import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';

@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, CheckCircle2, Clock, AlertTriangle, Scale } from 'lucide-react';
 import { contractsService } from '../../services/documentos.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useCurrency } from '../../contexts/CurrencyContext';

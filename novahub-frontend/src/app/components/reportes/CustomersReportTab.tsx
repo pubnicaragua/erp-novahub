@@ -5,7 +5,7 @@ import { customersService, invoicesService, paymentsService, salesOrdersService 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';

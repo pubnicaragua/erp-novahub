@@ -10,7 +10,7 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { customersService } from '../../services/ventas.service';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { SalesKpiCard } from './SalesKpiCard';
 import { useAuth } from '../../contexts/AuthContext';

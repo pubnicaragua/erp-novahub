@@ -7,7 +7,7 @@ import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '../ui/dialog';
 import { Label } from '../ui/label';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { hrService } from '../../services/hr.service';
 import { motion } from 'motion/react';

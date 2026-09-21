@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Label } from '../ui/label';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { hrService } from '../../services/hr.service';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';

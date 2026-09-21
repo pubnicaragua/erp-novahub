@@ -9,14 +9,12 @@ import {
   notificationEventKey,
   subscribeToNotificationEvents,
 } from '../services/notifications.service';
-import { waitForNotificationActionBarrier, getNotificationSequenceGapMs } from '../services/notification-action-coordinator';
+import { waitForNotificationActionBarrier } from '../services/notification-action-coordinator';
 import { isBrowserNotificationsEnabled } from '../utils/browserNotifications';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { getNotificationNavigation, navigateToNotification } from '../utils/notificationNavigation';
 import { refreshNotificationDomain } from '../services/notification-domain-refresh';
 import type { Notification } from '../types';
-
-const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 /**
  * Global notification presentation.
@@ -136,7 +134,7 @@ export function useIncomingNotificationAlert() {
 
       // A different user's action, scheduler event, or legacy event without
       // actorId must not wait for a local operation toast.
-      void presentNotification(notification, markAsRead);
+      presentNotification(notification, markAsRead);
     });
 
     try { localStorage.setItem(storageKey, JSON.stringify([...seenEvents.current].slice(-1_000))); } catch {
@@ -148,9 +146,9 @@ export function useIncomingNotificationAlert() {
       void (async () => {
         try {
           while (queuedOwnNotifications.current.length > 0) {
-            const notification = queuedOwnNotifications.current.shift();
-            if (!notification) continue;
-            await presentNotification(notification, markAsRead, true);
+            await waitForNotificationActionBarrier();
+            const batch = queuedOwnNotifications.current.splice(0);
+            batch.forEach((notification) => presentNotification(notification, markAsRead));
           }
         } finally {
           processingOwnQueue.current = false;
@@ -160,19 +158,15 @@ export function useIncomingNotificationAlert() {
   }, [authUser?.clientTenantId, authUser?.id, authUser?.tenantId, isFetched, markAsRead, notifications, queryClient, storageKey]);
 }
 
-async function presentNotification(
+function presentNotification(
   notification: Notification,
   markAsRead: (id: string) => Promise<void>,
-  waitForAction = false,
-): Promise<void> {
-  if (waitForAction) await waitForNotificationActionBarrier();
+): void {
 
   const navigation = getNotificationNavigation(notification);
   playNotificationSound();
   toast.info(notification.title || 'Nueva notificación', {
     description: notification.message || 'Tienes una novedad pendiente de revisar.',
-    duration: 6_000,
-    position: 'top-right',
     action: {
       label: navigation.module === 'tickets' ? 'Abrir ticket' : 'Abrir',
       onClick: () => {
@@ -200,5 +194,4 @@ async function presentNotification(
     }
   }
 
-  await wait(getNotificationSequenceGapMs());
 }

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Camera, ImagePlus, Package, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/app/services/toast";
 import { cn } from "./utils";
 
 const ACCEPTED_IMAGE_TYPES = [

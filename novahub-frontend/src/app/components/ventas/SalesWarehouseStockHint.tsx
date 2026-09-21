@@ -7,8 +7,30 @@ type WarehouseStockOption = {
   isActive?: boolean;
 };
 
+type WarehouseStockLevel = {
+  warehouseId?: string;
+  warehouseName?: string;
+  variantId?: string | null;
+  available?: number | null;
+  currentStock?: number | null;
+  quantity?: number | null;
+  stock?: number | null;
+  reserved?: number | null;
+  warehouse?: { id?: string; name?: string };
+};
+
+type StockTrackedProduct = {
+  itemType?: string | null;
+  type?: string | null;
+  trackInventory?: boolean;
+  warehouseStock?: WarehouseStockLevel[];
+  stockLevels?: WarehouseStockLevel[];
+  currentStock?: number | null;
+  variants?: Array<{ id: string; currentStock?: number | null }>;
+};
+
 type WarehouseStockHintProps = {
-  product?: any | null;
+  product?: StockTrackedProduct | null;
   warehouseId?: string | null;
   warehouses?: WarehouseStockOption[];
   variantId?: string | null;
@@ -26,7 +48,7 @@ const numberOrZero = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const availableFromLevel = (level: any) => {
+const availableFromLevel = (level: WarehouseStockLevel) => {
   if (level?.available !== undefined && level?.available !== null) return numberOrZero(level.available);
   if (level?.currentStock !== undefined && level?.currentStock !== null) return numberOrZero(level.currentStock);
   const quantity = numberOrZero(level?.quantity ?? level?.stock);
@@ -44,6 +66,7 @@ const formatStock = (value: number) => new Intl.NumberFormat('es-NI', {
  */
 export function SalesWarehouseStockHint({ product, warehouseId, warehouses = [], variantId, className }: WarehouseStockHintProps) {
   if (!product || String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'SERVICE') return null;
+  if (product.trackInventory === false) return null;
 
   const selectedWarehouseId = String(warehouseId || '').trim();
   if (!selectedWarehouseId) return null;
@@ -51,21 +74,24 @@ export function SalesWarehouseStockHint({ product, warehouseId, warehouses = [],
   const rawLevels = Array.isArray(product.warehouseStock) && product.warehouseStock.length > 0
     ? product.warehouseStock
     : (Array.isArray(product.stockLevels) ? product.stockLevels : []);
-  if (rawLevels.length === 0) return null;
 
   const normalizedVariantId = String(variantId || '').trim();
+  const variantStock = normalizedVariantId
+    ? product.variants?.find((variant) => String(variant.id || '') === normalizedVariantId)?.currentStock
+    : product.currentStock;
   const exactVariantLevels = normalizedVariantId
-    ? rawLevels.filter((level: any) => String(level?.variantId || '').trim() === normalizedVariantId)
+    ? rawLevels.filter((level) => String(level?.variantId || '').trim() === normalizedVariantId)
     : rawLevels;
   const levels = normalizedVariantId ? exactVariantLevels : rawLevels;
   const warehouseNames = new Map(
     warehouses.map((warehouse) => [String(warehouse.id), warehouse.name]),
   );
+  const visibleWarehouseIds = new Set(warehouses.map((warehouse) => String(warehouse.id)));
   const stockMap = new Map<string, StockByWarehouse>();
 
-  levels.forEach((level: any) => {
+  levels.forEach((level) => {
     const id = String(level?.warehouseId || level?.warehouse?.id || '').trim();
-    if (!id) return;
+    if (!id || (id !== selectedWarehouseId && !visibleWarehouseIds.has(id))) return;
     const existing = stockMap.get(id);
     stockMap.set(id, {
       warehouseId: id,
@@ -73,6 +99,16 @@ export function SalesWarehouseStockHint({ product, warehouseId, warehouses = [],
       stock: (existing?.stock || 0) + availableFromLevel(level),
     });
   });
+
+  // getProducts devuelve 0 cuando la bodega no tiene una fila de inventario.
+  // Conservamos esa señal para que la ausencia de niveles no oculte el aviso.
+  if (stockMap.size === 0) {
+    stockMap.set(selectedWarehouseId, {
+      warehouseId: selectedWarehouseId,
+      warehouseName: warehouseNames.get(selectedWarehouseId) || 'bodega seleccionada',
+      stock: numberOrZero(variantStock),
+    });
+  }
 
   const selectedStock = stockMap.get(selectedWarehouseId)?.stock || 0;
   const otherWarehouses = Array.from(stockMap.values())

@@ -8,7 +8,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 
 // ============================================================================

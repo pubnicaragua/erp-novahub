@@ -5,7 +5,7 @@ import { subscriptionsService } from '../../services/subscriptions.service';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';

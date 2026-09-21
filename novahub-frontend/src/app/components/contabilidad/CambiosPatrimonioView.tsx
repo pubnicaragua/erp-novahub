@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Search, Filter, X, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { DateField } from '../ui/DateField';
 

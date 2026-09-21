@@ -1,5 +1,5 @@
 export type PdfDocumentStructure = 'transaction' | 'history' | 'report' | 'receipt' | 'administrative' | 'dashboard' | 'print';
-export type PdfTemplateFamily = 'transaction' | 'history' | 'report' | 'receipt' | 'cash' | 'dashboard' | 'label' | 'administrative';
+export type PdfTemplateFamily = 'transaction' | 'history' | 'report' | 'receipt' | 'cash' | 'cash-ticket' | 'dashboard' | 'label' | 'administrative';
 
 export type PdfTemplateModule =
   | 'ventas'
@@ -9,7 +9,8 @@ export type PdfTemplateModule =
   | 'inventario'
   | 'recursos-humanos'
   | 'reportes'
-  | 'dashboard';
+  | 'dashboard'
+  | 'portal-clientes';
 
 export interface PdfTemplateTarget {
   key: string;
@@ -40,7 +41,7 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'ventas.return', module: 'ventas', moduleLabel: 'Ventas', label: 'Devoluciones', structure: 'transaction', legacyKeys: ['return'], source: 'generateEstimatePDF' },
   { key: 'ventas.credit-note', module: 'ventas', moduleLabel: 'Ventas', label: 'Notas de crédito', structure: 'transaction', legacyKeys: ['credit-note'], source: 'generateEstimatePDF' },
   { key: 'ventas.cash-session', module: 'ventas', moduleLabel: 'Ventas', label: 'Resumen de sesión de caja', structure: 'receipt', source: 'generateSessionSummaryPDF' },
-  { key: 'ventas.cash-ticket', module: 'ventas', moduleLabel: 'Ventas', label: 'Ticket de caja', structure: 'print', source: 'printPosTicket' },
+  { key: 'ventas.cash-ticket', module: 'ventas', moduleLabel: 'Ventas', label: 'Ticket de caja', structure: 'print', family: 'cash-ticket', source: 'printPosTicket' },
   { key: 'ventas.cash-historical-report', module: 'ventas', moduleLabel: 'Ventas', label: 'Reporte histórico de caja', structure: 'report', family: 'cash', source: 'generateHistoricalCashReportPDF' },
   { key: 'ventas.customer-history', module: 'ventas', moduleLabel: 'Ventas', label: 'Historial de cliente', structure: 'history', source: 'customerTransactionsExport' },
 
@@ -63,6 +64,8 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'finanzas.balance', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Balance general', structure: 'report', source: 'FinanceBalanceView.exportPDF' },
   { key: 'finanzas.transactions', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Tabla financiera', structure: 'report', source: 'FinanceTableView.exportPDF' },
   { key: 'contabilidad.trial-balance', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Balance de comprobación', structure: 'report', source: 'BalanceComprobacionView.handlePrint' },
+  { key: 'contabilidad.journal', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Libro Diario', structure: 'report', source: 'DiarioView.handleExportPDF' },
+  { key: 'contabilidad.ledger', module: 'contabilidad', moduleLabel: 'Contabilidad', label: 'Libro Mayor', structure: 'report', source: 'LibroMayorView.handleExportPDF' },
   { key: 'recursos-humanos.payrolls', module: 'recursos-humanos', moduleLabel: 'Recursos Humanos', label: 'Reporte de nóminas', structure: 'report', source: 'NominasView.handleExportPDF' },
 
   { key: 'reportes.customers', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de clientes', structure: 'report', source: 'CustomersReportTab.exportPDF' },
@@ -72,7 +75,8 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'reportes.providers', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de proveedores', structure: 'report', source: 'ProvidersReportTab.exportPDF' },
   { key: 'reportes.finance', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte financiero', structure: 'report', source: 'FinanceReportTab.exportPDF' },
   { key: 'reportes.hr', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de capital humano', structure: 'report', source: 'HRReportTab.exportPDF' },
-  { key: 'dashboard.tenant-overview', module: 'dashboard', moduleLabel: 'Dashboard', label: 'Reporte del dashboard', structure: 'dashboard', source: 'TenantOverview.handleExport' },
+  { key: 'dashboard.tenant-overview', module: 'dashboard', moduleLabel: 'Dashboard', label: 'Reporte del dashboard', structure: 'dashboard', source: 'ExecutiveTenantOverview.exportDashboard' },
+  { key: 'portal.customer-summary', module: 'portal-clientes', moduleLabel: 'Portal de clientes', label: 'Resumen del portal de clientes', structure: 'report', source: 'exportCustomerPortalPdf' },
 ];
 
 export type PdfTemplatePartyMode = 'customer' | 'supplier' | 'requester' | 'payee' | 'none';

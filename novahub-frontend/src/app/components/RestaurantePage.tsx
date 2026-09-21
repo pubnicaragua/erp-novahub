@@ -20,7 +20,7 @@ import {
   Utensils,
   X,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';

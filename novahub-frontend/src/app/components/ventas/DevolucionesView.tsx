@@ -9,7 +9,7 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { invoicesService, salesReturnsService } from '../../services/ventas.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import type { SalesReturn, Customer, Invoice, Product, SalesPaginationControls, SelectedSalesReturnCharge } from '../../types';

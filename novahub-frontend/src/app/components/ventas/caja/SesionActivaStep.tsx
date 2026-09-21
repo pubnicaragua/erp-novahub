@@ -10,7 +10,7 @@ import { Calculator, ArrowDownToLine, Plus, Printer, Lock, Vault, BarChart3, Lan
 import { CashRegisterSession, SessionLog, CashRegisterCount, CashClosureMode, cajaService } from '../../../services/caja.service';
 import { MovimientoManualModal } from './MovimientoManualModal';
 import { DenominationCounter, NIO_BILLS, NIO_COINS, USD_BILLS, USD_COINS, DenominationState } from './DenominationCounter';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useCurrency } from '../../../contexts/CurrencyContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTheme } from '../../../contexts/ThemeContext';

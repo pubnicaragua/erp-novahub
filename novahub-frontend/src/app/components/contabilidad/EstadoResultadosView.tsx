@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Search, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3, Settings2, Download } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { ReportSectionsDialog } from './ReportSectionsDialog';

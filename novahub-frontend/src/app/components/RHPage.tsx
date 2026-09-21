@@ -13,7 +13,7 @@ import { ConfirmDialog } from './ui/ConfirmDialog';
 import { employeesService, payrollService, timeOffService } from '../services/rh.service';
 import type { Employee, Payroll, TimeOff, PaginatedResponse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 interface RHPageProps {

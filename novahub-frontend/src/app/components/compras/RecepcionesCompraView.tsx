@@ -18,7 +18,7 @@ import type { SalesPaginationControls, InventoryCostOperation } from '../../type
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { TaxTypeSelect } from '../ui/TaxSelector';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';

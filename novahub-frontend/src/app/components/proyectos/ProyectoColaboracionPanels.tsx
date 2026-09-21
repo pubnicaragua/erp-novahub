@@ -12,7 +12,7 @@ import { storageService } from '../../services/storage.service';
 import { projectsService, type ProjectActivity, type ProjectDocument, type ProjectMember } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ACTIVITY_TYPE_LABEL, formatDate } from './shared';
 
 interface PanelsProps { projectId: string; }

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { priceListsService, type PriceListItem } from '../../services/price-lists.service';
 import type { ProductVariant } from '../../types/variants';
 import { buildVariantDescription } from '../../types/variants';

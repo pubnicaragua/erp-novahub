@@ -25,7 +25,7 @@ import {
 import { tasksService } from '../../services/actividades.service';
 import { usersService } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';

@@ -5,7 +5,7 @@ import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import { accountsService, sourceDocumentsService } from '../../services/finanzas.service'
 import { paymentsMadeService } from '../../services/compras.service'
-import { toast } from 'sonner'
+import { toast } from '@/app/services/toast'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, ComposedChart, Cell, Legend,

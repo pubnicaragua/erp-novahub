@@ -3,6 +3,7 @@ import {
   useMemo,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent,
@@ -77,7 +78,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatCurrencyDescriptor, getCurrencyMetadata } from "../utils/currency";
 import { getReadableForeground } from "../utils/color-contrast";
 import { THEME_PRESETS, type ThemePreset } from "../constants/themePresets";
-import { toast } from "sonner";
+import { toast } from "@/app/services/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -136,6 +137,7 @@ const MANAGER_INVENTORY_VIEW_ICONS: Record<ManagerInventoryView, LucideIcon> = {
   losses: TrendingDown,
   movements: History,
   assets: Boxes,
+  brands: Tags,
 };
 
 const MANAGER_SALES_VIEW_ICONS: Record<ManagerSalesView, LucideIcon> = {
@@ -168,6 +170,13 @@ const MANAGER_PURCHASES_VIEW_ICONS: Record<ManagerPurchasesView, LucideIcon> = {
   requests: ClipboardCheck,
   management: FileText,
 };
+
+function canReadCorporateWarehouses(group?: ManagerGroup) {
+  const access = group?.managerAccess;
+  if (access?.isOwner) return true;
+  const permissions = Array.isArray(access?.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
+  return permissions.some((permission) => String(permission.module || '').toUpperCase() === 'MANAGER_WAREHOUSES' && permission.read === true);
+}
 
 const MANAGER_FINANCE_VIEW_ICONS: Record<ManagerFinanceView, LucideIcon> = {
   overview: LayoutDashboard,
@@ -254,7 +263,6 @@ export type ManagerSection =
   | "novachat"
   | "support"
   | "users"
-  | "managers"
   | "settings"
   | "catalog"
   | "consolidated"
@@ -302,12 +310,6 @@ export const MANAGER_SECTIONS: Array<{
     group: "Operaciones",
   },
   { id: "users", label: "Usuarios", icon: Users, group: "Administración" },
-  {
-    id: "managers",
-    label: "Accesos Manager",
-    icon: ShieldCheck,
-    group: "Administración",
-  },
   { id: "settings", label: "Configuración", icon: Settings2, group: "Sistema" },
 ];
 
@@ -405,14 +407,25 @@ export function ManagerShell({
   const [expandedSection, setExpandedSection] = useState<ManagerSection | null>(
     () => (section === "inventory" || section === "sales" || section === "purchases" || section === "finances" || section === "accounting" || section === "reports" || section === "hr" || isManagerOperationSection(section) ? section : null),
   );
-  const { user, logout } = useAuth();
+  const { user, logout, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const { currency, displayMode, setDisplayMode, displayModeLabel } = useCurrency();
   const { themeConfig, updateTheme, resetTheme } = useTheme();
+  const isManagerThemeUser = Boolean(user && !user.isPlatformAdmin && (
+    user.userType === "manager" || user.role === "manager"
+  ));
+  const canViewTheme = canPerform("CONFIG_BRANDING", "view") || isManagerThemeUser;
+  const canEditTheme = canPerform("CONFIG_BRANDING", "edit") || isManagerThemeUser;
   const [isSavingTheme, setIsSavingTheme] = useState(false);
   const [themeMode, setThemeMode] = useState<"light" | "dark">(
     () => (document.documentElement.classList.contains("dark") || readPersistedDarkMode() ? "dark" : "light"),
   );
+
+  useLayoutEffect(() => {
+    const isDark = readPersistedDarkMode();
+    document.documentElement.classList.toggle("dark", isDark);
+    setThemeMode(isDark ? "dark" : "light");
+  }, []);
   const activePresetName = useMemo(() => {
     const currentPrimary = String(themeConfig.colors.primary || '').toLowerCase();
     return THEME_PRESETS.find((preset) => preset.primary.toLowerCase() === currentPrimary)?.name || null;
@@ -580,7 +593,6 @@ export function ManagerShell({
       playNotificationSound();
       toast.info(notification.title || 'Nueva notificación del Manager', {
         description: notification.message || 'Tienes una novedad pendiente de revisar.',
-        duration: 6_000,
         position: 'top-right',
         action: { label: 'Abrir', onClick: () => openManagerNotification(notification) },
       });
@@ -693,7 +705,7 @@ export function ManagerShell({
   };
 
   const saveSharedTheme = async () => {
-    if (isSavingTheme) return;
+    if (!canViewTheme || !canEditTheme || isSavingTheme) return;
     setIsSavingTheme(true);
     try {
       await brandingService.updateTheme({ paletteMode: themeConfig.paletteMode, colors: themeConfig.colors });
@@ -707,9 +719,10 @@ export function ManagerShell({
   };
 
   const resetSharedTheme = async () => {
-    resetTheme();
+    if (!canViewTheme || !canEditTheme) return;
     try {
       await brandingService.updateTheme(null);
+      resetTheme();
       toast.info("Tema personal restaurado al predeterminado");
     } catch (error) {
       console.error("Error restaurando el tema del Manager:", error);
@@ -737,6 +750,7 @@ export function ManagerShell({
           onClose={() => setSidebarOpen(false)}
           groupName={displayGroupName}
           groupLogo={displayGroupLogo}
+          canViewCorporateWarehouses={canReadCorporateWarehouses(group)}
           sections={visibleSections}
           settingsView={settingsView}
           onSettingsViewChange={onSettingsViewChange}
@@ -1001,6 +1015,8 @@ export function ManagerShell({
                 themeConfig={themeConfig}
                 themeMode={themeMode}
                 activePresetName={activePresetName}
+                canViewBranding={canViewTheme}
+                canEditBranding={canEditTheme}
                 onPresetChange={(preset) => {
                   updateTheme({
                     primary: preset.primary,
@@ -1038,6 +1054,7 @@ function ManagerSidebar({
   onClose,
   groupName,
   groupLogo,
+  canViewCorporateWarehouses,
   sections = MANAGER_SECTIONS,
   settingsView = "theme",
   onSettingsViewChange,
@@ -1067,6 +1084,7 @@ function ManagerSidebar({
   onClose: () => void;
   groupName?: string;
   groupLogo?: string | null;
+  canViewCorporateWarehouses: boolean;
   sections?: typeof MANAGER_SECTIONS;
   settingsView?: ManagerSettingsView;
   onSettingsViewChange?: (view: ManagerSettingsView) => void;
@@ -1272,7 +1290,7 @@ function ManagerSidebar({
                               ) : (isManagerOperationSection(item.id)
                                 ? MANAGER_OPERATION_VIEWS[item.id]
                                 : item.id === "inventory"
-                                ? MANAGER_INVENTORY_VIEWS
+                                ? MANAGER_INVENTORY_VIEWS.filter((view) => view.id !== "corporateWarehouses" || canViewCorporateWarehouses)
                                 : item.id === "sales"
                                   ? VISIBLE_MANAGER_SALES_VIEWS
                                   : item.id === "purchases"
@@ -1285,7 +1303,8 @@ function ManagerSidebar({
                                           ? MANAGER_REPORTS_VIEWS
                                           : MANAGER_HR_VIEWS
                               ).map((view) => {
-                                const isOperation = isManagerOperationSection(item.id);
+                                const operationModule = isManagerOperationSection(item.id) ? item.id : null;
+                                const isOperation = operationModule !== null;
                                 const isInventory = item.id === "inventory";
                                 const isSales = item.id === "sales";
                                 const isPurchases = item.id === "purchases";
@@ -1307,8 +1326,8 @@ function ManagerSidebar({
                                   : isReports
                                             ? MANAGER_REPORTS_VIEW_ICONS[view.id as ManagerReportsView]
                                             : MANAGER_HR_VIEW_ICONS[view.id as ManagerHrView]) || FileText;
-                                const subActive = isOperation
-                                  ? (operationViews[item.id] || 'overview') === view.id
+                                const subActive = operationModule
+                                  ? (operationViews[operationModule] || 'overview') === view.id
                                   : isInventory
                                     ? inventoryView === view.id
                                   : isSales
@@ -1323,7 +1342,7 @@ function ManagerSidebar({
                                             ? reportView === view.id
                                             : hrView === view.id;
                                 const selectView = () => {
-                                  if (isOperation) onOperationViewChange(item.id, view.id);
+                                  if (operationModule) onOperationViewChange(operationModule, view.id);
                                   else if (isInventory) onInventoryViewChange(view.id as ManagerInventoryView);
                                   else if (isSales) onSalesViewChange(view.id as ManagerSalesView);
                                   else if (isPurchases) onPurchasesViewChange(view.id as ManagerPurchasesView);
@@ -1423,6 +1442,8 @@ function ManagerThemeSettings({
   themeConfig,
   themeMode,
   activePresetName,
+  canViewBranding,
+  canEditBranding,
   onPresetChange,
   onPaletteModeChange,
   onToggleTheme,
@@ -1433,6 +1454,8 @@ function ManagerThemeSettings({
   themeConfig: ThemeConfig;
   themeMode: "light" | "dark";
   activePresetName: string | null;
+  canViewBranding: boolean;
+  canEditBranding: boolean;
   onPresetChange: (preset: ThemePreset) => void;
   onPaletteModeChange: (mode: ThemePaletteMode) => void;
   onToggleTheme: (event?: MouseEvent<HTMLElement>) => void;
@@ -1461,41 +1484,49 @@ function ManagerThemeSettings({
               </Button>
             </div>
           </section>
-          <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-sm sm:p-6">
-            <div>
-              <h3 className="text-lg font-black uppercase italic tracking-tight">Paletas de color</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Las mismas paletas y modos de aplicación disponibles en la configuración de sucursal.</p>
-            </div>
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {THEME_PRESETS.map((preset) => (
-                <button key={preset.name} type="button" onClick={() => onPresetChange(preset)} aria-pressed={activePresetName === preset.name}
-                  className={cn("flex min-w-0 items-center gap-3 rounded-2xl border p-4 text-left transition-colors", activePresetName === preset.name ? "border-primary bg-primary/10" : "border-border/60 hover:border-primary/50")}>
-                  <span className="size-10 shrink-0 rounded-xl shadow-inner" style={{ background: preset.primary }} />
-                  <span className="min-w-0 flex-1"><span className="block text-sm font-black">{preset.name}</span><span className="mt-1 block text-xs text-muted-foreground">{preset.description}</span></span>
-                  {activePresetName === preset.name && <span className="shrink-0 text-sm font-black text-primary">✓</span>}
+          {canViewBranding ? (
+            <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-sm sm:p-6">
+              <div>
+                <h3 className="text-lg font-black uppercase italic tracking-tight">Paletas de color</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Las mismas paletas y modos de aplicación disponibles en la configuración de sucursal.</p>
+                {!canEditBranding && <p className="mt-2 text-xs text-muted-foreground">Tu acceso permite consultar el tema, pero no modificarlo.</p>}
+              </div>
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {THEME_PRESETS.map((preset) => (
+                  <button key={preset.name} type="button" onClick={() => onPresetChange(preset)} aria-pressed={activePresetName === preset.name} disabled={!canEditBranding}
+                    className={cn("flex min-w-0 items-center gap-3 rounded-2xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60", activePresetName === preset.name ? "border-primary bg-primary/10" : "border-border/60 hover:border-primary/50")}>
+                    <span className="size-10 shrink-0 rounded-xl shadow-inner" style={{ background: preset.primary }} />
+                    <span className="min-w-0 flex-1"><span className="block text-sm font-black">{preset.name}</span><span className="mt-1 block text-xs text-muted-foreground">{preset.description}</span></span>
+                    {activePresetName === preset.name && <span className="shrink-0 text-sm font-black text-primary">✓</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Modo de aplicación de la paleta">
+                <button type="button" role="radio" aria-checked={!isComplete} onClick={() => onPaletteModeChange("details")} disabled={!canEditBranding}
+                  className={cn("rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60", !isComplete ? "border-primary bg-background shadow-sm" : "border-border/60 hover:border-primary/40")}>
+                  <span className="text-sm font-bold">{!isComplete ? "✓ " : ""}Modo detalles</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Cambia los elementos internos; el sidebar se mantiene neutral según el modo.</span>
                 </button>
-              ))}
-            </div>
-            <div className="mt-5 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Modo de aplicación de la paleta">
-              <button type="button" role="radio" aria-checked={!isComplete} onClick={() => onPaletteModeChange("details")}
-                className={cn("rounded-xl border p-3 text-left transition-colors", !isComplete ? "border-primary bg-background shadow-sm" : "border-border/60 hover:border-primary/40")}>
-                <span className="text-sm font-bold">{!isComplete ? "✓ " : ""}Modo detalles</span>
-                <span className="mt-1 block text-xs text-muted-foreground">Cambia los elementos internos; el sidebar se mantiene neutral según el modo.</span>
-              </button>
-              <button type="button" role="radio" aria-checked={isComplete} onClick={() => onPaletteModeChange("complete")}
-                className={cn("rounded-xl border p-3 text-left transition-colors", isComplete ? "border-primary bg-background shadow-sm" : "border-border/60 hover:border-primary/40")}>
-                <span className="text-sm font-bold">{isComplete ? "✓ " : ""}Modo completo</span>
-                <span className="mt-1 block text-xs text-muted-foreground">Aplica también la tonalidad de la paleta al sidebar.</span>
-              </button>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button type="button" className="rounded-xl" onClick={onSaveTheme} disabled={isSavingTheme}>
-                {isSavingTheme ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}
-                {isSavingTheme ? "Guardando…" : "Guardar tema"}
-              </Button>
-              <Button type="button" variant="outline" className="rounded-xl" onClick={onResetTheme}>Restaurar predeterminado</Button>
-            </div>
-          </section>
+                <button type="button" role="radio" aria-checked={isComplete} onClick={() => onPaletteModeChange("complete")} disabled={!canEditBranding}
+                  className={cn("rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60", isComplete ? "border-primary bg-background shadow-sm" : "border-border/60 hover:border-primary/40")}>
+                  <span className="text-sm font-bold">{isComplete ? "✓ " : ""}Modo completo</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Aplica también la tonalidad de la paleta al sidebar.</span>
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button type="button" className="rounded-xl" onClick={onSaveTheme} disabled={!canEditBranding || isSavingTheme}>
+                  {isSavingTheme ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}
+                  {isSavingTheme ? "Guardando…" : "Guardar tema"}
+                </Button>
+                <Button type="button" variant="outline" className="rounded-xl" onClick={onResetTheme} disabled={!canEditBranding}>Restaurar predeterminado</Button>
+              </div>
+            </section>
+          ) : (
+            <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-sm sm:p-6">
+              <h3 className="text-lg font-black uppercase italic tracking-tight">Paletas de color</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Esta cuenta no tiene permiso para consultar o cambiar paletas personalizadas. Se mantiene el tema predeterminado de NovaHub.</p>
+            </section>
+          )}
         </div>
         <aside className="h-fit rounded-3xl border border-primary/20 bg-primary/5 p-5 sm:p-6">
           <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Settings2 className="size-5" /></div>

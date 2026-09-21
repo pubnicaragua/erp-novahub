@@ -14,7 +14,7 @@ import {
 } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';

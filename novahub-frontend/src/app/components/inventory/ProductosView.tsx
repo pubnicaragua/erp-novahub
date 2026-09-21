@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Combobox } from '../ui/Combobox';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';

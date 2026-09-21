@@ -23,7 +23,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../ui/utils';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { translatePaymentMethodText } from '../../utils/paymentMethods';

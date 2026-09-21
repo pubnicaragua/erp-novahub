@@ -11,7 +11,7 @@ import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { accountsService, sourceDocumentsService } from '../../services/finanzas.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard, financeCategoryLabel } from './financeChartTheme';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';

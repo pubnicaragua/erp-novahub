@@ -5,7 +5,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
 import {

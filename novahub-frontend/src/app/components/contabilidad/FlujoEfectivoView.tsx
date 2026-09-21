@@ -12,7 +12,7 @@ import { Search, Filter, X, ArrowUpCircle, ArrowDownCircle, DollarSign, ChevronD
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { api } from '../../services/api';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { useAccountingQuery, accountingList } from '../../hooks/useAccountingQuery';
 import { useQueryClient } from '@tanstack/react-query';

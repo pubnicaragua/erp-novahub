@@ -4,7 +4,7 @@ import { Button } from '../../ui/button';
 import { Lock } from 'lucide-react';
 import { DenominationCounter, NIO_BILLS, NIO_COINS, USD_BILLS, USD_COINS, DenominationState } from './DenominationCounter';
 import { useCurrency } from '../../../contexts/CurrencyContext';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { getApiErrorMessage } from '../../../services/api';
 
 interface AperturaCajaStepProps {

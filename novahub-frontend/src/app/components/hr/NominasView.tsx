@@ -4,7 +4,7 @@ import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, 
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';

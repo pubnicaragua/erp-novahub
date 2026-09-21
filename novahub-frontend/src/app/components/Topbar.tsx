@@ -46,7 +46,7 @@ import { navigateToNotification } from '../utils/notificationNavigation';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { persistThemeMode, readPersistedDarkMode } from '../utils/theme-mode';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Label } from './ui/label';
 import { usersService } from '../services/users.service';

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAuth } from '../contexts/AuthContext';
 
 import { ProductosView, type ProductExportOptions, type ProductStatusFilter } from './inventory/ProductosView';

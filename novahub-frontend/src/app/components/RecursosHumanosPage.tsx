@@ -130,13 +130,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           ]);
           return { payrolls, employees };
         }
-        case 'comisiones': {
-          const [employees, departments] = await Promise.all([
-            hrService.getEmployees(page, signal),
-            hrService.getDepartments(signal),
-          ]);
-          return { employees, departments };
-        }
+        case 'comisiones':
+          return {};
         case 'asistencia': {
           const [attendance, employees] = await Promise.all([
             hrService.getAttendanceRecords(page, signal),
@@ -206,7 +201,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     users: list(hrQuery.data?.users),
     stats: hrQuery.data?.stats || null,
   }), [hrQuery.data]);
-  const loading = hrQuery.isLoading;
+  const loading = activeTab !== 'comisiones' && hrQuery.isLoading;
   const queryError = hrQuery.error as any;
   const errorMessage = queryError?.response?.data?.message || queryError?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
   const refreshData = (detail?: NotificationDomainRefreshDetail) => {
@@ -246,8 +241,13 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             // La suscripción al módulo padre (HR) habilita todas sus vistas,
             // incluso con submódulos granulares contratados.
             const hasFallback = user?.enabledModules?.includes('HR');
-            const permissionModule = tab.id === 'comisiones' ? 'HR_COMMISSIONS' : tab.module;
-            const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(permissionModule, 'view');
+            const isCommissionsTab = tab.id === 'comisiones';
+            const hasCommissionSubscription = !user?.enabledModules || user.enabledModules.some((module) => ['HR', 'HR_PAYROLL', 'HR_COMMISSIONS'].includes(module));
+            const hasSubscriptionAccess = isCommissionsTab ? hasCommissionSubscription : (!user?.enabledModules || hasRequired || hasFallback);
+            const hasPermission = isCommissionsTab
+              ? canPerform('HR_COMMISSIONS', 'view') || canPerform('HR_COMMISSIONS_CONFIG', 'view')
+              : canPerform(tab.module, 'view');
+            const hasAccess = hasSubscriptionAccess && hasPermission;
             if (!hasAccess) return null;
             return (
               <TabsTrigger 

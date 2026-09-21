@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect, useCallback } from 'react';
 import { useCajaSession } from '../../hooks/useCajaSession';
 import { cajaService, CashRegister } from '../../services/caja.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
