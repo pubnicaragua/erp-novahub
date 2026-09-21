@@ -1,6 +1,7 @@
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget, type PdfTemplateTarget } from './pdf-document-catalog';
 
-export type PdfTemplateNodeType = 'section' | 'text' | 'field' | 'table' | 'report-sections' | 'totals' | 'image' | 'barcode' | 'divider' | 'spacer';
+export type PdfTemplateNodeType = 'section' | 'text' | 'field' | 'table' | 'report-sections' | 'chart' | 'totals' | 'image' | 'barcode' | 'divider' | 'spacer';
+export type PdfTemplateChartType = 'area' | 'bar' | 'donut';
 export type PdfTemplateHorizontalAlign = 'left' | 'center' | 'right';
 
 export interface PdfTemplateColumn {
@@ -34,6 +35,16 @@ export interface PdfTemplateKpi {
   label: string;
   value: string;
   detail: string;
+}
+
+export interface PdfTemplateChart {
+  id: string;
+  title: string;
+  type: PdfTemplateChartType;
+  labels: string[];
+  values?: number[];
+  series?: Array<{ label: string; values: number[]; color?: string }>;
+  colors?: string[];
 }
 
 export interface PdfTemplateNode {
@@ -75,6 +86,7 @@ export interface PdfTemplateNode {
   tableHeaderTextColor?: string;
   tableRowColor?: string;
   tableStripeColor?: string;
+  chartType?: PdfTemplateChartType;
   reportSectionVisibility?: Record<string, boolean>;
   reportSectionStyles?: Record<string, PdfTemplateReportSectionStyle>;
   repeatHeader?: boolean;
@@ -104,6 +116,8 @@ export interface PdfTemplateData {
   history?: Array<Record<string, unknown>>;
   reportSections?: PdfTemplateReportSection[];
   reportKpis?: PdfTemplateKpi[];
+  dashboardCharts?: PdfTemplateChart[];
+  dashboardPreferences?: { indicators?: string[]; blocks?: string[] };
 }
 
 export const TEMPLATE_TOKENS = [
@@ -239,7 +253,28 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     title: string,
     headers: string[],
     values: Array<Array<string | number>> = [],
-  ): PdfTemplateReportSection => ({
+  ): PdfTemplateReportSection => {
+    const sampleValue = (header: string, rowIndex: number) => {
+      const label = header.toLocaleLowerCase('es-NI');
+      if (/fecha|per[ií]odo|mes|ingreso|vencimiento|entrega|inicio|fin/.test(label)) return rowIndex ? '07/08/2026' : '08/09/2026';
+      if (/participaci[oó]n|margen|rotaci[oó]n|porcentaje|cobertura/.test(label)) return rowIndex ? '12.4%' : '18.5%';
+      if (/cliente/.test(label)) return rowIndex ? 'Distribuidora Central' : 'Comercial La Colonia';
+      if (/proveedor/.test(label)) return rowIndex ? 'Suministros del Norte' : 'Distribuciones Vega';
+      if (/colaborador|empleado/.test(label)) return rowIndex ? 'Luis Pérez' : 'Ana Martínez';
+      if (/producto|insumo/.test(label)) return rowIndex ? 'Tóner compatible TN-450' : 'Papel carta Premium';
+      if (/sucursal|bodega/.test(label)) return rowIndex ? 'Bodega Central' : 'Tienda 1';
+      if (/categor[ií]a|segmento|origen|tipo|estado|status|departamento|cargo|forma de pago|cuenta/.test(label)) return rowIndex ? 'Operaciones' : 'Ventas';
+      if (/indicador/.test(label)) return rowIndex ? 'Operaciones del período' : 'Ventas pagadas';
+      if (/detalle|interpretaci[oó]n|alcance|f[oó]rmula|incidencias/.test(label)) return rowIndex ? 'Comparación con el período anterior' : 'Datos del período consultado';
+      if (/unidades|cantidad|productos|facturas|proveedores|pagos|d[ií]as|operaciones|movimientos|colaboradores|sesiones|bajas|altas|existencia|stock|l[ií]neas|documentos/.test(label)) return rowIndex ? '18' : '42';
+      if (/monto|valor|saldo|precio|importe|ventas|compras|costo|salario|ingreso|egreso|flujo|cobro|total|debe|haber|utilidad|inversi[oó]n|capital|liquidez|presupuesto/.test(label)) return rowIndex ? 'C$ 8,725.00' : 'C$ 24,500.00';
+      return rowIndex ? 'Registro de muestra 2' : 'Registro de muestra 1';
+    };
+    const rows = values.length ? values : [
+      headers.map(header => sampleValue(header, 0)),
+      headers.map(header => sampleValue(header, 1)),
+    ];
+    return ({
     id,
     title,
     columns: headers.map((label, index) => ({
@@ -249,10 +284,17 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       width: 100 / headers.length,
       align: index === 0 ? 'left' : 'right',
     })),
-    rows: values.map((row) =>
+    rows: rows.map((row) =>
       Object.fromEntries(row.map((value, index) => [`column-${index}`, value])),
     ),
   });
+  };
+
+  const sampleKpiValue = (label: string, index: number) => /margen|ratio|rotaci[oó]n|participaci[oó]n|asistencia|antig[uü]edad/.test(label.toLocaleLowerCase('es-NI'))
+    ? `${18 + index * 3}.5%`
+    : /activo|factura|producto|colaborador|movimiento|unidades|cuenta|sesiones|saldo|cliente|proveedor|pendiente/.test(label.toLocaleLowerCase('es-NI'))
+      ? (index + 1) * 24
+      : `C$ ${(24500 + index * 1825).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   if (target.key === 'ventas.customer-history') {
     const history = [
@@ -296,6 +338,80 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       items: reportSections[2].rows,
       rows: reportSections[2].rows,
     };
+  }
+  if (target.structure === 'dashboard') {
+    const dashboardCharts: PdfTemplateChart[] = [
+      { id: 'dashboard.trend', title: 'Evolución del período', type: 'area', labels: ['01 sep', '03 sep', '05 sep', '07 sep', '09 sep'], series: [{ label: 'Ventas pagadas', values: [7200, 10400, 8300, 15600, 12450], color: '#10b981' }, { label: 'Gastos registrados', values: [2100, 2800, 3400, 2500, 3900], color: '#2563eb' }] },
+      { id: 'dashboard.attention', title: 'Atención requerida', type: 'donut', labels: ['Órdenes abiertas', 'Agotados', 'Stock bajo', 'Reordenar'], values: [7, 3, 5, 4], colors: ['#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'] },
+      { id: 'dashboard.products-sales', title: 'Productos más vendidos', type: 'bar', labels: ['Papel carta Premium', 'Tóner TN-450', 'Carpeta ejecutiva'], values: [48, 32, 21], colors: ['#10b981', '#2563eb', '#f59e0b'] },
+      { id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: ['Tóner TN-450', 'Resma Premium', 'Carpeta ejecutiva'], values: [6200, 4850, 3120], colors: ['#10b981', '#2563eb', '#f59e0b'] },
+      { id: 'dashboard.registers', title: 'Ventas por caja', type: 'bar', labels: ['Caja 1', 'Caja 2', 'Caja 3'], values: [18400, 12100, 8350], colors: ['#10b981', '#2563eb', '#f59e0b'] },
+    ];
+    const reportSections = [
+      reportSection('dashboard-attention', 'Atención requerida', ['Prioridad', 'Cantidad', 'Detalle'], [['Órdenes abiertas', '7', 'Seguimiento comercial pendiente'], ['Productos con alerta', '12', 'Revisar existencias por bodega']]),
+      reportSection('dashboard-products', 'Desempeño de productos', ['Producto', 'Unidades', 'Venta neta'], [['Papel carta Premium', '48', 'C$ 24,500.00'], ['Tóner compatible TN-450', '32', 'C$ 18,725.00']]),
+      reportSection('dashboard-registers', 'Ventas por caja', ['Caja', 'Operaciones', 'Ventas pagadas'], [['Caja 1 · Tienda principal', '36', 'C$ 18,400.00'], ['Caja 2 · Sucursal norte', '24', 'C$ 12,100.00']]),
+      reportSection('dashboard-transactions', 'Actividad reciente', ['Documento', 'Cliente', 'Monto', 'Estado'], [['FAC-001245', 'Comercial La Colonia', 'C$ 4,850.00', 'Pagada'], ['FAC-001244', 'Distribuidora Central', 'C$ 2,300.00', 'Pagada']]),
+    ];
+    return {
+      ...base,
+      document: { ...base.document, title: 'RESUMEN DE GESTIÓN', number: 'DASH-0001', period: 'Período: 01/09/2026 al 09/09/2026', notes: 'Indicadores y bloques seleccionados en el dashboard.' },
+      reportKpis: [
+        { label: 'VENTAS PAGADAS', value: 'C$ 42,850.00', detail: 'En el período' },
+        { label: 'GASTOS REGISTRADOS', value: 'C$ 12,400.00', detail: 'En el período' },
+        { label: 'FACTURAS PAGADAS', value: '84', detail: 'Operaciones' },
+        { label: 'TICKET PROMEDIO', value: 'C$ 510.12', detail: 'Por factura' },
+      ],
+      dashboardCharts,
+      dashboardPreferences: { indicators: ['totalRevenue', 'totalExpenses', 'paidInvoicesCount', 'averagePaidInvoice'], blocks: ['trend', 'attention', 'products', 'registers', 'transactions'] },
+      reportSections,
+      items: reportSections.flatMap(section => section.rows),
+      rows: reportSections.flatMap(section => section.rows),
+    };
+  }
+  if (target.key === 'portal.customer-summary') {
+    const reportSections = [
+      reportSection('portal-inventory', 'Mi inventario', ['Producto / código', 'Variante / SKU', 'Bodega', 'Disponibles', 'Valor disponible'], [
+        ['Papel carta Premium / PAP-001', 'Caja 10 resmas / PAP-001-10', 'Tienda 1', '24', 'C$ 18,750.00'],
+        ['Tóner compatible TN-450 / TON-450', 'Negro / TN-450-N', 'Bodega Central', '8', 'C$ 6,400.00'],
+      ]),
+      reportSection('portal-sales', 'Mis ventas y facturas', ['Fecha', 'Factura', 'Estado', 'Productos', 'Total', 'Pagado', 'Saldo'], [
+        ['08/09/2026', 'FAC-001245', 'Pagada', 'Papel carta Premium', 'C$ 4,850.00', 'C$ 4,850.00', 'C$ 0.00'],
+        ['05/09/2026', 'FAC-001231', 'Pendiente', 'Tóner compatible TN-450', 'C$ 2,300.00', 'C$ 1,000.00', 'C$ 1,300.00'],
+      ]),
+    ];
+    return {
+      ...base,
+      company: { ...base.company, name: 'NovaHub Comercial' },
+      customer,
+      party: customer,
+      document: { ...base.document, title: 'RESUMEN DEL PORTAL DE CLIENTES', number: 'PORTAL-0001', date: '09/09/2026', period: 'Información de inventario y ventas atribuida al cliente.' },
+      reportKpis: [
+        { label: 'VENTAS DE HOY', value: 'C$ 4,850.00', detail: '1 factura' },
+        { label: 'VENTAS DEL MES', value: 'C$ 28,450.00', detail: '12 facturas' },
+        { label: 'UNIDADES DISPONIBLES', value: '32', detail: '2 productos' },
+        { label: 'SALDO PENDIENTE', value: 'C$ 1,300.00', detail: '1 factura' },
+      ],
+      reportSections,
+      items: reportSections.flatMap(section => section.rows),
+      rows: reportSections.flatMap(section => section.rows),
+    };
+  }
+  if (target.key === 'contabilidad.journal') {
+    const entries = [
+      ['AS-000124', '08/09/2026', 'Venta de factura FAC-001245', 'Contabilizado', 'C$ 4,850.00', 'C$ 4,850.00', 'Factura', 'FAC-001245'],
+      ['AS-000123', '07/09/2026', 'Pago a proveedor PRO-00088', 'Contabilizado', 'C$ 2,300.00', 'C$ 2,300.00', 'Pago', 'PAG-00088'],
+      ['AS-000122', '06/09/2026', 'Gasto de servicios básicos', 'Borrador', 'C$ 1,250.00', 'C$ 1,250.00', 'Gasto', 'GAS-00042'],
+    ].map(row => Object.fromEntries(row.map((value, index) => [`column-${index}`, value])));
+    return { ...base, party: undefined, document: { ...base.document, title: 'LIBRO DIARIO', number: 'DIARIO-0001', period: 'Período: 01/09/2026 al 09/09/2026' }, items: entries, rows: entries };
+  }
+  if (target.key === 'contabilidad.ledger') {
+    const entries = [
+      ['08/09/2026', '1101', 'Caja general', 'Activo', 'Venta de factura FAC-001245', 'FAC-001245', 'C$ 4,850.00', 'C$ 0.00', 'C$ 12,350.00'],
+      ['07/09/2026', '2101', 'Proveedores', 'Pasivo', 'Pago a proveedor PRO-00088', 'PAG-00088', 'C$ 2,300.00', 'C$ 0.00', 'C$ 9,700.00'],
+      ['06/09/2026', '4101', 'Ventas', 'Ingreso', 'Factura FAC-001238', 'FAC-001238', 'C$ 0.00', 'C$ 6,250.00', 'C$ -6,250.00'],
+    ].map(row => Object.fromEntries(row.map((value, index) => [`column-${index}`, value])));
+    return { ...base, party: undefined, document: { ...base.document, title: 'LIBRO MAYOR', number: 'MAYOR-0001', period: 'Cuenta: Caja general · Período: 01/09/2026 al 09/09/2026' }, items: entries, rows: entries };
   }
   if (target.module === 'reportes') {
     const reportKpisByTarget: Record<string, PdfTemplateKpi[]> = {
@@ -464,7 +580,11 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       document: { title: target.label.toUpperCase(), number: '', date: '', status: '', notes: '', terms: '', meta: '' },
       totals: {},
       history: [],
-      reportKpis: reportKpisByTarget[target.key] || [],
+      reportKpis: (reportKpisByTarget[target.key] || []).map((kpi, index) => ({
+        ...kpi,
+        value: kpi.value || String(sampleKpiValue(kpi.label, index)),
+        detail: kpi.detail || (index % 2 ? 'Comparado con el período anterior' : 'Período consultado'),
+      })),
       reportSections,
       items: [],
       rows: [],
@@ -569,6 +689,15 @@ function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
     'reportes.subscriptions': ['Cliente', 'Estado', 'Plan', 'Monto'],
     'dashboard.tenant-overview': ['Indicador', 'Valor', 'Detalle'],
   };
+  if (targetKey === 'contabilidad.journal') {
+    return ['# Asiento', 'Fecha', 'Descripción', 'Estado', 'Debe', 'Haber', 'Ref. Tipo', 'Referencia'].map((label, index) => ({ id: `column-${index}`, label, token: `column-${index}`, width: index === 2 ? 23 : 11, align: index === 0 || index === 2 || index === 3 ? 'left' : 'right' }));
+  }
+  if (targetKey === 'contabilidad.ledger') {
+    return ['Fecha', 'Código', 'Cuenta', 'Tipo', 'Descripción', 'Referencia', 'Débito', 'Crédito', 'Saldo'].map((label, index) => ({ id: `column-${index}`, label, token: `column-${index}`, width: index === 4 ? 20 : 10, align: index === 4 ? 'left' : index < 4 ? 'left' : 'right' }));
+  }
+  if (targetKey === 'portal.customer-summary') {
+    return ['Producto / código', 'Variante / SKU', 'Bodega', 'Disponibles', 'Valor disponible'].map((label, index) => ({ id: `column-${index}`, label, token: `column-${index}`, width: index < 2 ? 24 : 17.33, align: index < 3 ? 'left' : 'right' }));
+  }
   const labels = presets[targetKey] || ['Descripción', 'Cant.', 'Precio', 'Total'];
   return labels.map((label, index) => ({
     id: index === 0 ? 'description' : index === 1 ? 'quantity' : index === 2 ? 'unitPrice' : 'total',
@@ -614,17 +743,42 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   const partySectionLabel = party.sectionLabel;
   const hasLogo = Boolean(settings?.logoUrl);
   const isHistoricalCashReport = target.key === 'ventas.cash-historical-report';
-  const reportKpiCount = target.module === 'reportes'
+  const isDashboard = target.structure === 'dashboard';
+  const isPortalSummary = target.key === 'portal.customer-summary';
+  const reportKpiCount = isDashboard ? 4 : isPortalSummary ? 4 : target.module === 'reportes'
     ? ['reportes.hr', 'reportes.finance', 'reportes.sales'].includes(target.key) ? 5 : 4
     : 0;
   const reportKpiColumns = reportKpiCount >= 5 ? 4 : reportKpiCount;
   const reportKpiHeight = 13;
   const reportKpiRowGap = 1;
   const reportKpiRows = reportKpiCount > 0 ? Math.ceil(reportKpiCount / reportKpiColumns) : 0;
-  const reportSectionsY = reportKpiCount > 0
+  const reportSectionsY = isDashboard ? 84 : reportKpiCount > 0
     ? 30 + reportKpiRows * reportKpiHeight + (reportKpiRows - 1) * reportKpiRowGap + 3
     : 46;
   const reportSectionsHeight = reportKpiCount > 0 ? Math.max(20, 91 - reportSectionsY) : 45;
+
+  if (family === 'cash-ticket') {
+    const columns = [
+      { id: 'description', label: 'Descripción', token: 'description', width: 48, align: 'left' as const },
+      { id: 'quantity', label: 'Cant.', token: 'quantity', width: 12, align: 'right' as const },
+      { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 19, align: 'right' as const },
+      { id: 'total', label: 'Total', token: 'total', width: 21, align: 'right' as const },
+    ];
+    return {
+      version: 1,
+      page: { paperSize: settingsValue(settings, 'paperSize', 'ROLL-80'), orientation: 'portrait', background },
+      nodes: [
+        node({ type: 'field', label: 'Empresa', token: 'company.name', x: 5, y: 4, width: 90, height: 7, fontSize: 10, bold: true, align: 'center', borderStyle: 'none' }, 'company-name'),
+        node({ type: 'field', label: 'Título', token: 'document.title', x: 5, y: 12, width: 90, height: 5, fontSize: 8, bold: true, align: 'center', borderStyle: 'none' }, 'document-title'),
+        node({ type: 'field', label: 'Número y fecha', token: 'document.meta', x: 5, y: 18, width: 90, height: 7, fontSize: 6.5, align: 'center', borderStyle: 'none' }, 'ticket-meta'),
+        node({ type: 'field', label: 'Cliente', token: 'customer.name', x: 5, y: 26, width: 90, height: 6, fontSize: 7, borderStyle: 'none' }, 'party-name'),
+        node({ type: 'table', label: 'Detalle del ticket', x: 5, y: 34, width: 90, height: 48, fontSize: 6, columns, repeatHeader: true, tableHeaderColor: '#ffffff', tableHeaderTextColor: text, tableRowColor: '#ffffff', tableStripeColor: '#ffffff' }, 'items-table'),
+        node({ type: 'totals', label: 'Totales', x: 5, y: 84, width: 90, height: 10, fontSize: 7, backgroundColor: '#ffffff', borderColor: line }, 'totals'),
+        node({ type: 'field', label: 'Gracias por su compra', text: 'Gracias por su compra', x: 5, y: 96, width: 90, height: 3, fontSize: 6, align: 'center', borderStyle: 'none' }, 'ticket-footer'),
+      ],
+      metadata: { preset: 'system-default-cash-ticket' },
+    };
+  }
 
   if (family === 'label') {
     return {
@@ -714,7 +868,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     node({ type: 'field', label: 'Datos de la sucursal', token: 'company.summary', x: headerLayout === 'ribbon' ? 43 : headerLayout === 'portal' ? 50 : 8, y: headerLayout === 'compact' ? 16 : 16, width: headerLayout === 'ribbon' ? 52 : headerLayout === 'portal' ? 41 : 46, height: 7, fontSize: 5.8, lineHeight: 1.15, color: headerLayout === 'ribbon' || headerLayout === 'portal' ? text : headerTextColor, align: 'left', borderStyle: 'none', padding: 0.2 }, 'company-summary'),
   ];
   const logoNode = node({ type: 'image', label: 'Logotipo', x: 8, y: 7, width: headerLayout === 'ribbon' ? 11 : 16, height: 8, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent' }, 'company-logo');
-  const reportHeaderFields = target.module === 'reportes'
+  const reportHeaderFields = target.module === 'reportes' || isDashboard || isPortalSummary
     ? [
       ...headerFields.filter(item => ['company-name', 'company-summary', 'document-title'].includes(item.id)),
       node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 24, width: 84, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
@@ -736,7 +890,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     node({ type: 'field', label: party.labels.contact, token: `${party.tokenPrefix}.contact`, x: 62, y: 45.5, width: 30, height: 4, fontSize: 7, color: '#64748b', align: 'right', borderStyle: 'none' }, 'party-contact'),
   ];
 
-  if (target.module === 'reportes') {
+  if (target.module === 'reportes' || isDashboard || isPortalSummary) {
     const kpiWidth = (90 - (reportKpiColumns - 1) * 2) / reportKpiColumns;
     const kpiColors = [primary, secondary, primary, secondary, primary, secondary];
     for (let index = 0; index < reportKpiCount; index += 1) {
@@ -773,7 +927,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
         type: 'report-sections', label: 'Secciones del reporte', x: 5, y: 31, width: 90, height: 60,
         subsequentY: 31, subsequentHeight: 63, backgroundColor: '#ffffff', borderColor: line, color: text, columns: tableColumns, repeatHeader: true,
       }, 'cash-report-sections'));
-    } else if (target.module === 'reportes') {
+    } else if (target.module === 'reportes' || isDashboard || isPortalSummary) {
       nodes.push(node({
         type: 'report-sections', label: 'Secciones del reporte', x: 5, y: reportSectionsY, width: 90, height: reportSectionsHeight,
         subsequentY: 31, subsequentHeight: 63, backgroundColor: '#ffffff', borderColor: line, color: text, columns: tableColumns, repeatHeader: true,
@@ -789,10 +943,18 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 58, width: 90, height: 17, fontSize: 9, color: text }, 'document-notes'));
   }
 
+  if (isDashboard) {
+    nodes.push(node({ type: 'chart', label: 'Evolución del período', token: 'dashboard.trend', chartType: 'area', x: 5, y: 46, width: 90, height: 13, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-trend'));
+    nodes.push(node({ type: 'chart', label: 'Atención requerida', token: 'dashboard.attention', chartType: 'donut', x: 5, y: 61, width: 28, height: 12, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-attention'));
+    nodes.push(node({ type: 'chart', label: 'Productos más vendidos', token: 'dashboard.products-sales', chartType: 'bar', x: 35, y: 61, width: 28, height: 12, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-sales'));
+    nodes.push(node({ type: 'chart', label: 'Utilidad de referencia', token: 'dashboard.products-margin', chartType: 'bar', x: 65, y: 61, width: 30, height: 12, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-margin'));
+    nodes.push(node({ type: 'chart', label: 'Ventas por caja', token: 'dashboard.registers', chartType: 'bar', x: 5, y: 75, width: 90, height: 8, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-registers'));
+  }
+
   if ((family === 'transaction' || family === 'receipt' || family === 'cash') && !isHistoricalCashReport) {
     nodes.push(node({ type: 'totals', label: 'Totales', x: 55, y: 80, width: 40, height: 12, backgroundColor: '#f8fafc', borderColor: line, color: text }, 'totals'));
   }
-  if (target.module !== 'reportes' && !isHistoricalCashReport) nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 80, width: 46, height: 10, fontSize: 8, color: text }, 'notes'));
+  if (target.module !== 'reportes' && !isDashboard && !isPortalSummary && !isHistoricalCashReport) nodes.push(node({ type: 'field', label: 'Notas', token: 'document.notes', x: 5, y: 80, width: 46, height: 10, fontSize: 8, color: text }, 'notes'));
   const footerIsFilled = ['band', 'wave', 'layers', 'notch'].includes(footerLayout);
   if (footerLayout === 'band') {
     nodes.push(node({ type: 'section', label: 'Banda inferior', x: 5, y: 93, width: 90, height: 5, backgroundColor: primary, borderColor: primary, borderRadius: 1 }, 'footer-band'));

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/app/services/toast";
 import { cn } from "./utils";
 import { Button } from "./button";
 

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
-import { toast } from 'sonner'
+import { toast } from '@/app/services/toast'
 import { api } from '../../services/api'
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery'
 

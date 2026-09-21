@@ -23,7 +23,7 @@ import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { MANAGER_PURCHASES_VIEWS, type ManagerPurchasesView } from './manager-purchases.types';
 import { cn } from '../ui/utils';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { PURCHASE_ORDER_STATUS_OPTIONS } from '../../utils/purchaseOrderStatus';
 import { managerStatusLabel } from '../../utils/managerLabels';
 
@@ -85,7 +85,7 @@ function PurchaseBranchLabel({ branchName }: { branchName?: unknown }) {
   return <span className="flex items-start gap-1.5 text-xs font-semibold text-primary"><Building2 className="mt-0.5 size-3.5 shrink-0" /><span className="break-words">{String(branchName || 'Sucursal no identificada')}</span></span>;
 }
 
-export function ManagerPurchasesModule({ view, onViewChange, groupId, businessUnitId, branchId, branches, reportCurrency, onEnterBranch, canEnterBranch = false, canExport = true }: { view: ManagerPurchasesView; onViewChange: (view: ManagerPurchasesView) => void; groupId: string; businessUnitId?: string; branchId?: string; branches: BranchOption[]; reportCurrency: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean; canExport?: boolean }) {
+export function ManagerPurchasesModule({ view, onViewChange, groupId, businessUnitId, branchId, branches, reportCurrency, onEnterBranch, enterableBranchIds = new Set<string>(), canExport = true }: { view: ManagerPurchasesView; onViewChange: (view: ManagerPurchasesView) => void; groupId: string; businessUnitId?: string; branchId?: string; branches: BranchOption[]; reportCurrency: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; enterableBranchIds?: Set<string>; canExport?: boolean }) {
   const { sidebarCollapsed } = useManagerShellNavigation();
   const { user } = useAuth();
   const { displayMode } = useCurrency();
@@ -143,7 +143,7 @@ export function ManagerPurchasesModule({ view, onViewChange, groupId, businessUn
   const panel = document ? buildPurchasePanel(document, activeReportCurrency, detail?.history || [], displayMode) : null;
   const branchTargetId = String(document?.branchId || document?.clientTenantId || selected?.row?.branchId || '');
   const supplierPhone = String(document?.supplierPhone || selected?.row?.supplierPhone || selected?.row?.supplier?.phone || selected?.row?.phone || '').trim();
-  const goToBranch = onEnterBranch && canEnterBranch && branchTargetId ? () => { setSelected(null); void onEnterBranch(groupId, branchTargetId); } : undefined;
+  const goToBranch = onEnterBranch && enterableBranchIds.has(branchTargetId) ? () => { setSelected(null); void onEnterBranch(groupId, branchTargetId); } : undefined;
   const sendWhatsApp = supplierPhone ? () => { const phone = supplierPhone.replace(/\D/g, ''); const normalized = phone.length === 8 ? `505${phone}` : phone.startsWith('505') ? phone : `505${phone}`; window.open(`https://wa.me/${normalized}?text=${encodeURIComponent(`Hola ${document?.supplierName || 'proveedor'}, te compartimos información de ${document?.title?.toLowerCase() || 'la compra'} ${document?.number || ''}.`)}`, '_blank', 'noopener,noreferrer'); } : undefined;
   const downloadDetail = async (format: PdfDownloadFormat) => {
     if (!canExport || !document) return;

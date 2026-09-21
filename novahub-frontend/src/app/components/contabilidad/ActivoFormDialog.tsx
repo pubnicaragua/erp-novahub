@@ -13,7 +13,7 @@ import { mobiliarioService } from '../../services/mobiliario.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { api } from '../../services/api';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface ActivoFormDialogProps {

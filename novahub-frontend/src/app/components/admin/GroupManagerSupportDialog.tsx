@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, Loader2, ShieldCheck, UserRound } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { enterpriseGroupsService } from '../../services/enterprise-groups.service';
 import { authService } from '../../services/auth.service';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../../utils/accountValidation';

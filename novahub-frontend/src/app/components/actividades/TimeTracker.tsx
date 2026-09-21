@@ -5,7 +5,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { tasksService } from '../../services/actividades.service';
 import type { ActivityTimeEntry } from '../../types';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { format } from 'date-fns';
 
 interface TimeTrackerProps {

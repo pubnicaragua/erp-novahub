@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Combobox } from '../ui/Combobox';
 import { Input } from '../ui/input';
 import { Search, RefreshCw, Tags, UserRound } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { inventoryService } from '../../services/inventario.service';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';

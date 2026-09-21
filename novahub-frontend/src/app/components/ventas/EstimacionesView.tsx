@@ -11,7 +11,7 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { estimatesService } from '../../services/ventas.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import type { Estimate, EstimateItem, Customer, Product, SalesPaginationControls } from '../../types';
@@ -394,7 +394,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     if (publicPdfUrl) {
       toast.success('¡Enlace público del PDF generado e incluido en el mensaje de WhatsApp!', preparingToastId ? { id: preparingToastId } : undefined);
     } else {
-      toast.success('PDF descargado. ¡Se abrió WhatsApp para que lo adjuntes!', { ...(preparingToastId ? { id: preparingToastId } : {}), duration: 5000 });
+      toast.success('PDF descargado. ¡Se abrió WhatsApp para que lo adjuntes!', { ...(preparingToastId ? { id: preparingToastId } : {}) });
     }
   };
 

@@ -9,7 +9,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
 import { buildCustomerWhatsAppUrl } from '../ventas/WhatsAppActionButton';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { legalService, type LegalMessage } from '../../services/legal.service';
 import { storageService } from '../../services/storage.service';
 import { useAuth } from '../../contexts/AuthContext';

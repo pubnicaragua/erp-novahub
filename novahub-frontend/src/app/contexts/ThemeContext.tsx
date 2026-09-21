@@ -156,16 +156,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { user, canPerform } = useAuth();
   const themeUserId = user?.id || 'anonymous';
   const isPlatformUser = Boolean(user?.isPlatformAdmin);
+  const isManagerThemeUser = Boolean(user && !isPlatformUser && (
+    user.userType === 'manager' || user.role === 'manager'
+  ));
   // A stored user theme is still private data, but it must not affect the
   // workspace of a user who cannot even view Marca y tema. This also keeps a
   // revoked permission from leaving custom colors active in the current tab.
   const canViewBranding = Boolean(user && !isPlatformUser && canPerform('CONFIG_BRANDING', 'view'));
+  // Manager Settings edits only the authenticated user's private preference;
+  // it does not grant access to the tenant's corporate branding.
+  const canUsePersonalTheme = canViewBranding || isManagerThemeUser;
   // clientTenantId is the canonical active tenant after a group/branch
   // context switch. It remains context for the fallback corporate branding,
   // but the saved visual preference is always keyed by the user id.
   const activeTenantId = user?.clientTenantId || user?.tenantId || 'default';
   const brandingSessionKey = user ? `${user.id}:${activeTenantId}` : 'anonymous';
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => !canViewBranding
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => !canUsePersonalTheme
     ? createDefaultTheme(themeUserId, 'default')
     : readStoredTheme(themeUserId, activeTenantId));
   const [readyBrandingSessionKey, setReadyBrandingSessionKey] = useState<string | null>(
@@ -174,7 +180,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const isBrandingReady = !user || isPlatformUser || activeTenantId === 'default' || readyBrandingSessionKey === brandingSessionKey;
 
   const updateTheme = useCallback((colors: Partial<BrandColors>, paletteMode?: ThemePaletteMode) => {
-    if (!canViewBranding) return;
+    if (!canUsePersonalTheme) return;
     setThemeConfig(prev => ({
       ...prev,
       paletteMode: paletteMode || prev.paletteMode,
@@ -188,7 +194,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         };
       })(),
     }));
-  }, [canViewBranding]);
+  }, [canUsePersonalTheme]);
 
   const updateConfig = useCallback((config: Partial<Omit<ThemeConfig, 'colors' | 'userId'>>) => {
     setThemeConfig(prev => ({
@@ -198,18 +204,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applyServerBranding = useCallback((branding: Branding, tenantId: string, userId: string) => {
-    const userTheme = canViewBranding ? normalizeUserTheme(branding.userTheme) : {};
-    const colors = canViewBranding ? { ...brandingColors(branding), ...userTheme.colors } : {};
+    const userTheme = canUsePersonalTheme ? normalizeUserTheme(branding.userTheme) : {};
+    const colors = {
+      ...(canViewBranding ? brandingColors(branding) : {}),
+      ...(canUsePersonalTheme ? userTheme.colors : {}),
+    };
     setThemeConfig(previous => {
-      const base = canViewBranding && previous.userId === userId && previous.tenantId === tenantId
+      const base = canUsePersonalTheme && previous.userId === userId && previous.tenantId === tenantId
         ? previous
-        : canViewBranding
+        : canUsePersonalTheme
           ? readStoredTheme(userId, tenantId)
           : createDefaultTheme(userId, tenantId);
       // The explicit user preference wins. If an older record has colors but
       // no mode, keep the mode already resolved for this user instead of
       // silently converting a details theme into a complete theme.
-      const paletteMode = canViewBranding
+      const paletteMode = canUsePersonalTheme
         ? userTheme.paletteMode || base.paletteMode || DEFAULT_PALETTE_MODE
         : DEFAULT_PALETTE_MODE;
       const nextColors = { ...defaultColors, ...colors };
@@ -230,24 +239,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         },
       };
     });
-  }, [canViewBranding]);
+  }, [canViewBranding, canUsePersonalTheme]);
 
   useEffect(() => {
     // Cada usuario mantiene su propia preferencia visual. El tenant solo aporta
     // el fallback corporativo cuando ese usuario aún no ha personalizado el tema.
     setThemeConfig(() => {
       if (!user) return createDefaultTheme();
-      return canViewBranding
+      return canUsePersonalTheme
         ? readStoredTheme(themeUserId, activeTenantId)
         : createDefaultTheme(themeUserId, activeTenantId);
     });
-  }, [activeTenantId, canViewBranding, themeUserId, user]);
+  }, [activeTenantId, canUsePersonalTheme, themeUserId, user]);
 
   useEffect(() => {
     // Login/profile ya transporta la preferencia privada. Aplicarla aquí evita
     // que una sesión nueva dependa de visitar Configuración para descubrirla.
     if (!user || isPlatformUser) return;
-    if (!canViewBranding) return;
+    if (!canUsePersonalTheme) return;
     const userTheme = normalizeUserTheme(user.themeSettings);
     if (!userTheme.paletteMode && Object.keys(userTheme.colors || {}).length === 0) return;
     setThemeConfig(previous => {
@@ -266,7 +275,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         },
       };
     });
-  }, [activeTenantId, canViewBranding, isPlatformUser, themeUserId, user?.themeSettings]);
+  }, [activeTenantId, canUsePersonalTheme, isPlatformUser, themeUserId, user?.themeSettings]);
 
   useLayoutEffect(() => {
     // Apply brand colors and choose whether the sidebar is neutral or branded.
@@ -276,7 +285,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Read the active tenant's persisted theme synchronously during the
     // transition. Applying the global default here caused a visible gray/
     // default-color flash until the synchronization effect finished.
-    const activeTheme = !canViewBranding || isPlatformUser
+    const activeTheme = !canUsePersonalTheme || isPlatformUser
       ? createDefaultTheme(themeUserId, 'default')
       : themeConfig.userId === themeUserId && themeConfig.tenantId === activeTenantId
       ? themeConfig
@@ -331,11 +340,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     observer.observe(root, { attributes: true, attributeFilter: ['class'] });
 
     // No persistir un tema de otra sesión durante una transición de usuario.
-    if (canViewBranding && !isPlatformUser && activeTheme.userId === themeUserId && activeTheme.tenantId === activeTenantId && themeConfig.userId === themeUserId) {
+    if (canUsePersonalTheme && !isPlatformUser && activeTheme.userId === themeUserId && activeTheme.tenantId === activeTenantId && themeConfig.userId === themeUserId) {
       safeSetItem(themeStorageKey(themeUserId), JSON.stringify(themeConfig));
     }
     return () => observer.disconnect();
-  }, [canViewBranding, isPlatformUser, themeConfig, activeTenantId, themeUserId]);
+  }, [canUsePersonalTheme, isPlatformUser, themeConfig, activeTenantId, themeUserId]);
 
   // Handle branding from server — re-fetch when user/token changes (login/switch/logout).
   // No se usa polling: `user` de useAuth cambia en login, switch de empresa y logout,
@@ -399,7 +408,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Keep the private state intact so a later permission grant can restore the
   // user's preference, but never expose that state to modules without access.
-  const effectiveThemeConfig = canViewBranding
+  const effectiveThemeConfig = canUsePersonalTheme
     ? themeConfig
     : {
       ...createDefaultTheme(themeUserId, activeTenantId),

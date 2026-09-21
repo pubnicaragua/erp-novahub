@@ -11,7 +11,7 @@ import type { Ticket } from '../../types';
 import { supportService } from '../../services/support.service';
 import { invoicesService } from '../../services/ventas.service';
 import { storageService } from '../../services/storage.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface TicketFormModalProps {

@@ -1,6 +1,7 @@
 import { BookOpenCheck, Info, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
@@ -10,6 +11,7 @@ type SalesAccountingLegendProps = {
   flow: SalesAccountingFlow;
   paymentMethod?: string | null;
   compact?: boolean;
+  presentation?: 'popover' | 'tooltip';
 };
 
 type AccountMapping = {
@@ -73,7 +75,7 @@ function AccountLine({ label, side, account }: { label: string; side: 'debit' | 
   );
 }
 
-export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: SalesAccountingLegendProps) {
+export function SalesAccountingLegend({ flow, paymentMethod, compact = true, presentation = 'popover' }: SalesAccountingLegendProps) {
   const { data, isLoading } = useAccountingQuery<any>(
     ['sales-accounting-mappings'],
     (signal) => contabilidadService.getSuggestedAccounts(signal),
@@ -127,6 +129,41 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
           : method
             ? `Factura: un asiento por el total · ${method.label} → ${effectivePayment.code}; Ingresos netos + IVA + salida de inventario.`
             : `Factura: un asiento por el total con CxC, IVA y salida de inventario; cada cobro posterior cancela CxC.`;
+
+  if (presentation === 'tooltip') {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            aria-label="Información contable de Facturación por Caja"
+          >
+            {isLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Info className="size-3.5" />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start" className="w-[min(390px,calc(100vw-2rem))] space-y-2 whitespace-normal text-left">
+          <p className="font-black">Contabilidad de Facturación por Caja</p>
+          <p className="leading-relaxed">
+            {isLoading ? 'Consultando cuentas configuradas…' : summary}
+          </p>
+          {!isLoading && (
+            <>
+              <div className="space-y-1 border-t border-primary-foreground/20 pt-2 text-[11px] leading-relaxed">
+                <p>Debe · Cobro {effectiveMethod.label}: {effectivePayment.code} · {effectivePayment.name}</p>
+                <p>Haber · Ingresos netos: {effectiveIncome.code} · {effectiveIncome.name}</p>
+                <p>Haber · IVA por pagar: {effectiveVat.code} · {effectiveVat.name}</p>
+                <p>Haber · Inventario: cuenta configurada en el almacén</p>
+              </div>
+              <p className="leading-relaxed opacity-90">
+                La factura nace pagada y usa las cuentas globales configuradas. El costo reduce los ingresos y la salida de inventario queda en el mismo asiento.
+              </p>
+            </>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <div className={`flex min-w-0 items-center gap-2 rounded-xl border border-border/40 bg-muted/10 px-3 py-2 ${compact ? '' : 'text-xs'}`}>

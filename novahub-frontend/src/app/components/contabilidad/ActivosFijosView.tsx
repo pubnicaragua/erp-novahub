@@ -14,7 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { fetchFixedAssetDetails, exportFixedAssetsExcel } from './fixedAssetsExport';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ActivosFijosCategoriesTab } from './ActivosFijosCategoriesTab';
 import { ActivosFijosDepreciationTab } from './ActivosFijosDepreciationTab';

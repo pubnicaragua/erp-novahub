@@ -14,7 +14,7 @@ import { Textarea } from './ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { cn } from './ui/utils';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAuth } from '../contexts/AuthContext';
 import { financingService, type FinancingApplication, type PrefillData } from '../services/financing.service';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';

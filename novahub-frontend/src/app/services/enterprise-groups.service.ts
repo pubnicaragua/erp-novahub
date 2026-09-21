@@ -29,9 +29,11 @@ export interface ManagerGroup {
     isOwner: boolean;
     canManageManagers: boolean;
     canEdit: boolean;
+    accessScopeMode?: 'ALL_GROUP' | 'BRANCHES' | 'BUSINESS_UNITS' | 'LEGACY';
     businessUnitIds: string[];
     branchIds: string[];
     warehouseIds: string[];
+    branchAccess?: Array<{ scopeType: 'GROUP' | 'BUSINESS_UNIT' | 'BRANCH'; scopeId: string; mode: 'FULL' | 'CUSTOM' | 'NONE'; permissions: any[] }>;
     permissions: unknown;
   } | null;
 }
@@ -698,6 +700,7 @@ export const enterpriseGroupsService = {
       pageSize?: number;
       report?: boolean;
       export?: boolean;
+      corporateManagement?: boolean;
     },
     signal?: AbortSignal,
   ) =>

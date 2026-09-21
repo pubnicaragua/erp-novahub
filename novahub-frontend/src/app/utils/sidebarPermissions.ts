@@ -118,6 +118,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'HR_DEPARTMENTS', label: 'Departamentos', parent: 'HR' },
   { id: 'HR_PAYROLL', label: 'Nóminas', parent: 'HR' },
   { id: 'HR_COMMISSIONS', label: 'Comisiones', parent: 'HR' },
+  { id: 'HR_COMMISSIONS_CONFIG', label: 'Configuración de comisiones', parent: 'HR' },
   { id: 'HR_ATTENDANCE', label: 'Asistencia', parent: 'HR' },
   { id: 'HR_LEAVES', label: 'Vacaciones', parent: 'HR' },
   { id: 'HR_PERFORMANCE', label: 'Desempeño', parent: 'HR' },
@@ -250,7 +251,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   empleados: ['HR_EMPLOYEES'],
   departamentos: ['HR_DEPARTMENTS'],
   nominas: ['HR_PAYROLL'],
-  comisiones: ['HR_COMMISSIONS'],
+  comisiones: ['HR_COMMISSIONS', 'HR_PAYROLL'],
   asistencia: ['HR_ATTENDANCE'],
   ausencias: ['HR_LEAVES'],
   evaluaciones: ['HR_PERFORMANCE'],
@@ -406,7 +407,7 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'calendario-financiero': ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD'],
   'analisis-ingresos-gastos': ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   'finanzas:perdidas': ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
-  'rh:comisiones': ['HR_COMMISSIONS'],
+  'rh:comisiones': ['HR_COMMISSIONS', 'HR_COMMISSIONS_CONFIG'],
   'inventario:productos': ['INVENTORY_PRODUCTS'],
   'inventario:marcas-clientes': ['INVENTORY_PRODUCTS'],
   'inventario:servicios': ['INVENTORY_SERVICES'],
@@ -415,6 +416,12 @@ export const SIDEBAR_SUBMENU_PERMISSION_MODULES: Record<string, string[]> = {
   'inventario:perdidas': ['INVENTORY_LOSSES'],
   'inventario:mobiliario-equipos': ['INVENTORY_ASSETS'],
   'inventario:configuracion': ['INVENTORY_CONFIG'],
+};
+
+/** Suscripciones equivalentes que exponen una fila de permiso en Roles. */
+export const ROLE_PERMISSION_SCOPE_ALIASES: Record<string, string[]> = {
+  HR_COMMISSIONS: ['HR_COMMISSIONS', 'HR_PAYROLL', 'HR'],
+  HR_COMMISSIONS_CONFIG: ['HR_COMMISSIONS', 'HR_PAYROLL', 'HR'],
 };
 
 /** Tabs internos que no son entradas propias del sidebar, pero sí requieren autorización individual. */

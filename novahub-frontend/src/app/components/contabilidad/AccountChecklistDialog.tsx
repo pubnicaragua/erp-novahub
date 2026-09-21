@@ -5,7 +5,7 @@ import { Input } from '../ui/input';
 import { Search, Loader2, Check, Settings2, Trash2, RotateCcw } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface ChartAccount {

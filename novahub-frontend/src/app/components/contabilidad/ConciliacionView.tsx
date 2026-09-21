@@ -23,7 +23,7 @@ import {
 import { Combobox } from '../ui/Combobox';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { api } from '../../services/api';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';

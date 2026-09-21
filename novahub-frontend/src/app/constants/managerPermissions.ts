@@ -1,6 +1,5 @@
-export type ManagerPermissionLevel = 'NONE' | 'READ' | 'EDIT' | 'FULL';
-
-export type ManagerPermissionState = Record<string, ManagerPermissionLevel>;
+export type ManagerPermissionAction = 'read' | 'create' | 'edit' | 'delete' | 'export' | 'manage';
+export type ManagerPermissionState = Record<string, Record<ManagerPermissionAction, boolean>>;
 
 export const MANAGER_PERMISSION_OPTIONS = [
   { id: 'MANAGER_OVERVIEW', label: 'Resumen empresarial', description: 'Indicadores y distribución por sucursal' },
@@ -28,11 +27,21 @@ export const MANAGER_PERMISSION_OPTIONS = [
   { id: 'MANAGER_USERS', label: 'Usuarios de sucursales', description: 'Recuento y consulta de usuarios' },
   { id: 'MANAGER_WAREHOUSES', label: 'Almacenes corporativos', description: 'Creación y abastecimiento autorizado' },
   { id: 'MANAGER_MANAGERS', label: 'Managers', description: 'Crear y administrar accesos Manager' },
-  { id: 'BRANCH_OPERATIONS', label: 'Operar dentro de sucursales', description: 'Entrar como supervisor y realizar cambios operativos' },
 ] as const;
 
+export const MANAGER_PERMISSION_ACTIONS: Array<{ key: ManagerPermissionAction; label: string }> = [
+  { key: 'read', label: 'Ver' },
+  { key: 'create', label: 'Crear' },
+  { key: 'edit', label: 'Editar' },
+  { key: 'delete', label: 'Eliminar' },
+  { key: 'export', label: 'Exportar' },
+  { key: 'manage', label: 'Administrar' },
+];
+
+const emptyActions = (): Record<ManagerPermissionAction, boolean> => ({ read: false, create: false, edit: false, delete: false, export: false, manage: false });
+
 export const emptyManagerPermissionState = (): ManagerPermissionState => Object.fromEntries(
-  MANAGER_PERMISSION_OPTIONS.map((option) => [option.id, 'NONE']),
+  MANAGER_PERMISSION_OPTIONS.map((option) => [option.id, emptyActions()]),
 ) as ManagerPermissionState;
 
 export function managerPermissionsToState(value: unknown): ManagerPermissionState {
@@ -43,17 +52,26 @@ export function managerPermissionsToState(value: unknown): ManagerPermissionStat
     const module = String((item as any).module || '').toUpperCase();
     if (!Object.prototype.hasOwnProperty.call(state, module)) continue;
     const record = item as any;
-    state[module] = record.manage || record.delete ? 'FULL' : record.edit || record.create ? 'EDIT' : record.read ? 'READ' : 'NONE';
+    const actions = emptyActions();
+    for (const action of MANAGER_PERMISSION_ACTIONS) actions[action.key] = record[action.key] === true;
+    if (record.write === true) actions.create = actions.edit = true;
+    if (module === 'MANAGER_INVENTORY_COST') {
+      actions.create = actions.edit = actions.delete = actions.export = actions.manage = false;
+    } else if (Object.entries(actions).some(([key, value]) => key !== 'read' && value)) {
+      actions.read = true;
+    }
+    state[module] = actions;
   }
   return state;
 }
 
 export function managerStateToPermissions(state: ManagerPermissionState) {
-  return MANAGER_PERMISSION_OPTIONS.flatMap((option) => {
-    const level = state[option.id] || 'NONE';
-    if (level === 'NONE') return [];
-    if (level === 'READ') return [{ module: option.id, read: true, export: true }];
-    if (level === 'EDIT') return [{ module: option.id, read: true, create: true, edit: true, export: true }];
-    return [{ module: option.id, read: true, create: true, edit: true, delete: true, export: true, manage: true }];
+  return MANAGER_PERMISSION_OPTIONS.flatMap<{ module: string } & Record<ManagerPermissionAction, boolean>>((option) => {
+    const actions = state[option.id] || emptyActions();
+    if (option.id === 'MANAGER_INVENTORY_COST') {
+      return actions.read ? [{ module: option.id, ...emptyActions(), read: true }] : [];
+    }
+    if (!Object.values(actions).some(Boolean)) return [];
+    return [{ module: option.id, ...actions, read: actions.read || actions.create || actions.edit || actions.delete || actions.export || actions.manage }];
   });
 }

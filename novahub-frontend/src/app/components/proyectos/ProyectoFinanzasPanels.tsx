@@ -14,7 +14,7 @@ import { suppliersService } from '../../services/compras.service';
 import { projectsService, type ProjectBudgetLine, type ProjectCost, type ProjectCostSource, type ProjectReport } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import {
   COST_SOURCE_LABEL, COST_SOURCE_OPTIONS, COST_STATUS_META, COST_STATUS_OPTIONS,

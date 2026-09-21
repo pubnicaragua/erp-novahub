@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { customerPortalService, type CustomerPortalInventoryRow, type CustomerPortalInventoryVariant, type CustomerPortalSummary } from '../../services/customer-portal.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 
 type PortalTab = 'summary' | 'inventory' | 'sales';
 

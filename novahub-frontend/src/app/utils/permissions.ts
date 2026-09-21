@@ -182,6 +182,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   HR_DEPARTMENTS: ['read', 'create', 'edit', 'delete'],
   HR_PAYROLL: ['read', 'create', 'edit', 'delete', 'import', 'export', 'approve'],
   HR_COMMISSIONS: ['read', 'export'],
+  HR_COMMISSIONS_CONFIG: ['read', 'edit'],
   HR_ATTENDANCE: ['read', 'create', 'import'],
   HR_LEAVES: ['read', 'create', 'edit', 'delete', 'approve'],
   HR_PERFORMANCE: ['read', 'create', 'edit'],

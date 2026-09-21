@@ -9,7 +9,7 @@ import { DateField } from '../ui/DateField';
 import { FileSpreadsheet, Upload, CheckCircle2, AlertTriangle, Download, X } from 'lucide-react';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';

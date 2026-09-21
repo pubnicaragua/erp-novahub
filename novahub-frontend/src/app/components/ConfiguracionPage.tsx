@@ -27,7 +27,7 @@ import { rolesService } from '../services/roles.service';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { brandingService, type ThemePaletteMode } from '../services/branding.service';
 import { api } from '../services/api';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from './ui/utils';
 import { type RoleManagement, type Permission } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';

@@ -8,7 +8,7 @@ import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { getApiErrorMessage } from '../../services/api';
 import { novaPulseService, type NovaPulseConfig, type NovaPulseRecipient } from '../../services/nova-pulse.service';
 import { NovaHubLogo } from '../NovaHubLogo';

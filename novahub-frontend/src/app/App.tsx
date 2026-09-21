@@ -482,7 +482,6 @@ function DashboardLayout() {
           </Suspense>
         </main>
       </div>
-      <Toaster position="top-right" />
       {currentModule !== 'fuerza-comercial' && <FloatingChat />}
     </div>
   );
@@ -606,12 +605,7 @@ function AppContent() {
 
   // Ruta pública de registro: no requiere autenticación y evita el guard.
   if (location.pathname === '/landing') {
-    return (
-      <>
-        <LandingPage />
-        <Toaster position="top-right" />
-      </>
-    );
+    return <LandingPage />;
   }
 
   if (location.pathname === '/modulos') {
@@ -619,21 +613,11 @@ function AppContent() {
   }
 
   if (location.pathname === '/register') {
-    return (
-      <>
-        <RegisterTenantPage />
-        <Toaster position="top-right" />
-      </>
-    );
+    return <RegisterTenantPage />;
   }
 
   if (!isAuthenticated) {
-    return (
-      <>
-        <LoginPage onLogin={login} />
-        <Toaster position="top-right" />
-      </>
-    );
+    return <LoginPage onLogin={login} />;
   }
 
   const handleGuardLogout = () => {
@@ -651,7 +635,6 @@ function AppContent() {
       <>
         <SessionClosedPage mode={sessionClosed} onLogout={handleGuardLogout} />
         <SessionMonitor />
-        <Toaster position="top-right" />
       </>
     );
   }
@@ -661,7 +644,6 @@ function AppContent() {
       <>
         <TrialExpiredPage onLogout={handleGuardLogout} />
         <SessionMonitor />
-        <Toaster position="top-right" />
       </>
     );
   }
@@ -692,24 +674,26 @@ function AppContent() {
         <Suspense fallback={<PageLoader />}><ManagerPage key={`manager-${sessionStartVersion}-${user.id}-${user.clientTenantId || user.tenantId}`} /></Suspense>
       ) : <DashboardLayout key={`dashboard-${sessionStartVersion}-${user?.id || 'anonymous'}-${user?.clientTenantId || user?.tenantId || ''}`} />}
       <SessionMonitor />
-      <Toaster position="top-right" />
     </>
   );
 }
 
 export default function App() {
   return (
-    <Sentry.ErrorBoundary fallback={<ErrorBoundaryFallback />}>
-      <AuthProvider>
-        <ThemeProvider>
-          <CurrencyProvider>
-            <ImpersonationProvider>
-              <ActionClickGuard />
-              <AppContent />
-            </ImpersonationProvider>
-          </CurrencyProvider>
-        </ThemeProvider>
-      </AuthProvider>
-    </Sentry.ErrorBoundary>
+    <>
+      <Toaster position="top-right" />
+      <Sentry.ErrorBoundary fallback={<ErrorBoundaryFallback />}>
+        <AuthProvider>
+          <ThemeProvider>
+            <CurrencyProvider>
+              <ImpersonationProvider>
+                <ActionClickGuard />
+                <AppContent />
+              </ImpersonationProvider>
+            </CurrencyProvider>
+          </ThemeProvider>
+        </AuthProvider>
+      </Sentry.ErrorBoundary>
+    </>
   );
 }

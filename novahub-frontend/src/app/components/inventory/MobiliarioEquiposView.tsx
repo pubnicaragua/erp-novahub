@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Building2, X, Upload, FileDown, Paperclip, ExternalLink, FileSpreadsheet, CalendarClock } from 'lucide-react';
 import { cn } from '../ui/utils';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import * as XLSX from 'xlsx';
 import { mobiliarioService } from '../../services/mobiliario.service';
 import { storageService } from '../../services/storage.service';

@@ -10,7 +10,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import {
   novachatService,
   type ChatChannel,

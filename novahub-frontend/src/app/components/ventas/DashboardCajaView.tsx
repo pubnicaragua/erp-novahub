@@ -7,7 +7,7 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { DateField } from '../ui/DateField';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cajaService, type DashboardData } from '../../services/caja.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { normalizeCurrency, type SupportedCurrency } from '../../utils/currency';

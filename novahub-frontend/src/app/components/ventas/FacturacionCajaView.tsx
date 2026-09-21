@@ -11,7 +11,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Switch } from '../ui/switch';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ProductThumbnail } from '../ui/ProductImage';
@@ -2224,9 +2224,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
             <Card className="min-w-0 border-border/50 shadow-sm">
               <CardContent className="min-w-0 p-4 sm:p-5">
                 <h3 className="mb-5 flex items-center gap-2 text-sm font-black uppercase tracking-tight">
+                  <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} presentation="tooltip" />
                   <Receipt className="size-4 text-primary" /> Configuración de Emisión
                 </h3>
-                <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} />
                 <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
                   <div className="min-w-0 space-y-3" data-tour="pos-register">
                     <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Caja Operativa</Label>

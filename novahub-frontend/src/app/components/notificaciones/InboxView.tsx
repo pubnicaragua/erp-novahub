@@ -19,7 +19,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { notificationsService as inboxService } from '../../services/notifications.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';

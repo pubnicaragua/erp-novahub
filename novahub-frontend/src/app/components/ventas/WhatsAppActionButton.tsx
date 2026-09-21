@@ -1,6 +1,6 @@
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import type { Customer } from '../../types';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
 

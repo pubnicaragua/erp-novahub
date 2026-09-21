@@ -9,7 +9,7 @@ import { DateField } from '../ui/DateField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import type { SalesPaginationControls } from '../../types';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';

@@ -10,7 +10,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import {
   MAX_EVIDENCE_FILES,
   soporteTecnicoService,
@@ -102,7 +102,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
       setForm({ subject: '', description: '', category: 'BUG', priority: 'MEDIUM', evidenceFiles: [] });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error al enviar el ticket';
-      toast.error(message, { id: 'create-ticket', duration: 7000 });
+      toast.error(message, { id: 'create-ticket' });
     }
     finally { setSaving(false); }
   };

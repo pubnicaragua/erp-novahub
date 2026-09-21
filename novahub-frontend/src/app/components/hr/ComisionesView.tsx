@@ -13,11 +13,12 @@ import {
   List,
   ReceiptText,
   RefreshCw,
+  Settings2,
   Users,
   WalletCards,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -34,6 +35,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { CommissionScaleConfigurationView } from './CommissionScaleConfigurationView';
 
 type CommissionLayout = 'table' | 'cards';
 type CommissionTab = 'sellers' | 'recent';
@@ -171,10 +173,12 @@ function RecentCards({ items, baseCurrency }: { items: any[]; baseCurrency: stri
 }
 
 export function ComisionesView() {
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const { baseCurrency: contextBaseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatExplicitAmount } = useCurrency();
   const canViewHr = canPerform('HR_COMMISSIONS', 'view');
+  const canViewConfiguration = canPerform('HR_COMMISSIONS_CONFIG', 'view');
   const canExportCommissions = canPerform('HR_COMMISSIONS', 'export');
+  const [showConfiguration, setShowConfiguration] = useState(() => !canViewHr);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [status, setStatus] = useState('ALL');
@@ -185,7 +189,8 @@ export function ComisionesView() {
   const [layoutMode, setLayoutMode] = useLocalStorageState<CommissionLayout>('hr-commissions-layout', 'table', 8760);
 
   const commissionFilters = { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(status !== 'ALL' ? { status } : {}), ...(sellerId !== 'ALL' ? { sellerId } : {}) };
-  const query = useQuery({ queryKey: ['hr', 'comisiones', { from, to, status, sellerId }], queryFn: ({ signal }) => hrService.getCommissionReport({ ...commissionFilters, page: 1, pageSize: 500 }, signal), enabled: canViewHr });
+  const isConfigurationView = canViewConfiguration && (showConfiguration || !canViewHr);
+  const query = useQuery({ queryKey: ['hr', 'comisiones', user?.clientTenantId, { from, to, status, sellerId }], queryFn: ({ signal }) => hrService.getCommissionReport({ ...commissionFilters, page: 1, pageSize: 500 }, signal), enabled: canViewHr && !isConfigurationView });
   const rawReport = query.data as any;
   const report = rawReport?.data ?? rawReport;
   const baseCurrency = (report?.baseCurrency || contextBaseCurrency || 'NIO') as 'NIO' | 'USD';
@@ -242,9 +247,17 @@ export function ComisionesView() {
     finally { setExporting(false); }
   };
 
+  if (isConfigurationView) {
+    return <CommissionScaleConfigurationView onBack={canViewHr ? () => setShowConfiguration(false) : undefined} />;
+  }
+
+  if (!canViewHr) {
+    return <Card className="rounded-2xl border-border/60"><CardContent className="p-6 text-sm text-muted-foreground">No tienes permiso para consultar esta vista.</CardContent></Card>;
+  }
+
   return (
     <div className="min-w-0 space-y-4">
-      <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-end"><div className="min-w-0"><div className="mb-1 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-primary"><BadgeDollarSign className="size-3.5" /> Control de comisiones</div><h1 className="text-2xl font-black tracking-tight sm:text-3xl">Comisiones de ventas</h1><p className="mt-1 max-w-3xl text-sm text-muted-foreground">Consulta las ventas base de cada vendedor, lo pendiente de cobro o nómina y lo pagado por nómina.</p></div>{canExportCommissions && <Button variant="outline" size="sm" onClick={downloadCsv} disabled={exporting || query.isLoading || query.isError} className="h-10 shrink-0 gap-2 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><Download className="size-4" /> {exporting ? 'Preparando…' : 'Exportar reporte'}</Button>}</div>
+      <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-end"><div className="min-w-0"><div className="mb-1 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-primary"><BadgeDollarSign className="size-3.5" /> Control de comisiones</div><h1 className="text-2xl font-black tracking-tight sm:text-3xl">Comisiones de ventas</h1><p className="mt-1 max-w-3xl text-sm text-muted-foreground">Consulta las ventas base de cada vendedor, lo pendiente de cobro o nómina y lo pagado por nómina.</p></div><div className="flex flex-wrap items-center gap-2">{canViewConfiguration && <Button variant="outline" size="sm" onClick={() => setShowConfiguration(true)} className="h-10 shrink-0 gap-2 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><Settings2 className="size-4" /> Configurar escalas</Button>}{canExportCommissions && <Button variant="outline" size="sm" onClick={downloadCsv} disabled={exporting || query.isLoading || query.isError} className="h-10 shrink-0 gap-2 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><Download className="size-4" /> {exporting ? 'Preparando…' : 'Exportar reporte'}</Button>}</div></div>
       <Card className="rounded-2xl border-border/60 bg-card/80 shadow-sm"><CardContent className="flex flex-wrap items-end gap-3 p-3 sm:p-4"><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Desde</Label><DateField value={from} onChange={setFrom} maxDate={to || undefined} placeholder="Fecha desde" title="Fecha desde" className="h-10 w-full sm:w-[160px]" /></div><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Hasta</Label><DateField value={to} onChange={setTo} minDate={from || undefined} placeholder="Fecha hasta" title="Fecha hasta" className="h-10 w-full sm:w-[160px]" /></div><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</Label><Select value={status} onValueChange={setStatus}><SelectTrigger className="h-10 w-full sm:w-[210px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos</SelectItem><SelectItem value="PENDING">Pendiente</SelectItem><SelectItem value="PAID_IN_PAYROLL">Pagada en nómina</SelectItem></SelectContent></Select></div><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vendedor</Label><Select value={sellerId} onValueChange={setSellerId}><SelectTrigger className="h-10 w-full sm:w-[240px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los vendedores</SelectItem>{sellerOptions.map((seller) => <SelectItem key={seller.id} value={seller.id}>{seller.name}</SelectItem>)}</SelectContent></Select></div><div className="ml-auto"><LayoutToggle value={layoutMode} onChange={setLayoutMode} /></div></CardContent></Card>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"><SalesKpiCard title="Vendedores con ventas" value={String(summary.sellerCount || 0)} icon={Users} color="text-primary" bg="bg-primary/10" />{renderMoneyKpis('Venta total', Number(summary.salesBase || 0), 'salesOriginalCurrencyBreakdown', ReceiptText, 'text-foreground', 'bg-muted')}{renderMoneyKpis('Comisión total', Number(summary.commissionBase || 0), 'commissionOriginalCurrencyBreakdown', BadgeDollarSign, 'text-primary', 'bg-primary/10')}{renderMoneyKpis('Pendiente', Number(summary.pendingBase || 0), 'pendingOriginalCurrencyBreakdown', Clock3, 'text-warning', 'bg-warning/10')}{renderMoneyKpis('Pagada en nómina', Number(summary.paidBase || 0), 'paidOriginalCurrencyBreakdown', WalletCards, 'text-success', 'bg-success/10')}</div>
       {query.isError ? <Alert variant="destructive" className="border-destructive/30 bg-destructive/5"><AlertTriangle className="size-4" /><AlertTitle>No se pudo cargar el reporte de comisiones</AlertTitle><AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3"><span>{query.error instanceof Error ? query.error.message : 'El servidor no devolvió el detalle de comisiones.'}</span><Button variant="outline" size="sm" onClick={() => query.refetch()} className="gap-2"><RefreshCw className="size-3.5" /> Reintentar</Button></AlertDescription></Alert> : query.isLoading ? <div className="flex h-40 items-center justify-center"><RefreshCw className="size-8 animate-spin text-primary" /></div> : <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as CommissionTab)} className="gap-4"><TabsList className="h-auto max-w-full flex-wrap justify-start gap-1 rounded-2xl border border-border/60 bg-card p-1"><TabsTrigger value="sellers" className="h-10 gap-2 px-4 text-[10px] font-black uppercase tracking-widest"><Users className="size-4" /> Comisiones por vendedor</TabsTrigger><TabsTrigger value="recent" className="h-10 gap-2 px-4 text-[10px] font-black uppercase tracking-widest"><CreditCard className="size-4" /> Comisiones recientes</TabsTrigger></TabsList><TabsContent value="sellers" className="m-0 space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-black tracking-tight">Resumen por vendedor</h2><p className="text-xs text-muted-foreground">La cantidad corresponde a vendedores con registros de venta base en el período.</p></div><Badge variant="outline" className="gap-1.5 text-[10px]"><FileText className="size-3.5" /> {sellers.length} vendedor(es)</Badge></div>{!sellers.length ? <Card className="rounded-2xl border-dashed"><CardContent className="space-y-2 p-10 text-center"><p className="text-sm font-semibold">No hay comisiones de vendedores para los filtros seleccionados.</p><p className="text-xs text-muted-foreground">Verifica que existan ventas con vendedor y comisión registrada.</p></CardContent></Card> : layoutMode === 'cards' ? <SellerCards sellers={sellers} detailRows={detailRows} expanded={expanded} onToggle={toggleSeller} baseCurrency={baseCurrency} /> : <SellerTable sellers={sellers} detailRows={detailRows} expanded={expanded} onToggle={toggleSeller} baseCurrency={baseCurrency} />}</TabsContent><TabsContent value="recent" className="m-0 space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-black tracking-tight">Comisiones recientes</h2><p className="text-xs text-muted-foreground">Cada fila representa una comisión registrada, ordenada de la más reciente a la más antigua.</p></div><Badge variant="outline" className="gap-1.5 text-[10px]"><RefreshCw className="size-3.5" /> {recentItems.length} registro(s)</Badge></div>{!recentItems.length ? <Card className="rounded-2xl border-dashed"><CardContent className="p-10 text-center text-sm text-muted-foreground">No hay comisiones recientes para los filtros seleccionados.</CardContent></Card> : layoutMode === 'cards' ? <RecentCards items={recentItems} baseCurrency={baseCurrency} /> : <RecentTable items={recentItems} baseCurrency={baseCurrency} />}</TabsContent></Tabs>}

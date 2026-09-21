@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Upload, FileDown, Info, UserCheck, UserX, CheckCircle2, XCircle, X } from 'lucide-react';
 import { Button } from '../ui/button';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';

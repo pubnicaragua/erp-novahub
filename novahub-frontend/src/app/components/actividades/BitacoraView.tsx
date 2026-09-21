@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Search, Activity, MousePointerClick, Database, Plus, Folder, FileText, Eye } from 'lucide-react';
 import { activityLogsService, tasksService, eventsService } from '../../services/actividades.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';

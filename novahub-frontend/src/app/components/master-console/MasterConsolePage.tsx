@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../ui/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import {
   Zap, Building2, Users, DollarSign, AlertTriangle, TrendingUp,
   Search, Eye, CreditCard, Clock, ShieldAlert, BarChart3,

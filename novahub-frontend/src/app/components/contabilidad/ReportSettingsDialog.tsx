@@ -7,7 +7,7 @@ import {
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Combobox } from '../ui/Combobox';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';

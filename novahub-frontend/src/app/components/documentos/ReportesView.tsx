@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, FileBarChart, Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { reportsService } from '../../services/documentos.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';

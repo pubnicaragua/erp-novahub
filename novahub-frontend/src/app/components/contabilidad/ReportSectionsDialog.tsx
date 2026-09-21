@@ -5,7 +5,7 @@ import { Input } from '../ui/input';
 import { Search, Plus, Trash2, Loader2, Settings2, Check, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 export interface ReportSection {

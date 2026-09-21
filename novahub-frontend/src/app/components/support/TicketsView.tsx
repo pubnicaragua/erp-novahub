@@ -31,7 +31,7 @@ import {
   CircleHelp,
 } from 'lucide-react';
 import { supportService } from '../../services/support.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';

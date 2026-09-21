@@ -12,7 +12,7 @@ import { cn } from '../ui/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { invoicesService } from '../../services/ventas.service';

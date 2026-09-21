@@ -17,7 +17,7 @@ import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Switch } from '../ui/switch';
 import { cn } from '../ui/utils';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import {
   countryConfigService, COUNTRY_FLAGS, getImpactByCountry,
   type CountryConfig, type ImpactModule, type ImpactSubmodule

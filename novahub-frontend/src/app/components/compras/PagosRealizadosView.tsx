@@ -15,7 +15,7 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';

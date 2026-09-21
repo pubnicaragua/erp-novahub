@@ -21,7 +21,7 @@ import {
 } from '../ui/table';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { storageService } from '../../services/storage.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 

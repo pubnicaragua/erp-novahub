@@ -9,7 +9,7 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { paymentsService } from '../../services/ventas.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import type { PaymentReceived, Customer, Invoice, CreditNote, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';

@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Combobox } from './ui/Combobox';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from './ui/utils';
 
 const EMPTY_FILTERS: AuditLogQuery = { page: 1, pageSize: 25 };

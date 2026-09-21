@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../ui/utils';
 import { NovaHubLogo } from '../NovaHubLogo';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { aiService, type ChatGuide } from '../../services/ai.service';
 import { trainingService } from '../../services/training.service';

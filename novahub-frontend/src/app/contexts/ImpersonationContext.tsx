@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { api } from '../services/api';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 
 interface ImpersonationState {
   isImpersonating: boolean;

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { CalendarDays, CheckCircle2, ClipboardCheck, Clock3, Download, Eye, FileDown, Loader2, Package, Search, Scale, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerInventoryAdjustmentsResponse } from '../../services/enterprise-groups.service';
 import { Badge } from '../ui/badge';

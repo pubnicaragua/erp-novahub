@@ -4,7 +4,7 @@ import { Input } from '../../ui/input';
 import { Switch } from '../../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { ClipboardList, CalendarClock, AlertTriangle, CheckCircle2, ArrowDownToLine, ArrowUpFromLine, Loader2, Landmark, ListChecks, Plus, Trash2, GripVertical } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cajaService } from '../../../services/caja.service';
 import { api, getApiErrorMessage } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';

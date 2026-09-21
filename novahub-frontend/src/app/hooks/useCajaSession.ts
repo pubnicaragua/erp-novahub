@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cajaService, CashRegisterSession, SessionLog, CashRegisterCount, CashClosureMode } from '../services/caja.service';
 import { getApiErrorMessage } from '../services/api';
 

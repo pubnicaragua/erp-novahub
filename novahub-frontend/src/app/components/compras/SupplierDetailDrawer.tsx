@@ -48,7 +48,7 @@ import { getSupplierDebtAmount, getSupplierFavorAmount } from '../../utils/suppl
 import { generateSupplierHistoryPDF } from '../../utils/pdfGenerator';
 import { fetchSupplierHistoryItems, type SupplierHistoryItem } from '../../utils/supplierHistory';
 import { formatCurrencyAmount } from '../../utils/currency';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 
 interface SupplierDetailDrawerProps {

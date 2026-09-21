@@ -12,7 +12,7 @@ import { cn } from '../ui/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import { usersService } from '../../services/users.service';

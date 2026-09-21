@@ -15,7 +15,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { accountsService } from '../../services/finanzas.service';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 
 
 

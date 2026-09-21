@@ -5,7 +5,7 @@ import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { hasPaymentReferenceField, requiresPaymentReference } from '../../../utils/paymentMethods';
 
 interface MovimientoManualModalProps {

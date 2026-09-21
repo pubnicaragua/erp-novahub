@@ -24,7 +24,7 @@ import { customersService } from '../../services/ventas.service';
 import { brandingService } from '../../services/branding.service';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';

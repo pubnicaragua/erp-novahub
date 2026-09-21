@@ -7,7 +7,7 @@ import {
 import { ConfigNominaView } from './ConfigNominaView';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';

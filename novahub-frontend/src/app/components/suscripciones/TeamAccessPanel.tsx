@@ -7,7 +7,7 @@ import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { rolesService } from '../../services/roles.service';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { subscriptionsService } from '../../services/subscriptions.service';
@@ -15,7 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { allowedModulesFromPermissions, getPermissionActionKeys, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, serializePermissionActions, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
-import { HIDDEN_PERMISSION_MODULE_IDS, LEGACY_VIEW_PERMISSION_ALIASES, PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_MODULE_IDS } from '../../utils/sidebarPermissions';
+import { HIDDEN_PERMISSION_MODULE_IDS, LEGACY_VIEW_PERMISSION_ALIASES, PERMISSION_SUBMODULES, ROLE_PERMISSION_SCOPE_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../../utils/sidebarPermissions';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
@@ -192,6 +192,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     const hasSalesScope = scope.has('SALES') || [...scope].some((module) => module.startsWith('SALES_'));
     const hasScope = (moduleId: string) => scope.has(moduleId)
       || (LEGACY_VIEW_PERMISSION_ALIASES[moduleId] || []).some((alias) => scope.has(String(alias).toUpperCase()))
+      || (ROLE_PERMISSION_SCOPE_ALIASES[moduleId] || []).some((alias) => scope.has(String(alias).toUpperCase()))
       || (['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(moduleId) && hasSalesScope);
     const hasParentScope = (parent: string) => hasScope(parent)
       || [...scope].some((module) => module.startsWith(`${parent}_`));

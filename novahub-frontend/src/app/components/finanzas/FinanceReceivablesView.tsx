@@ -6,7 +6,7 @@ import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { sourceDocumentsService } from '../../services/finanzas.service'
-import { toast } from 'sonner'
+import { toast } from '@/app/services/toast'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell,
 } from 'recharts'

@@ -15,7 +15,7 @@ import { usersService } from '../../services/users.service';
 import { customersService } from '../../services/ventas.service';
 import { projectsService, type ProjectListItem } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { DateField } from '../ui/DateField';
 import { useMutation, useQueryClient } from '@tanstack/react-query';

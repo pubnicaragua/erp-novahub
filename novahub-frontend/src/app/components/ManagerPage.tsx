@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { motion } from 'motion/react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Activity, ArrowRightLeft, ArrowUpRight, BarChart3, Building2, Boxes, ChevronLeft, ChevronRight, Cloud, Download, FileStack, KeyRound, Landmark, MapPin, Package, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, Users, UserCheck, UserX, Warehouse, RefreshCw, Tags, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -30,7 +30,8 @@ import { ManagerOperationsModule as ManagerOperationsView } from './manager/Mana
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { BrandLogo } from './BrandLogo';
 import { InventoryDetailPanel } from './inventory/InventoryDetailPanel';
-import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionLevel, type ManagerPermissionState } from '../constants/managerPermissions';
+import { emptyManagerPermissionState, MANAGER_PERMISSION_ACTIONS, MANAGER_PERMISSION_OPTIONS, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionAction, type ManagerPermissionState } from '../constants/managerPermissions';
+import { ManagerBranchAccessEditor, type ManagerBranchAccessRule } from './manager/ManagerBranchAccessEditor';
 import { getBusinessTypeLabel } from '../constants/businessTypes';
 import { parseSpreadsheetInWorker } from '../utils/import-spreadsheet';
 import { VirtualizedImportList } from './ui/VirtualizedImportList';
@@ -43,6 +44,18 @@ import { auditActionLabel, auditDescriptionLabel, auditModuleLabel, auditRoleLab
 import { managerStatusLabel } from '../utils/managerLabels';
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
+const USER_TYPE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrador',
+  COLLABORATOR: 'Colaborador',
+  MANAGER: 'Gerente',
+  CUSTOMER_PORTAL: 'Cliente de portal',
+};
+
+function managerUserTypeLabel(user: { userType?: unknown; managerGroup?: unknown; managerOwner?: boolean }) {
+  if (user.managerGroup) return user.managerOwner ? 'Gerente propietario' : 'Gerente';
+  const userType = String(user.userType || '').trim().toUpperCase();
+  return USER_TYPE_LABELS[userType] || 'Tipo no definido';
+}
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
 const formatStorage = (value: unknown) => {
   const bytes = Number(value || 0);
@@ -106,6 +119,7 @@ async function readSpreadsheet(file: File) {
 export function ManagerPage() {
   const { displayMode, baseCurrency } = useCurrency();
   const [section, setSection] = useState<ManagerSection>('overview');
+  const [usersTab, setUsersTab] = useState<'users' | 'managers' | 'access'>('users');
   const [settingsView, setSettingsView] = useState<ManagerSettingsView>('theme');
   const [inventoryView, setInventoryView] = useState<ManagerInventoryView>('products');
   const [salesView, setSalesView] = useState<ManagerSalesView>('overview');
@@ -127,10 +141,11 @@ export function ManagerPage() {
   const [managerName, setManagerName] = useState('');
   const [managerEmail, setManagerEmail] = useState('');
   const [managerPassword, setManagerPassword] = useState('');
+  const [managerScopeMode, setManagerScopeMode] = useState<'BRANCHES' | 'BUSINESS_UNITS'>('BRANCHES');
   const [managerBusinessUnitIds, setManagerBusinessUnitIds] = useState<string[]>([]);
   const [managerBranchIds, setManagerBranchIds] = useState<string[]>([]);
+  const [managerBranchAccess, setManagerBranchAccess] = useState<ManagerBranchAccessRule[]>([]);
   const [managerCanManageManagers, setManagerCanManageManagers] = useState(false);
-  const [managerCanEdit, setManagerCanEdit] = useState(false);
   const [managerPermissionState, setManagerPermissionState] = useState<ManagerPermissionState>(defaultManagerPermissionState);
   const [editingBranchUser, setEditingBranchUser] = useState<any | null>(null);
   const [usersActivitySearch, setUsersActivitySearch] = useState('');
@@ -165,7 +180,28 @@ export function ManagerPage() {
     [group?.branches],
   );
   const allowedSections = useMemo(() => getAllowedManagerSections(managerAccess), [managerAccess]);
-  const canEnterBranch = useMemo(() => Boolean(group?.managerAccess?.canEdit) || managerAccessAllows(group?.managerAccess, 'BRANCH_OPERATIONS') || managerAccessAllows(group?.managerAccess, 'MANAGER_SALES'), [group?.managerAccess]);
+  const enterableBranchIds = useMemo(() => {
+    const access = group?.managerAccess;
+    const groupId = group?.id;
+    if (!group || !access) return new Set<string>();
+    if (access.isOwner) return new Set(group.branches.filter((branch) => branch.isActive !== false).map((branch) => branch.id));
+    const rules = Array.isArray(access.branchAccess) ? access.branchAccess : [];
+    return new Set((group?.branches || []).filter((branch) => {
+      if (branch.isActive === false) return false;
+      const mode = String(access.accessScopeMode || 'LEGACY').toUpperCase();
+      const inScope = mode === 'ALL_GROUP'
+        || (mode === 'BRANCHES' && access.branchIds.includes(branch.id))
+        || (mode === 'BUSINESS_UNITS' && Boolean(branch.businessUnitId && access.businessUnitIds.includes(branch.businessUnitId)))
+        || (mode === 'LEGACY' && (!access.branchIds.length || access.branchIds.includes(branch.id)) && (!access.businessUnitIds.length || Boolean(branch.businessUnitId && access.businessUnitIds.includes(branch.businessUnitId))));
+      if (!inScope) return false;
+      const rule = rules.find((candidate) => candidate.scopeType === 'BRANCH' && candidate.scopeId === branch.id)
+        || rules.find((candidate) => candidate.scopeType === 'BUSINESS_UNIT' && candidate.scopeId === branch.businessUnitId)
+        || rules.find((candidate) => candidate.scopeType === 'GROUP' && candidate.scopeId === groupId);
+      return rule?.mode === 'FULL' || (rule?.mode === 'CUSTOM' && Array.isArray(rule.permissions) && rule.permissions.length > 0);
+    }).map((branch) => branch.id));
+  }, [group]);
+  const canViewManagerUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'read'), [group?.managerAccess]);
+  const canViewManagerAssignments = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_MANAGERS', 'read'), [group?.managerAccess]);
   const canEditBranchUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'edit'), [group?.managerAccess]);
   const canConfigureManagers = useMemo(() => {
     const access = group?.managerAccess;
@@ -174,14 +210,17 @@ export function ManagerPage() {
   const canManageManagersFromUsers = canConfigureManagers;
   const canViewManagerAudit = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'read'), [group?.managerAccess]);
   const canApproveManagerTransfers = useMemo(() => {
-    const access = group?.managerAccess;
-    const canCreateTransfer = managerAccessAllowsAction(access, 'MANAGER_TRANSFERS', 'create');
-    const canEditTransfer = managerAccessAllowsAction(access, 'MANAGER_TRANSFERS', 'edit');
-    return canCreateTransfer && Boolean(!access || access.isOwner || access.canEdit || canEditTransfer);
+    return managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'edit');
   }, [group?.managerAccess]);
   const canExportSales = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_SALES', 'export');
   const canExportPurchases = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_PURCHASES', 'export');
   const canExportInventory = managerAccessAllowsAction(group?.managerAccess, inventoryView === 'transfers' ? 'MANAGER_TRANSFERS' : 'MANAGER_INVENTORY', 'export');
+  const canExportOverview = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_OVERVIEW', 'export');
+  const canViewCorporateWarehouses = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_WAREHOUSES', 'read');
+  const canCreateCorporateWarehouses = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_WAREHOUSES', 'create');
+  const canEditCorporateWarehouses = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_WAREHOUSES', 'edit');
+  const canCreateSharedCatalog = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_CATALOG', 'create');
+  const canEditSharedCatalog = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_CATALOG', 'edit');
   const canExportFinance = ['MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED'].some((module) => managerAccessAllowsAction(group?.managerAccess, module, 'export'));
   const canExportAccounting = ['MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED'].some((module) => managerAccessAllowsAction(group?.managerAccess, module, 'export'));
   const canExportReports = managerAccessAllowsAction(group?.managerAccess, 'MANAGER_REPORTS', 'export');
@@ -190,8 +229,9 @@ export function ManagerPage() {
   useEffect(() => {
     if (selectedBusinessUnitId && !businessUnits.some((unit) => unit.id === selectedBusinessUnitId && unit.isActive !== false)) setSelectedBusinessUnitId('');
     if (selectedBranchId && !branchOptions.some((branch) => branch.id === selectedBranchId)) setSelectedBranchId('');
+    if (inventoryView === 'corporateWarehouses' && !canViewCorporateWarehouses) setInventoryView('warehouses');
     if (!allowedSections.includes(section) && allowedSections[0]) setSection(allowedSections[0]);
-  }, [groupId, selectedBusinessUnitId, selectedBranchId, businessUnits, group?.branches, branchOptions, allowedSections, section]);
+  }, [groupId, selectedBusinessUnitId, selectedBranchId, businessUnits, group?.branches, branchOptions, allowedSections, section, inventoryView, canViewCorporateWarehouses]);
 
   const effectiveSelectedBranchId = selectedBranchId && branchOptions.some((branch) => branch.id === selectedBranchId) ? selectedBranchId : '';
 
@@ -217,6 +257,11 @@ export function ManagerPage() {
     (signal) => enterpriseGroupsService.getInventoryModule(groupId, { view: 'warehouses', businessUnitId: selectedBusinessUnitId || undefined, branchId: effectiveSelectedBranchId || undefined, report: true, page: 1, pageSize: 5000 }, signal),
     { enabled: Boolean(groupId) && section === 'inventory' },
   );
+  const corporateWarehousesQuery = useTenantQuery(
+    ['manager-corporate-warehouses', groupId, selectedBusinessUnitId || 'all', effectiveSelectedBranchId || 'all'],
+    (signal) => enterpriseGroupsService.getInventoryModule(groupId, { view: 'warehouses', businessUnitId: selectedBusinessUnitId || undefined, branchId: effectiveSelectedBranchId || undefined, corporateManagement: true, report: true, page: 1, pageSize: 5000 }, signal),
+    { enabled: Boolean(groupId) && section === 'inventory' && inventoryView === 'corporateWarehouses' && canViewCorporateWarehouses },
+  );
   const accountingQuery = useTenantQuery(
     ['manager-accounting', groupId, effectiveSelectedBranchId || 'all'],
     (signal) => enterpriseGroupsService.getAccounting(groupId, effectiveSelectedBranchId || undefined, signal),
@@ -225,7 +270,7 @@ export function ManagerPage() {
   const usersQuery = useTenantQuery(
     ['manager-users', groupId, selectedBusinessUnitId || 'all', effectiveSelectedBranchId || 'all'],
     (signal) => enterpriseGroupsService.getUsers(groupId, effectiveSelectedBranchId || undefined, selectedBusinessUnitId || undefined, signal),
-    { enabled: Boolean(groupId) && (section === 'users' || (section === 'settings' && settingsView === 'audit')) },
+    { enabled: Boolean(groupId) && ((section === 'users' && usersTab === 'users' && canViewManagerUsers) || (section === 'settings' && settingsView === 'audit' && canViewManagerUsers)) },
   );
   const usersActivityQuery = useTenantQuery(
     ['manager-users-activity', groupId, selectedBusinessUnitId || 'all', effectiveSelectedBranchId || 'all', usersActivityPage, usersActivitySearch, usersActivityModule],
@@ -242,7 +287,7 @@ export function ManagerPage() {
   const managersQuery = useTenantQuery(
     ['manager-assignments', groupId],
     (signal) => enterpriseGroupsService.getManagers(groupId, signal),
-    { enabled: Boolean(groupId) && section === 'managers' },
+    { enabled: Boolean(groupId) && section === 'users' && usersTab !== 'users' && (canViewManagerAssignments || canConfigureManagers) },
   );
   const sharedCatalogQuery = useTenantQuery(
     ['manager-catalog', groupId],
@@ -265,8 +310,8 @@ export function ManagerPage() {
     onSuccess: (result: any) => { void overviewQuery.refetch(); void inventoryWarehousesQuery.refetch(); toast.success(`Catálogo preparado: ${result.productsLinked || 0} producto(s), ${result.stockLevelsCreated || 0} registro(s) en cero`); },
     onError: (error: Error) => toast.error(error.message),
   });
-  const managerPayload = () => ({ name: managerName.trim(), email: managerEmail.trim(), ...(managerPassword ? { password: managerPassword } : {}), businessUnitIds: managerBusinessUnitIds, branchIds: managerBranchIds, permissions: managerStateToPermissions(managerPermissionState), canEdit: managerCanEdit, canManageManagers: managerCanManageManagers });
-  const resetManagerForm = () => { setEditingManagerId(''); setManagerName(''); setManagerEmail(''); setManagerPassword(''); setManagerBusinessUnitIds([]); setManagerBranchIds([]); setManagerCanManageManagers(false); setManagerCanEdit(false); setManagerPermissionState(defaultManagerPermissionState()); };
+  const managerPayload = () => ({ name: managerName.trim(), email: managerEmail.trim(), ...(managerPassword ? { password: managerPassword } : {}), accessScopeMode: managerScopeMode, businessUnitIds: managerBusinessUnitIds, branchIds: managerBranchIds, branchAccess: managerBranchAccess, permissions: managerStateToPermissions(managerPermissionState), canManageManagers: managerCanManageManagers });
+  const resetManagerForm = () => { setEditingManagerId(''); setManagerName(''); setManagerEmail(''); setManagerPassword(''); setManagerScopeMode('BRANCHES'); setManagerBusinessUnitIds([]); setManagerBranchIds([]); setManagerBranchAccess([]); setManagerCanManageManagers(false); setManagerPermissionState(defaultManagerPermissionState()); };
   const managerMutation = useMutation({
     mutationFn: () => editingManagerId
       ? enterpriseGroupsService.updateManager(groupId, editingManagerId, managerPayload())
@@ -366,6 +411,23 @@ export function ManagerPage() {
   const catalogProducts = branchProductsQuery.data || [];
   const activeTitle = MANAGER_SECTIONS.find((item) => item.id === section)?.label;
   const loading = groupsQuery.isLoading || (section === 'overview' && overviewQuery.isLoading);
+  const managersContentProps = {
+    data: managersQuery.data || [], businessUnits, branches: managerAssignableBranches,
+    canConfigureManagers, canEditOwner: Boolean(group?.managerAccess?.isOwner),
+    editingManagerId, name: managerName, email: managerEmail, password: managerPassword,
+    scopeMode: managerScopeMode, businessUnitIds: managerBusinessUnitIds, branchIds: managerBranchIds,
+    branchAccess: managerBranchAccess, canManageManagers: managerCanManageManagers,
+    permissionState: managerPermissionState, setEditingManagerId, setName: setManagerName,
+    setEmail: setManagerEmail, setPassword: setManagerPassword, setScopeMode: setManagerScopeMode,
+    setBusinessUnitIds: setManagerBusinessUnitIds, setBranchIds: setManagerBranchIds,
+    setBranchAccess: setManagerBranchAccess, setCanManageManagers: setManagerCanManageManagers,
+    setPermissionState: setManagerPermissionState, onReset: resetManagerForm,
+    onSave: () => managerMutation.mutate(), saving: managerMutation.isPending,
+    onPassword: (userId: string, password: string) => managerPasswordMutation.mutate({ userId, password }),
+    resettingPassword: managerPasswordMutation.isPending,
+    onRevoke: (userId: string) => revokeManagerMutation.mutate(userId), revoking: revokeManagerMutation.isPending,
+    onEdit: () => setUsersTab('access'),
+  };
 
   return (
     <ManagerShell
@@ -408,28 +470,35 @@ export function ManagerPage() {
       <div className="min-w-0 space-y-6">
         {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && section !== 'reports' && section !== 'hr' && !MANAGER_OPERATION_BY_SECTION[section] && <div className="flex min-w-0 justify-end">
           <div className="hidden min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2></div>
-          <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(buildDownloadFileName(['resumen', activeTitle || section], 'csv'), (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
+          {canExportOverview && <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(buildDownloadFileName(['resumen', activeTitle || section], 'csv'), (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>}
         </div>}
 
         {loading && <div className="flex min-h-[240px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-5 animate-spin" /> Cargando consolidado...</div>}
-        {!loading && !groupId && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">SuperAdmin todavía no ha asignado este usuario a un grupo empresarial.</CardContent></Card>}
+        {!loading && groupsQuery.isError && <Card role="alert" className="rounded-3xl border-destructive/30 bg-destructive/5"><CardContent className="flex flex-col items-center gap-4 p-8 text-center sm:p-10"><div><p className="font-bold text-destructive">No se pudo cargar el grupo empresarial.</p><p className="mt-1 text-sm text-muted-foreground">La consulta falló. Esto no confirma que el usuario carezca de una asignación.</p></div><Button type="button" variant="outline" className="rounded-xl" onClick={() => void groupsQuery.refetch()} disabled={groupsQuery.isFetching}><RefreshCw className={`mr-2 size-4 ${groupsQuery.isFetching ? 'animate-spin' : ''}`} /> Reintentar</Button></CardContent></Card>}
+        {!loading && !groupsQuery.isError && !groupId && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">SuperAdmin todavía no ha asignado este usuario a un grupo empresarial.</CardContent></Card>}
 
         {!loading && groupId && !allowedSections.includes(section) && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">Este acceso Manager no tiene permisos para esta vista.</CardContent></Card>}
-        {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
-        {section === 'inventory' && allowedSections.includes('inventory') && <ManagerInventoryModule view={inventoryView} onViewChange={setInventoryView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} warehouses={scopedWarehouses} businessUnits={businessUnits} canCreateTransfers={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} canApproveTransfers={canApproveManagerTransfers} approvingTransferId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApproveTransfer={setTransferToApprove} canImportInventory={Boolean(!group?.managerAccess || group.managerAccess.isOwner || group.managerAccess.canEdit) && managerAccessAllowsAction(group?.managerAccess, 'MANAGER_INVENTORY', 'create')} canViewInventoryCost={managerAccessCanViewInventoryCost(group?.managerAccess)} canExport={canExportInventory} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} onRefreshScope={() => groupsQuery.refetch()} corporateWarehouseContent={<WarehouseContent overview={overview} inventoryWarehouses={inventoryWarehousesQuery.data?.data || []} warehousesLoading={inventoryWarehousesQuery.isLoading} branches={branchOptions} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />} />}
-        {section === 'sales' && allowedSections.includes('sales') && <ManagerSalesModule view={salesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} canExport={canExportSales} />}
-        {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={purchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} canExport={canExportPurchases} />}
+        {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} />}
+        {section === 'inventory' && allowedSections.includes('inventory') && <ManagerInventoryModule view={inventoryView} onViewChange={setInventoryView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} warehouses={scopedWarehouses} businessUnits={businessUnits} canViewCorporateWarehouses={canViewCorporateWarehouses} canCreateTransfers={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} canApproveTransfers={canApproveManagerTransfers} approvingTransferId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApproveTransfer={setTransferToApprove} canImportInventory={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_INVENTORY', 'create')} canViewInventoryCost={managerAccessCanViewInventoryCost(group?.managerAccess)} canExport={canExportInventory} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} onRefreshScope={() => groupsQuery.refetch()} corporateWarehouseContent={<WarehouseContent overview={overview} inventoryWarehouses={corporateWarehousesQuery.data?.data || []} warehousesLoading={corporateWarehousesQuery.isLoading} branches={branchOptions} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} canCreate={canCreateCorporateWarehouses} canEdit={canEditCorporateWarehouses} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />} />}
+        {section === 'sales' && allowedSections.includes('sales') && <ManagerSalesModule view={salesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} canExport={canExportSales} />}
+        {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={purchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} onEnterBranch={enterBranch} enterableBranchIds={enterableBranchIds} canExport={canExportPurchases} />}
         {section === 'finances' && allowedSections.includes('finances') && <ManagerFinanceModule view={financeView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} reportCurrency={activeManagerCurrency} canExport={canExportFinance} />}
         {section === 'accounting' && allowedSections.includes('accounting') && <ManagerAccountingModule view={accountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportAccounting} />}
         {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={reportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportReports} />}
         {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={hrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={canExportHr} />}
         {activeOperationModule && allowedSections.includes(section) && <ManagerOperationsView key={activeOperationModule} module={activeOperationModule} view={activeOperationView} onViewChange={(view) => setOperationViews((current) => ({ ...current, [activeOperationModule]: view }))} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={effectiveSelectedBranchId || undefined} branches={branchOptions} canExport={managerAccessAllowsAction(group?.managerAccess, MANAGER_OPERATION_PERMISSION[activeOperationModule], 'export')} />}
-        {section === 'users' && <UsersContent showActivity={false} data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={undefined} activityLoading={false} activityError={null} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={() => undefined} setActivityModule={() => undefined} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={() => undefined} setActivityBranchId={() => undefined} onActivityPageChange={() => undefined} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
+        {section === 'users' && <div className="space-y-5">
+          <div role="tablist" aria-label="Administración de usuarios del grupo" className="flex max-w-full gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/20 p-2">
+            {([{ id: 'users', label: 'Usuarios del grupo', allowed: canViewManagerUsers }, { id: 'managers', label: 'Managers', allowed: canViewManagerAssignments || canConfigureManagers }, { id: 'access', label: 'Accesos Manager', allowed: canConfigureManagers }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={usersTab === tab.id} disabled={!tab.allowed} onClick={() => setUsersTab(tab.id)} className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${usersTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>{tab.label}</button>)}
+          </div>
+          {usersTab === 'users' && (canViewManagerUsers ? <UsersContent showActivity={false} data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={undefined} activityLoading={false} activityError={null} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={() => undefined} setActivityModule={() => undefined} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={() => undefined} setActivityBranchId={() => undefined} onActivityPageChange={() => undefined} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setUsersTab('access'); }} /> : <Card className="rounded-3xl border-dashed"><CardContent className="p-6 text-sm text-muted-foreground">No tienes permiso para consultar usuarios de sucursal.</CardContent></Card>)}
+          {usersTab === 'managers' && (canViewManagerAssignments || canConfigureManagers) && <ManagersContent {...managersContentProps} showForm={false} showList />}
+          {usersTab === 'access' && canConfigureManagers && <ManagersContent {...managersContentProps} showForm showList={false} />}
+        </div>}
         {section === 'settings' && settingsView === 'audit' && canViewManagerAudit && <UsersContent showActivity auditOnly data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} activity={usersActivityQuery.data} activityLoading={usersActivityQuery.isLoading} activityError={usersActivityQuery.error} activitySearch={usersActivitySearch} activityModule={usersActivityModule} activityPage={usersActivityPage} setActivitySearch={(value) => { setUsersActivitySearch(value); setUsersActivityPage(1); }} setActivityModule={(value) => { setUsersActivityModule(value); setUsersActivityPage(1); }} activityBusinessUnitId={selectedBusinessUnitId} activityBranchId={effectiveSelectedBranchId} activityBusinessUnits={businessUnits} activityBranches={branchOptions} setActivityBusinessUnitId={(value) => { setSelectedBusinessUnitId(value); setSelectedBranchId(''); setUsersActivityPage(1); }} setActivityBranchId={(value) => { setSelectedBranchId(value); setUsersActivityPage(1); }} onActivityPageChange={setUsersActivityPage} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={() => undefined} togglingUserId="" onCreateManager={() => undefined} />}
-        {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
+        {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} canShare={canCreateSharedCatalog} canEditCatalog={canEditSharedCatalog} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
         {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
         {section === 'transfers' && <TransfersContent data={transfersQuery.data || []} loading={transfersQuery.isLoading} canApprove={canApproveManagerTransfers} approvingId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApprove={setTransferToApprove} />}
-        {section === 'managers' && <ManagersContent data={managersQuery.data || []} businessUnits={businessUnits} businessUnitIds={managerBusinessUnitIds} branches={managerAssignableBranches} canConfigureManagers={canConfigureManagers} canEditOwner={Boolean(group?.managerAccess?.isOwner)} editingManagerId={editingManagerId} name={managerName} email={managerEmail} password={managerPassword} branchIds={managerBranchIds} canManageManagers={managerCanManageManagers} canEdit={managerCanEdit} permissionState={managerPermissionState} setEditingManagerId={setEditingManagerId} setName={setManagerName} setEmail={setManagerEmail} setPassword={setManagerPassword} setBusinessUnitIds={setManagerBusinessUnitIds} setBranchIds={setManagerBranchIds} setCanManageManagers={setManagerCanManageManagers} setCanEdit={setManagerCanEdit} setPermissionState={setManagerPermissionState} onReset={resetManagerForm} onSave={() => managerMutation.mutate()} saving={managerMutation.isPending} onPassword={(userId, password) => managerPasswordMutation.mutate({ userId, password })} resettingPassword={managerPasswordMutation.isPending} onRevoke={(userId) => revokeManagerMutation.mutate(userId)} revoking={revokeManagerMutation.isPending} />}
       </div>
       <ManagerUserEditorDialog user={editingBranchUser} open={Boolean(editingBranchUser)} saving={branchUserMutation.isPending} onOpenChange={(open) => { if (!open) setEditingBranchUser(null); }} onSave={(payload) => { if (editingBranchUser?.id) branchUserMutation.mutate({ userId: editingBranchUser.id, payload }); }} />
       <ConfirmDialog
@@ -456,9 +525,7 @@ export function ManagerPage() {
 }
 
 function defaultManagerPermissionState(): ManagerPermissionState {
-  const state = emptyManagerPermissionState();
-  ['MANAGER_OVERVIEW', 'MANAGER_SALES', 'MANAGER_PURCHASES', 'MANAGER_INVENTORY', 'MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_REPORTS', 'MANAGER_HR', 'MANAGER_ACTIVITIES', 'MANAGER_PROJECTS', 'MANAGER_TICKETS', 'MANAGER_DOCUMENTS', 'MANAGER_RESTAURANT', 'MANAGER_LOGISTICS', 'MANAGER_FINANCING', 'MANAGER_LEGAL', 'MANAGER_NOVACHAT', 'MANAGER_SUPPORT', 'MANAGER_CONSOLIDATED', 'MANAGER_TRANSFERS', 'MANAGER_CATALOG', 'MANAGER_USERS', 'MANAGER_WAREHOUSES'].forEach((module) => { state[module] = 'READ'; });
-  return state;
+  return emptyManagerPermissionState();
 }
 
 const MANAGER_SECTION_MODULES: Partial<Record<ManagerSection, string>> = {
@@ -484,7 +551,6 @@ const MANAGER_SECTION_MODULES: Partial<Record<ManagerSection, string>> = {
   transfers: 'MANAGER_TRANSFERS',
   catalog: 'MANAGER_CATALOG',
   users: 'MANAGER_USERS',
-  managers: 'MANAGER_MANAGERS',
 };
 
 function getAllowedManagerSections(access?: ManagerOverview['group']['managerAccess']): ManagerSection[] {
@@ -492,6 +558,7 @@ function getAllowedManagerSections(access?: ManagerOverview['group']['managerAcc
   const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
   return MANAGER_SECTIONS.filter((item) => {
     if (item.id === 'settings') return true;
+    if (item.id === 'users') return managerPermissionGranted(permissions, 'MANAGER_USERS') || managerPermissionGranted(permissions, 'MANAGER_MANAGERS') || Boolean(access.canManageManagers);
     // Los Managers creados antes de separar Finanzas y Contabilidad pueden
     // conservar el permiso legado. Se mantiene visible Finanzas para no
     // romper su navegación; el backend también acepta ese permiso heredado.
@@ -509,14 +576,7 @@ function getAllowedManagerSections(access?: ManagerOverview['group']['managerAcc
 function managerPermissionGranted(permissions: Array<Record<string, unknown>>, module?: string) {
   if (!module) return false;
   const permission = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === module);
-  return Boolean(permission && (permission.read === true || permission.create === true || permission.edit === true || permission.delete === true || permission.manage === true));
-}
-
-function managerAccessAllows(access: ManagerOverview['group']['managerAccess'], module: string) {
-  if (!access || access.isOwner) return true;
-  const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
-  const permission = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === module);
-  return Boolean(permission && (permission.read === true || permission.create === true || permission.edit === true || permission.delete === true || permission.manage === true));
+  return Boolean(permission?.read === true);
 }
 
 function managerAccessAllowsAction(access: ManagerOverview['group']['managerAccess'], module: string, action: string) {
@@ -524,19 +584,17 @@ function managerAccessAllowsAction(access: ManagerOverview['group']['managerAcce
   if (module === 'MANAGER_MANAGERS' && action === 'manage' && !access.canManageManagers) return false;
   const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
   const permission = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === module);
-  return Boolean(permission && (permission[action] === true || permission.manage === true));
+  return Boolean(permission?.[action] === true);
 }
 
 function managerAccessCanViewInventoryCost(access: ManagerOverview['group']['managerAccess']) {
   if (!access || access.isOwner) return true;
   const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
   const explicit = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === 'MANAGER_INVENTORY_COST');
-  if (explicit && (explicit.read === true || explicit.create === true || explicit.edit === true || explicit.delete === true || explicit.manage === true)) return true;
-  const inventory = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === 'MANAGER_INVENTORY');
-  return Boolean(access.canManageManagers && access.canEdit && inventory && (inventory.create === true || inventory.manage === true));
+  return explicit?.read === true;
 }
 
-function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = true }: { overview?: ManagerOverview; groupId?: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean }) {
+function OverviewContent({ overview, groupId, onEnterBranch, enterableBranchIds = new Set<string>() }: { overview?: ManagerOverview; groupId?: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; enterableBranchIds?: Set<string> }) {
   const metrics = overview?.metrics;
   const visibleBranches = overview?.branches || [];
   const activeBranches = visibleBranches.filter((branch) => branch.isActive !== false).length;
@@ -606,7 +664,7 @@ function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = tr
                   <div className="min-w-0 border-l border-border/60 pl-2"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Productos</p><p className="mt-1 text-sm font-black tabular-nums">{formatNumber(branch._count.products)}</p></div>
                   <div className="min-w-0 border-l border-border/60 pl-2"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Bodegas</p><p className="mt-1 text-sm font-black tabular-nums">{formatNumber(branch._count.warehouses)}</p></div>
                 </div>
-                <div className="mt-3 flex min-w-0 items-center justify-between gap-3"><p className="flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground"><MapPin className="size-3.5 shrink-0" />{branch.slug || 'Sucursal operativa'}</p>{onEnterBranch && canEnterBranch && groupId && isActive ? <Button variant="ghost" size="sm" className="h-8 shrink-0 gap-1 rounded-lg px-2.5 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary" onClick={() => onEnterBranch(groupId, branch.id)}><span>Ir a sucursal</span><ArrowUpRight className="size-3.5" /></Button> : <span className="shrink-0 text-[11px] text-muted-foreground">{isActive ? 'Solo consulta' : 'No disponible'}</span>}</div>
+                <div className="mt-3 flex min-w-0 items-center justify-between gap-3"><p className="flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground"><MapPin className="size-3.5 shrink-0" />{branch.slug || 'Sucursal operativa'}</p>{onEnterBranch && enterableBranchIds.has(branch.id) && groupId && isActive ? <Button variant="ghost" size="sm" className="h-8 shrink-0 gap-1 rounded-lg px-2.5 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary" onClick={() => onEnterBranch(groupId, branch.id)}><span>Ir a sucursal</span><ArrowUpRight className="size-3.5" /></Button> : <span className="shrink-0 text-[11px] text-muted-foreground">{isActive ? 'Solo consulta' : 'No disponible'}</span>}</div>
               </motion.article>;
             })}
           </div>
@@ -734,13 +792,13 @@ function UsersContent({ auditOnly = false, showActivity = auditOnly, data, loadi
         {canManageManagers && <Button type="button" className="w-full shrink-0 rounded-xl sm:w-auto" onClick={onCreateManager}><ShieldCheck className="mr-2 size-4" /> Agregar acceso Manager</Button>}
       </CardHeader>
       <CardContent>
-        {loading ? <div className="p-8 text-center text-muted-foreground">Cargando usuarios...</div> : error ? <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive"><p className="font-bold">No se pudo cargar el recuento de usuarios.</p><p className="mt-1 break-words">{error.message}</p></div> : !data.length ? <p className="py-8 text-center text-sm text-muted-foreground">No hay usuarios en el alcance seleccionado.</p> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal / grupo</TableHead><TableHead>Usuario</TableHead><TableHead>Rol</TableHead><TableHead>RR. HH.</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{data.map((user) => {
+        {loading ? <div className="p-8 text-center text-muted-foreground">Cargando usuarios...</div> : error ? <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive"><p className="font-bold">No se pudo cargar el recuento de usuarios.</p><p className="mt-1 break-words">{error.message}</p></div> : !data.length ? <p className="py-8 text-center text-sm text-muted-foreground">No hay usuarios en el alcance seleccionado.</p> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal / grupo</TableHead><TableHead>Usuario</TableHead><TableHead>Tipo</TableHead><TableHead>RR. HH.</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{data.map((user) => {
           const isManager = Boolean(user.managerGroup);
           const isToggling = togglingUserId === user.id;
           return <TableRow key={`${user.id}-${user.managerGroup?.id || user.clientTenant?.id || 'user'}`}>
             <TableCell>{isManager ? <span className="font-semibold">Grupo empresarial</span> : user.clientTenant?.name || 'Sin sucursal'}</TableCell>
             <TableCell><p className="font-semibold">{user.name}</p><p className="text-xs text-muted-foreground">{user.email}</p></TableCell>
-            <TableCell><Badge variant={isManager ? 'default' : 'outline'}>{isManager ? (user.managerOwner ? 'Manager propietario' : 'Manager') : user.role}</Badge></TableCell>
+            <TableCell><Badge variant={isManager ? 'default' : 'outline'}>{managerUserTypeLabel(user)}</Badge></TableCell>
             <TableCell>{user.employee ? 'Vinculado' : 'Usuario independiente'}</TableCell>
             <TableCell><Badge variant={user.isActive ? 'default' : 'secondary'}>{user.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell>
             <TableCell className="text-right">{!isManager && canEditUsers ? <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => onEditUser(user)}><Pencil className="size-3.5" /> Editar</Button><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={isToggling || user.role === 'ADMIN'} title={user.role === 'ADMIN' ? 'El administrador principal está protegido' : undefined} onClick={() => onToggleUser(user)}>{user.isActive ? <UserX className="size-3.5" /> : <UserCheck className="size-3.5" />}<span className="hidden sm:inline">{isToggling ? 'Guardando…' : user.isActive ? 'Inhabilitar' : 'Habilitar'}</span></Button></div> : <span className="text-xs text-muted-foreground">Solo consulta</span>}</TableCell>
@@ -803,7 +861,7 @@ function UsersContent({ auditOnly = false, showActivity = auditOnly, data, loadi
   </div>;
 }
 
-function WarehouseContent({ overview, inventoryWarehouses, warehousesLoading, branches, units, name, location, businessUnitId, branchIds, setName, setLocation, setBusinessUnitId, setBranchIds, onCreate, creating, onSyncCatalog, syncingCatalogId }: { overview?: ManagerOverview; inventoryWarehouses: any[]; warehousesLoading: boolean; branches: Array<{ id: string; name: string; businessUnitId?: string | null }>; units: Array<{ id: string; name: string }>; name: string; location: string; businessUnitId: string; branchIds: string[]; setName: (value: string) => void; setLocation: (value: string) => void; setBusinessUnitId: (value: string) => void; setBranchIds: (value: string[]) => void; onCreate: () => void; creating: boolean; onSyncCatalog: (warehouseId: string) => void; syncingCatalogId: string }) {
+function WarehouseContent({ overview, inventoryWarehouses, warehousesLoading, branches, units, name, location, businessUnitId, branchIds, setName, setLocation, setBusinessUnitId, setBranchIds, onCreate, creating, canCreate, canEdit, onSyncCatalog, syncingCatalogId }: { overview?: ManagerOverview; inventoryWarehouses: any[]; warehousesLoading: boolean; branches: Array<{ id: string; name: string; businessUnitId?: string | null }>; units: Array<{ id: string; name: string }>; name: string; location: string; businessUnitId: string; branchIds: string[]; setName: (value: string) => void; setLocation: (value: string) => void; setBusinessUnitId: (value: string) => void; setBranchIds: (value: string[]) => void; onCreate: () => void; creating: boolean; canCreate: boolean; canEdit: boolean; onSyncCatalog: (warehouseId: string) => void; syncingCatalogId: string }) {
   const visibleBranches = branches.length ? branches : (overview?.branches || []);
   const visibleWarehouses = inventoryWarehouses.length
     ? inventoryWarehouses.map((warehouse: any) => ({ ...warehouse, authorizedBranchIds: warehouse.authorizedBranchIds || warehouse.branchIds || (warehouse.branches || []).map((branch: any) => branch.id) }))
@@ -813,10 +871,10 @@ function WarehouseContent({ overview, inventoryWarehouses, warehousesLoading, br
   return <div className="space-y-6">
     <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Warehouse className="size-5 text-primary" /> Almacenes corporativos</CardTitle></CardHeader><CardContent>
       {warehousesLoading && !visibleWarehouses.length && <p className="py-6 text-center text-sm text-muted-foreground">Cargando almacenes corporativos...</p>}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{visibleWarehouses.map((warehouse: any) => <div key={warehouse.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-bold">{warehouse.name}</p><p className="text-xs text-muted-foreground">{warehouse.location || 'Sin ubicación registrada'}</p></div><Badge variant="outline">Por rubro</Badge></div><p className="mt-4 text-xs text-muted-foreground">Rubro: {units.find((unit) => unit.id === warehouse.businessUnitId)?.name || warehouse.businessUnitName || 'Pendiente de normalizar'}</p><p className="mt-2 text-xs text-muted-foreground">Abastece: {warehouse.authorizedBranchIds?.map((id: string) => visibleBranches.find((branch) => branch.id === id)?.name).filter(Boolean).join(', ') || 'Sin autorización registrada'}</p><Button type="button" variant="outline" size="sm" className="mt-4 w-full rounded-xl" disabled={Boolean(syncingCatalogId)} onClick={() => onSyncCatalog(warehouse.id)}>{syncingCatalogId === warehouse.id ? 'Preparando catálogo...' : 'Preparar catálogo en cero'}</Button></div>)}</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{visibleWarehouses.map((warehouse: any) => <div key={warehouse.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-bold">{warehouse.name}</p><p className="text-xs text-muted-foreground">{warehouse.location || 'Sin ubicación registrada'}</p></div><Badge variant="outline">Por rubro</Badge></div><p className="mt-4 text-xs text-muted-foreground">Rubro: {units.find((unit) => unit.id === warehouse.businessUnitId)?.name || warehouse.businessUnitName || 'Pendiente de normalizar'}</p><p className="mt-2 text-xs text-muted-foreground">Abastece: {warehouse.authorizedBranchIds?.map((id: string) => visibleBranches.find((branch) => branch.id === id)?.name).filter(Boolean).join(', ') || 'Sin autorización registrada'}</p>{canEdit && <Button type="button" variant="outline" size="sm" className="mt-4 w-full rounded-xl" disabled={Boolean(syncingCatalogId)} onClick={() => onSyncCatalog(warehouse.id)}>{syncingCatalogId === warehouse.id ? 'Preparando catálogo...' : 'Preparar catálogo en cero'}</Button>}</div>)}</div>
       {!warehousesLoading && !visibleWarehouses.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay almacenes visibles.</p>}
     </CardContent></Card>
-    <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Plus className="size-5 text-primary" /> Nuevo almacén corporativo</CardTitle></CardHeader><CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nombre del almacén" className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Ubicación (opcional)" className="h-10 min-w-0 rounded-xl border border-border bg-background px-3 text-sm" /><select value={businessUnitId} onChange={(event) => setBusinessUnitId(event.target.value)} className="h-10 min-w-0 rounded-xl border border-border bg-background px-3 text-sm" disabled={!units.length}><option value="">{units.length ? 'Selecciona un rubro' : 'Crea primero un rubro'}</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select><div className="rounded-2xl border border-border/60 bg-muted/20 p-3 sm:col-span-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales que puede abastecer</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{destinationBranches.map((branch) => <label key={branch.id} className="flex items-center gap-2 rounded-xl border border-border/60 p-2 text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 accent-primary" />{branch.name}</label>)}{!destinationBranches.length && <p className="text-xs text-muted-foreground">Selecciona un rubro con sucursales.</p>}</div></div><Button className="h-10 rounded-xl sm:col-span-3" disabled={!name.trim() || !businessUnitId || !branchIds.length || creating} onClick={onCreate}>{creating ? 'Guardando...' : 'Agregar almacén'}</Button></CardContent></Card>
+    {canCreate && <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Plus className="size-5 text-primary" /> Nuevo almacén corporativo</CardTitle></CardHeader><CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nombre del almacén" className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Ubicación (opcional)" className="h-10 min-w-0 rounded-xl border border-border bg-background px-3 text-sm" /><select value={businessUnitId} onChange={(event) => setBusinessUnitId(event.target.value)} className="h-10 min-w-0 rounded-xl border border-border bg-background px-3 text-sm" disabled={!units.length}><option value="">{units.length ? 'Selecciona un rubro' : 'Crea primero un rubro'}</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select><div className="rounded-2xl border border-border/60 bg-muted/20 p-3 sm:col-span-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales que puede abastecer</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{destinationBranches.map((branch) => <label key={branch.id} className="flex items-center gap-2 rounded-xl border border-border/60 p-2 text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 accent-primary" />{branch.name}</label>)}{!destinationBranches.length && <p className="text-xs text-muted-foreground">Selecciona un rubro con sucursales.</p>}</div></div><Button className="h-10 rounded-xl sm:col-span-3" disabled={!name.trim() || !businessUnitId || !branchIds.length || creating} onClick={onCreate}>{creating ? 'Guardando...' : 'Agregar almacén'}</Button></CardContent></Card>}
   </div>;
 }
 
@@ -875,17 +933,17 @@ function ConsolidatedContent({ trialBalance, profitLoss, balanceSheet, branchCom
   </div>;
 }
 
-function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourceBranchId, search, setSearch, products, productsLoading, selectedProductIds, setSelectedProductIds, targetBranchIds, setTargetBranchIds, onShare, sharing, onUnshare, unsharing, onSync, syncing }: {
+function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourceBranchId, search, setSearch, products, productsLoading, selectedProductIds, setSelectedProductIds, targetBranchIds, setTargetBranchIds, canShare, canEditCatalog, onShare, sharing, onUnshare, unsharing, onSync, syncing }: {
   data: any[]; loading: boolean; branchOptions: Array<{ id: string; name: string; businessUnitId?: string | null }>;
   sourceBranchId: string; setSourceBranchId: (value: string) => void; search: string; setSearch: (value: string) => void;
   products: any[]; productsLoading: boolean; selectedProductIds: string[]; setSelectedProductIds: (value: string[]) => void;
-  targetBranchIds: string[]; setTargetBranchIds: (value: string[]) => void; onShare: () => void; sharing: boolean;
+  targetBranchIds: string[]; setTargetBranchIds: (value: string[]) => void; canShare: boolean; canEditCatalog: boolean; onShare: () => void; sharing: boolean;
   onUnshare: (mirrorIds: string[]) => void; unsharing: boolean; onSync: (productId: string) => void; syncing: boolean;
 }) {
   const toggleProduct = (id: string) => setSelectedProductIds(selectedProductIds.includes(id) ? selectedProductIds.filter((value) => value !== id) : [...selectedProductIds, id]);
   const toggleTarget = (id: string) => setTargetBranchIds(targetBranchIds.includes(id) ? targetBranchIds.filter((value) => value !== id) : [...targetBranchIds, id]);
   return <div className="space-y-6">
-    <Card className="rounded-3xl border-border/60">
+    {canShare && <Card className="rounded-3xl border-border/60">
       <CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Tags className="size-5 text-primary" /> Compartir productos entre sucursales</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -912,7 +970,7 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
           </div>
         </div>
       </CardContent>
-    </Card>
+    </Card>}
 
     <Card className="rounded-3xl border-border/60">
       <CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Tags className="size-5 text-primary" /> Productos compartidos ({data.length})</CardTitle></CardHeader>
@@ -922,9 +980,9 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
           {data.map((master) => <div key={master.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0"><p className="font-bold">{master.name}</p><p className="font-mono text-xs text-muted-foreground">{master.code} · {master.clientTenant?.name} · {formatNumber(master.salePrice)}</p></div>
-              <div className="flex items-center gap-2"><Badge variant="outline">{master.sharedCount} espejo(s)</Badge><Button variant="outline" size="sm" disabled={syncing} onClick={() => onSync(master.id)}><RefreshCw className="mr-1.5 size-3.5" /> Sincronizar</Button></div>
+              <div className="flex items-center gap-2"><Badge variant="outline">{master.sharedCount} espejo(s)</Badge>{canEditCatalog && <Button variant="outline" size="sm" disabled={syncing} onClick={() => onSync(master.id)}><RefreshCw className="mr-1.5 size-3.5" /> Sincronizar</Button>}</div>
             </div>
-            {master.mirrors?.length > 0 && <Table containerClassName="mt-3 overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal espejo</TableHead><TableHead>Precio</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{master.mirrors.map((mirror: any) => <TableRow key={mirror.id}><TableCell className="font-semibold">{mirror.clientTenant?.name}</TableCell><TableCell>{formatNumber(mirror.salePrice)}</TableCell><TableCell><Badge variant={mirror.isActive ? 'default' : 'secondary'}>{mirror.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" className="text-destructive" disabled={unsharing} onClick={() => onUnshare([mirror.id])}>Quitar</Button></TableCell></TableRow>)}</TableBody></Table>}
+            {master.mirrors?.length > 0 && <Table containerClassName="mt-3 overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal espejo</TableHead><TableHead>Precio</TableHead><TableHead>Estado</TableHead>{canEditCatalog && <TableHead className="text-right">Acciones</TableHead>}</TableRow></TableHeader><TableBody>{master.mirrors.map((mirror: any) => <TableRow key={mirror.id}><TableCell className="font-semibold">{mirror.clientTenant?.name}</TableCell><TableCell>{formatNumber(mirror.salePrice)}</TableCell><TableCell><Badge variant={mirror.isActive ? 'default' : 'secondary'}>{mirror.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell>{canEditCatalog && <TableCell className="text-right"><Button variant="ghost" size="sm" className="text-destructive" disabled={unsharing} onClick={() => onUnshare([mirror.id])}>Quitar</Button></TableCell>}</TableRow>)}</TableBody></Table>}
           </div>)}
         </div>}
       </CardContent>
@@ -936,7 +994,6 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
 type ManagersContentProps = {
   data: any[];
   businessUnits: Array<{ id: string; name: string; isActive?: boolean }>;
-  businessUnitIds: string[];
   branches: Array<{ id: string; name: string; businessUnitId?: string | null }>;
   canConfigureManagers: boolean;
   canEditOwner: boolean;
@@ -944,18 +1001,21 @@ type ManagersContentProps = {
   name: string;
   email: string;
   password: string;
+  scopeMode: 'BRANCHES' | 'BUSINESS_UNITS';
+  businessUnitIds: string[];
   branchIds: string[];
+  branchAccess: ManagerBranchAccessRule[];
   canManageManagers: boolean;
-  canEdit: boolean;
   permissionState: ManagerPermissionState;
   setEditingManagerId: (value: string) => void;
   setName: (value: string) => void;
   setEmail: (value: string) => void;
   setPassword: (value: string) => void;
+  setScopeMode: (value: 'BRANCHES' | 'BUSINESS_UNITS') => void;
   setBusinessUnitIds: (value: string[]) => void;
   setBranchIds: (value: string[]) => void;
+  setBranchAccess: (value: ManagerBranchAccessRule[]) => void;
   setCanManageManagers: (value: boolean) => void;
-  setCanEdit: (value: boolean) => void;
   setPermissionState: (value: ManagerPermissionState) => void;
   onReset: () => void;
   onSave: () => void;
@@ -964,90 +1024,92 @@ type ManagersContentProps = {
   resettingPassword: boolean;
   onRevoke: (userId: string) => void;
   revoking: boolean;
+  showForm: boolean;
+  showList: boolean;
+  onEdit: () => void;
 };
 
 function ManagersContent({
-  data,
-  businessUnits,
-  businessUnitIds,
-  branches,
-  canConfigureManagers,
-  canEditOwner,
-  editingManagerId,
-  name,
-  email,
-  password,
-  branchIds,
-  canManageManagers,
-  canEdit,
-  permissionState,
-  setEditingManagerId,
-  setName,
-  setEmail,
-  setPassword,
-  setBusinessUnitIds,
-  setBranchIds,
-  setCanManageManagers,
-  setCanEdit,
-  setPermissionState,
-  onReset,
-  onSave,
-  saving,
-  onPassword,
-  resettingPassword,
-  onRevoke,
-  revoking,
+  data, businessUnits, branches, canConfigureManagers, canEditOwner,
+  editingManagerId, name, email, password, scopeMode, businessUnitIds, branchIds,
+  branchAccess, canManageManagers, permissionState, setEditingManagerId,
+  setName, setEmail, setPassword, setScopeMode, setBusinessUnitIds, setBranchIds,
+  setBranchAccess, setCanManageManagers, setPermissionState, onReset, onSave,
+  saving, onPassword, resettingPassword, onRevoke, revoking, showForm, showList, onEdit,
 }: ManagersContentProps) {
   const [passwordTargetId, setPasswordTargetId] = useState('');
   const [passwordDraft, setPasswordDraft] = useState('');
   const isEditing = Boolean(editingManagerId);
-  const selectedBusinessUnits = useMemo(
-    () => new Set(businessUnitIds),
-    [businessUnitIds],
-  );
-  const visibleBranches = useMemo(
-    () => businessUnitIds.length ? branches.filter((branch) => selectedBusinessUnits.has(branch.businessUnitId || '')) : branches,
-    [branches, businessUnitIds, selectedBusinessUnits],
-  );
-  const toggleBranch = (id: string) => setBranchIds(branchIds.includes(id) ? branchIds.filter((value) => value !== id) : [...branchIds, id]);
-  const toggleBusinessUnit = (id: string) => {
-    const nextIds = businessUnitIds.includes(id) ? businessUnitIds.filter((value) => value !== id) : [...businessUnitIds, id];
-    setBusinessUnitIds(nextIds);
-    if (nextIds.length) {
-      const nextUnits = new Set(nextIds);
-      setBranchIds(branchIds.filter((branchId) => branches.some((branch) => branch.id === branchId && nextUnits.has(branch.businessUnitId || ''))));
-    }
-  };
-  const updatePermission = (module: string, level: ManagerPermissionLevel) => setPermissionState({ ...permissionState, [module]: level });
+  const configuredModules = Object.values(permissionState).filter((actions) => Object.values(actions).some(Boolean)).length;
+  const policyComplete = scopeMode === 'BRANCHES'
+    ? branchIds.length > 0 && branchIds.every((id) => branchAccess.some((rule) => rule.scopeType === 'BRANCH' && rule.scopeId === id))
+    : businessUnitIds.length > 0 && businessUnitIds.every((id) => branchAccess.some((rule) => rule.scopeType === 'BUSINESS_UNIT' && rule.scopeId === id));
+
   const startEditing = (assignment: any) => {
     setEditingManagerId(assignment.user?.id || '');
     setName(assignment.user?.name || '');
     setEmail(assignment.user?.email || '');
     setPassword('');
-    setBusinessUnitIds(assignment.businessUnitIds || []);
-    setBranchIds(assignment.branchIds || []);
+    const storedRules = (Array.isArray(assignment.branchAccess) ? assignment.branchAccess : []) as ManagerBranchAccessRule[];
+    const storedScope = String(assignment.accessScopeMode || '').toUpperCase();
+    if (storedScope === 'BUSINESS_UNITS') {
+      setScopeMode('BUSINESS_UNITS');
+      setBusinessUnitIds(assignment.businessUnitIds || []);
+      setBranchIds([]);
+      setBranchAccess(storedRules);
+    } else if (storedScope === 'ALL_GROUP' || (storedScope === 'LEGACY' && !(assignment.branchIds || []).length && !(assignment.businessUnitIds || []).length)) {
+      const unitIds = businessUnits.filter((unit) => unit.isActive !== false).map((unit) => unit.id);
+      const groupRule = storedRules.find((rule) => rule.scopeType === 'GROUP');
+      setScopeMode('BUSINESS_UNITS');
+      setBusinessUnitIds(unitIds);
+      setBranchIds([]);
+      setBranchAccess(unitIds.map((unitId) => storedRules.find((rule) => rule.scopeType === 'BUSINESS_UNIT' && rule.scopeId === unitId) || ({
+        scopeType: 'BUSINESS_UNIT', scopeId: unitId, mode: groupRule?.mode === 'FULL' ? 'FULL' : 'CUSTOM', permissions: groupRule?.permissions || [],
+      })));
+    } else if (storedScope === 'LEGACY' && (assignment.businessUnitIds || []).length && !(assignment.branchIds || []).length) {
+      setScopeMode('BUSINESS_UNITS');
+      setBusinessUnitIds(assignment.businessUnitIds || []);
+      setBranchIds([]);
+      setBranchAccess(storedRules);
+    } else {
+      setScopeMode('BRANCHES');
+      setBusinessUnitIds([]);
+      setBranchIds(assignment.branchIds || []);
+      setBranchAccess(storedRules);
+    }
     setCanManageManagers(Boolean(assignment.canManageManagers));
-    setCanEdit(Boolean(assignment.canEdit));
     setPermissionState(assignment.isOwner ? defaultManagerPermissionState() : managerPermissionsToState(assignment.permissions));
+    onEdit();
   };
+
+  const updateManagerPermission = (module: string, action: ManagerPermissionAction, enabled: boolean) => {
+    if (module === 'MANAGER_INVENTORY_COST' && action !== 'read') return;
+    const current = permissionState[module] || { read: false, create: false, edit: false, delete: false, export: false, manage: false };
+    const next = { ...current, [action]: enabled };
+    if (action !== 'read' && enabled) next.read = true;
+    if (action === 'read' && !enabled && Object.entries(next).some(([key, value]) => key !== 'read' && value)) next.read = true;
+    setPermissionState({ ...permissionState, [module]: next });
+    if (module === 'MANAGER_MANAGERS' && action === 'manage') setCanManageManagers(enabled);
+  };
+
+  const updateManagerAdministration = (enabled: boolean) => {
+    setCanManageManagers(enabled);
+    const current = permissionState.MANAGER_MANAGERS || { read: false, create: false, edit: false, delete: false, export: false, manage: false };
+    setPermissionState({ ...permissionState, MANAGER_MANAGERS: { ...current, read: true, manage: enabled } });
+  };
+
   const submitPassword = (userId: string) => {
     const passwordError = getPasswordError(passwordDraft);
-    if (passwordError) {
-      toast.error(passwordError);
-      return;
-    }
+    if (passwordError) return toast.error(passwordError);
     onPassword(userId, passwordDraft);
     setPasswordTargetId('');
     setPasswordDraft('');
   };
 
   return <div className="space-y-6">
-    {canConfigureManagers && <Card className="rounded-3xl border-border/60">
+    {showForm && canConfigureManagers && <Card className="rounded-3xl border-border/60">
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><ShieldCheck className="size-5 text-primary" /> {isEditing ? 'Editar acceso Manager' : 'Nuevo usuario Manager'}</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">El Manager es global al grupo y no se registra como usuario de una sucursal.</p>
-        </div>
+        <div><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><ShieldCheck className="size-5 text-primary" />{isEditing ? 'Editar acceso Manager' : 'Nuevo acceso Manager'}</CardTitle><p className="mt-1 text-sm text-muted-foreground">La cuenta, su alcance y sus permisos se guardan como una sola asignación del grupo.</p></div>
         {isEditing && <Button type="button" variant="outline" className="w-fit rounded-xl" onClick={onReset}>Cancelar edición</Button>}
       </CardHeader>
       <CardContent className="space-y-6">
@@ -1057,34 +1119,45 @@ function ManagersContent({
           <label className="min-w-0 space-y-2 text-sm font-semibold md:col-span-2"><span>{isEditing ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'}</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isEditing ? 'Déjala vacía para conservarla' : 'Contraseña segura'} className="h-10 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal" /><PasswordRequirements value={password} required={!isEditing} /></label>
         </div>
 
-        <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Rubros con acceso</p><p className="mt-1 text-xs text-muted-foreground">Limita el Manager a unidades de negocio concretas. Sin selección conserva el alcance permitido por quien lo administra.</p></div><span className="text-xs text-muted-foreground">{businessUnitIds.length ? `${businessUnitIds.length} seleccionado(s)` : 'Todos los rubros permitidos'}</span></div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{businessUnits.filter((unit) => unit.isActive !== false).map((unit) => <label key={unit.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-background p-3 text-sm"><input type="checkbox" checked={selectedBusinessUnits.has(unit.id)} onChange={() => toggleBusinessUnit(unit.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{unit.name}</span></label>)}{!businessUnits.length && <p className="text-sm text-muted-foreground">Este grupo todavía no tiene rubros configurados.</p>}</div>
-        </div>
-
-        <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales con acceso</p><p className="mt-1 text-xs text-muted-foreground">La selección se evalúa dentro de los rubros seleccionados.</p></div><span className="text-xs text-muted-foreground">{branchIds.length ? `${branchIds.length} seleccionada(s)` : 'Todas las sucursales permitidas'}</span></div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{visibleBranches.map((branch) => <label key={branch.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-background p-3 text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span></label>)}{!visibleBranches.length && <p className="text-sm text-muted-foreground">No hay sucursales dentro del alcance seleccionado.</p>}</div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 p-4"><input type="checkbox" checked={canEdit} onChange={(event) => setCanEdit(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span><span className="block text-sm font-bold">Puede realizar cambios operativos</span><span className="mt-1 block text-xs text-muted-foreground">Permite operar dentro de las sucursales asignadas, importar productos masivos y deja trazabilidad del Manager.</span></span></label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 p-4"><input type="checkbox" checked={canManageManagers} onChange={(event) => setCanManageManagers(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span><span className="block text-sm font-bold">Puede administrar Managers</span><span className="mt-1 block text-xs text-muted-foreground">Puede crear, editar, restablecer y revocar Managers delegados.</span></span></label>
-        </div>
+        <ManagerBranchAccessEditor scopeMode={scopeMode} setScopeMode={setScopeMode} businessUnitIds={businessUnitIds} setBusinessUnitIds={setBusinessUnitIds} branchIds={branchIds} setBranchIds={setBranchIds} branchAccess={branchAccess} setBranchAccess={setBranchAccess} businessUnits={businessUnits} branches={branches} />
 
         <div className="rounded-2xl border border-border/60 p-4">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Permisos de la vista Manager</p><p className="mt-1 text-xs text-muted-foreground">Define el nivel de cada módulo. Los permisos de sucursal se controlan aparte.</p></div><Badge variant="outline">{Object.values(permissionState).filter((value) => value !== 'NONE').length} módulo(s)</Badge></div>
-          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">{MANAGER_PERMISSION_OPTIONS.map((option) => <div key={option.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-bold">{option.label}</p><p className="text-xs text-muted-foreground">{option.description}</p></div><select aria-label={`Nivel de ${option.label}`} value={permissionState[option.id] || 'NONE'} onChange={(event) => updatePermission(option.id, event.target.value as ManagerPermissionLevel)} className="h-9 w-full shrink-0 rounded-xl border border-border bg-background px-2 text-xs font-bold sm:w-32"><option value="NONE">Sin acceso</option><option value="READ">Lectura</option><option value="EDIT">Editar</option><option value="FULL">Total</option></select></div>)}</div>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Acceso a la vista Manager</p><p className="mt-1 text-xs text-muted-foreground">Controla cada módulo consolidado y cada acción. Este acceso se mantiene independiente de la operación en sucursales.</p></div><Badge variant="outline">{configuredModules} módulo(s)</Badge></div>
+          <div className="mt-4 space-y-2">
+            {MANAGER_PERMISSION_OPTIONS.map((option) => {
+              const actions = permissionState[option.id] || { read: false, create: false, edit: false, delete: false, export: false, manage: false };
+              const availableActions = option.id === 'MANAGER_INVENTORY_COST' ? MANAGER_PERMISSION_ACTIONS.filter((action) => action.key === 'read') : MANAGER_PERMISSION_ACTIONS;
+              return <details key={option.id} className="group rounded-2xl border border-border/60 bg-muted/20">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 marker:hidden [&::-webkit-details-marker]:hidden"><span className="min-w-0"><span className="block text-sm font-bold">{option.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{option.description}</span></span><span className="flex shrink-0 items-center gap-2"><Badge variant="outline">{availableActions.filter((action) => actions[action.key]).length} acción(es)</Badge><ChevronRight className="size-4 transition-transform group-open:rotate-90" /></span></summary>
+                <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border/50 px-3 py-3">{availableActions.map((action) => <label key={action.key} className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={actions[action.key]} onChange={(event) => updateManagerPermission(option.id, action.key, event.target.checked)} className="size-4 accent-primary" />{action.label}</label>)}</div>
+              </details>;
+            })}
+          </div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="rounded-xl" onClick={onReset} disabled={saving}>Limpiar</Button><Button type="button" className="rounded-xl" disabled={saving || !name.trim() || !email.trim() || Boolean(getPasswordError(password, !isEditing))} onClick={onSave}>{saving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Crear Manager'}</Button></div>
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 p-4"><input type="checkbox" checked={canManageManagers} onChange={(event) => updateManagerAdministration(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span><span className="block text-sm font-bold">Puede administrar Managers</span><span className="mt-1 block text-xs text-muted-foreground">Puede crear, editar y revocar Managers dentro de su propio alcance y permisos. Esta capacidad incluye consultar la lista.</span></span></label>
+
+        {(!policyComplete || !name.trim() || !email.trim()) && <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">Selecciona al menos un rubro o sucursal, configura su regla operativa y completa nombre y correo. Los accesos personalizados sin vistas quedan sin operación.</p>}
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="rounded-xl" onClick={onReset} disabled={saving}>Limpiar</Button><Button type="button" className="rounded-xl" disabled={saving || !policyComplete || !name.trim() || !email.trim() || Boolean(getPasswordError(password, !isEditing))} onClick={onSave}>{saving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Crear Manager'}</Button></div>
       </CardContent>
     </Card>}
-    {!canConfigureManagers && <Card className="rounded-3xl border-dashed border-border/60"><CardContent className="p-5 text-sm text-muted-foreground">Este Manager puede consultar los accesos configurados, pero solo el Manager principal o un delegado con la capacidad explícita de administrar Managers puede crear, editar, cambiar contraseñas o revocarlos.</CardContent></Card>}
 
-    <Card className="rounded-3xl border-border/60">
-      <CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Managers configurados</CardTitle></CardHeader>
-      <CardContent><div className="space-y-3">{data.map((assignment) => <div key={assignment.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-bold">{assignment.user?.name}</p><Badge variant={assignment.isOwner ? 'default' : 'outline'}>{assignment.isOwner ? 'Propietario' : 'Delegado'}</Badge><Badge variant="outline">{assignment.branchIds?.length ? `${assignment.branchIds.length} sucursal(es)` : "Todas las sucursales"}</Badge></div><p className="truncate text-xs text-muted-foreground">{assignment.user?.email}</p><p className="mt-1 text-xs text-muted-foreground">{assignment.isOwner ? 'Acceso completo al grupo.' : `${(assignment.permissions || []).filter((permission: any) => permission.read || permission.create || permission.edit || permission.manage).length} módulo(s) configurado(s).`}</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={!canConfigureManagers || (assignment.isOwner && !canEditOwner)} onClick={() => startEditing(assignment)}><Pencil className="size-3.5" /> Editar</Button><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={!canConfigureManagers || (assignment.isOwner && !canEditOwner)} onClick={() => { setPasswordTargetId(passwordTargetId === assignment.user?.id ? '' : assignment.user?.id || ''); setPasswordDraft(''); }}><KeyRound className="size-3.5" /> Contraseña</Button>{!assignment.isOwner && <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl text-destructive hover:text-destructive" disabled={!canConfigureManagers || revoking} onClick={() => { if (window.confirm(`¿Revocar el acceso de ${assignment.user?.name || 'este Manager'}?`)) onRevoke(assignment.user.id); }}><Trash2 className="size-3.5" /> Revocar</Button>}</div></div>{passwordTargetId === assignment.user?.id && <div className="mt-4 flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row"><div className="min-w-0 flex-1"><input type="password" value={passwordDraft} onChange={(event) => setPasswordDraft(event.target.value)} placeholder="Nueva contraseña" className="h-10 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm" /><PasswordRequirements value={passwordDraft} /></div><Button type="button" className="h-10 rounded-xl" disabled={Boolean(getPasswordError(passwordDraft)) || resettingPassword} onClick={() => submitPassword(assignment.user.id)}>{resettingPassword ? 'Actualizando...' : 'Actualizar contraseña'}</Button></div>}</div>)}{!data.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay accesos Manager explícitos todavía.</p>}</div></CardContent>
-    </Card>
+    {showForm && !canConfigureManagers && <Card className="rounded-3xl border-dashed border-border/60"><CardContent className="p-5 text-sm text-muted-foreground">Solo el propietario o un delegado con permiso explícito puede crear y modificar accesos Manager.</CardContent></Card>}
+
+    {showList && <Card className="rounded-3xl border-border/60">
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="text-lg font-black uppercase italic tracking-tight">Managers del grupo</CardTitle><p className="mt-1 text-sm text-muted-foreground">Cuentas globales asignadas al grupo. Los encargados de sucursal se administran en Usuarios del grupo.</p></div>{canConfigureManagers && <Button type="button" className="rounded-xl" onClick={() => { onReset(); onEdit(); }}><Plus className="mr-2 size-4" />Nuevo acceso Manager</Button>}</CardHeader>
+      <CardContent><div className="space-y-3">{data.map((assignment) => {
+        const isRubricScope = assignment.accessScopeMode === 'BUSINESS_UNITS';
+        const scopeLabel = assignment.isOwner ? 'Todo el grupo' : isRubricScope
+          ? `${(assignment.businessUnitIds || []).length} rubro(s), incluye futuras sucursales`
+          : `${(assignment.branchIds || []).length} sucursal(es) seleccionada(s)`;
+        const managerPermissionCount = (assignment.permissions || []).filter((permission: any) => Object.keys(permission).some((key) => key !== 'module' && permission[key] === true)).length;
+        const branchRuleCount = (assignment.branchAccess || []).filter((rule: any) => rule.mode !== 'NONE').length;
+        return <div key={assignment.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-bold">{assignment.user?.name}</p><Badge variant={assignment.isOwner ? 'default' : 'outline'}>{assignment.isOwner ? 'Propietario' : 'Delegado'}</Badge><Badge variant="outline">{scopeLabel}</Badge></div><p className="truncate text-xs text-muted-foreground">{assignment.user?.email}</p><p className="mt-1 text-xs text-muted-foreground">{assignment.isOwner ? 'Control completo del grupo.' : `${managerPermissionCount} módulo(s) Manager y ${branchRuleCount} regla(s) operativa(s).`}</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={!canConfigureManagers || (assignment.isOwner && !canEditOwner)} onClick={() => startEditing(assignment)}><Pencil className="size-3.5" />Editar accesos</Button><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={!canConfigureManagers || (assignment.isOwner && !canEditOwner)} onClick={() => { setPasswordTargetId(passwordTargetId === assignment.user?.id ? '' : assignment.user?.id || ''); setPasswordDraft(''); }}><KeyRound className="size-3.5" />Contraseña</Button>{!assignment.isOwner && <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl text-destructive hover:text-destructive" disabled={!canConfigureManagers || revoking} onClick={() => { if (window.confirm(`¿Revocar el acceso de ${assignment.user?.name || 'este Manager'}?`)) onRevoke(assignment.user.id); }}><Trash2 className="size-3.5" />Revocar</Button>}</div></div>
+          {passwordTargetId === assignment.user?.id && <div className="mt-4 flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row"><div className="min-w-0 flex-1"><input type="password" value={passwordDraft} onChange={(event) => setPasswordDraft(event.target.value)} placeholder="Nueva contraseña" className="h-10 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm" /><PasswordRequirements value={passwordDraft} /></div><Button type="button" className="h-10 rounded-xl" disabled={Boolean(getPasswordError(passwordDraft)) || resettingPassword} onClick={() => submitPassword(assignment.user.id)}>{resettingPassword ? 'Actualizando...' : 'Actualizar contraseña'}</Button></div>}
+        </div>;
+      })}{!data.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay accesos Manager explícitos todavía.</p>}</div></CardContent>
+    </Card>}
   </div>;
 }

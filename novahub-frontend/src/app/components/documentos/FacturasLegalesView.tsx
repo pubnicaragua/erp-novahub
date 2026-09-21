@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, FileText, CheckCircle2, AlertTriangle, TrendingUp } from 'lucide-react';
 import { legalInvoicesService } from '../../services/documentos.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useCurrency } from '../../contexts/CurrencyContext';

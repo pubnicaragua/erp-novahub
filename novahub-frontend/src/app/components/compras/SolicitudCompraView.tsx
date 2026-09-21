@@ -11,7 +11,7 @@ import { Label } from '../ui/label';
 import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
 import type { Product, PurchaseRequest, PurchaseManagement, Warehouse, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';

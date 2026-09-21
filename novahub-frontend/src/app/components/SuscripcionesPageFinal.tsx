@@ -2,7 +2,7 @@
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { motion } from 'motion/react';
 import { cn } from './ui/utils';
 import {

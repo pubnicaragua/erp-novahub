@@ -87,7 +87,7 @@ import { getSalesAdditionalCharges, normalizeSalesExtraCharges } from '../../uti
 import { normalizeCurrency } from '../../utils/currency';
 import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { runWithReportRequestLimit } from '../../utils/report-request-limiter';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import type { Customer, Estimate, Invoice } from '../../types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';

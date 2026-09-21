@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../../ui/switch';
 import { Badge } from '../../ui/badge';
 import { Banknote, Plus, Loader2, Edit2, Ban, Users } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
 import { getApiErrorMessage } from '../../../services/api';
 import { SalesViewTutorial } from '../SalesViewTutorial';

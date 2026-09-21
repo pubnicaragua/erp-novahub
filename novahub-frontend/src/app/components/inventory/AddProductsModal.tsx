@@ -13,7 +13,7 @@ import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { inventoryService } from '@/app/services/inventario.service';
 import { storageService } from '@/app/services/storage.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { ProductSimilarityAlert } from './ProductSimilarityAlert';

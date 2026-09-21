@@ -64,7 +64,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { resolveInventoryValuation } from '../../utils/inventory-valuation';
 import { ProductThumbnail } from '../ui/ProductImage';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { useAuth } from '../../contexts/AuthContext';

@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { subscriptionsService, type ModuleQuoteCatalogModule, type ModuleQuoteRequest, type SubscriptionRequest } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
 import { rolesService } from '../services/roles.service';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { api } from '../services/api';
 import { TrialExtensionRequestsPanel } from './suscripciones/TrialExtensionRequestsPanel';
 import { NovaSuiteIcon } from './ui/NovaIcons';
