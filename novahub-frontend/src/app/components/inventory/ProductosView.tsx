@@ -1078,7 +1078,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     }
     return ids;
   }, [branches]);
-  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out' | 'expiring'>(initialStockFilter || 'all');
   const [expiryRows, setExpiryRows] = useState<any[]>([]);
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
@@ -1095,6 +1094,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const effectiveTaxRateFilter = controlledTaxRateFilter ?? localTaxRateFilter;
   const [localStockStatusFilter, setLocalStockStatusFilter] = useState('');
   const effectiveStockStatusFilter = controlledStockStatusFilter ?? localStockStatusFilter;
+  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out' | 'expiring'>(initialStockFilter || (effectiveStockStatusFilter as any) || 'all');
+  useEffect(() => {
+    if (controlledStockStatusFilter !== undefined && controlledStockStatusFilter !== '') {
+      setStockFilter((controlledStockStatusFilter || 'all') as any);
+    }
+  }, [controlledStockStatusFilter]);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [initialImportIntroOpen, setInitialImportIntroOpen] = useState(false);
@@ -1780,7 +1785,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       || (effectiveStockStatusFilter === 'available' && pType === 'PRODUCT' && stock > 0)
       || (effectiveStockStatusFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
       || (effectiveStockStatusFilter === 'out' && pType === 'PRODUCT' && stock <= 0);
-    const matchesStock = matchesKpiStock && matchesStockStatus;
+    const matchesStock = Boolean(pagination) || (matchesKpiStock && matchesStockStatus);
     const matchesStatus = isServiceView || effectiveProductStatusFilter === 'ALL'
       || (effectiveProductStatusFilter === 'ACTIVE' && p.isActive !== false)
       || (effectiveProductStatusFilter === 'INACTIVE' && p.isActive === false);
@@ -1792,12 +1797,49 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const matchesTaxRate = !effectiveTaxRateFilter || String(p.taxRate ?? '') === effectiveTaxRateFilter;
     return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability && matchesUnit && matchesBrand && matchesTaxRate;
   };
+  const matchesSummaryProductFilters = (p: any) => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const normalizedBrandFilter = effectiveBrandFilter.trim().toLowerCase();
+    const productBrand = String(p.brand || p.details?.brand || '').trim();
+    const matchesVariantSku = Array.isArray(p.variants) && p.variants.some((variant: any) =>
+      String(variant?.sku || '').toLowerCase().includes(normalizedSearch),
+    );
+    const matchesSearch = !normalizedSearch ||
+      p.name?.toLowerCase().includes(normalizedSearch) ||
+      p.code?.toLowerCase().includes(normalizedSearch) ||
+      productBrand.toLowerCase().includes(normalizedSearch) ||
+      p.category?.name?.toLowerCase().includes(normalizedSearch) ||
+      matchesVariantSku;
+    const matchesCategory = true;
+    const productWarehouseIds = [
+      ...(Array.isArray(p.warehouseCatalogs) ? p.warehouseCatalogs.map((catalog: any) => catalog.warehouseId || catalog.warehouse?.id) : []),
+      ...(Array.isArray(p.stockLevels) ? p.stockLevels.map((level: any) => level.warehouseId || level.warehouse?.id) : []),
+      ...(Array.isArray(p.allocations) ? p.allocations.map((allocation: any) => allocation.warehouseId || allocation.warehouse?.id) : []),
+    ].filter(Boolean);
+    const matchesWarehouse = warehouseFilters.length === 0
+      || warehouseFilters.some((warehouseId) => productWarehouseIds.includes(warehouseId));
+    const matchesLinkedScope = selectedBranchId || showAllWarehouseProducts
+      || productWarehouseIds.length === 0
+      || productWarehouseIds.some((warehouseId) => linkedWarehouseIds.has(warehouseId));
+    const pType = String(p.itemType || p.type || 'PRODUCT').toUpperCase();
+    const matchesType = pType === catalogItemType;
+    const matchesStatus = isServiceView || effectiveProductStatusFilter === 'ALL'
+      || (effectiveProductStatusFilter === 'ACTIVE' && p.isActive !== false)
+      || (effectiveProductStatusFilter === 'INACTIVE' && p.isActive === false);
+    const matchesAvailability = pType !== 'SERVICE' || availabilityFilter === 'all'
+      || (availabilityFilter === 'available' && p.isActive !== false)
+      || (availabilityFilter === 'unavailable' && p.isActive === false);
+    const matchesUnit = !effectiveUnitFilter || (p.unit || p.details?.unit || '') === effectiveUnitFilter;
+    const matchesBrand = !normalizedBrandFilter || productBrand.toLowerCase() === normalizedBrandFilter;
+    const matchesTaxRate = !effectiveTaxRateFilter || String(p.taxRate ?? '') === effectiveTaxRateFilter;
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStatus && matchesAvailability && matchesUnit && matchesBrand && matchesTaxRate;
+  };
   const filteredProducts = products
     .filter(matchesProductFilters)
     .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
 
   const summarySource = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
-  const filteredSummaryProducts = colFilters.applyTo(summarySource.filter(matchesProductFilters), filterGetters);
+  const filteredSummaryProducts = colFilters.applyTo(summarySource.filter(matchesSummaryProductFilters), filterGetters);
   const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
   const totalProductsForExport = summaryProducts && summaryProducts.length > 0
     ? filteredSummaryProducts.length
@@ -3861,7 +3903,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               bg={item.bg}
               kind={item.kind}
               active={'filter' in item ? stockFilter === item.filter : false}
-              onClick={'filter' in item ? () => setStockFilter(item.filter) : undefined}
+              onClick={'filter' in item ? () => {
+                const nextFilter = item.filter;
+                setStockFilter(nextFilter);
+                const statusParam = nextFilter === 'all' ? '' : nextFilter;
+                setLocalStockStatusFilter(statusParam);
+                onStockStatusChange?.(statusParam);
+              } : undefined}
             />
           ))}
         </div>
@@ -4024,7 +4072,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </Select>
           )}
           {!isServiceView && (
-            <Select value={effectiveStockStatusFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalStockStatusFilter(v); onStockStatusChange?.(v); }}>
+            <Select value={effectiveStockStatusFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalStockStatusFilter(v); setStockFilter((v || 'all') as any); onStockStatusChange?.(v); }}>
               <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por stock"><SelectValue /></SelectTrigger>
               <SelectContent align="end">
                 <SelectItem value="__all__">Stock</SelectItem>
@@ -4261,7 +4309,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         >
         <Table
           responsiveCards={false}
-          containerClassName="w-max min-w-full max-w-none overflow-visible"
+          containerClassName="w-max min-w-full max-w-none min-h-0 overflow-visible"
           className="table-fixed"
           data-catalog-table={isServiceView ? 'service' : 'product'}
           data-catalog-cost={canViewInventoryCost ? 'visible' : 'hidden'}
