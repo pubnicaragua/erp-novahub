@@ -60,6 +60,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .secondary{background:#e9f4f0;color:#0b7055;border:1px solid #d5e9e1}
 .view-tabs{display:none;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border:1px solid #d7e8e1;border-radius:12px;background:#eff7f3;margin:0 0 10px}.view-tabs button{border:0;border-radius:9px;background:transparent;color:#62756e;padding:9px 4px;font-size:9px;font-weight:800;cursor:pointer}.view-tabs button.active{background:white;color:#08785a;box-shadow:0 3px 10px rgba(18,73,59,.11)}
 .workspace-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 10px;padding:4px 2px}.workspace-heading[hidden]{display:none}.workspace-heading b{font-size:17px;color:var(--ink)}.workspace-heading span{font-size:8px;color:var(--muted)}
+.workspace-kanban .list,.workspace-history .list{display:none}
 .workspace-kanban .scroll>.kpis,.workspace-kanban .scroll>.seller-summary,.workspace-history .scroll>.kpis,.workspace-history .scroll>.seller-summary{display:none}.workspace-kanban .search-row,.workspace-kanban .search-meta,.workspace-kanban .sect,.workspace-kanban .actions,.workspace-kanban .bulkbar,.workspace-kanban .resultsHead,.workspace-history .search-row,.workspace-history .search-meta,.workspace-history .sect,.workspace-history .actions,.workspace-history .bulkbar,.workspace-history .resultsHead{display:none}.workspace-kanban .view-tabs,.workspace-history .view-tabs{margin-bottom:10px}.workspace-kanban .kanban-board,.workspace-history .history-list{margin-top:0}
 .resultsHead{display:flex;justify-content:space-between;align-items:center;margin:14px 2px 7px;font-size:9px;color:var(--muted)}
 .resultsHead b{font-size:10.5px;color:var(--ink)}
@@ -106,6 +107,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .crm select,.crm input,.crm textarea{width:100%;border:1px solid #dfe8e4;border-radius:8px;padding:6px;margin:3px 0 5px;font-size:8.5px}.crm textarea{height:42px;resize:vertical}.crm button{width:100%;border:0;border-radius:8px;background:#123e35;color:white;padding:7px;font-size:8.5px;font-weight:700}.crm input[type=file]{padding:5px;background:#f7fbf9}.visit-readout{font-size:8px;color:#277443;background:#ecf9ee;border-radius:7px;padding:6px;margin:4px 0}
 .quick-heading{font-size:9px;font-weight:800;color:#123f35;margin-bottom:4px}.evidence-preview{display:flex;align-items:center;gap:7px;margin:3px 0 6px;padding:5px;border:1px solid #dce8e3;border-radius:8px;background:#f7fbf9}.evidence-preview[hidden]{display:none}.evidence-preview img{width:42px;height:42px;object-fit:cover;border-radius:6px}.evidence-preview span{font-size:8px;color:#526a60;line-height:1.35}.advanced-crm{margin-top:7px;border-top:1px solid #e4ece9;padding-top:7px}.advanced-crm summary{cursor:pointer;color:#0b7155;font-size:8px;font-weight:800}.advanced-crm .advanced-content{padding-top:6px}
 .bulkbar{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:10px 0 3px;padding:8px;border-radius:12px;background:#edf7f2;border:1px solid #d5e9e1}.bulkbar b{font-size:9px;margin-right:auto}.bulkbar button{border:0;border-radius:8px;padding:6px 7px;background:white;color:#0b7155;font-size:8px;font-weight:800;cursor:pointer}.bulkbar button:hover{background:#d7f0e6}.item-actions{display:flex;gap:5px;margin-top:7px}.item-actions button{flex:1;padding:6px 4px}.item.selected-item{border-color:#4a9be4;background:#f5faff}.item.kanban-item{border-color:#77caa7}.item .check{accent-color:#08785a;width:15px;height:15px;margin-top:4px}.show-more-results{width:100%;border:1px solid #bfe2d4;border-radius:10px;background:#f2faf6;color:#08785a;padding:9px;font-size:9px;font-weight:800;cursor:pointer}
+.bulkbar.is-empty{display:none}
 .toast{position:fixed;z-index:2000;left:50%;bottom:22px;transform:translate(-50%,18px);opacity:0;background:#153d35;color:white;padding:10px 13px;border-radius:11px;font-size:9px;transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
 .quick-capture{position:fixed;z-index:1900;left:calc(var(--sheet) + 18px);bottom:18px;width:min(390px,calc(100vw - var(--sheet) - 36px));padding:15px;border:1px solid #bfe2d4;border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 18px 45px rgba(12,53,43,.24)}.quick-capture[hidden]{display:none}.quick-capture h2{margin:0;font-size:14px}.quick-capture p{margin:4px 0 10px;color:#6c7c77;font-size:9px}.quick-capture-grid{display:grid;grid-template-columns:1fr;gap:7px}.quick-capture input{width:100%;height:40px;border:1px solid #dce8e3;border-radius:10px;padding:0 10px;font-size:11px;outline:none}.quick-capture input:focus{border-color:#12aa7b;box-shadow:0 0 0 3px rgba(18,170,123,.12)}.quick-capture-photo{display:flex;align-items:center;gap:8px;margin:8px 0;padding:6px;border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9}.quick-capture-photo[hidden]{display:none}.quick-capture-photo img{width:56px;height:56px;border-radius:8px;object-fit:cover}.quick-capture-photo span{flex:1;font-size:8px;color:#526a60}.quick-capture-photo button{border:0;background:transparent;color:#08785a;font-size:8px;font-weight:800;cursor:pointer}.quick-capture-actions{display:flex;gap:7px;margin-top:10px}.quick-capture-actions button{flex:1;border:0;border-radius:10px;padding:10px 8px;font-size:9px;font-weight:800;cursor:pointer}.quick-capture-actions button:disabled{opacity:.45;cursor:not-allowed}.quick-capture-actions .cancel{background:#edf5f1;color:#537068}.quick-capture-actions .camera{background:#e5f5ed;color:#08785a}.quick-capture-actions .save{background:#08785a;color:white}
 .primary-float{background:#08785a;color:white;border-color:#08785a}.standalone-view #map{display:none}.standalone-view .sidebar{left:0;top:0;bottom:0;width:100%;border:0;border-radius:0;box-shadow:none}.standalone-view .sidebar .scroll{width:min(1180px,100%);margin:0 auto}.standalone-view .fabbar,.standalone-view .quick-capture{display:none}.map-fullscreen #map{left:0;width:100vw}.map-fullscreen .fabbar{left:14px}.map-fullscreen:not(.standalone-view) .sidebar{display:none}.map-fullscreen .legend{right:14px}.fullscreen-float{min-width:32px;padding:8px 9px;font-size:14px}.modal-backdrop{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:18px;background:rgba(8,31,25,.42);backdrop-filter:blur(4px)}.modal-backdrop[hidden]{display:none}.confirm-modal{width:min(430px,100%);border:1px solid #d6e7df;border-radius:20px;background:#fff;padding:19px;box-shadow:0 24px 70px rgba(8,42,32,.28)}.confirm-modal h2{margin:0;color:#123f35;font-size:16px}.confirm-modal p{margin:6px 0 14px;color:#64766f;font-size:10px;line-height:1.5}.confirm-modal label{display:block;color:#51655e;font-size:9px;font-weight:800;margin:10px 0 5px}.confirm-modal select,.confirm-modal textarea{width:100%;border:1px solid #dce8e3;border-radius:10px;background:#fbfdfc;padding:9px;font-size:10px}.confirm-modal textarea{min-height:64px;resize:vertical}.confirm-modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:15px}.confirm-modal-actions button{border:0;border-radius:10px;padding:10px 13px;font-size:9px;font-weight:800;cursor:pointer}.confirm-modal-actions .cancel{background:#edf5f1;color:#537068}.confirm-modal-actions .danger{background:#b63849;color:white}
@@ -180,13 +182,6 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
    <div class="kpi" data-pipeline="visited"><b id="visitedCount">0</b><span>Visitados</span></div>
   <div class="kpi" data-pipeline="interested"><b id="interestedCount">0</b><span>Interesados</span></div>
  </div>
- <div class="seller-summary" id="sellerSummary" hidden>
-  <div><b id="sellerProspects">0</b><span>Prospectos propios</span></div>
-  <div><b id="sellerQuotes">0</b><span>Cotizaciones</span></div>
-  <div><b id="sellerAccepted">0</b><span>Aceptadas</span></div>
-  <div><b id="sellerQuotedValue">—</b><span>Valor cotizado</span></div>
- </div>
-
   <div class="view-tabs" id="viewTabs" aria-label="Vistas comerciales">
    <button class="active" data-view="map" type="button">Mapa</button>
    <button data-view="kanban" type="button">Kanban</button>
@@ -221,21 +216,20 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 
   <div class="actions">
    <button class="btn primary" id="refresh">↻ Actualizar Google Places</button>
-   <button class="btn secondary" id="export">↓ Exportar CSV</button>
    <button class="btn secondary" id="zoneManager">▦ Zonas y vendedores</button>
    <button class="btn secondary" id="opportunities">✦ Ver oportunidades</button>
    <button class="btn secondary" id="kanbanToggle">▦ Ver Kanban</button>
    <button class="btn secondary" id="historyToggle">◷ Ver historial</button>
   </div>
 
-  <div class="bulkbar">
+  <div class="bulkbar" id="bulkbar">
    <b id="selectionSummary">0 seleccionados</b>
    <button id="selectVisible">Seleccionar visibles</button>
-   <button id="clearSelection">Limpiar</button>
-   <button id="bulkKanban">Kanban</button>
-   <button id="bulkRoute">Ruta</button>
-  <button id="bulkVisit">Registrar visita</button>
-  <button id="bulkWhatsApp">WhatsApp oficial</button>
+   <button id="clearSelection">Quitar selección</button>
+   <button id="bulkKanban">Añadir a Kanban</button>
+   <button id="bulkRoute">Armar ruta</button>
+   <button id="bulkVisit">Registrar visitas</button>
+   <button id="bulkWhatsApp">WhatsApp oficial</button>
    <button id="bulkDiscard">Descartar</button>
   </div>
 
@@ -249,6 +243,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <div class="fabbar">
  <div class="float" id="summary">Managua · Fuerza Comercial</div>
  <button class="float" id="locateMe" type="button">◎ Mi ubicación</button>
+ <button class="float" id="togglePresence" type="button" hidden>Ocultar mi ubicación</button>
  <button class="float primary-float" id="newPoint" type="button">＋ Nuevo punto</button>
  <button class="float fullscreen-float" id="fullscreenMap" type="button" title="Ver mapa en pantalla completa" aria-label="Ver mapa en pantalla completa">⛶</button>
  <button class="float" id="mobileSheetToggle" type="button">Filtros ↑</button>
@@ -310,6 +305,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <p>Visualiza las zonas operativas y asigna sus prospectos cargados a un vendedor. Las zonas son operativas y se guardan en los prospectos del ERP.</p>
   <label for="zoneAssignmentZone">Zona comercial</label>
   <select id="zoneAssignmentZone"></select>
+  <label for="zoneAssignmentCell">Cuadrante hexagonal</label>
+  <select id="zoneAssignmentCell"><option value="">Toda la zona</option></select>
   <label for="zoneAssignmentAssignee">Vendedor responsable</label>
   <select id="zoneAssignmentAssignee"><option value="">Mi zona</option></select>
   <div class="meta" id="zoneAssignmentSummary"></div>
@@ -318,8 +315,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 </div>
 <div class="modal-backdrop" id="deleteModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
-  <h2 id="deleteTitle">Eliminar prospecto de prueba</h2>
-  <p id="deleteDescription">Esta acción elimina el registro del ERP y no debe usarse para prospectos reales. Solo está disponible para el Super Admin principal.</p>
+  <h2 id="deleteTitle">Eliminar negocio</h2>
+  <p id="deleteDescription">El negocio se quitará del mapa y, si ya está sincronizado, también del registro comercial. Esta acción solo está disponible para el Super Admin principal.</p>
   <div class="confirm-modal-actions"><button class="cancel" id="deleteCancel" type="button">Cancelar</button><button class="danger" id="deleteConfirm" type="button">Eliminar definitivamente</button></div>
  </div>
 </div>
@@ -378,11 +375,12 @@ const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 const CURRENT_USER_ID = mapQuery.get('userId') || '';
 const CAN_DELETE_TEST = mapQuery.get('platformAdmin') === 'true';
 const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
-const GOOGLE_PAGE_DELAY = 2000;
-const GOOGLE_MAX_PAGES = 3;
+const GOOGLE_SEARCH_MAX_RESULTS = 100;
 const GOOGLE_CATALOG_KEY = 'novaGooglePlacesCatalogV1';
+const DELETED_BUSINESSES_KEY = 'novaFuerzaDeletedBusinessesV1';
 
 let googlePlaces = readStore(GOOGLE_CATALOG_KEY, []);
+const deletedBusinessKeys = new Set(readStore(DELETED_BUSINESSES_KEY, []));
 let remoteProspects = [];
 let businesses = [...seed];
 let filtered = [];
@@ -400,6 +398,7 @@ let pendingEvidenceBusinessId = null;
 let pendingQuickPointPhoto = false;
 let pendingQuickPointFile = null;
 let presenceMarkers = new Map();
+let presenceSharingEnabled = localStorage.getItem('novaFuerzaPresenceSharingV1') !== 'false';
 let assignees = [];
 let routeBusinesses = [];
 let zonePolygons = new Map();
@@ -469,13 +468,13 @@ function markerSvg(b){
   const ring=state==='interested'?'#0b9d68':state==='visited'?'#84d795':state==='kanban'?'#12aa7b':state==='selected'?'#3287e8':state==='discarded'?'#86958f':'#9cacaa';
   const fill=b.priority==='A'?'#08785a':b.priority==='B'?'#eea13d':'#83928d';
   if(NOVAHUB_ISOTIPO_URL){
-    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(42,42),anchor:new google.maps.Point(21,21)};
+    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(30,30),anchor:new google.maps.Point(15,15)};
   }
   return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 42 42"><circle cx="21" cy="21" r="18" fill="white" stroke="${ring}" stroke-width="3"/><rect x="7" y="7" width="28" height="28" rx="9" fill="${fill}"/><path d="M14 13v16M28 13v16M14 13l14 14" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><path d="M14 29l14-16" fill="none" stroke="#8df1be" stroke-width="3.2" stroke-linecap="round"/></svg>`),scaledSize:new google.maps.Size(42,42),anchor:new google.maps.Point(21,21)};
 }
 function clusterSvg(count){
   if(NOVAHUB_ISOTIPO_URL){
-    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(50,50),anchor:new google.maps.Point(25,25)};
+    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(36,36),anchor:new google.maps.Point(18,18)};
   }
   return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="58" height="58"><circle cx="29" cy="29" r="25" fill="#123f35" stroke="#b4f4d8" stroke-width="4"/><path d="M20 17v24M38 17v24M20 17l18 18M20 41l18-24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><text x="29" y="34" text-anchor="middle" font-family="Poppins,Arial" font-size="11" font-weight="900" fill="#8df1be">${count}</text></svg>`),scaledSize:new google.maps.Size(58,58),anchor:new google.maps.Point(29,29)};
 }
@@ -500,46 +499,67 @@ const cluster={
     }else this.markers.forEach(marker=>marker.setMap(googleMap));
   }
 };
-const zoneShapes={
-  Managua:[{lat:12.19,lng:-86.34},{lat:12.19,lng:-86.15},{lat:12.08,lng:-86.15},{lat:12.08,lng:-86.34}],
-  'Ciudad Sandino':[{lat:12.21,lng:-86.40},{lat:12.21,lng:-86.31},{lat:12.13,lng:-86.31},{lat:12.13,lng:-86.40}],
-  Veracruz:[{lat:12.11,lng:-86.23},{lat:12.11,lng:-86.15},{lat:12.01,lng:-86.15},{lat:12.01,lng:-86.23}],
-  'Carretera Norte':[{lat:12.20,lng:-86.25},{lat:12.20,lng:-86.13},{lat:12.12,lng:-86.13},{lat:12.12,lng:-86.25}],
-  'Carretera a Masaya':[{lat:12.14,lng:-86.29},{lat:12.14,lng:-86.19},{lat:12.03,lng:-86.19},{lat:12.03,lng:-86.29}],
-  'Mercado Oriental':[{lat:12.18,lng:-86.27},{lat:12.18,lng:-86.23},{lat:12.11,lng:-86.23},{lat:12.11,lng:-86.27}],
-};
+function hexPath(lat,lng,latRadius=.045,lngRadius=.065){
+  return Array.from({length:6},(_,index)=>{
+    const angle=Math.PI/6 + index * Math.PI/3;
+    return {lat:lat + Math.sin(angle)*latRadius,lng:lng + Math.cos(angle)*lngRadius};
+  });
+}
+const zoneShapes=Object.fromEntries(Object.entries(centers).map(([zone,[lat,lng]])=>[zone,hexPath(lat,lng)]));
+const CELL_OFFSETS=[[0,0],[.026,0],[.013,.034],[-.013,.034],[-.026,0],[-.013,-.034],[.013,-.034]];
+const zoneCells=Object.fromEntries(Object.entries(centers).map(([zone,[lat,lng]])=>[zone,CELL_OFFSETS.map(([latOffset,lngOffset],index)=>({
+  id:`${zone}::${index+1}`,
+  label:`${zone} · sector ${index+1}`,
+  lat:lat+latOffset,
+  lng:lng+lngOffset,
+  paths:hexPath(lat+latOffset,lng+lngOffset,.015,.023)
+}))]));
+function nearestZoneCell(b){
+  const cells=zoneCells[b?.zone] || [];
+  return cells.reduce((best,cell)=>{
+    const distance=(Number(b?.lat||0)-cell.lat)**2+(Number(b?.lng||0)-cell.lng)**2;
+    return !best || distance<best.distance ? {cell,distance} : best;
+  },null)?.cell || null;
+}
 function clearZonePolygons(){zonePolygons.forEach(polygon=>polygon.setMap(null));zonePolygons.clear()}
 function renderZonePolygons(){
   clearZonePolygons();
   if(!zonesVisible)return;
-  Object.entries(zoneShapes).forEach(([zone,paths],index)=>{
-    const polygon=new google.maps.Polygon({map:googleMap,paths,strokeColor:index%2?'#0b8e69':'#2364d2',strokeOpacity:.68,strokeWeight:2,fillColor:index%2?'#0b8e69':'#2364d2',fillOpacity:.07,clickable:true,zIndex:2});
-    polygon.addListener('click',()=>{selectedZone=zone;document.querySelectorAll('[data-zone]').forEach(button=>button.classList.toggle('active',button.dataset.zone===zone));render();googleMap.fitBounds(new google.maps.LatLngBounds({lat:paths[3].lat,lng:paths[3].lng},{lat:paths[1].lat,lng:paths[1].lng}))});
-    zonePolygons.set(zone,polygon);
-  });
+  Object.entries(zoneCells).forEach(([zone,cells],zoneIndex)=>cells.forEach((cell,index)=>{
+    const color=(zoneIndex+index)%2?'#0b8e69':'#2364d2';
+    const polygon=new google.maps.Polygon({map:googleMap,paths:cell.paths,strokeColor:color,strokeOpacity:.58,strokeWeight:1.5,fillColor:color,fillOpacity:.06,clickable:true,zIndex:2});
+    polygon.addListener('click',()=>{selectedZone=zone;document.querySelectorAll('[data-zone]').forEach(button=>button.classList.toggle('active',button.dataset.zone===zone));render();googleMap.panTo({lat:cell.lat,lng:cell.lng});googleMap.setZoom(14)});
+    zonePolygons.set(cell.id,polygon);
+  }));
 }
 function populateZoneAssignment(){
   const zoneSelect=document.getElementById('zoneAssignmentZone');
+  const cellSelect=document.getElementById('zoneAssignmentCell');
   const assigneeSelect=document.getElementById('zoneAssignmentAssignee');
-  if(zoneSelect)zoneSelect.innerHTML=Object.keys(zoneShapes).map(zone=>`<option value="${esc(zone)}" ${zone===selectedZone?'selected':''}>${esc(zone)}</option>`).join('');
-  if(assigneeSelect)assigneeSelect.innerHTML='<option value="">Mi zona</option>' + assignees.map(item=>`<option value="${esc(item.id)}">${esc(item.name || item.email || 'Vendedor')}</option>`).join('');
+  const currentZone=zoneSelect?.value || selectedZone;
+  if(zoneSelect)zoneSelect.innerHTML=Object.keys(zoneShapes).map(zone=>`<option value="${esc(zone)}" ${zone===currentZone?'selected':''}>${esc(zone)}</option>`).join('');
   const zone=zoneSelect?.value || selectedZone;
-  const count=businesses.filter(b=>b.zone===zone&&!isDiscarded(b)).length;
+  const currentCell=cellSelect?.value || '';
+  if(cellSelect)cellSelect.innerHTML='<option value="">Toda la zona</option>' + (zoneCells[zone] || []).map(cell=>`<option value="${esc(cell.id)}" ${cell.id===currentCell?'selected':''}>${esc(cell.label)}</option>`).join('');
+  if(assigneeSelect)assigneeSelect.innerHTML='<option value="">Mi zona</option>' + assignees.map(item=>`<option value="${esc(item.id)}">${esc(item.name || item.email || 'Vendedor')}</option>`).join('');
+  const cell=cellSelect?.value || '';
+  const count=businesses.filter(b=>b.zone===zone&&!isDiscarded(b)&&(!cell || nearestZoneCell(b)?.id===cell)).length;
   const summary=document.getElementById('zoneAssignmentSummary');
-  if(summary)summary.textContent=`${count} prospectos cargados en ${zone}. La asignación se aplica a los registros visibles en NovaHub.`;
+  if(summary)summary.textContent=`${count} prospectos cargados en ${cell || zone}. La asignación se aplica a los registros visibles en NovaHub.`;
 }
 function openZoneManager(){populateZoneAssignment();document.getElementById('zoneModal').hidden=false}
 async function assignZoneProspects(){
   const zone=document.getElementById('zoneAssignmentZone')?.value || selectedZone;
+  const cell=document.getElementById('zoneAssignmentCell')?.value || '';
   const assigneeId=document.getElementById('zoneAssignmentAssignee')?.value || CURRENT_USER_ID || null;
-  const selected=businesses.filter(b=>b.zone===zone&&!isDiscarded(b));
+  const selected=businesses.filter(b=>b.zone===zone&&!isDiscarded(b)&&(!cell || nearestZoneCell(b)?.id===cell));
   if(!selected.length){toast('No hay prospectos cargados en esta zona');return}
-  selected.forEach(b=>{stateOf(b).assignedToId=assigneeId});
+  selected.forEach(b=>{const state=stateOf(b);state.assignedToId=assigneeId;state.assignedCellId=cell || nearestZoneCell(b)?.id || null});
   persistCommercial();
   document.getElementById('zoneModal').hidden=true;
   render();
   await syncProspects(selected);
-  toast(`${selected.length} prospectos asignados a ${assigneeId ? 'un vendedor' : 'tu zona'}`);
+  toast(`${selected.length} prospectos asignados a ${assigneeId ? 'un vendedor' : 'tu zona'} · ${cell || 'zona completa'}`);
 }
 
 function norm(s=''){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
@@ -648,7 +668,7 @@ function prospectPayload(b){
     website:b.website || null, address:b.address || null, zone:b.zone || null, category:b.category || null,
     lat:b.lat, lng:b.lng, rating:b.rating || null, reviews:b.reviews || 0, novaFitScore:b.score || 0,
     priority:b.priority || 'C', selected:Boolean(c.selected), stage:stageToApi(statusOf(b)),
-    discardedReason:c.discardReason || null, assignedToId:c.assignedToId || null,
+    discardedReason:c.discardReason || null, assignedToId:c.assignedToId || null, zoneCellId:c.assignedCellId || null,
     visitedAt:c.visitedAt || null, visitLat:c.visitLat ?? null, visitLng:c.visitLng ?? null,
     notes:(followups[b.id] || {}).note || null, evidenceName:c.evidenceName || null, evidenceType:c.evidenceType || null, evidenceUri:c.evidenceUri || null,
     whatsappPhone:c.whatsappPhone || b.phone || null,
@@ -689,8 +709,8 @@ async function syncProspects(list, evidenceFile=null){
   }
 }
 function remoteBusiness(prospect){
-  const id=prospect.googlePlaceId ? `google-${prospect.googlePlaceId}` : `remote-${prospect.id}`;
-  return {id,googlePlaceId:prospect.googlePlaceId || undefined,name:prospect.name || 'Prospecto sin nombre',zone:prospect.zone || nearestZone(Number(prospect.lat)||12.115,Number(prospect.lng)||-86.26),category:prospect.category || 'Comercio / servicios',address:prospect.address || 'Dirección pendiente de validar',source:'Fuerza Comercial',sourceUrl:'',lat:Number(prospect.lat)||12.115,lng:Number(prospect.lng)||-86.26,precision:'Prospecto persistido en NovaHub',score:Number(prospect.novaFitScore)||0,priority:prospect.priority || 'C',owner:'Fuerza Comercial',phone:prospect.phone || '',website:prospect.website || '',rating:prospect.rating || null,reviews:prospect.reviews || 0};
+  const id=prospect.googlePlaceId ? `google-${prospect.googlePlaceId}` : prospect.sourceKey || `remote-${prospect.id}`;
+  return {id,googlePlaceId:prospect.googlePlaceId || undefined,zoneCellId:prospect.zoneCellId || undefined,name:prospect.name || 'Prospecto sin nombre',zone:prospect.zone || nearestZone(Number(prospect.lat)||12.115,Number(prospect.lng)||-86.26),category:prospect.category || 'Comercio / servicios',address:prospect.address || 'Dirección pendiente de validar',source:'Fuerza Comercial',sourceUrl:'',lat:Number(prospect.lat)||12.115,lng:Number(prospect.lng)||-86.26,precision:'Prospecto persistido en NovaHub',score:Number(prospect.novaFitScore)||0,priority:prospect.priority || 'C',owner:'Fuerza Comercial',phone:prospect.phone || '',website:prospect.website || '',rating:prospect.rating || null,reviews:prospect.reviews || 0};
 }
 async function loadRemoteProspects(){
   if(!localStorage.getItem('nh-auth-token')) return;
@@ -699,7 +719,7 @@ async function loadRemoteProspects(){
     if(!Array.isArray(data)) return;
     remoteProspects=data.map(prospect=>{
       const business=remoteBusiness(prospect); const key=keyOf(business); const current=commercialState[key] || {};
-      commercialState[key]={...current,remoteId:prospect.id,selected:Boolean(prospect.selected),kanban:true,stage:stageToUi(prospect.stage),discarded:stageToUi(prospect.stage)==='Descartado',discardReason:prospect.discardedReason || current.discardReason,visitedAt:prospect.visitedAt || current.visitedAt,visitLat:prospect.visitLat ?? current.visitLat,visitLng:prospect.visitLng ?? current.visitLng,evidenceName:prospect.evidenceName || current.evidenceName,evidenceType:prospect.evidenceType || current.evidenceType,evidenceUri:prospect.evidenceUri || current.evidenceUri,whatsappPhone:prospect.phone || current.whatsappPhone,whatsappOptIn:Boolean(prospect.whatsappOptIn),whatsappOptInSource:prospect.whatsappOptInSource || current.whatsappOptInSource};
+      commercialState[key]={...current,remoteId:prospect.id,selected:Boolean(prospect.selected),kanban:true,stage:stageToUi(prospect.stage),discarded:stageToUi(prospect.stage)==='Descartado',discardReason:prospect.discardedReason || current.discardReason,assignedToId:prospect.assignedToId || current.assignedToId,assignedCellId:prospect.zoneCellId || current.assignedCellId,visitedAt:prospect.visitedAt || current.visitedAt,visitLat:prospect.visitLat ?? current.visitLat,visitLng:prospect.visitLng ?? current.visitLng,evidenceName:prospect.evidenceName || current.evidenceName,evidenceType:prospect.evidenceType || current.evidenceType,evidenceUri:prospect.evidenceUri || current.evidenceUri,whatsappPhone:prospect.phone || current.whatsappPhone,whatsappOptIn:Boolean(prospect.whatsappOptIn),whatsappOptInSource:prospect.whatsappOptInSource || current.whatsappOptInSource};
       return business;
     });
     persistCommercial(); mergeBusinesses(); populateFilters(); render();
@@ -737,7 +757,9 @@ async function loadAssignees(){
   if(!localStorage.getItem('nh-auth-token'))return;
   try{
     const rows=await forceSalesRequest('/users/lookups/assignees');
-    assignees=Array.isArray(rows) ? rows.filter(item=>item?.id && item?.isActive !== false) : [];
+    const unique=new Map();
+    (Array.isArray(rows) ? rows : []).filter(item=>item?.id && item?.isActive !== false).forEach(item=>unique.set(String(item.id),item));
+    assignees=[...unique.values()];
   }catch(error){console.warn('No se pudo cargar la lista de vendedores',error)}
 }
 function nearestZone(lat,lng){
@@ -757,6 +779,7 @@ function scoreFor(cat, tags={}){
 function mergeBusinesses(){
   const m = new Map();
   [...seed, ...localPoints, ...googlePlaces, ...remoteProspects].forEach(b => {
+    if(deletedBusinessKeys.has(String(keyOf(b))))return;
     const key = b.googlePlaceId ? `google:${b.googlePlaceId}` : `record:${b.id || norm(b.name) + '|' + norm(b.zone)}`;
     if(!m.has(key)) m.set(key, b);
     else {const old=m.get(key);m.set(key,{...old,...b,source:old.source===b.source?b.source:`${old.source} + ${b.source}`})}
@@ -814,7 +837,7 @@ function popupHtml(b){
       ${c.kanban ? '<button disabled>✓ Ya en Fuerza Comercial</button>' : `<button class="primary-action" onclick="addToKanban('${b.id}')">Agregar al Kanban</button>`}
       <button class="visit-action" onclick="registerVisit('${b.id}')">⌖ Registrar visita</button>
       <button onclick="discardBusiness('${b.id}')">Descartar</button>
-      ${CAN_DELETE_TEST && b.id.startsWith('quick-') ? `<button onclick="deleteBusiness('${b.id}')">Eliminar prueba</button>` : ''}
+      ${CAN_DELETE_TEST ? `<button onclick="deleteBusiness('${b.id}')">Eliminar negocio</button>` : ''}
     </div>
     ${c.visitedAt ? `<div class="visit-readout">Visita registrada ${new Date(c.visitedAt).toLocaleString('es-NI')} · ${c.visitLat?.toFixed?.(5) || '—'}, ${c.visitLng?.toFixed?.(5) || '—'}</div>` : ''}
     <div class="crm">
@@ -979,6 +1002,7 @@ document.getElementById('zoneManager').addEventListener('click',openZoneManager)
 document.getElementById('zoneClose').addEventListener('click',()=>{document.getElementById('zoneModal').hidden=true});
 document.getElementById('zoneModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
 document.getElementById('zoneAssignmentZone').addEventListener('change',populateZoneAssignment);
+document.getElementById('zoneAssignmentCell').addEventListener('change',populateZoneAssignment);
 document.getElementById('zoneTogglePolygons').addEventListener('click',()=>{zonesVisible=!zonesVisible;renderZonePolygons();document.getElementById('zoneTogglePolygons').textContent=zonesVisible?'Ocultar zonas':'Mostrar zonas'});
 document.getElementById('zoneAssign').addEventListener('click',()=>{void assignZoneProspects()});
 document.getElementById('deleteCancel').addEventListener('click',()=>{pendingDeleteId=null;document.getElementById('deleteModal').hidden=true});
@@ -1064,7 +1088,7 @@ function discardBusiness(id){
 window.discardBusiness = discardBusiness;
 let pendingDeleteId = null;
 function deleteBusiness(id){
-  if(!CAN_DELETE_TEST || !String(id).startsWith('quick-')){toast('Solo el Super Admin puede eliminar puntos de prueba');return}
+  if(!CAN_DELETE_TEST){toast('Solo el Super Admin principal puede eliminar negocios');return}
   if(!findBusiness(id))return;
   pendingDeleteId=id;
   document.getElementById('deleteModal').hidden=false;
@@ -1073,16 +1097,20 @@ window.deleteBusiness = deleteBusiness;
 async function confirmDeleteBusiness(){
   const b=findBusiness(pendingDeleteId); if(!b)return;
   const c=stateOf(b);
+  const businessKey=String(keyOf(b));
   try{
     if(c.remoteId)await forceSalesRequest('/force-sales/prospects/' + encodeURIComponent(c.remoteId),{method:'DELETE'});
-    const localIndex=localPoints.findIndex(item=>item.id===b.id);
-    if(localIndex>=0)localPoints.splice(localIndex,1);
-    delete commercialState[b.id];delete followups[b.id];
+    for(let index=localPoints.length-1;index>=0;index--){if(String(keyOf(localPoints[index]))===businessKey)localPoints.splice(index,1)}
+    googlePlaces=googlePlaces.filter(item=>String(keyOf(item))!==businessKey);
+    deletedBusinessKeys.add(businessKey);
+    delete commercialState[businessKey];delete commercialState[b.id];delete followups[b.id];
     localStorage.setItem('novaFuerzaLocalPointsV1',JSON.stringify(localPoints));
+    localStorage.setItem(GOOGLE_CATALOG_KEY,JSON.stringify(googlePlaces));
+    localStorage.setItem(DELETED_BUSINESSES_KEY,JSON.stringify([...deletedBusinessKeys]));
     localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));
-    persistCommercial();remoteProspects=remoteProspects.filter(item=>item.id!==b.id && item.id!==c.remoteId);mergeBusinesses();populateFilters();render();
-    document.getElementById('deleteModal').hidden=true;pendingDeleteId=null;toast('Prospecto de prueba eliminado');
-  }catch(error){console.warn(error);toast('No se pudo eliminar el prospecto')}
+    persistCommercial();remoteProspects=remoteProspects.filter(item=>String(keyOf(item))!==businessKey && item.id!==c.remoteId);mergeBusinesses();populateFilters();render();
+    document.getElementById('deleteModal').hidden=true;pendingDeleteId=null;toast('Negocio eliminado');
+  }catch(error){console.warn(error);toast('No se pudo eliminar el negocio')}
 }
 window.openEvidence = async function(id){
   const b=findBusiness(id); const c=b && stateOf(b);
@@ -1183,9 +1211,30 @@ async function loadSellerPresence(){
   catch(error){console.warn('No se pudo actualizar la presencia comercial',error)}
 }
 async function syncSellerPresence(coords){
-  if(!localStorage.getItem('nh-auth-token'))return;
+  if(!presenceSharingEnabled || !localStorage.getItem('nh-auth-token'))return;
   try{await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:coords.latitude,lng:coords.longitude,accuracy:coords.accuracy,heading:coords.heading})});await loadSellerPresence();}
   catch(error){console.warn('No se pudo sincronizar la presencia comercial',error)}
+}
+function updatePresenceToggle(){
+  const button=document.getElementById('togglePresence');
+  if(!button)return;
+  button.hidden=!CAN_DELETE_TEST;
+  button.textContent=presenceSharingEnabled?'Ocultar mi ubicación':'Mostrar mi ubicación';
+  button.title=presenceSharingEnabled?'Tu última ubicación puede verse por vendedores autorizados':'Tu ubicación está oculta para otros vendedores';
+}
+async function setPresenceSharing(enabled){
+  presenceSharingEnabled=enabled;
+  localStorage.setItem('novaFuerzaPresenceSharingV1',String(enabled));
+  if(!enabled){
+    userLocationMarker?.setMap(null);
+    userLocationCircle?.setMap(null);
+    try{await forceSalesRequest('/force-sales/presence/me',{method:'DELETE'});}catch(error){console.warn('No se pudo ocultar la presencia comercial',error)}
+    await loadSellerPresence();
+    toast('Tu ubicación quedó oculta');
+  }else{
+    toast('Tu ubicación volverá a compartirse al usar Mi ubicación o registrar una visita');
+  }
+  updatePresenceToggle();
 }
 function locateMe(){
   toast('Obteniendo tu ubicación…');
@@ -1320,7 +1369,7 @@ function render(){
   markerById.clear();
   const currentBounds=googleMap.getBounds?.();
   const zoom=googleMap.getZoom() || 11;
-  const mapLimit=innerWidth<=820 ? (zoom<13 ? 80 : 140) : (zoom<13 ? 260 : 500);
+  const mapLimit=innerWidth<=820 ? (zoom<13 ? 60 : 100) : (zoom<13 ? 180 : 320);
   const mapBusinesses=filtered.filter(b=>!currentBounds || currentBounds.contains({lat:Number(b.lat),lng:Number(b.lng)})).slice(0,mapLimit);
   mapBusinesses.forEach(b => {
     const m = L.marker([b.lat, b.lng], {icon: icon(b), title:b.name});
@@ -1334,7 +1383,9 @@ function render(){
 
   updatePipelineKpis();
   document.getElementById('resultText').textContent = `${filtered.length} de ${businesses.length}`;
-  document.getElementById('summary').textContent = `${selectedZone === 'Todos' ? 'Managua' : selectedZone} · ${selectedBusinesses().length} seleccionados`;
+  const selectedCount=selectedBusinesses().length;
+  document.getElementById('summary').textContent = selectedZone === 'Todos' ? 'Managua' : selectedZone;
+  document.getElementById('bulkbar')?.classList.toggle('is-empty',selectedCount===0);
 
   const list = document.getElementById('list');
   const visibleResults = filtered.slice(0, listLimit);
@@ -1348,11 +1399,12 @@ function render(){
         </div>
       </div>
       <span class="status">${esc(isKanban(b)?'En Kanban':statusOf(b))} · ${b.score}% afinidad</span>
-      <div class="item-actions">
-        <button data-action="select" data-id="${esc(b.id)}">${isSelected(b)?'✓ Seleccionado':'Seleccionar'}</button>
-        <button class="primary-action" data-action="kanban" data-id="${esc(b.id)}">${isKanban(b)?'✓ Kanban':'Kanban'}</button>
-        <button class="visit-action" data-action="visit" data-id="${esc(b.id)}">Visitar</button>
-      </div>
+       <div class="item-actions">
+         <button data-action="select" data-id="${esc(b.id)}">${isSelected(b)?'✓ Seleccionado':'Seleccionar'}</button>
+         <button class="primary-action" data-action="kanban" data-id="${esc(b.id)}">${isKanban(b)?'✓ Kanban':'Kanban'}</button>
+         <button class="visit-action" data-action="visit" data-id="${esc(b.id)}">Visitar</button>
+         ${CAN_DELETE_TEST ? `<button data-action="delete" data-id="${esc(b.id)}">Eliminar</button>` : ''}
+       </div>
     </div>`).join('') + (filtered.length > listLimit ? `<div class="item"><button class="show-more-results" id="showMoreResults" type="button">Mostrar más resultados (${filtered.length - listLimit} disponibles)</button></div>` : '');
   document.querySelectorAll('.item[data-id]').forEach(el => el.addEventListener('click', () => {
     const b = businesses.find(x => x.id === el.dataset.id);
@@ -1364,6 +1416,7 @@ function render(){
   document.querySelectorAll('[data-action="select"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();toggleSelected(el.dataset.id)}));
   document.querySelectorAll('[data-action="kanban"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();addToKanban(el.dataset.id)}));
   document.querySelectorAll('[data-action="visit"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();registerVisit(el.dataset.id)}));
+  document.querySelectorAll('[data-action="delete"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();deleteBusiness(el.dataset.id)}));
   document.getElementById('showMoreResults')?.addEventListener('click', () => {listLimit += 140; render()});
   updateView();
 }
@@ -1396,16 +1449,20 @@ function placesCategory(types=[],name=''){
 }
 function googlePlaceBiz(place){
   if(place?.googlePlaceId && Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)))return place;
-  const location=place.geometry?.location; if(!place.place_id||!location)return null;
+  const placeId=place?.place_id || place?.id;
+  const location=place?.geometry?.location || place?.location; if(!placeId||!location)return null;
   const lat=typeof location.lat==='function'?location.lat():location.lat;
   const lng=typeof location.lng==='function'?location.lng():location.lng;
   if(lat==null||lng==null)return null;
-  const category=placesCategory(place.types||[],place.name||'');
+  const name=typeof place.displayName==='string' ? place.displayName : place.displayName?.text || place.name || 'Negocio sin nombre';
+  const rating=Number(place.rating || 0) || null;
+  const reviews=Number(place.userRatingCount ?? place.user_ratings_total ?? 0);
+  const category=placesCategory(place.types||[],name);
   let score=scoreFor(category,{});
-  if(place.rating)score+=Math.round(Math.max(0,place.rating-3.5)*5);
-  if((place.user_ratings_total||0)>=100)score+=5;
+  if(rating)score+=Math.round(Math.max(0,rating-3.5)*5);
+  if(reviews>=100)score+=5;
   score=Math.min(95,score);
-  return {id:`google-${place.place_id}`,googlePlaceId:place.place_id,name:place.name||'Negocio sin nombre',zone:nearestZone(lat,lng),category,address:place.formatted_address||'Dirección disponible en Google Maps',source:'Google Places',sourceUrl:place.url||`https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${encodeURIComponent(place.place_id)}`,lat,lng,precision:'Ubicación y ficha devueltas por Google Places',score,priority:score>=78?'A':score>=60?'B':'C',owner:'Fuerza Comercial',rating:place.rating||null,reviews:place.user_ratings_total||0};
+  return {id:`google-${placeId}`,googlePlaceId:placeId,name,zone:nearestZone(lat,lng),category,address:place.formattedAddress||place.formatted_address||'Dirección disponible en Google Maps',source:'Google Places',sourceUrl:place.googleMapsURI||place.url||`https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${encodeURIComponent(placeId)}`,lat,lng,precision:'Ubicación y ficha devueltas por Google Places',score,priority:score>=78?'A':score>=60?'B':'C',owner:'Fuerza Comercial',phone:place.nationalPhoneNumber||place.formattedPhoneNumber||place.formatted_phone_number||'',website:place.websiteURI||place.website||'',rating,reviews};
 }
 function boundsKey(bounds){
   if(!bounds)return 'managua';
@@ -1431,22 +1488,23 @@ function mergeGoogleResults(items){
   googlePlaces=[...merged.values()].slice(-2500);
   localStorage.setItem(GOOGLE_CATALOG_KEY,JSON.stringify(googlePlaces));
 }
-function searchTextPage(service, request, query, runId){
-  return new Promise(resolve=>{
-    const items=[]; let page=0; let finished=false;
-    const complete=()=>{if(!finished){finished=true;resolve(items)}};
-    const callback=(pageItems,status,pagination)=>{
-      if(runId!==googleSearchRun){complete();return}
-      page++;
-      if(status==='OK' && Array.isArray(pageItems))items.push(...pageItems);
-      if(status!=='OK' && status!=='ZERO_RESULTS')setSearchStatus(`Google Places respondió ${status} al buscar ${query}.`);
-      if(pagination?.hasNextPage && page<GOOGLE_MAX_PAGES){
-        setSearchStatus(`Google Places · ${query} · página ${page}/${GOOGLE_MAX_PAGES}…`);
-        window.setTimeout(()=>pagination.nextPage(),GOOGLE_PAGE_DELAY);
-      }else complete();
-    };
-    service.textSearch(request,callback);
-  });
+async function searchTextPlaces(Place,request,query,runId){
+  if(runId!==googleSearchRun)return [];
+  try{
+    const {places=[]}=await Place.searchByText({
+      fields:['id','displayName','formattedAddress','location','types','rating','userRatingCount','websiteURI','nationalPhoneNumber','googleMapsURI'],
+      textQuery:request.query,
+      language:'es',
+      region:'ni',
+      locationBias:{center:request.location,radius:request.radius},
+      maxResultCount:20,
+    });
+    return Array.isArray(places) ? places : [];
+  }catch(error){
+    setSearchStatus(`Google Places no pudo buscar ${query}.`);
+    console.warn('Google Places searchByText',error);
+    return [];
+  }
 }
 async function searchGooglePlaces(query='', options={}){
   const force=options.force===true;
@@ -1463,33 +1521,35 @@ async function searchGooglePlaces(query='', options={}){
     setSearchStatus(`${Math.max(0,googlePlaces.length-before)} nuevos · ${googlePlaces.length} negocios Google acumulados.`);
     [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false}); return;
   }
-  const service=new google.maps.places.PlacesService(googleMap);
   const queries=normalizedQuery ? [normalizedQuery] : ['logística y transporte','tiendas de ropa','ferreterías y construcción','agencias de marketing','farmacias y clínicas'];
   const collected=[];
   try{
+    const placesLibrary=await google.maps.importLibrary('places');
+    const Place=placesLibrary?.Place;
+    if(!Place?.searchByText)throw new Error('Place.searchByText no está disponible. Habilita Places API (New).');
     setSearchStatus(`Buscando ${queries.length} rubro${queries.length>1?'s':''} en Google Places…`);
     const center=googleMap.getCenter();
     const centerLat=center?.lat?.() ?? 12.115;
     const centerLng=center?.lng?.() ?? -86.26;
     const area=selectedZone !== 'Todos' ? selectedZone : nearestZone(centerLat,centerLng);
-    for(let index=0;index<queries.length;index+=2){
+    for(let index=0;index<queries.length && collected.length<GOOGLE_SEARCH_MAX_RESULTS;index+=2){
       const batch=queries.slice(index,index+2);
       const responses=await Promise.all(batch.map(searchQuery=>{
-        const request={query:`${searchQuery} en ${area}, Nicaragua`,language:'es',region:'ni',location:{lat:centerLat,lng:centerLng},radius:visibleOnly?15000:25000};
-        return searchTextPage(service,request,searchQuery,runId);
+        const request={query:`${searchQuery} en ${area}, Nicaragua`,location:{lat:centerLat,lng:centerLng},radius:visibleOnly?15000:25000};
+        return searchTextPlaces(Place,request,searchQuery,runId);
       }));
-      responses.forEach(items=>collected.push(...items));
+      responses.forEach(items=>{if(collected.length<GOOGLE_SEARCH_MAX_RESULTS)collected.push(...items.slice(0,GOOGLE_SEARCH_MAX_RESULTS-collected.length))});
     }
     if(runId!==googleSearchRun)return;
     const uniqueRaw=[]; const seen=new Set();
-    collected.forEach(place=>{if(place?.place_id&&!seen.has(place.place_id)){seen.add(place.place_id);uniqueRaw.push(place)}});
+    collected.forEach(place=>{const placeId=place?.place_id || place?.id;if(placeId&&!seen.has(placeId)){seen.add(placeId);uniqueRaw.push(place)}});
     const mapped=uniqueRaw.map(googlePlaceBiz).filter(Boolean);
     if(mapped.length){
       const previousIds=new Set(googlePlaces.map(place=>place.googlePlaceId));
       mergeGoogleResults(uniqueRaw);
       localStorage.setItem(cachedGoogleKey(normalizedQuery,bounds),JSON.stringify({savedAt:Date.now(),data:mapped}));
       mergeBusinesses(); populateFilters(); render();
-      const newCount=mapped.filter(place=>!previousIds.has(place.place_id)).length;
+      const newCount=mapped.filter(place=>!previousIds.has(place.googlePlaceId)).length;
       setSearchStatus(`${newCount} nuevos · ${googlePlaces.length} negocios Google acumulados · ${area}.`);
       toast(`${newCount} negocios nuevos encontrados`);
     }else{
@@ -1500,20 +1560,6 @@ async function searchGooglePlaces(query='', options={}){
   }finally{[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});if(btn)btn.textContent='↻ Actualizar Google Places'}
 }
 function loadGooglePlaces(force=false){return searchGooglePlaces('',{force})}
-function exportCSV(){
-  const rows = [['Empresa','Zona','Rubro','Prioridad','Puntaje','Dirección','Latitud','Longitud','Precisión','Fuente','Responsable','Estado','Próximo contacto','Notas','WhatsApp','Opt-in WhatsApp','Fuente opt-in','URL fuente']];
-  filtered.forEach(b => {
-    const f = followups[b.id] || {};
-    const c=stateOf(b);
-    rows.push([b.name,b.zone,b.category,b.priority,b.score,b.address,b.lat,b.lng,b.precision,b.source,'Fuerza Comercial',f.status||'Nuevo',f.date||'',f.note||'',c.whatsappPhone||b.phone||'',c.whatsappOptIn?'Sí':'No',c.whatsappOptInSource||'',b.sourceUrl||'']);
-  });
-  const csv = '\ufeff' + rows.map(r => r.map(v => `"${String(v ?? '').replaceAll('"','""')}"`).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
-  a.download = `Prospectos_NovaHub_Managua_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
 function routeBusinessesFromStore(){
   return readStore('novaFuerzaRouteV1',[]).map(key=>findBusinessByKey(key)).filter(Boolean);
 }
@@ -1617,7 +1663,6 @@ document.getElementById('clearGoogleCache').addEventListener('click', () => {
   Object.keys(localStorage).filter(key=>key.startsWith('novaGooglePlacesCacheV')).forEach(key=>localStorage.removeItem(key));
   setSearchStatus('Caché de Google Places limpiada. La próxima búsqueda será en vivo.'); toast('Caché limpiada');
 });
-document.getElementById('export').addEventListener('click', exportCSV);
 function setActiveView(view){
   const changed=activeView!==view;
   activeView=view;
@@ -1652,6 +1697,9 @@ window.setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLin
 
 const sheet = document.getElementById('sheet');
 const toggle = document.getElementById('mobileSheetToggle');
+const togglePresence = document.getElementById('togglePresence');
+togglePresence?.addEventListener('click',()=>void setPresenceSharing(!presenceSharingEnabled));
+updatePresenceToggle();
 let sheetDrag=null;
 let lastSheetDragMoved=false;
 function updateToggle(){ toggle.textContent = sheet.classList.contains('collapsed') ? 'Abrir panel' : 'Ocultar panel'; }
@@ -1713,10 +1761,10 @@ updateToggle();
 populateFilters();
 render();
 updateOfflineStatus();
-setTimeout(() => { loadAssignees(); loadSellerSummary().finally(() => loadRemoteProspects().finally(() => flushOutbox().finally(() => {
+setTimeout(() => { loadAssignees(); loadRemoteProspects().finally(() => flushOutbox().finally(() => {
   setSearchStatus('Datos locales cargados. Pulsa Buscar zona para consultar Google Places.');
   loadSellerPresence();
-}))); }, 450);
+})); }, 450);
 }).catch(() => {});
 </script>
 </body>
