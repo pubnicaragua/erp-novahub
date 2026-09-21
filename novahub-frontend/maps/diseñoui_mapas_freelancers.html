@@ -397,7 +397,9 @@ const mapQuery = new URLSearchParams(location.search);
 const API_BASE = (mapQuery.get('api') || localStorage.getItem('novaApiBase') || 'http://localhost:3000/api').replace(/\/$/, '');
 const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 const CURRENT_USER_ID = mapQuery.get('userId') || '';
-const CAN_DELETE_TEST = mapQuery.get('platformAdmin') === 'true';
+const IS_PLATFORM_ADMIN = mapQuery.get('platformAdmin') === 'true';
+const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
+const PRESENCE_STORAGE_KEY = `novaFuerzaPresenceSharingV1:${CURRENT_USER_ID || 'anonymous'}`;
 const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const GOOGLE_SEARCH_MAX_RESULTS = 100;
 const GOOGLE_CATALOG_KEY = 'novaGooglePlacesCatalogV1';
@@ -422,7 +424,8 @@ let pendingEvidenceBusinessId = null;
 let pendingQuickPointPhoto = false;
 let pendingQuickPointFile = null;
 let presenceMarkers = new Map();
-let presenceSharingEnabled = localStorage.getItem('novaFuerzaPresenceSharingV1') !== 'false';
+const storedPresenceSharing = localStorage.getItem(PRESENCE_STORAGE_KEY);
+let presenceSharingEnabled = IS_PLATFORM_ADMIN ? storedPresenceSharing === 'true' : storedPresenceSharing !== 'false';
 let presenceWatchId = null;
 let presenceWatchRequested = false;
 let lastPresenceSentAt = 0;
@@ -445,13 +448,7 @@ const googleMap = new google.maps.Map(document.getElementById('map'), {
   center: {lat:12.115,lng:-86.26}, zoom:11,
   mapId: mapQuery.get('mapId') || 'DEMO_MAP_ID',
   mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
-  zoomControl:true, clickableIcons:false, gestureHandling:'greedy', scrollwheel:true,
-  styles:[
-    {featureType:'poi',elementType:'labels',stylers:[{visibility:'off'}]},
-    {featureType:'transit',elementType:'labels',stylers:[{visibility:'off'}]},
-    {featureType:'road',elementType:'labels.text.fill',stylers:[{color:'#5c6f69'}]},
-    {featureType:'water',elementType:'geometry',stylers:[{color:'#c9e6df'}]}
-  ]
+  zoomControl:true, clickableIcons:false, gestureHandling:'greedy', scrollwheel:true
 });
 let googleTilesLoaded = false;
 google.maps.event.addListenerOnce(googleMap, 'tilesloaded', () => {
@@ -531,6 +528,12 @@ function markerContentFromIcon(icon,title,label){
   }
   return wrapper;
 }
+function setNovaMarkerMap(marker,mapInstance){
+  if(!marker)return;
+  const Advanced=window.__novaAdvancedMarkerElement;
+  if(Advanced && marker instanceof Advanced){marker.map=mapInstance || null;return}
+  if(typeof marker.setMap==='function')marker.setMap(mapInstance || null);
+}
 function createMapMarker(options={}){
   const Advanced=window.__novaAdvancedMarkerElement;
   if(!Advanced)throw new Error('Nova AdvancedMarkerElement unavailable');
@@ -542,14 +545,13 @@ function createMapMarker(options={}){
     gmpClickable:true,
     zIndex:options.zIndex
   });
-  marker.setMap=(mapInstance)=>{marker.map=mapInstance || null};
   marker.setPosition=(position)=>{marker.position=position};
   marker.setLabel=()=>marker;
   return marker;
 }
 function createGoogleMarker(coords, options){
   const marker=createMapMarker({position:{lat:coords[0],lng:coords[1]},title:options.title||'',icon:options.icon||undefined});
-  marker.setMap(null);
+  setNovaMarkerMap(marker,null);
   marker.bindPopup=function(factory){
     marker._popupFactory=factory;
     const open=()=>marker.openPopup();
@@ -570,12 +572,12 @@ const L={marker:createGoogleMarker};
 const cluster={
   markers:[],clusterer:null,
   addLayer(marker){this.markers.push(marker)},
-  clearLayers(){this.clusterer?.clearMarkers();this.markers.forEach(marker=>marker.setMap(null));this.markers=[]},
+  clearLayers(){this.clusterer?.clearMarkers();this.markers.forEach(marker=>setNovaMarkerMap(marker,null));this.markers=[]},
   refresh(){
     this.clusterer?.clearMarkers();
     if(window.markerClusterer?.MarkerClusterer){
        this.clusterer=new window.markerClusterer.MarkerClusterer({map:googleMap,markers:this.markers,renderer:{render:({count,position})=>createMapMarker({map:googleMap,position,icon:clusterSvg(count),label:NOVAHUB_ISOTIPO_URL?String(count):undefined,zIndex:1000+count})}});
-    }else this.markers.forEach(marker=>marker.setMap(googleMap));
+    }else this.markers.forEach(marker=>setNovaMarkerMap(marker,googleMap));
   }
 };
 window.__novaRefreshClusters=()=>cluster.refresh();
@@ -1298,13 +1300,13 @@ function renderPresence(rows){
     if(marker){
       marker.setPosition({lat,lng});
       marker.title=title;
-      marker.setMap(googleMap);
+      setNovaMarkerMap(marker,googleMap);
     }else{
       marker=createMapMarker({map:googleMap,position:{lat,lng},title,icon:presenceSvg(row.initials),zIndex:1300});
       presenceMarkers.set(id,marker);
     }
   });
-  presenceMarkers.forEach((marker,id)=>{if(!activeIds.has(id)){marker.setMap(null);presenceMarkers.delete(id)}});
+  presenceMarkers.forEach((marker,id)=>{if(!activeIds.has(id)){setNovaMarkerMap(marker,null);presenceMarkers.delete(id)}});
 }
 function stopPresenceWatch(){
   if(presenceWatchId===null)return;
@@ -1346,11 +1348,11 @@ function updatePresenceToggle(){
 }
 async function setPresenceSharing(enabled){
   presenceSharingEnabled=enabled;
-  localStorage.setItem('novaFuerzaPresenceSharingV1',String(enabled));
+  localStorage.setItem(PRESENCE_STORAGE_KEY,String(enabled));
   if(!enabled){
     stopPresenceWatch();
     presenceWatchRequested=false;
-    userLocationMarker?.setMap(null);
+    setNovaMarkerMap(userLocationMarker,null);
     userLocationCircle?.setMap(null);
     try{await forceSalesRequest('/force-sales/presence/me',{method:'DELETE'});}catch(error){console.warn('No se pudo ocultar la presencia comercial',error)}
     await loadSellerPresence();
@@ -1630,7 +1632,7 @@ async function searchTextPlaces(Place,request,query,runId){
     return Array.isArray(places) ? places : [];
   }catch(error){
     setSearchStatus(`Nova no pudo buscar ${query}.`);
-    console.warn('Google Places searchByText',error);
+    console.warn('Nova Places searchByText',error);
     return [];
   }
 }
