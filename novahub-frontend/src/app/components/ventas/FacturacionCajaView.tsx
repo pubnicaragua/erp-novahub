@@ -21,7 +21,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../ui/utils';
-import { buildPdfFileName } from '../../utils/exportFileNames';
 import {
   cajaService,
   type CashRegister,
@@ -55,7 +54,10 @@ import { formatSalesAmount, getConfiguredPriceForVariant, getMissingSalesPriceMe
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
-import { getPdfDesignSettings } from '../../utils/pdfGenerator';
+import { getPdfDesign } from '../../utils/pdfGenerator';
+import { renderPdfTemplateToPdf } from '../../utils/pdf-template-renderer';
+import { createDefaultTemplateDefinition, sanitizeTemplateDefinition } from '../../services/pdf-template-definition';
+import { getPdfTemplateLogo } from '../../utils/pdfGenerator';
 import { formatPdfVariantAttributes } from '../../utils/pdf-line-details';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
@@ -63,7 +65,7 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { playNotificationSound } from '../../utils/notificationSound';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
-import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentTotalBase, getPaymentTotalBaseForSettlement } from '../../utils/paymentSettlement';
+import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentLinesDocumentAmount, getPaymentTotalBaseForSettlement, roundPaymentAmount } from '../../utils/paymentSettlement';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 
@@ -190,79 +192,75 @@ const NICARAGUA_IVA_RATE = 15;
 
 type PaymentCurrency = 'NIO' | 'USD';
 
-function escapeTicketHtml(value: unknown) {
-  return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character] || character));
-}
-
 async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaymentLine[], currency: PaymentCurrency, exchangeRate: number, companyName: string, companyLogo?: string) {
-  const winWidth = 420;
-  const winHeight = 700;
-  const win = window.open('', '_blank', `width=${winWidth},height=${winHeight}`);
+  const win = window.open('', '_blank', 'width=420,height=700');
   if (!win) return;
-  // Se consulta la vista específica para que el ticket no herede la plantilla de una factura.
-  const ticketSettings = await getPdfDesignSettings('ventas.cash-ticket');
-  // Las impresoras térmicas deben recibir una salida monocromática, aunque la
-  // plantilla general de documentos tenga una paleta corporativa.
-  const ticketPrimary = '#000';
-  const ticketText = '#000';
-  const ticketFont = typeof ticketSettings.fontFamily === 'string' ? ticketSettings.fontFamily.replace(/["'<>]/g, '') : 'monospace';
-  const logo = ticketSettings.logoUrl || companyLogo;
-  const money = (value: number) => `${currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(value)}`;
-  const paidDisplay = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const paidLocal = paidDisplay * (currency === 'USD' ? exchangeRate : 1);
-  const changeLocal = Math.max(0, paidLocal - Number(invoice.total));
-  const customerName = invoice.customer?.name || invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
-  const customerPhone = invoice.customer?.phone
-    ? formatCustomerPhoneForDisplay(invoice.customer.phone, invoice.customer.countryCode || 'NI')
-    : undefined;
-  const paymentLabel = (method: PosPaymentLine['method']) => method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'CHECK' ? 'Cheque' : method === 'CUSTOMER_BALANCE' ? 'Saldo a favor' : 'Transferencia';
-  const paymentRows = payments.map((payment) => {
-    const paymentCurrency = payment.currency || currency;
-    const paymentSymbol = paymentCurrency === 'USD' ? '$' : 'C$';
-    return `<div class="row"><span>${paymentLabel(payment.method)}</span><span>${paymentSymbol} ${formatSalesAmount(Number(payment.amount || 0))}</span></div>`;
-  }).join('');
-  const itemRows = cart.map(item => {
-    const commercialNote = item.commercialNoteSnapshot || (item as any).commercialNote || (item as any).product?.commercialNote || '';
-    const variantSku = item.variant?.sku || item.variantId || '';
-    const variantName = item.variant?.name || '';
-    const variantAttributes = formatPdfVariantAttributes(item.variant?.attributes);
-    const productCode = item.productCode || (item as any).product?.code || '';
-    const variantHtml = [
-      productCode ? `Código: ${productCode}` : '',
-      variantSku ? `SKU variante: ${variantSku}` : '',
-      variantName ? `Nombre variante: ${variantName}` : '',
-      variantAttributes ? `Atributos: ${variantAttributes}` : '',
-    ].filter(Boolean).map((line) => `<div style="font-size:9px">${escapeTicketHtml(line)}</div>`).join('');
-    const noteHtml = commercialNote ? `<div style="font-size:9px">Nota: ${escapeTicketHtml(commercialNote)}</div>` : '';
-    return `<div class="item"><div>${escapeTicketHtml(item.description)}</div>${variantHtml}${noteHtml}<div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`;
-  }).join('');
-  const discount = Number(invoice.discountAmount || 0);
-  const delivery = Number(invoice.deliveryAmount || 0);
-  const extraCharges = normalizeSalesExtraCharges(invoice).filter((charge) => charge.amount > 0);
-  const additionalRows = `${extraCharges.map((charge) => `<div class="row"><span>${escapeTicketHtml(charge.description || 'Coste extra')}</span><span>${money(charge.amount / (currency === 'USD' ? exchangeRate : 1))}</span></div>`).join('')}${delivery > 0 ? `<div class="row"><span>${escapeTicketHtml(invoice.deliveryDescription || 'Delivery')}</span><span>${money(delivery / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}`;
-  const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
-  const registerCode = invoice.register?.code || 'N/D';
-  const printFileName = buildPdfFileName(['factura', invoice.number || 'sin_numero'], 'roll-80');
-
-  const pageStyle = '@page{size:80mm auto;margin:0}*{box-sizing:border-box}html{width:100%;min-width:0;max-width:none;margin:0;padding:0;background:#fff}body{display:flex;justify-content:center;align-items:flex-start;width:100%;min-width:0;max-width:none;margin:0;padding:0;background:#fff;color:#000;font:10px monospace;filter:grayscale(1);-webkit-filter:grayscale(1);overflow-x:hidden}body>div{width:72mm;max-width:72mm;margin:0 auto;padding:4mm 0}.center{text-align:center;line-height:1.35}.line{border-top:1px dashed #000;margin:8px 0 0;padding:6px 0 0}.label{font-weight:800;letter-spacing:.08em;margin:4px 0}.item{padding:3px 0;border-bottom:1px dotted #555}.row{display:flex;justify-content:space-between;gap:8px;line-height:1.35}.row>span:first-child{min-width:0;overflow-wrap:anywhere}.row>span:last-child{flex:0 0 auto;text-align:right}.totals{margin-top:6px}.total{font-weight:800;border-top:1px solid #000;margin-top:4px;padding-top:4px}.footer{text-align:center;border-top:1px dashed #000;margin-top:10px;padding-top:6px}.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}';
-
-  const logoHtml = logo
-     ? `<img src="${escapeTicketHtml(logo)}" alt="Logo" style="display:block;width:auto;height:auto;max-width:42mm;max-height:16mm;object-fit:contain;margin:0 auto 6px;" />`
-     : '';
-  const headerHtml = `${logoHtml}<h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3>`;
-
-  win.document.write(`<html><head><title>${escapeTicketHtml(printFileName)}</title><style>${pageStyle}</style></head><body><div>${headerHtml}<div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${additionalRows}<div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></div></body></html>`);
-  const designStyle = win.document.createElement('style');
-  designStyle.textContent = ['body{font-family:', ticketFont, ';color:', ticketText, '}', 'h2,.label,.total{color:', ticketPrimary, '}', '.line{border-color:', ticketPrimary, '}', '.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}'].join('');
-  win.document.head.appendChild(designStyle);
-  win.document.close();
-  // Esperar a que el documento se pinte evita que Chrome abra una vista previa en blanco.
-  window.setTimeout(() => {
-    win.focus();
-    win.print();
-  }, 300);
+  const targetKey = 'ventas.cash-ticket';
+  try {
+    const design = await getPdfDesign(targetKey);
+    const settings = { ...(design?.settings || {}), companyName: design?.settings?.companyName || companyName, paperSize: design?.settings?.paperSize || 'ROLL-80', orientation: 'portrait' as const };
+    const safeRate = currency === 'USD' ? Math.max(1, Number(exchangeRate) || 1) : 1;
+    const money = (value: number) => `${currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(value)}`;
+    const paymentLabel = (method: PosPaymentLine['method']) => method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'CHECK' ? 'Cheque' : method === 'CUSTOMER_BALANCE' ? 'Saldo a favor' : 'Transferencia';
+    const paidDisplay = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const paidLocal = paidDisplay * safeRate;
+    const changeLocal = Math.max(0, paidLocal - Number(invoice.total));
+    const paymentSummary = payments.map(payment => `${paymentLabel(payment.method)} ${payment.currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(Number(payment.amount || 0))}`).join(' · ');
+    const itemRows = cart.map(item => {
+      const commercialNote = item.commercialNoteSnapshot || (item as any).commercialNote || (item as any).product?.commercialNote || '';
+      const variantSku = item.variant?.sku || item.variantId || '';
+      const variantName = item.variant?.name || '';
+      const variantAttributes = formatPdfVariantAttributes(item.variant?.attributes);
+      const productCode = item.productCode || (item as any).product?.code || '';
+      const details = [
+        productCode ? `Código: ${productCode}` : '',
+        variantSku ? `SKU variante: ${variantSku}` : '',
+        variantName ? `Nombre variante: ${variantName}` : '',
+        variantAttributes ? `Atributos: ${variantAttributes}` : '',
+        commercialNote ? `Nota: ${commercialNote}` : '',
+      ].filter(Boolean);
+      return { description: [item.description, ...details].join('\n'), quantity: item.quantity, unitPrice: money(Number(item.unitPrice || 0) / safeRate), total: money(Number(item.lineTotal || 0) / safeRate) };
+    });
+    const extraChargeRows = normalizeSalesExtraCharges(invoice).filter(charge => charge.amount > 0).map(charge => ({ description: charge.description || 'Coste extra', quantity: '', unitPrice: '', total: money(Number(charge.amount) / safeRate) }));
+    const deliveryAmount = Number(invoice.deliveryAmount || 0);
+    if (deliveryAmount > 0) extraChargeRows.push({ description: invoice.deliveryDescription || 'Delivery', quantity: '', unitPrice: '', total: money(deliveryAmount / safeRate) });
+    const rows = [...itemRows, ...extraChargeRows];
+    const documentDate = invoice.date ? new Date(invoice.date).toLocaleString('es-NI') : new Date().toLocaleString('es-NI');
+    const settingsLogo = getPdfTemplateLogo(settings, companyLogo, targetKey);
+    const ticketData = {
+      company: { name: settings.companyName || companyName, slogan: settings.slogan, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, logo: settingsLogo },
+      logo: settingsLogo,
+      document: { title: 'COMPROBANTE DE VENTA', number: invoice.number, date: documentDate, meta: `Factura: ${invoice.number} · Caja: ${invoice.register?.code || 'N/D'} · ${documentDate}`, notes: `Pago: ${paymentSummary || 'Sin detalle'} · Cambio / vuelto: C$ ${formatSalesAmount(changeLocal)}` },
+      customer: { name: invoice.customer?.name || invoice.customCustomerName || GENERAL_CUSTOMER_NAME, phone: invoice.customer?.phone || '' },
+      party: { name: invoice.customer?.name || invoice.customCustomerName || GENERAL_CUSTOMER_NAME },
+      rows,
+      items: rows,
+      totals: { subtotal: money(Number(invoice.subtotal || 0) / safeRate), discount: money(Number(invoice.discountAmount || 0) / safeRate), tax: money(Number(invoice.taxAmount || 0) / safeRate), total: money(Number(invoice.total || 0) / safeRate) },
+      tableColumns: [
+        { id: 'description', label: 'Descripción', token: 'description', width: 48, align: 'left' as const },
+        { id: 'quantity', label: 'Cant.', token: 'quantity', width: 12, align: 'right' as const },
+        { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 19, align: 'right' as const },
+        { id: 'total', label: 'Total', token: 'total', width: 21, align: 'right' as const },
+      ],
+    };
+    const definition = sanitizeTemplateDefinition(design?.layoutZones?.definition || createDefaultTemplateDefinition(targetKey, settings), targetKey, settings);
+    const { blob } = await renderPdfTemplateToPdf({ definition, settings, targetKey, data: ticketData, fileName: `factura_${invoice.number || 'sin_numero'}.pdf`, save: false });
+    const pdfUrl = URL.createObjectURL(blob);
+    win.location.replace(pdfUrl);
+    let didPrint = false;
+    const print = () => {
+      if (didPrint) return;
+      didPrint = true;
+      try { win.focus(); win.print(); } catch { /* el usuario puede imprimir desde el visor del PDF */ }
+    };
+    win.addEventListener('load', print, { once: true });
+    window.setTimeout(print, 900);
+    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+  } catch (error) {
+    win.close();
+    toast.error(error instanceof Error ? error.message : 'No se pudo preparar el ticket de caja');
+  }
 }
-
 const POS_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="pos-register"]',
@@ -874,7 +872,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         productId: item.id,
         productCode: (item as any).productCode || (item as any).product?.code || null,
         variantId: item.variantId || undefined,
-        variant: item.variant ? { id: item.variant.id, sku: item.variant.sku, name: item.variant.name, attributes: item.variant.attributes } : null,
+        variant: item.variant ? { id: item.variant.id, sku: item.variant.sku, name: item.variant.name, attributes: Array.isArray(item.variant.attributes) ? item.variant.attributes : undefined } : null,
         description: item.description,
         quantity: Number(item.quantity || 0),
         unitPrice: Number(item.unitPrice || 0),
@@ -1654,12 +1652,17 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       getSalesExtraChargesAmount({ extraCharges: holdCreateDto.extraCharges }),
       holdCreateDto.deliveryAmount || 0,
     ).total;
-    const holdTotalBase = toBaseAmount(holdTotal, 'NIO', 1);
-    const receivedBase = payments.reduce((sum, payment) => sum + toBaseAmount(
-      Number(payment.amount || 0),
-      payment.currency || 'NIO',
-      (payment.currency || 'NIO') === baseCurrency ? 1 : Number(payment.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1),
-    ), 0);
+    const normalizedHoldTotal = roundPaymentAmount(holdTotal);
+    const holdTotalBase = roundPaymentAmount(toBaseAmount(normalizedHoldTotal, 'NIO', 1));
+    const getHoldPaymentBase = (payment: PosPaymentLine) => getPaymentLineBase(payment, 'NIO');
+    const receivedBase = getPaymentTotalBaseForSettlement(
+      payments,
+      holdTotalBase,
+      'NIO',
+      baseCurrency,
+      convertBetweenCurrencies,
+      getHoldPaymentBase,
+    );
     const changeBase = getPaymentChangeBase(payments, holdTotalBase, (payment) => getPaymentLineBase(payment, 'NIO'));
     if (changeBase > 0.005 && !cashCoversPaymentChange(payments, holdTotalBase, (payment) => getPaymentLineBase(payment, 'NIO'), 0.005)) {
       toast.error('No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.');
@@ -1677,7 +1680,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       toast.error('Selecciona un cliente para aplicar su saldo a favor.');
       return;
     }
-    if (receivedBase + 0.005 < holdTotalBase) {
+    if (receivedBase < holdTotalBase) {
       toast.error('El monto recibido debe ser igual o mayor al total');
       return;
     }
@@ -1860,7 +1863,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       return;
     }
     const documentRate = paymentCurrency === baseCurrency ? 1 : Number(globalRate || activeSession.exchangeRateUSD || 1);
-    const totalBase = toBaseAmount(summary.total, paymentCurrency, documentRate);
+    const totalDocument = roundPaymentAmount(summary.total);
+    const totalBase = roundPaymentAmount(toBaseAmount(totalDocument, paymentCurrency, documentRate));
     const getCurrentPaymentBase = (payment: PosPaymentLine) => getPaymentLineBase(payment, paymentCurrency);
     const receivedBase = getPaymentTotalBaseForSettlement(
       payments,
@@ -1887,7 +1891,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       toast.error('Selecciona un cliente para aplicar su saldo a favor.');
       return;
     }
-    if (receivedBase + 0.005 < totalBase) {
+    if (receivedBase < totalBase) {
       toast.error('El monto recibido debe ser igual o mayor al total');
       return;
     }
@@ -3138,26 +3142,37 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                   holdCreateDto.deliveryAmount || 0,
                 ).total
                 : null;
+              const documentCurrency = holdTotal !== null ? 'NIO' : paymentCurrency;
               const documentRate = paymentCurrency === baseCurrency ? 1 : Number(globalRate || activeSession.exchangeRateUSD || 1);
-              const totalToPayBase = holdTotal !== null
-                ? toBaseAmount(holdTotal, 'NIO', 1)
-                : toBaseAmount(summary.total, paymentCurrency, documentRate);
+              const totalToPayDocument = holdTotal !== null
+                ? roundPaymentAmount(convertBetweenCurrencies(roundPaymentAmount(holdTotal), 'NIO', paymentCurrency, 1, documentRate))
+                : roundPaymentAmount(summary.total);
+              const totalToPayBase = roundPaymentAmount(toBaseAmount(
+                holdTotal !== null ? roundPaymentAmount(holdTotal) : totalToPayDocument,
+                documentCurrency,
+                holdTotal !== null ? 1 : documentRate,
+              ));
               const getCurrentPaymentBase = (payment: PosPaymentLine) => getPaymentLineBase(payment, paymentCurrency);
               const totalPaidBase = getPaymentTotalBaseForSettlement(
                 payments,
                 totalToPayBase,
-                paymentCurrency,
+                documentCurrency,
                 baseCurrency,
                 convertBetweenCurrencies,
                 getCurrentPaymentBase,
               );
-              const pendingBase = Math.max(0, totalToPayBase - totalPaidBase);
-              const changeLocal = Math.max(0, totalPaidBase - totalToPayBase);
+              const pendingBase = roundPaymentAmount(Math.max(0, totalToPayBase - totalPaidBase));
+              const changeLocal = roundPaymentAmount(Math.max(0, totalPaidBase - totalToPayBase));
               const changeUnsupported = changeLocal > 0.005 && !cashCoversPaymentChange(payments, totalToPayBase, getCurrentPaymentBase, 0.005);
-              const totalToPayDocument = convertBetweenCurrencies(totalToPayBase, baseCurrency, paymentCurrency, 1, documentRate);
-              const totalPaidDocument = convertBetweenCurrencies(totalPaidBase, baseCurrency, paymentCurrency, 1, documentRate);
-              const pendingDocument = convertBetweenCurrencies(pendingBase, baseCurrency, paymentCurrency, 1, documentRate);
-              const changeDocument = convertBetweenCurrencies(changeLocal, baseCurrency, paymentCurrency, 1, documentRate);
+              const totalPaidDocument = getPaymentLinesDocumentAmount(
+                payments,
+                paymentCurrency,
+                documentRate,
+                baseCurrency,
+                convertBetweenCurrencies,
+              );
+              const pendingDocument = roundPaymentAmount(Math.max(0, totalToPayDocument - totalPaidDocument));
+              const changeDocument = roundPaymentAmount(Math.max(0, totalPaidDocument - totalToPayDocument));
               const paymentCurrencies = [...new Set(payments.map((payment) => payment.currency || paymentCurrency))] as PaymentCurrency[];
               const indicatorPaymentCurrencies = paymentCurrencies.filter((currency) => currency !== paymentCurrency);
               const formatIndicatorEquivalent = (amount: number) => indicatorPaymentCurrencies.map((currency) => {
@@ -3181,7 +3196,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                       <div className="text-xl font-black">{formatExplicitAmount(totalPaidDocument, paymentCurrency)}</div>
                       {indicatorPaymentCurrencies.length > 0 && <div className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatIndicatorEquivalent(totalPaidBase)}</div>}
                     </div>
-                    <div className={cn("rounded-xl p-3 border", pendingBase > 0.005 ? "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400")}>
+                    <div className={cn("rounded-xl p-3 border", pendingBase > 0 ? "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400")}>
                       <span className="text-xs font-bold">Pendiente</span>
                       <div className="text-xl font-black">{formatExplicitAmount(pendingDocument, paymentCurrency)}</div>
                       {indicatorPaymentCurrencies.length > 0 && <div className="text-[10px] font-bold text-muted-foreground">Equivalente en pago: {formatIndicatorEquivalent(pendingBase)}</div>}
@@ -3413,6 +3428,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         open={variantPickerOpen}
         onOpenChange={setVariantPickerOpen}
         product={variantPickerProduct}
+        warehouseId={selectedWarehouseId}
+        warehouses={directWarehouseOptions}
         onSelect={(variant) => {
           if (variantPickerProduct) handleVariantSelected(variantPickerProduct, variant);
         }}

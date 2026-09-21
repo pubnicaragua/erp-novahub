@@ -5,15 +5,20 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import type { PosProduct, PosProductVariant } from '../../services/caja.service';
 import { extractVariantAttributes, findVariantByAttributes } from '../../types/variants';
+import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+
+type WarehouseOption = { id: string; name: string };
 
 interface VariantPickerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product: PosProduct | null;
   onSelect: (variant: PosProductVariant) => void;
+  warehouseId?: string;
+  warehouses?: WarehouseOption[];
 }
 
-export function VariantPickerModal({ open, onOpenChange, product, onSelect }: VariantPickerModalProps) {
+export function VariantPickerModal({ open, onOpenChange, product, onSelect, warehouseId, warehouses = [] }: VariantPickerModalProps) {
   const variants = useMemo(() => product?.variants || [], [product?.variants]);
   const attributes = useMemo(() => extractVariantAttributes(variants), [variants]);
   const [selected, setSelected] = useState<Record<string, string>>({});
@@ -23,7 +28,8 @@ export function VariantPickerModal({ open, onOpenChange, product, onSelect }: Va
     [variants, selected]
   );
   const matchedVariantHasStock = !product?.trackInventory
-    || Boolean(matchedVariant && Number(matchedVariant.currentStock || 0) > 0);
+    || Boolean(warehouseId && matchedVariant && Number(matchedVariant.currentStock ?? 0) > 0);
+  const selectedWarehouseName = warehouses.find((warehouse) => warehouse.id === warehouseId)?.name;
 
   const toggleValue = (attribute: string, value: string) => {
     setSelected((prev) => {
@@ -92,11 +98,32 @@ export function VariantPickerModal({ open, onOpenChange, product, onSelect }: Va
               </div>
               {product.trackInventory && (
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-muted-foreground">Stock:</span>
-                  <Badge variant={matchedVariantHasStock ? 'secondary' : 'destructive'} className="text-[10px]">
-                    {matchedVariant.currentStock == null ? 'Sin existencia' : `${matchedVariant.currentStock} unidades`}
+                  <span className="text-muted-foreground">
+                    {selectedWarehouseName ? `Stock en ${selectedWarehouseName}:` : 'Stock:'}
+                  </span>
+                  <Badge
+                    variant={!warehouseId ? 'outline' : matchedVariantHasStock ? 'secondary' : 'destructive'}
+                    className="text-[10px]"
+                  >
+                    {!warehouseId
+                      ? 'Selecciona bodega'
+                      : matchedVariantHasStock ? `${matchedVariant.currentStock} unidades` : 'Sin stock'}
                   </Badge>
                 </div>
+              )}
+              {product.trackInventory && !warehouseId && (
+                <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
+                  Selecciona una bodega de salida para consultar existencias.
+                </p>
+              )}
+              {product.trackInventory && (
+                <SalesWarehouseStockHint
+                  product={product}
+                  warehouseId={warehouseId}
+                  warehouses={warehouses}
+                  variantId={matchedVariant.id}
+                  className="mt-2 px-0"
+                />
               )}
             </div>
           )}

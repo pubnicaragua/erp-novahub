@@ -78,10 +78,36 @@ function pageAspect(settings: CanvasSettings) {
 
 function nodeText(node: PdfTemplateNode, data: PdfTemplateData) {
   if (node.type === 'field' || node.type === 'barcode') {
-    const value = resolveTemplateToken(node.token, data, node.sample || getTemplateTokenSample(node.token));
+    if (!node.token) return node.text || node.sample || '';
+    const fallback = node.token.startsWith('company.') ? '' : node.sample || getTemplateTokenSample(node.token);
+    const value = resolveTemplateToken(node.token, data, fallback);
     return node.type === 'field' && node.id.startsWith('party-') ? `${node.label}\n${value}` : value;
   }
-  return node.text || node.sample || node.label;
+  if (node.type === 'text') return node.text || node.sample || node.label;
+  if (node.type === 'section') return node.text || node.sample || '';
+  return '';
+}
+
+const COMPANY_TOKEN_SETTINGS: Record<string, keyof CanvasSettings> = {
+  'company.name': 'companyName',
+  'company.slogan': 'slogan',
+  'company.fiscalInfo': 'fiscalInfo',
+  'company.address': 'address',
+  'company.phone': 'phone',
+  'company.email': 'email',
+  'company.website': 'website',
+};
+
+function isInlineTextEditable(node: PdfTemplateNode) {
+  return node.type === 'text'
+    || (node.type === 'section' && Boolean(node.text || node.sample))
+    || (node.type === 'field' && !node.token && Boolean(node.text || node.sample))
+    || (node.type === 'field' && Boolean(node.token && COMPANY_TOKEN_SETTINGS[node.token]));
+}
+
+function inlineTextValue(node: PdfTemplateNode, data: PdfTemplateData = {}) {
+  if (node.type === 'field' && node.token && COMPANY_TOKEN_SETTINGS[node.token]) return nodeText(node, data);
+  return node.type === 'text' ? node.text || node.sample || node.label : node.text || node.sample || '';
 }
 
 function LogoPreview({ src, companyName, className }: { src?: string | null; companyName?: string; className?: string }) {
@@ -190,7 +216,7 @@ function ChartPreview({ chart, node }: { chart?: PdfTemplateChart; node: PdfTemp
   return <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-white/95 p-1.5 text-slate-700">
     <p className="shrink-0 truncate text-[7px] font-bold leading-tight" title={chart.title}>{chart.title}</p>
     {type === 'donut' ? <div className="flex min-h-0 flex-1 items-center gap-2 overflow-hidden">
-      <div className="relative aspect-square h-full max-h-full shrink-0 rounded-full" style={{ background: `conic-gradient(${values.map((value, index) => `${colors[index % colors.length]} ${values.slice(0, index).reduce((sum, item) => sum + Math.max(0, item), 0) / Math.max(1, values.reduce((sum, item) => sum + Math.max(0, item), 0)) * 360}deg ${(values.slice(0, index + 1).reduce((sum, item) => sum + Math.max(0, item), 0) / Math.max(1, values.reduce((sum, item) => sum + Math.max(0, item), 0))) * 360}deg`).join(',')}` }}><div className="absolute inset-[28%] flex items-center justify-center rounded-full bg-white text-[7px] font-bold">{values.reduce((sum, item) => sum + Math.max(0, item), 0)}</div></div>
+      <div className="relative aspect-square h-full max-h-full shrink-0 rounded-full" style={{ background: `conic-gradient(${values.map((_, index) => `${colors[index % colors.length]} ${values.slice(0, index).reduce((sum, item) => sum + Math.max(0, item), 0) / Math.max(1, values.reduce((sum, item) => sum + Math.max(0, item), 0)) * 360}deg ${(values.slice(0, index + 1).reduce((sum, item) => sum + Math.max(0, item), 0) / Math.max(1, values.reduce((sum, item) => sum + Math.max(0, item), 0))) * 360}deg`).join(',')}` }}><div className="absolute inset-[28%] flex items-center justify-center rounded-full bg-white text-[7px] font-bold">{values.reduce((sum, item) => sum + Math.max(0, item), 0)}</div></div>
       <div className="min-w-0 flex-1 space-y-0.5">{chart.labels.slice(0, 4).map((label, index) => <div key={label} className="flex min-w-0 items-center gap-1 text-[6px]"><span className="size-1.5 shrink-0 rounded-sm" style={{ backgroundColor: colors[index % colors.length] }} /><span className="min-w-0 flex-1 truncate">{label}</span><strong className="shrink-0">{values[index] ?? 0}</strong></div>)}</div>
     </div> : type === 'bar' ? <div className="min-h-0 flex-1 space-y-1 overflow-hidden pt-1">{chart.labels.slice(0, 4).map((label, index) => <div key={label} className="grid grid-cols-[minmax(0,34%)_minmax(0,1fr)_auto] items-center gap-1 text-[6px]"><span className="truncate" title={label}>{label}</span><span className="h-1.5 overflow-hidden rounded-full bg-slate-100"><i className="block h-full rounded-full" style={{ width: `${Math.max(2, (Number(values[index] || 0) / maxValue) * 100)}%`, backgroundColor: colors[index % colors.length] }} /></span><strong className="truncate">{Number(values[index] || 0).toLocaleString('es-NI', { maximumFractionDigits: 0 })}</strong></div>)}</div> : <div className="min-h-0 flex-1 overflow-hidden pt-1">
       <svg viewBox="0 0 300 70" className="h-full w-full" preserveAspectRatio="none"><path d="M5 58 H295" stroke="#cbd5e1" strokeWidth="1" />{(chart.series?.length ? chart.series : [{ label: chart.title, values, color: colors[0] }]).slice(0, 3).map((series, seriesIndex) => { const source = series.values.slice(0, chart.labels.length); const maximum = Math.max(1, ...source.map(value => Number(value) || 0)); const points = source.map((value, index) => `${8 + index * 284 / Math.max(source.length - 1, 1)},${52 - (Number(value) / maximum) * 38}`).join(' '); return <polyline key={series.label} points={points} fill="none" stroke={series.color || colors[seriesIndex % colors.length]} strokeWidth="2.5" vectorEffect="non-scaling-stroke" />; })}</svg>
@@ -236,22 +262,16 @@ function updateNode(definition: PdfTemplateDefinition, id: string, patch: Partia
   return { ...definition, nodes: definition.nodes.map(node => node.id === id ? { ...node, ...patch } : node) };
 }
 
-type DocumentPanelId = 'brand' | 'header' | 'content' | 'footer' | 'page';
+type DocumentPanelId = 'header' | 'content' | 'footer' | 'page';
 
 const SELECT_CLASS = 'h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-[11px] text-white outline-none transition focus:border-emerald-400';
 const INPUT_CLASS = 'h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-[11px] text-white outline-none transition focus:border-emerald-400';
 
-function CanvasDocumentControls({ settings, target, logo, onChange, onUploadLogo }: { settings: CanvasSettings; target: ReturnType<typeof getPdfTemplateTarget>; logo?: string | null; onChange: (changes: Partial<CanvasSettings>) => void; onUploadLogo?: (file: File) => void }) {
+function CanvasDocumentControls({ settings, target, onChange }: { settings: CanvasSettings; target: ReturnType<typeof getPdfTemplateTarget>; onChange: (changes: Partial<CanvasSettings>) => void }) {
   const [activePanel, setActivePanel] = useState<DocumentPanelId>('header');
-  const logoInputRef = useRef<HTMLInputElement>(null);
   const update = <K extends keyof CanvasSettings>(key: K, value: CanvasSettings[K]) => onChange({ [key]: value } as Partial<CanvasSettings>);
   const color = settings.primaryColor || '#10b981';
-  // `logo` llega resuelto desde el configurador. El URI de almacenamiento no
-  // es una URL que el navegador pueda pintar directamente, por lo que solo se
-  // usa como respaldo cuando el componente se consume sin esa resolución.
-  const visibleLogo = logo || settings.templateLogoUrl;
   const panels: Array<{ id: DocumentPanelId; label: string; icon: typeof Building2 }> = [
-    { id: 'brand', label: 'Marca', icon: Building2 },
     { id: 'header', label: 'Header', icon: PanelTop },
     { id: 'content', label: 'Contenido', icon: Table2 },
     { id: 'footer', label: 'Footer', icon: PanelBottom },
@@ -265,10 +285,6 @@ function CanvasDocumentControls({ settings, target, logo, onChange, onUploadLogo
       <span className="ml-auto hidden shrink-0 text-[10px] text-slate-500 md:inline">{target.moduleLabel} · {target.label}</span>
     </div>
     <div className="max-h-[300px] overflow-y-auto px-3 py-3 sm:px-4">
-      {activePanel === 'brand' && <div className="grid gap-3 md:grid-cols-[auto_minmax(0,1fr)]">
-        <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-2 md:w-52"><div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/10"><LogoPreview src={visibleLogo} companyName={settings.companyName || target.moduleLabel} className="h-full w-full" /></div><div className="min-w-0"><p className="truncate text-[11px] font-semibold text-white">{visibleLogo ? 'Logo agregado' : 'Identificador de empresa'}</p><button type="button" className="mt-1 text-[10px] font-semibold text-emerald-300 hover:text-emerald-200" onClick={() => logoInputRef.current?.click()} disabled={!onUploadLogo}>Agregar o reemplazar</button><input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) onUploadLogo?.(file); event.currentTarget.value = ''; }} /></div></div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><label className="space-y-1 text-[10px] text-slate-400">Empresa<input className={INPUT_CLASS} value={settings.companyName || ''} onChange={event => update('companyName', event.target.value)} placeholder="Nombre de la empresa" /></label><label className="space-y-1 text-[10px] text-slate-400">Eslogan<input className={INPUT_CLASS} value={settings.slogan || ''} onChange={event => update('slogan', event.target.value)} /></label><label className="space-y-1 text-[10px] text-slate-400">Teléfono<input className={INPUT_CLASS} value={settings.phone || ''} onChange={event => update('phone', event.target.value)} /></label><label className="space-y-1 text-[10px] text-slate-400">Correo<input className={INPUT_CLASS} value={settings.email || ''} onChange={event => update('email', event.target.value)} /></label><label className="space-y-1 text-[10px] text-slate-400 sm:col-span-2 lg:col-span-4">Dirección<input className={INPUT_CLASS} value={settings.address || ''} onChange={event => update('address', event.target.value)} /></label></div>
-      </div>}
       {activePanel === 'header' && <div className="grid gap-3 md:grid-cols-4"><label className="space-y-1 text-[10px] text-slate-400 md:col-span-2">Patrón del encabezado<select className={SELECT_CLASS} value={settings.headerLayout || 'split'} onChange={event => onChange({ headerLayout: event.target.value })}><option value="classic">Clásico</option><option value="split">Empresa + documento</option><option value="banner">Banda corporativa</option><option value="compact">Compacto</option><option value="ribbon">Cinta lateral</option><option value="topline">Línea superior</option><option value="sidebar">Acento lateral</option><option value="centered">Centrado</option><option value="boxed">Recuadro</option><option value="corner">Acento de esquina</option><option value="editorial">Editorial</option><option value="double-band">Doble banda</option><optgroup label="Patrones creativos"><option value="fluid">Fluido orgánico</option><option value="aurora">Aurora</option><option value="diagonal">Diagonal</option><option value="portal">Portal</option><option value="steps">Escalonado</option><option value="ink">Tinta</option><option value="grid">Retícula</option><option value="ticket">Talón</option></optgroup></select></label><div className="space-y-1 text-[10px] text-slate-400">Posición del logo<div className="grid grid-cols-3 gap-1">{(['left', 'center', 'right'] as const).map(position => <button key={position} type="button" aria-pressed={settings.logoPosition === position} onClick={() => update('logoPosition', position)} className={cn('h-8 rounded-md border text-[10px] transition', settings.logoPosition === position ? 'border-emerald-400 bg-emerald-400/10 text-emerald-200' : 'border-slate-700 text-slate-400 hover:border-slate-500')}>{position === 'left' ? 'Izq.' : position === 'center' ? 'Centro' : 'Der.'}</button>)}</div></div><label className="space-y-1 text-[10px] text-slate-400">Tamaño del logo <span className="text-slate-500">{settings.logoSize || 34}px</span><input type="range" min="18" max="70" value={settings.logoSize || 34} onChange={event => update('logoSize', Number(event.target.value))} className="mt-2 w-full accent-emerald-400" /></label><label className="flex items-center gap-2 self-end rounded-md border border-slate-700 px-2 py-2 text-[10px] text-slate-300"><input type="checkbox" checked={settings.showCompanyName !== false} onChange={event => update('showCompanyName', event.target.checked)} className="accent-emerald-400" />Mostrar empresa</label></div>}
       {activePanel === 'content' && <div className="grid gap-3 md:grid-cols-4"><label className="space-y-1 text-[10px] text-slate-400 md:col-span-2">Tabla<select className={SELECT_CLASS} value={settings.tableLayout || 'standard'} onChange={event => onChange({ tableLayout: event.target.value })}><option value="standard">Estándar</option><option value="striped">Filas alternas</option><option value="boxed">Recuadros</option><option value="minimal">Minimalista</option><option value="compact">Compacta</option><option value="accent">Acento en totales</option><option value="ledger">Libro contable</option><option value="cards">Tarjetas</option></select></label><label className="space-y-1 text-[10px] text-slate-400 md:col-span-2">Información bancaria<input className={INPUT_CLASS} value={settings.bankInfo || ''} onChange={event => update('bankInfo', event.target.value)} placeholder="Banco, cuenta y beneficiario" /></label><label className="flex items-center gap-2 rounded-md border border-slate-700 px-2 py-2 text-[10px] text-slate-300"><input type="checkbox" checked={Boolean(settings.showQr)} onChange={event => update('showQr', event.target.checked)} className="accent-emerald-400" />Código QR</label><label className="flex items-center gap-2 rounded-md border border-slate-700 px-2 py-2 text-[10px] text-slate-300"><input type="checkbox" checked={Boolean(settings.showBarcode)} onChange={event => update('showBarcode', event.target.checked)} className="accent-emerald-400" />Código de barras</label><label className="space-y-1 text-[10px] text-slate-400 md:col-span-2">Marca de agua<input className={INPUT_CLASS} value={settings.watermark || ''} onChange={event => update('watermark', event.target.value)} placeholder="BORRADOR" /></label></div>}
       {activePanel === 'footer' && <div className="grid gap-3 md:grid-cols-4"><label className="space-y-1 text-[10px] text-slate-400 md:col-span-2">Patrón del pie<select className={SELECT_CLASS} value={settings.footerLayout || 'line'} onChange={event => onChange({ footerLayout: event.target.value })}><option value="line">Línea sobria</option><option value="minimal">Minimalista</option><option value="band">Banda corporativa</option><option value="wave">Ola / doble banda</option><option value="boxed">Recuadro</option><option value="split">Pie dividido</option><option value="layers">Capas orgánicas</option><option value="notch">Muesca dentada</option><option value="dots">Puntos</option></select></label><label className="space-y-1 text-[10px] text-slate-400 md:col-span-2">Texto del pie<input className={INPUT_CLASS} value={settings.footerText || ''} onChange={event => update('footerText', event.target.value)} /></label><label className="flex items-center gap-2 rounded-md border border-slate-700 px-2 py-2 text-[10px] text-slate-300"><input type="checkbox" checked={settings.showPageNumber !== false} onChange={event => update('showPageNumber', event.target.checked)} className="accent-emerald-400" />Numeración</label><label className="space-y-1 text-[10px] text-slate-400">Formato<select className={SELECT_CLASS} value={settings.pageNumberFormat || 'page-of'} onChange={event => update('pageNumberFormat', event.target.value as CanvasSettings['pageNumberFormat'])}><option value="page-of">Página X de Y</option><option value="number-only">Solo número</option><option value="custom">Personalizado</option></select></label><label className="space-y-1 text-[10px] text-slate-400 md:col-span-2">Texto legal<input className={INPUT_CLASS} value={settings.legalText || ''} onChange={event => update('legalText', event.target.value)} placeholder="Condiciones legales" /></label><label className="space-y-1 text-[10px] text-slate-400 md:col-span-2">Términos<input className={INPUT_CLASS} value={settings.terms || ''} onChange={event => update('terms', event.target.value)} placeholder="Términos y condiciones" /></label></div>}
@@ -279,14 +295,19 @@ function CanvasDocumentControls({ settings, target, logo, onChange, onUploadLogo
 
 export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data, onChange, onSettingsChange, onUploadLogo, onSave, logo, readOnly = false }: PdfTemplateCanvasEditorProps) {
   const [selectedId, setSelectedId] = useState(definition.nodes.find(node => node.enabled !== false)?.id || null);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [selectedReportSection, setSelectedReportSection] = useState<{ nodeId: string; index: number } | null>(null);
   const [zoom, setZoom] = useState(72);
   const [history, setHistory] = useState<PdfTemplateDefinition[]>([]);
   const [future, setFuture] = useState<PdfTemplateDefinition[]>([]);
   const [drag, setDrag] = useState<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const inlineTextEditorRef = useRef<HTMLDivElement>(null);
+  const inlineTextInitialValueRef = useRef('');
+  const cancelInlineTextEditRef = useRef(false);
+  const editorRootRef = useRef<HTMLDivElement>(null);
   const target = getPdfTemplateTarget(targetKey);
-  const sampleData = useMemo(() => {
+  const sampleData = useMemo<PdfTemplateData>(() => {
     const contextual = createPdfTemplateSampleData(targetKey);
     return {
       ...contextual,
@@ -305,6 +326,24 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
       items: data?.items || data?.rows || data?.history || contextual.items || [],
     };
   }, [data, logo, targetKey]);
+  useEffect(() => {
+    const root = editorRootRef.current;
+    if (!root) return;
+    root.toggleAttribute('inert', readOnly);
+  }, [readOnly]);
+  useEffect(() => {
+    const editor = inlineTextEditorRef.current;
+    if (!editor || !editingTextId) return;
+    editor.textContent = inlineTextInitialValueRef.current;
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, [editingTextId]);
   const selectedNode = definition.nodes.find(node => node.id === selectedId) || null;
   const selected = selectedNode ? { ...selectedNode, borderStyle: selectedNode.borderStyle || defaultCanvasBorderStyle(selectedNode.type) } : null;
   const activeNodes = useMemo(() => definition.nodes.filter(node => node.enabled !== false && (node.page || 1) === 1), [definition.nodes]);
@@ -436,6 +475,35 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
     selectedPatch({ rotation: nextRotation });
   };
 
+  const startInlineTextEdit = (node: PdfTemplateNode) => {
+    if (readOnly || !isInlineTextEditable(node)) return;
+    setSelectedId(node.id);
+    setSelectedReportSection(null);
+    cancelInlineTextEditRef.current = false;
+    inlineTextInitialValueRef.current = inlineTextValue(node, sampleData);
+    setEditingTextId(node.id);
+  };
+
+  const finishInlineTextEdit = (node: PdfTemplateNode, value: string) => {
+    if (cancelInlineTextEditRef.current) {
+      cancelInlineTextEditRef.current = false;
+      setEditingTextId(null);
+      return;
+    }
+    const text = value.replace(/\r\n?/g, '\n');
+    const companySetting = node.type === 'field' && node.token ? COMPANY_TOKEN_SETTINGS[node.token] : undefined;
+    if (companySetting) {
+      if (text !== inlineTextValue(node, sampleData)) onSettingsChange?.({ [companySetting]: text } as Partial<CanvasSettings>);
+      setEditingTextId(null);
+      return;
+    }
+    if (text !== inlineTextValue(node, sampleData)) {
+      const label = text.trim().split('\n')[0]?.slice(0, 80) || node.label;
+      commit(updateNode(definition, node.id, { text, label }));
+    }
+    setEditingTextId(null);
+  };
+
   const patchSettings = (patch: Partial<CanvasSettings>) => onSettingsChange?.(patch);
   const previewLogo = logo || (typeof sampleData.logo === 'string' ? sampleData.logo : typeof sampleData.company?.logo === 'string' ? sampleData.company.logo : undefined);
   const previewReportSection = target.module === 'reportes' ? sampleData.reportSections?.[0] : undefined;
@@ -473,12 +541,12 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#101827] text-slate-100 shadow-2xl" data-testid="pdf-template-canvas-editor" aria-disabled={readOnly || undefined} inert={readOnly}>
+    <div ref={editorRootRef} className="overflow-hidden rounded-2xl border border-slate-800 bg-[#101827] text-slate-100 shadow-2xl" data-testid="pdf-template-canvas-editor" aria-disabled={readOnly || undefined}>
       {readOnly && <div className="border-b border-amber-400/20 bg-amber-400/10 px-4 py-2 text-xs text-amber-200">Vista de solo lectura: tu permiso permite revisar esta plantilla, pero no modificarla.</div>}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-[#0b1220] px-3 py-2">
         <div className="mr-2 flex min-w-0 items-center gap-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-400/15 text-emerald-300"><Move size={15} /></div>
-          <div className="min-w-0"><p className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">Canvas de plantilla</p><p className="truncate text-[10px] text-slate-500">{target.label} · arrastra y redimensiona</p></div>
+          <div className="min-w-0"><p className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">Canvas de plantilla</p><p className="truncate text-[10px] text-slate-500">{target.label} · arrastra; doble clic para editar texto</p></div>
           <Badge className="hidden shrink-0 border-emerald-400/30 bg-emerald-400/10 text-[9px] text-emerald-200 sm:inline-flex">{settings.headerLayout || 'split'} · {settings.footerLayout || 'line'}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-1 border-l border-slate-800 pl-2">
@@ -501,18 +569,20 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Acercar" onClick={() => setZoom(value => Math.min(120, value + 8))}><Plus size={15} /></Button>
         </div>
       </div>
-      <CanvasDocumentControls settings={settings} target={target} logo={logo} onChange={patchSettings} onUploadLogo={onUploadLogo} />
+      <CanvasDocumentControls settings={settings} target={target} onChange={patchSettings} />
       <div className="grid min-h-[580px] grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_245px]">
         <div className="relative overflow-auto bg-[radial-gradient(#243247_1px,transparent_1px)] [background-size:16px_16px] p-7 sm:p-10" onKeyDown={handleKeyDown} tabIndex={0}>
           <div className="mx-auto transition-transform duration-200" style={{ width: `${zoom}%`, maxWidth: 850, minWidth: 340 }}>
             <div ref={canvasRef} className="relative w-full overflow-hidden rounded-sm bg-white shadow-[0_22px_70px_rgba(0,0,0,0.45)]" style={{ aspectRatio: pageAspect(settings), backgroundColor: settings.backgroundColor || definition.page.background || '#fff' }} onPointerDown={() => setSelectedId(null)}>
               {activeNodes.map(node => {
                 const isSelected = selectedId === node.id;
+                const isEditingText = editingTextId === node.id;
+                const canInlineEditText = !readOnly && isInlineTextEditable(node);
                 const isInnerReportSectionSelected = node.type === 'report-sections' && selectedReportSectionIndex !== null && selectedReportSection?.nodeId === node.id;
                 const showNodeSelection = isSelected && !isInnerReportSectionSelected;
                 const isContainer = node.type === 'section' || node.type === 'report-sections' || node.type === 'spacer';
-                return <div key={node.id} data-template-node={node.id} className={cn('group absolute overflow-visible border transition-shadow', node.type === 'divider' ? 'border-t-2 border-x-0 border-b-0' : 'border-transparent', isContainer ? 'z-0' : showNodeSelection ? 'z-20 shadow-[0_0_0_2px_#34d399,0_8px_20px_rgba(16,185,129,0.20)]' : 'z-10 hover:shadow-[0_0_0_1px_#93c5fd]', showNodeSelection && isContainer && 'shadow-[0_0_0_2px_#34d399]')} style={nodeStyle(node, settings)} onPointerDown={event => beginDrag(event, node, 'move')} onClick={event => { event.stopPropagation(); setSelectedId(node.id); setSelectedReportSection(null); }}>
-                  {node.type === 'image' ? <LogoPreview src={previewLogo} companyName={String(sampleData.company?.name || settings.companyName || target.moduleLabel)} className="h-full w-full" /> : node.type === 'table' ? <TablePreview node={node} settings={settings} data={sampleData} reportSection={previewReportSection} /> : node.type === 'report-sections' ? <ReportSectionsPreview node={node} settings={settings} data={sampleData} selectedSectionIndex={selectedReportSectionIndex} onSelectSection={index => selectReportSection(node.id, index)} /> : node.type === 'chart' ? <ChartPreview chart={sampleData.dashboardCharts?.find(chart => chart.id === node.token)} node={node} /> : node.type === 'totals' ? <div className="space-y-0.5" style={{ fontSize: canvasFontSize(Math.max(8, (Number(node.fontSize || settings.fontSize || 9) || 9) - 0.5)) }}><p className="mb-1 font-bold uppercase tracking-wider opacity-60" style={{ fontSize: canvasFontSize(7) }}>Totales</p>{['subtotal', 'tax', 'discount', 'total'].map(key => <div key={key} className={cn('flex justify-between gap-2', key === 'total' && 'border-t pt-0.5 font-bold')}><span>{key === 'subtotal' ? 'Subtotal' : key === 'tax' ? 'Impuestos' : key === 'discount' ? 'Descuento' : 'Total'}</span><span>{resolveTemplateToken(`totals.${key}`, sampleData)}</span></div>)}</div> : node.type === 'field' && node.id.startsWith('party-') ? <span className="flex w-full flex-col justify-center gap-px whitespace-pre-line leading-tight"><small className="font-bold uppercase tracking-wide text-slate-400" style={{ fontSize: canvasFontSize(7) }}>{node.label}</small><span className="w-full text-current">{resolveTemplateToken(node.token, sampleData, getTemplateTokenSample(node.token))}</span></span> : <span className="block w-full break-words whitespace-pre-wrap leading-tight">{node.type === 'section' && /^(header|footer)(-|$)/i.test(node.id) ? '' : nodeText(node, sampleData)}</span>}
+                return <div key={node.id} data-template-node={node.id} title={canInlineEditText ? 'Doble clic para editar este texto' : undefined} className={cn('group absolute overflow-visible border transition-shadow', canInlineEditText && 'cursor-text', node.type === 'divider' ? 'border-t-2 border-x-0 border-b-0' : 'border-transparent', isContainer ? 'z-0' : showNodeSelection ? 'z-20 shadow-[0_0_0_2px_#34d399,0_8px_20px_rgba(16,185,129,0.20)]' : 'z-10 hover:shadow-[0_0_0_1px_#93c5fd]', showNodeSelection && isContainer && 'shadow-[0_0_0_2px_#34d399]')} style={nodeStyle(node, settings)} onPointerDown={event => { if (isEditingText) { event.stopPropagation(); return; } beginDrag(event, node, 'move'); }} onClick={event => { event.stopPropagation(); setSelectedId(node.id); setSelectedReportSection(null); }} onDoubleClick={event => { if (!canInlineEditText) return; event.stopPropagation(); startInlineTextEdit(node); }}>
+                  {isEditingText ? <div ref={inlineTextEditorRef} data-inline-text-editor="true" contentEditable suppressContentEditableWarning role="textbox" aria-label={`Editar texto: ${node.label}`} aria-multiline="true" className="absolute inset-0 z-30 min-h-[36px] min-w-[140px] max-w-[260px] overflow-auto rounded border border-emerald-400 bg-white/95 p-1 text-left text-slate-900 shadow-xl outline-none" style={{ fontFamily: canvasFontFamily(node.fontFamily || settings.fontFamily), fontSize: canvasFontSize(Number(node.fontSize || settings.fontSize || 9) || 9), fontWeight: node.fontWeight || (node.bold ? 700 : 400), color: node.color || '#334155', textAlign: node.align || 'left', lineHeight: node.lineHeight || 1.25, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onBlur={event => finishInlineTextEdit(node, event.currentTarget.innerText)} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape') { event.preventDefault(); cancelInlineTextEditRef.current = true; event.currentTarget.blur(); } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.blur(); } }}>{inlineTextValue(node)}</div> : node.type === 'image' ? <LogoPreview src={previewLogo} companyName={String(sampleData.company?.name || settings.companyName || target.moduleLabel)} className="h-full w-full" /> : node.type === 'table' ? <TablePreview node={node} settings={settings} data={sampleData} reportSection={previewReportSection} /> : node.type === 'report-sections' ? <ReportSectionsPreview node={node} settings={settings} data={sampleData} selectedSectionIndex={selectedReportSectionIndex} onSelectSection={index => selectReportSection(node.id, index)} /> : node.type === 'chart' ? <ChartPreview chart={sampleData.dashboardCharts?.find(chart => chart.id === node.token)} node={node} /> : node.type === 'totals' ? <div className="space-y-0.5" style={{ fontSize: canvasFontSize(Math.max(8, (Number(node.fontSize || settings.fontSize || 9) || 9) - 0.5)) }}><p className="mb-1 font-bold uppercase tracking-wider opacity-60" style={{ fontSize: canvasFontSize(7) }}>Totales</p>{['subtotal', 'tax', 'discount', 'total'].map(key => <div key={key} className={cn('flex justify-between gap-2', key === 'total' && 'border-t pt-0.5 font-bold')}><span>{key === 'subtotal' ? 'Subtotal' : key === 'tax' ? 'Impuestos' : key === 'discount' ? 'Descuento' : 'Total'}</span><span>{resolveTemplateToken(`totals.${key}`, sampleData)}</span></div>)}</div> : node.type === 'field' && node.id.startsWith('party-') ? <span className="flex w-full flex-col justify-center gap-px whitespace-pre-line leading-tight"><small className="font-bold uppercase tracking-wide text-slate-400" style={{ fontSize: canvasFontSize(7) }}>{node.label}</small><span className="w-full text-current">{resolveTemplateToken(node.token, sampleData, node.token?.startsWith('company.') ? '' : getTemplateTokenSample(node.token))}</span></span> : <span className="block w-full break-words whitespace-pre-wrap leading-tight">{node.type === 'section' && /^(header|footer)(-|$)/i.test(node.id) ? '' : nodeText(node, sampleData)}</span>}
                   {showNodeSelection && <><button type="button" aria-label="Girar elemento" title="Arrastra para girar" className="absolute left-1/2 -top-9 flex h-7 w-7 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border-2 border-[#101827] bg-emerald-400 text-[#101827] shadow-lg active:cursor-grabbing" onPointerDown={event => beginRotate(event, node)}><RotateCw size={13} /></button><span className="pointer-events-none absolute left-1/2 -top-5 h-5 w-px -translate-x-1/2 bg-emerald-400" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full border-2 border-[#101827] bg-emerald-400" /><span className="absolute -right-1.5 -top-1.5 h-3 w-3 rounded-full border-2 border-[#101827] bg-emerald-400" /><span className="absolute -bottom-1.5 -left-1.5 h-3 w-3 rounded-full border-2 border-[#101827] bg-emerald-400" /><button type="button" aria-label="Redimensionar elemento" className="absolute -bottom-2 -right-2 flex h-4 w-4 cursor-nwse-resize items-center justify-center rounded-full border-2 border-[#101827] bg-emerald-400 text-[#101827]" onPointerDown={event => beginDrag(event, node, 'resize')}><GripVertical size={8} /></button></>}
                 </div>;
               })}
@@ -527,7 +597,8 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
             <ReportSectionInspector node={selected} data={sampleData} selectedSectionIndex={selectedReportSectionIndex} onSelectSection={index => selectReportSection(selected.id, index)} onSetVisibility={setReportSectionVisibility} onPatchStyle={patchReportSectionStyle} />
             {selected.type === 'chart' && <div><Label className="text-[10px] text-slate-400">Tipo de gráfica</Label><select value={selected.chartType || 'area'} onChange={event => selectedPatch({ chartType: event.target.value as PdfTemplateChart['type'] })} className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="area">Área</option><option value="bar">Barras</option><option value="donut">Dona</option></select><p className="mt-1 text-[10px] text-slate-500">La serie y sus etiquetas provienen del dashboard seleccionado.</p></div>}
             <div className="grid grid-cols-2 gap-2"><div><Label className="text-[10px] text-slate-400">X</Label><Input type="number" value={selected.x} onChange={event => selectedPatch({ x: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Y</Label><Input type="number" value={selected.y} onChange={event => selectedPatch({ y: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Ancho</Label><Input type="number" value={selected.width} onChange={event => selectedPatch({ width: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Alto</Label><Input type="number" value={selected.height} onChange={event => selectedPatch({ height: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div></div>
-            {selected.type === 'field' && <div><Label className="text-[10px] text-slate-400">Campo de datos</Label><select value={selected.token || ''} onChange={event => selectedPatch({ token: event.target.value, label: TEMPLATE_TOKENS.find(item => item.token === event.target.value)?.label || selected.label })} className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="">Selecciona un campo</option>{TEMPLATE_TOKENS.map(item => <option key={item.token} value={item.token}>{item.label}</option>)}</select><p className="mt-1 text-[10px] text-slate-500">Vista previa: {getTemplateTokenSample(selected.token)}</p></div>}
+            {selected.type === 'field' && <div><Label className="text-[10px] text-slate-400">Campo de datos</Label><select value={selected.token || ''} onChange={event => selectedPatch({ token: event.target.value, label: TEMPLATE_TOKENS.find(item => item.token === event.target.value)?.label || selected.label })} className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="">Selecciona un campo</option>{TEMPLATE_TOKENS.map(item => <option key={item.token} value={item.token}>{item.label}</option>)}</select><p className="mt-1 text-[10px] text-slate-500">Vista previa: {selected.token?.startsWith('company.') ? resolveTemplateToken(selected.token, sampleData, '') || 'Sin datos de empresa configurados' : getTemplateTokenSample(selected.token)}</p></div>}
+            {selected.type === 'field' && selected.token?.startsWith('company.') && <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-2 text-[10px] leading-relaxed text-slate-400">{selected.token === 'company.summary' ? 'Este bloque combina los datos de la empresa. Cambia cada dato con doble clic sobre su texto o en la sección ' : 'Este campo se alimenta de la empresa. Puedes cambiarlo con doble clic aquí o en la sección '}<span className="font-semibold text-emerald-200">Datos de empresa en este PDF</span> que está debajo del canvas. Si el valor queda vacío, el PDF usa el dato que entregue la sucursal.</div>}
             {(selected.type === 'text' || selected.type === 'section') && <div><Label className="text-[10px] text-slate-400">Contenido</Label><Input value={selected.text || ''} onChange={event => selectedPatch({ text: event.target.value })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div>}
             <div><Label className="text-[10px] text-slate-400">Tipografía del componente</Label><select value={selected.fontFamily || settings.fontFamily || 'Arial'} onChange={event => selectedPatch({ fontFamily: event.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white">{CANVAS_FONT_OPTIONS.map(font => <option key={font.value} value={font.value}>{font.label}</option>)}</select></div>
             <div className="grid grid-cols-3 gap-2"><div><Label className="text-[10px] text-slate-400">Tamaño</Label><Input type="number" min={5} max={72} value={selected.fontSize || 9} onChange={event => selectedPatch({ fontSize: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Peso</Label><select value={selected.fontWeight || (selected.bold ? 700 : 400)} onChange={event => selectedPatch({ fontWeight: Number(event.target.value) as PdfTemplateNode['fontWeight'], bold: Number(event.target.value) >= 700 })} className="mt-1 h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-1 text-xs text-white"><option value="400">Normal</option><option value="500">Medio</option><option value="600">Semibold</option><option value="700">Negrita</option><option value="800">Fuerte</option></select></div><div><Label className="text-[10px] text-slate-400">Radio</Label><Input type="number" min={0} max={999} value={selected.borderRadius || 0} onChange={event => selectedPatch({ borderRadius: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div></div><div className="grid grid-cols-2 gap-2"><div><Label className="text-[10px] text-slate-400">Forma del componente</Label><select value={selected.shape || 'rectangle'} onChange={event => selectedPatch({ shape: event.target.value as PdfTemplateNode['shape'] })} className="mt-1 h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="rectangle">Rectangular</option><option value="pill">Píldora</option><option value="wave">Ola superior</option><option value="wave-bottom">Ola inferior</option><option value="circle">Circular</option><option value="angled">Angular</option><option value="blob">Orgánica</option><option value="arc">Arco</option></select></div><div><Label className="text-[10px] text-slate-400">Tipo de borde</Label><select value={selected.borderStyle || 'solid'} onChange={event => selectedPatch({ borderStyle: event.target.value as PdfTemplateNode['borderStyle'] })} className="mt-1 h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-white"><option value="solid">Continuo</option><option value="dashed">Segmentado</option><option value="dotted">Punteado</option><option value="double">Doble</option><option value="none">Sin borde</option></select></div></div><div className="grid grid-cols-2 gap-2"><div><Label className="text-[10px] text-slate-400">Giro</Label><Input type="number" min={-180} max={180} value={selected.rotation || 0} onChange={event => selectedPatch({ rotation: Number(event.target.value) })} className="mt-1 h-8 border-slate-700 bg-slate-900 text-xs text-white" /></div><div><Label className="text-[10px] text-slate-400">Opacidad <span className="text-slate-500">{Math.round((selected.opacity ?? 1) * 100)}%</span></Label><input type="range" min="0" max="100" value={Math.round((selected.opacity ?? 1) * 100)} onChange={event => selectedPatch({ opacity: Number(event.target.value) / 100 })} className="mt-3 w-full accent-emerald-400" /></div></div>
@@ -542,6 +613,36 @@ export function PdfTemplateCanvasEditor({ definition, settings, targetKey, data,
           <div className="mt-5 border-t border-slate-800 pt-4"><div className="mb-2 flex items-center justify-between"><p className="text-[10px] uppercase tracking-[0.16em] text-emerald-300">Capas y componentes</p><span className="text-[10px] text-slate-500">{activeNodes.length}</span></div><div className="max-h-44 space-y-1 overflow-y-auto pr-1">{[...activeNodes].reverse().map(node => <button key={node.id} type="button" onClick={() => { setSelectedId(node.id); setSelectedReportSection(null); }} className={cn('flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-[11px] transition', selectedId === node.id ? 'border-emerald-400/70 bg-emerald-400/10 text-emerald-200' : 'border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200')}><span className="min-w-0 truncate">{node.label}</span><Badge className="shrink-0 border-slate-700 bg-slate-900 px-1.5 text-[9px] text-slate-500">{node.type}</Badge></button>)}</div></div>
         </aside>
       </div>
+      <section className="border-t border-slate-800 bg-[#0d1726] p-4 sm:p-5" data-testid="pdf-company-data-section" aria-labelledby="pdf-company-data-title">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 id="pdf-company-data-title" className="flex items-center gap-2 text-sm font-semibold text-white"><Building2 size={15} className="text-emerald-300" />Datos de empresa en este PDF</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">Configura el encabezado para «{target.label}». Los campos vacíos usan los datos disponibles de la cuenta o sucursal.</p>
+          </div>
+          <Badge className="border-emerald-400/30 bg-emerald-400/10 text-[9px] text-emerald-200">{target.moduleLabel} · {target.label}</Badge>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3">
+            <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/10"><LogoPreview src={logo || settings.templateLogoUrl || settings.logoUrl} companyName={settings.companyName || target.moduleLabel} className="h-full w-full" /></div>
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-semibold text-white">{logo || settings.templateLogoUrl || settings.logoUrl ? 'Logo del documento' : 'Identificador de empresa'}</p>
+              <label className={cn('mt-1 inline-flex cursor-pointer items-center gap-1 text-[10px] font-semibold text-emerald-300 hover:text-emerald-200', (readOnly || !onUploadLogo) && 'cursor-not-allowed opacity-50')}>
+                <ImagePlus size={12} />Agregar o reemplazar
+                <input type="file" accept="image/*" aria-label="Cargar logo del documento" className="sr-only" disabled={readOnly || !onUploadLogo} onChange={event => { const file = event.target.files?.[0]; if (file) onUploadLogo?.(file); event.currentTarget.value = ''; }} />
+              </label>
+            </div>
+          </div>
+          <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <label className="min-w-0 space-y-1 text-[10px] text-slate-400">Empresa<input className={INPUT_CLASS} disabled={readOnly || !onSettingsChange} value={settings.companyName || ''} onChange={event => patchSettings({ companyName: event.target.value })} placeholder="Usar nombre de la cuenta" /></label>
+            <label className="min-w-0 space-y-1 text-[10px] text-slate-400">Eslogan<input className={INPUT_CLASS} disabled={readOnly || !onSettingsChange} value={settings.slogan || ''} onChange={event => patchSettings({ slogan: event.target.value })} placeholder="Eslogan" /></label>
+            <label className="min-w-0 space-y-1 text-[10px] text-slate-400">Teléfono<input className={INPUT_CLASS} disabled={readOnly || !onSettingsChange} value={settings.phone || ''} onChange={event => patchSettings({ phone: event.target.value })} placeholder="Teléfono de la empresa" /></label>
+            <label className="min-w-0 space-y-1 text-[10px] text-slate-400">Correo<input className={INPUT_CLASS} disabled={readOnly || !onSettingsChange} value={settings.email || ''} onChange={event => patchSettings({ email: event.target.value })} placeholder="Correo de la empresa" /></label>
+            <label className="min-w-0 space-y-1 text-[10px] text-slate-400 sm:col-span-2 xl:col-span-3">Dirección<input className={INPUT_CLASS} disabled={readOnly || !onSettingsChange} value={settings.address || ''} onChange={event => patchSettings({ address: event.target.value })} placeholder="Dirección fiscal o comercial" /></label>
+            <label className="min-w-0 space-y-1 text-[10px] text-slate-400">Identificación fiscal<input className={INPUT_CLASS} disabled={readOnly || !onSettingsChange} value={settings.fiscalInfo || ''} onChange={event => patchSettings({ fiscalInfo: event.target.value })} placeholder="RUC / identificación fiscal" /></label>
+            <label className="min-w-0 space-y-1 text-[10px] text-slate-400">Sitio web<input className={INPUT_CLASS} disabled={readOnly || !onSettingsChange} value={settings.website || ''} onChange={event => patchSettings({ website: event.target.value })} placeholder="Sitio web" /></label>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -30,8 +30,8 @@ import { ManagerOperationsModule as ManagerOperationsView } from './manager/Mana
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { BrandLogo } from './BrandLogo';
 import { InventoryDetailPanel } from './inventory/InventoryDetailPanel';
-import { emptyManagerPermissionState, MANAGER_PERMISSION_ACTIONS, MANAGER_PERMISSION_OPTIONS, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionAction, type ManagerPermissionState } from '../constants/managerPermissions';
-import { ManagerBranchAccessEditor, type ManagerBranchAccessRule } from './manager/ManagerBranchAccessEditor';
+import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermissionActionsFor, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionAction, type ManagerPermissionState } from '../constants/managerPermissions';
+import { ManagerBranchAccessEditor, type ManagerBranchAccessRule, type ManagerBranchScopeRule } from './manager/ManagerBranchAccessEditor';
 import { getBusinessTypeLabel } from '../constants/businessTypes';
 import { parseSpreadsheetInWorker } from '../utils/import-spreadsheet';
 import { VirtualizedImportList } from './ui/VirtualizedImportList';
@@ -141,9 +141,7 @@ export function ManagerPage() {
   const [managerName, setManagerName] = useState('');
   const [managerEmail, setManagerEmail] = useState('');
   const [managerPassword, setManagerPassword] = useState('');
-  const [managerScopeMode, setManagerScopeMode] = useState<'BRANCHES' | 'BUSINESS_UNITS'>('BRANCHES');
-  const [managerBusinessUnitIds, setManagerBusinessUnitIds] = useState<string[]>([]);
-  const [managerBranchIds, setManagerBranchIds] = useState<string[]>([]);
+  const [managerScopeRules, setManagerScopeRules] = useState<ManagerBranchScopeRule[]>([]);
   const [managerBranchAccess, setManagerBranchAccess] = useState<ManagerBranchAccessRule[]>([]);
   const [managerCanManageManagers, setManagerCanManageManagers] = useState(false);
   const [managerPermissionState, setManagerPermissionState] = useState<ManagerPermissionState>(defaultManagerPermissionState);
@@ -188,11 +186,15 @@ export function ManagerPage() {
     const rules = Array.isArray(access.branchAccess) ? access.branchAccess : [];
     return new Set((group?.branches || []).filter((branch) => {
       if (branch.isActive === false) return false;
+      const scopeRules = Array.isArray(access.scopeRules) ? access.scopeRules : null;
       const mode = String(access.accessScopeMode || 'LEGACY').toUpperCase();
-      const inScope = mode === 'ALL_GROUP'
-        || (mode === 'BRANCHES' && access.branchIds.includes(branch.id))
-        || (mode === 'BUSINESS_UNITS' && Boolean(branch.businessUnitId && access.businessUnitIds.includes(branch.businessUnitId)))
-        || (mode === 'LEGACY' && (!access.branchIds.length || access.branchIds.includes(branch.id)) && (!access.businessUnitIds.length || Boolean(branch.businessUnitId && access.businessUnitIds.includes(branch.businessUnitId))));
+      const inScope = scopeRules
+        ? scopeRules.some((scope) => scope.businessUnitId === branch.businessUnitId
+          && (scope.branchMode === 'ALL_CURRENT_AND_FUTURE' || (scope.branchMode === 'SELECTED_BRANCHES' && scope.branchIds?.includes(branch.id))))
+        : mode === 'ALL_GROUP'
+          || (mode === 'BRANCHES' && access.branchIds.includes(branch.id))
+          || (mode === 'BUSINESS_UNITS' && Boolean(branch.businessUnitId && access.businessUnitIds.includes(branch.businessUnitId)))
+          || (mode === 'LEGACY' && (!access.branchIds.length || access.branchIds.includes(branch.id)) && (!access.businessUnitIds.length || Boolean(branch.businessUnitId && access.businessUnitIds.includes(branch.businessUnitId))));
       if (!inScope) return false;
       const rule = rules.find((candidate) => candidate.scopeType === 'BRANCH' && candidate.scopeId === branch.id)
         || rules.find((candidate) => candidate.scopeType === 'BUSINESS_UNIT' && candidate.scopeId === branch.businessUnitId)
@@ -310,8 +312,8 @@ export function ManagerPage() {
     onSuccess: (result: any) => { void overviewQuery.refetch(); void inventoryWarehousesQuery.refetch(); toast.success(`Catálogo preparado: ${result.productsLinked || 0} producto(s), ${result.stockLevelsCreated || 0} registro(s) en cero`); },
     onError: (error: Error) => toast.error(error.message),
   });
-  const managerPayload = () => ({ name: managerName.trim(), email: managerEmail.trim(), ...(managerPassword ? { password: managerPassword } : {}), accessScopeMode: managerScopeMode, businessUnitIds: managerBusinessUnitIds, branchIds: managerBranchIds, branchAccess: managerBranchAccess, permissions: managerStateToPermissions(managerPermissionState), canManageManagers: managerCanManageManagers });
-  const resetManagerForm = () => { setEditingManagerId(''); setManagerName(''); setManagerEmail(''); setManagerPassword(''); setManagerScopeMode('BRANCHES'); setManagerBusinessUnitIds([]); setManagerBranchIds([]); setManagerBranchAccess([]); setManagerCanManageManagers(false); setManagerPermissionState(defaultManagerPermissionState()); };
+  const managerPayload = () => ({ name: managerName.trim(), email: managerEmail.trim(), ...(managerPassword ? { password: managerPassword } : {}), scopeRules: managerScopeRules, branchAccess: managerBranchAccess, permissions: managerStateToPermissions(managerPermissionState), canManageManagers: managerCanManageManagers });
+  const resetManagerForm = () => { setEditingManagerId(''); setManagerName(''); setManagerEmail(''); setManagerPassword(''); setManagerScopeRules([]); setManagerBranchAccess([]); setManagerCanManageManagers(false); setManagerPermissionState(defaultManagerPermissionState()); };
   const managerMutation = useMutation({
     mutationFn: () => editingManagerId
       ? enterpriseGroupsService.updateManager(groupId, editingManagerId, managerPayload())
@@ -415,11 +417,10 @@ export function ManagerPage() {
     data: managersQuery.data || [], businessUnits, branches: managerAssignableBranches,
     canConfigureManagers, canEditOwner: Boolean(group?.managerAccess?.isOwner),
     editingManagerId, name: managerName, email: managerEmail, password: managerPassword,
-    scopeMode: managerScopeMode, businessUnitIds: managerBusinessUnitIds, branchIds: managerBranchIds,
+    scopeRules: managerScopeRules,
     branchAccess: managerBranchAccess, canManageManagers: managerCanManageManagers,
     permissionState: managerPermissionState, setEditingManagerId, setName: setManagerName,
-    setEmail: setManagerEmail, setPassword: setManagerPassword, setScopeMode: setManagerScopeMode,
-    setBusinessUnitIds: setManagerBusinessUnitIds, setBranchIds: setManagerBranchIds,
+    setEmail: setManagerEmail, setPassword: setManagerPassword, setScopeRules: setManagerScopeRules,
     setBranchAccess: setManagerBranchAccess, setCanManageManagers: setManagerCanManageManagers,
     setPermissionState: setManagerPermissionState, onReset: resetManagerForm,
     onSave: () => managerMutation.mutate(), saving: managerMutation.isPending,
@@ -1001,9 +1002,7 @@ type ManagersContentProps = {
   name: string;
   email: string;
   password: string;
-  scopeMode: 'BRANCHES' | 'BUSINESS_UNITS';
-  businessUnitIds: string[];
-  branchIds: string[];
+  scopeRules: ManagerBranchScopeRule[];
   branchAccess: ManagerBranchAccessRule[];
   canManageManagers: boolean;
   permissionState: ManagerPermissionState;
@@ -1011,9 +1010,7 @@ type ManagersContentProps = {
   setName: (value: string) => void;
   setEmail: (value: string) => void;
   setPassword: (value: string) => void;
-  setScopeMode: (value: 'BRANCHES' | 'BUSINESS_UNITS') => void;
-  setBusinessUnitIds: (value: string[]) => void;
-  setBranchIds: (value: string[]) => void;
+  setScopeRules: (value: ManagerBranchScopeRule[]) => void;
   setBranchAccess: (value: ManagerBranchAccessRule[]) => void;
   setCanManageManagers: (value: boolean) => void;
   setPermissionState: (value: ManagerPermissionState) => void;
@@ -1031,9 +1028,9 @@ type ManagersContentProps = {
 
 function ManagersContent({
   data, businessUnits, branches, canConfigureManagers, canEditOwner,
-  editingManagerId, name, email, password, scopeMode, businessUnitIds, branchIds,
+  editingManagerId, name, email, password, scopeRules,
   branchAccess, canManageManagers, permissionState, setEditingManagerId,
-  setName, setEmail, setPassword, setScopeMode, setBusinessUnitIds, setBranchIds,
+  setName, setEmail, setPassword, setScopeRules,
   setBranchAccess, setCanManageManagers, setPermissionState, onReset, onSave,
   saving, onPassword, resettingPassword, onRevoke, revoking, showForm, showList, onEdit,
 }: ManagersContentProps) {
@@ -1041,42 +1038,58 @@ function ManagersContent({
   const [passwordDraft, setPasswordDraft] = useState('');
   const isEditing = Boolean(editingManagerId);
   const configuredModules = Object.values(permissionState).filter((actions) => Object.values(actions).some(Boolean)).length;
-  const policyComplete = scopeMode === 'BRANCHES'
-    ? branchIds.length > 0 && branchIds.every((id) => branchAccess.some((rule) => rule.scopeType === 'BRANCH' && rule.scopeId === id))
-    : businessUnitIds.length > 0 && businessUnitIds.every((id) => branchAccess.some((rule) => rule.scopeType === 'BUSINESS_UNIT' && rule.scopeId === id));
+  const policyComplete = scopeRules.length > 0
+    && scopeRules.every((scope) => scope.branchMode === 'ALL_CURRENT_AND_FUTURE' || Boolean(scope.branchIds?.length))
+    && scopeRules.every((scope) => branchAccess.some((rule) => rule.scopeType === 'BUSINESS_UNIT' && rule.scopeId === scope.businessUnitId));
 
   const startEditing = (assignment: any) => {
     setEditingManagerId(assignment.user?.id || '');
     setName(assignment.user?.name || '');
     setEmail(assignment.user?.email || '');
     setPassword('');
-    const storedRules = (Array.isArray(assignment.branchAccess) ? assignment.branchAccess : []) as ManagerBranchAccessRule[];
+    let storedRules = (Array.isArray(assignment.branchAccess) ? assignment.branchAccess : []) as ManagerBranchAccessRule[];
     const storedScope = String(assignment.accessScopeMode || '').toUpperCase();
-    if (storedScope === 'BUSINESS_UNITS') {
-      setScopeMode('BUSINESS_UNITS');
-      setBusinessUnitIds(assignment.businessUnitIds || []);
-      setBranchIds([]);
-      setBranchAccess(storedRules);
-    } else if (storedScope === 'ALL_GROUP' || (storedScope === 'LEGACY' && !(assignment.branchIds || []).length && !(assignment.businessUnitIds || []).length)) {
-      const unitIds = businessUnits.filter((unit) => unit.isActive !== false).map((unit) => unit.id);
-      const groupRule = storedRules.find((rule) => rule.scopeType === 'GROUP');
-      setScopeMode('BUSINESS_UNITS');
-      setBusinessUnitIds(unitIds);
-      setBranchIds([]);
-      setBranchAccess(unitIds.map((unitId) => storedRules.find((rule) => rule.scopeType === 'BUSINESS_UNIT' && rule.scopeId === unitId) || ({
-        scopeType: 'BUSINESS_UNIT', scopeId: unitId, mode: groupRule?.mode === 'FULL' ? 'FULL' : 'CUSTOM', permissions: groupRule?.permissions || [],
-      })));
-    } else if (storedScope === 'LEGACY' && (assignment.businessUnitIds || []).length && !(assignment.branchIds || []).length) {
-      setScopeMode('BUSINESS_UNITS');
-      setBusinessUnitIds(assignment.businessUnitIds || []);
-      setBranchIds([]);
-      setBranchAccess(storedRules);
+    let nextScopeRules: ManagerBranchScopeRule[];
+    if (Array.isArray(assignment.scopeRules)) {
+      nextScopeRules = assignment.scopeRules.flatMap((scope: any) => {
+        const businessUnitId = String(scope?.businessUnitId || '');
+        if (!businessUnitId) return [];
+        if (scope.branchMode === 'ALL_CURRENT_AND_FUTURE') return [{ businessUnitId, branchMode: 'ALL_CURRENT_AND_FUTURE' as const }];
+        if (scope.branchMode === 'SELECTED_BRANCHES' && Array.isArray(scope.branchIds)) return [{ businessUnitId, branchMode: 'SELECTED_BRANCHES' as const, branchIds: [...new Set(scope.branchIds.map(String))] }];
+        return [];
+      });
+    } else if (assignment.isOwner || storedScope === 'ALL_GROUP' || (storedScope === 'LEGACY' && !(assignment.branchIds || []).length && !(assignment.businessUnitIds || []).length)) {
+      nextScopeRules = businessUnits.filter((unit) => unit.isActive !== false).map((unit) => ({ businessUnitId: unit.id, branchMode: 'ALL_CURRENT_AND_FUTURE' }));
+    } else if (storedScope === 'BUSINESS_UNITS' || (storedScope === 'LEGACY' && (assignment.businessUnitIds || []).length && !(assignment.branchIds || []).length)) {
+      nextScopeRules = (assignment.businessUnitIds || []).map((businessUnitId: string) => ({ businessUnitId, branchMode: 'ALL_CURRENT_AND_FUTURE' }));
     } else {
-      setScopeMode('BRANCHES');
-      setBusinessUnitIds([]);
-      setBranchIds(assignment.branchIds || []);
-      setBranchAccess(storedRules);
+      const assignedBranchIds = new Set((assignment.branchIds || []).map(String));
+      const allowedUnitIds = new Set((assignment.businessUnitIds || []).map(String));
+      const byUnit = new Map<string, string[]>();
+      for (const branch of branches) {
+        if (!assignedBranchIds.has(branch.id) || !branch.businessUnitId || (storedScope === 'LEGACY' && allowedUnitIds.size && !allowedUnitIds.has(branch.businessUnitId))) continue;
+        byUnit.set(branch.businessUnitId, [...(byUnit.get(branch.businessUnitId) || []), branch.id]);
+      }
+      nextScopeRules = [...byUnit.entries()].map(([businessUnitId, branchIds]) => ({ businessUnitId, branchMode: 'SELECTED_BRANCHES', branchIds }));
     }
+    if (assignment.isOwner && !storedRules.length) {
+      storedRules = businessUnits.filter((unit) => unit.isActive !== false).map((unit) => ({ scopeType: 'BUSINESS_UNIT', scopeId: unit.id, mode: 'FULL', permissions: [] }));
+    }
+    const activeBranchIds = new Set(branches.map((branch) => branch.id));
+    nextScopeRules = nextScopeRules.flatMap((scope) => {
+      if (scope.branchMode === 'ALL_CURRENT_AND_FUTURE') return [scope];
+      const branchIds = (scope.branchIds || []).filter((branchId) => activeBranchIds.has(branchId));
+      return branchIds.length ? [{ ...scope, branchIds }] : [];
+    });
+    const selectedUnitIds = new Set(nextScopeRules.map((scope) => scope.businessUnitId));
+    const selectedBranchIds = new Set(nextScopeRules.flatMap((scope) => scope.branchMode === 'SELECTED_BRANCHES'
+      ? scope.branchIds || []
+      : branches.filter((branch) => branch.businessUnitId === scope.businessUnitId).map((branch) => branch.id)));
+    storedRules = storedRules.filter((rule) => rule.scopeType === 'BUSINESS_UNIT'
+      ? selectedUnitIds.has(rule.scopeId)
+      : rule.scopeType === 'BRANCH' && selectedBranchIds.has(rule.scopeId));
+    setScopeRules(nextScopeRules);
+    setBranchAccess(storedRules);
     setCanManageManagers(Boolean(assignment.canManageManagers));
     setPermissionState(assignment.isOwner ? defaultManagerPermissionState() : managerPermissionsToState(assignment.permissions));
     onEdit();
@@ -1119,25 +1132,25 @@ function ManagersContent({
           <label className="min-w-0 space-y-2 text-sm font-semibold md:col-span-2"><span>{isEditing ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'}</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isEditing ? 'Déjala vacía para conservarla' : 'Contraseña segura'} className="h-10 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal" /><PasswordRequirements value={password} required={!isEditing} /></label>
         </div>
 
-        <ManagerBranchAccessEditor scopeMode={scopeMode} setScopeMode={setScopeMode} businessUnitIds={businessUnitIds} setBusinessUnitIds={setBusinessUnitIds} branchIds={branchIds} setBranchIds={setBranchIds} branchAccess={branchAccess} setBranchAccess={setBranchAccess} businessUnits={businessUnits} branches={branches} />
+        <ManagerBranchAccessEditor scopeRules={scopeRules} setScopeRules={setScopeRules} branchAccess={branchAccess} setBranchAccess={setBranchAccess} businessUnits={businessUnits} branches={branches} />
 
-        <div className="rounded-2xl border border-border/60 p-4">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Acceso a la vista Manager</p><p className="mt-1 text-xs text-muted-foreground">Controla cada módulo consolidado y cada acción. Este acceso se mantiene independiente de la operación en sucursales.</p></div><Badge variant="outline">{configuredModules} módulo(s)</Badge></div>
-          <div className="mt-4 space-y-2">
+        <details open className="group rounded-2xl border border-border/60 bg-muted/15">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 marker:hidden [&::-webkit-details-marker]:hidden"><span className="min-w-0"><span className="block text-xs font-black uppercase tracking-widest">Vista Manager</span><span className="mt-1 block text-xs text-muted-foreground">Módulos consolidados y acciones disponibles dentro del alcance geográfico.</span></span><span className="flex shrink-0 items-center gap-2"><Badge variant="outline">{configuredModules} módulo(s)</Badge><ChevronRight className="size-4 transition-transform group-open:rotate-90" /></span></summary>
+          <div className="space-y-3 border-t border-border/50 p-4">
+            <p className="text-xs text-muted-foreground">El alcance por rubro limita los datos consolidados. Los permisos operativos de sucursal no cambian la visibilidad de estos módulos.</p>
             {MANAGER_PERMISSION_OPTIONS.map((option) => {
               const actions = permissionState[option.id] || { read: false, create: false, edit: false, delete: false, export: false, manage: false };
-              const availableActions = option.id === 'MANAGER_INVENTORY_COST' ? MANAGER_PERMISSION_ACTIONS.filter((action) => action.key === 'read') : MANAGER_PERMISSION_ACTIONS;
+              const availableActions = managerPermissionActionsFor(option.id);
               return <details key={option.id} className="group rounded-2xl border border-border/60 bg-muted/20">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 marker:hidden [&::-webkit-details-marker]:hidden"><span className="min-w-0"><span className="block text-sm font-bold">{option.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{option.description}</span></span><span className="flex shrink-0 items-center gap-2"><Badge variant="outline">{availableActions.filter((action) => actions[action.key]).length} acción(es)</Badge><ChevronRight className="size-4 transition-transform group-open:rotate-90" /></span></summary>
                 <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border/50 px-3 py-3">{availableActions.map((action) => <label key={action.key} className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={actions[action.key]} onChange={(event) => updateManagerPermission(option.id, action.key, event.target.checked)} className="size-4 accent-primary" />{action.label}</label>)}</div>
               </details>;
             })}
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 bg-background p-4"><input type="checkbox" checked={canManageManagers} onChange={(event) => updateManagerAdministration(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span><span className="block text-sm font-bold">Puede administrar Managers</span><span className="mt-1 block text-xs text-muted-foreground">Puede crear, editar y revocar Managers dentro de su propio alcance y permisos.</span></span></label>
           </div>
-        </div>
+        </details>
 
-        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 p-4"><input type="checkbox" checked={canManageManagers} onChange={(event) => updateManagerAdministration(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span><span className="block text-sm font-bold">Puede administrar Managers</span><span className="mt-1 block text-xs text-muted-foreground">Puede crear, editar y revocar Managers dentro de su propio alcance y permisos. Esta capacidad incluye consultar la lista.</span></span></label>
-
-        {(!policyComplete || !name.trim() || !email.trim()) && <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">Selecciona al menos un rubro o sucursal, configura su regla operativa y completa nombre y correo. Los accesos personalizados sin vistas quedan sin operación.</p>}
+        {(!policyComplete || !name.trim() || !email.trim()) && <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">Selecciona al menos un rubro y una regla de operación por rubro, y completa nombre y correo. El modo «Solo sucursales seleccionadas» requiere al menos una sucursal.</p>}
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="rounded-xl" onClick={onReset} disabled={saving}>Limpiar</Button><Button type="button" className="rounded-xl" disabled={saving || !policyComplete || !name.trim() || !email.trim() || Boolean(getPasswordError(password, !isEditing))} onClick={onSave}>{saving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Crear Manager'}</Button></div>
       </CardContent>
     </Card>}
@@ -1147,12 +1160,25 @@ function ManagersContent({
     {showList && <Card className="rounded-3xl border-border/60">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="text-lg font-black uppercase italic tracking-tight">Managers del grupo</CardTitle><p className="mt-1 text-sm text-muted-foreground">Cuentas globales asignadas al grupo. Los encargados de sucursal se administran en Usuarios del grupo.</p></div>{canConfigureManagers && <Button type="button" className="rounded-xl" onClick={() => { onReset(); onEdit(); }}><Plus className="mr-2 size-4" />Nuevo acceso Manager</Button>}</CardHeader>
       <CardContent><div className="space-y-3">{data.map((assignment) => {
-        const isRubricScope = assignment.accessScopeMode === 'BUSINESS_UNITS';
-        const scopeLabel = assignment.isOwner ? 'Todo el grupo' : isRubricScope
-          ? `${(assignment.businessUnitIds || []).length} rubro(s), incluye futuras sucursales`
-          : `${(assignment.branchIds || []).length} sucursal(es) seleccionada(s)`;
+        let assignmentScopes: ManagerBranchScopeRule[];
+        if (Array.isArray(assignment.scopeRules)) assignmentScopes = assignment.scopeRules as ManagerBranchScopeRule[];
+        else if (assignment.isOwner || assignment.accessScopeMode === 'ALL_GROUP' || (assignment.accessScopeMode === 'LEGACY' && !(assignment.branchIds || []).length && !(assignment.businessUnitIds || []).length)) {
+          assignmentScopes = businessUnits.filter((unit) => unit.isActive !== false).map((unit) => ({ businessUnitId: unit.id, branchMode: 'ALL_CURRENT_AND_FUTURE' }));
+        } else if (assignment.accessScopeMode === 'BUSINESS_UNITS' || (assignment.accessScopeMode === 'LEGACY' && (assignment.businessUnitIds || []).length && !(assignment.branchIds || []).length)) {
+          assignmentScopes = (assignment.businessUnitIds || []).map((businessUnitId: string) => ({ businessUnitId, branchMode: 'ALL_CURRENT_AND_FUTURE' }));
+        } else {
+          const selected = new Set((assignment.branchIds || []).map(String));
+          const byUnit = new Map<string, string[]>();
+          for (const branch of branches) {
+            if (selected.has(branch.id) && branch.businessUnitId) byUnit.set(branch.businessUnitId, [...(byUnit.get(branch.businessUnitId) || []), branch.id]);
+          }
+          assignmentScopes = [...byUnit.entries()].map(([businessUnitId, branchIds]) => ({ businessUnitId, branchMode: 'SELECTED_BRANCHES', branchIds }));
+        }
+        const futureRubrics = assignmentScopes.filter((rule) => rule.branchMode === 'ALL_CURRENT_AND_FUTURE').length;
+        const fixedBranches = assignmentScopes.reduce((count, rule) => count + (rule.branchMode === 'SELECTED_BRANCHES' ? (rule.branchIds || []).length : 0), 0);
+        const scopeLabel = assignment.isOwner ? 'Todo el grupo' : `${assignmentScopes.length} rubro(s) · ${futureRubrics} con sucursales futuras · ${fixedBranches} fija(s)`;
         const managerPermissionCount = (assignment.permissions || []).filter((permission: any) => Object.keys(permission).some((key) => key !== 'module' && permission[key] === true)).length;
-        const branchRuleCount = (assignment.branchAccess || []).filter((rule: any) => rule.mode !== 'NONE').length;
+        const branchRuleCount = (assignment.branchAccess || []).length;
         return <div key={assignment.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-bold">{assignment.user?.name}</p><Badge variant={assignment.isOwner ? 'default' : 'outline'}>{assignment.isOwner ? 'Propietario' : 'Delegado'}</Badge><Badge variant="outline">{scopeLabel}</Badge></div><p className="truncate text-xs text-muted-foreground">{assignment.user?.email}</p><p className="mt-1 text-xs text-muted-foreground">{assignment.isOwner ? 'Control completo del grupo.' : `${managerPermissionCount} módulo(s) Manager y ${branchRuleCount} regla(s) operativa(s).`}</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={!canConfigureManagers || (assignment.isOwner && !canEditOwner)} onClick={() => startEditing(assignment)}><Pencil className="size-3.5" />Editar accesos</Button><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={!canConfigureManagers || (assignment.isOwner && !canEditOwner)} onClick={() => { setPasswordTargetId(passwordTargetId === assignment.user?.id ? '' : assignment.user?.id || ''); setPasswordDraft(''); }}><KeyRound className="size-3.5" />Contraseña</Button>{!assignment.isOwner && <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl text-destructive hover:text-destructive" disabled={!canConfigureManagers || revoking} onClick={() => { if (window.confirm(`¿Revocar el acceso de ${assignment.user?.name || 'este Manager'}?`)) onRevoke(assignment.user.id); }}><Trash2 className="size-3.5" />Revocar</Button>}</div></div>
           {passwordTargetId === assignment.user?.id && <div className="mt-4 flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row"><div className="min-w-0 flex-1"><input type="password" value={passwordDraft} onChange={(event) => setPasswordDraft(event.target.value)} placeholder="Nueva contraseña" className="h-10 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm" /><PasswordRequirements value={passwordDraft} /></div><Button type="button" className="h-10 rounded-xl" disabled={Boolean(getPasswordError(passwordDraft)) || resettingPassword} onClick={() => submitPassword(assignment.user.id)}>{resettingPassword ? 'Actualizando...' : 'Actualizar contraseña'}</Button></div>}

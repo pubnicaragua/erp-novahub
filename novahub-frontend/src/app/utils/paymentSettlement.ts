@@ -13,6 +13,11 @@ export type PaymentCurrencyConverter = (
   targetExchangeRate?: number,
 ) => number;
 
+export const roundPaymentAmount = (amount: number) => {
+  const parsedAmount = Number(amount);
+  return Math.round((Number.isFinite(parsedAmount) ? parsedAmount : 0) * 100) / 100;
+};
+
 export function getPaymentLineDocumentAmount<T extends PaymentSettlementLine>(
   line: T,
   documentCurrency: string,
@@ -71,9 +76,15 @@ export function getPaymentTotalBaseForSettlement<T extends PaymentSettlementLine
   convertBetweenCurrencies: PaymentCurrencyConverter,
   getBaseAmount: (line: T) => number,
 ) {
-  const normalizedBalance = Number(Math.max(0, Number(balanceBase) || 0).toFixed(2));
-  const rawTotalBase = getPaymentTotalBase(lines, getBaseAmount);
-  if (normalizedBalance <= 0 || rawTotalBase >= normalizedBalance - 0.005) return rawTotalBase;
+  const normalizedBalance = roundPaymentAmount(Math.max(0, Number(balanceBase) || 0));
+  // El backend redondea el equivalente base de cada línea antes de sumar.
+  // Repetir ese límite de precisión evita que fracciones de centavo oculten
+  // un saldo real de 0.01 en el checkout.
+  const rawTotalBase = roundPaymentAmount(getPaymentTotalBase(
+    lines,
+    (line) => roundPaymentAmount(getBaseAmount(line)),
+  ));
+  if (normalizedBalance <= 0 || rawTotalBase >= normalizedBalance) return rawTotalBase;
 
   const normalizedDocumentCurrency = String(documentCurrency || baseCurrency).toUpperCase();
   const normalizedBaseCurrency = String(baseCurrency || '').toUpperCase();
@@ -94,7 +105,7 @@ export function getPaymentTotalBaseForSettlement<T extends PaymentSettlementLine
     paymentRate,
   ).toFixed(2));
 
-  return enteredAmount + 0.0001 >= requiredAmount ? normalizedBalance : rawTotalBase;
+  return enteredAmount >= requiredAmount ? normalizedBalance : rawTotalBase;
 }
 
 export function getPaymentCashBase<T extends PaymentSettlementLine>(

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "test:pdf-templates": "node scripts/test-pdf-templates.mjs",
     "architecture:check": "depcruise --config .dependency-cruiser.cjs src",
     "architecture:graph": "depcruise --config .dependency-cruiser.cjs --output-type mermaid src",
     "dev": "vite",

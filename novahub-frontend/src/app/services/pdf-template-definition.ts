@@ -182,12 +182,12 @@ export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
   logoSize: 34,
   showCompanyName: true,
   companyName: '',
-  slogan: 'Soluciones simples para crecer',
-  fiscalInfo: 'RUC / Identificación fiscal',
-  address: 'Dirección fiscal de la empresa',
-  phone: '+505 0000-0000',
-  email: 'contacto@empresa.com',
-  website: 'www.empresa.com',
+  slogan: '',
+  fiscalInfo: '',
+  address: '',
+  phone: '',
+  email: '',
+  website: '',
   bankInfo: '',
   showQr: false,
   showBarcode: false,
@@ -211,6 +211,23 @@ export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
   separator: 'solid',
   paletteMode: 'corporate',
 };
+
+/** Limpia ejemplos que versiones anteriores guardaban como si fueran datos reales de empresa. */
+export function normalizePdfCompanySettings<T extends Record<string, unknown>>(settings: T): T {
+  const legacySamples: Record<string, string[]> = {
+    slogan: ['Soluciones simples para crecer'],
+    fiscalInfo: ['RUC / Identificación fiscal'],
+    address: ['Dirección fiscal de la empresa'],
+    phone: ['+505 0000-0000', '+505 000-0000'],
+    email: ['contacto@empresa.com'],
+    website: ['www.empresa.com'],
+  };
+  const normalized: Record<string, unknown> = { ...settings };
+  Object.entries(legacySamples).forEach(([key, values]) => {
+    if (values.includes(String(normalized[key] ?? '').trim())) normalized[key] = '';
+  });
+  return normalized as T;
+}
 
 export function createSystemDefaultPdfSettings(overrides?: Record<string, unknown>) {
   return { ...SYSTEM_DEFAULT_PDF_SETTINGS, ...(overrides || {}) };
@@ -307,6 +324,9 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
   if (target.key === 'inventario.product-labels') {
     return { ...base, document: { ...base.document, title: 'ETIQUETA DE PRODUCTO', barcode: '7501234567890', date: '29/08/2026' }, product: { name: 'Producto de muestra', code: 'SKU-0001', barcode: '7501234567890', price: 'C$ 500.00' }, items: [] };
   }
+  if (target.key === 'ventas.cash-ticket') {
+    return { ...base, party: customer, document: { ...base.document, title: 'COMPROBANTE DE VENTA', number: 'FAC-001245', meta: 'FAC-001245 · CJ-01 · 09/09/2026 10:30', notes: 'Pago: Efectivo C$ 1,150.00 · Cambio: C$ 0.00' }, items: transactionItems };
+  }
   if (target.key === 'ventas.cash-historical-report') {
     const reportSections: PdfTemplateReportSection[] = [
       reportSection('cash-summary', 'Resumen general', ['Sesiones', 'Cerradas', 'Ventas NIO', 'Ventas USD', 'Diferencia NIO', 'Depósitos NIO'], [
@@ -339,7 +359,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       rows: reportSections[2].rows,
     };
   }
-  if (target.structure === 'dashboard') {
+  if (target.key === 'dashboard.tenant-overview') {
     const dashboardCharts: PdfTemplateChart[] = [
       { id: 'dashboard.trend', title: 'Evolución del período', type: 'area', labels: ['01 sep', '03 sep', '05 sep', '07 sep', '09 sep'], series: [{ label: 'Ventas pagadas', values: [7200, 10400, 8300, 15600, 12450], color: '#10b981' }, { label: 'Gastos registrados', values: [2100, 2800, 3400, 2500, 3900], color: '#2563eb' }] },
       { id: 'dashboard.attention', title: 'Atención requerida', type: 'donut', labels: ['Órdenes abiertas', 'Agotados', 'Stock bajo', 'Reordenar'], values: [7, 3, 5, 4], colors: ['#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'] },
@@ -355,7 +375,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     ];
     return {
       ...base,
-      document: { ...base.document, title: 'RESUMEN DE GESTIÓN', number: 'DASH-0001', period: 'Período: 01/09/2026 al 09/09/2026', notes: 'Indicadores y bloques seleccionados en el dashboard.' },
+      document: { ...base.document, title: 'RESUMEN DE GESTIÓN', number: 'DASH-0001', period: 'Período: 01/09/2026 al 09/09/2026', meta: 'Sucursal: Tienda 1 · Generado: 09/09/2026', notes: 'Indicadores y bloques seleccionados en el dashboard.' },
       reportKpis: [
         { label: 'VENTAS PAGADAS', value: 'C$ 42,850.00', detail: 'En el período' },
         { label: 'GASTOS REGISTRADOS', value: 'C$ 12,400.00', detail: 'En el período' },
@@ -385,7 +405,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       company: { ...base.company, name: 'NovaHub Comercial' },
       customer,
       party: customer,
-      document: { ...base.document, title: 'RESUMEN DEL PORTAL DE CLIENTES', number: 'PORTAL-0001', date: '09/09/2026', period: 'Información de inventario y ventas atribuida al cliente.' },
+      document: { ...base.document, title: 'RESUMEN DEL PORTAL DE CLIENTES', number: 'PORTAL-0001', date: '09/09/2026', period: 'Información de inventario y ventas atribuida al cliente.', meta: 'Cuenta de cliente · Estado: Activo' },
       reportKpis: [
         { label: 'VENTAS DE HOY', value: 'C$ 4,850.00', detail: '1 factura' },
         { label: 'VENTAS DEL MES', value: 'C$ 28,450.00', detail: '12 facturas' },
@@ -752,10 +772,10 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   const reportKpiHeight = 13;
   const reportKpiRowGap = 1;
   const reportKpiRows = reportKpiCount > 0 ? Math.ceil(reportKpiCount / reportKpiColumns) : 0;
-  const reportSectionsY = isDashboard ? 84 : reportKpiCount > 0
+  const reportSectionsY = isDashboard ? 31 : reportKpiCount > 0
     ? 30 + reportKpiRows * reportKpiHeight + (reportKpiRows - 1) * reportKpiRowGap + 3
     : 46;
-  const reportSectionsHeight = reportKpiCount > 0 ? Math.max(20, 91 - reportSectionsY) : 45;
+  const reportSectionsHeight = isDashboard ? 60 : reportKpiCount > 0 ? Math.max(20, 91 - reportSectionsY) : 45;
 
   if (family === 'cash-ticket') {
     const columns = [
@@ -774,7 +794,8 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
         node({ type: 'field', label: 'Cliente', token: 'customer.name', x: 5, y: 26, width: 90, height: 6, fontSize: 7, borderStyle: 'none' }, 'party-name'),
         node({ type: 'table', label: 'Detalle del ticket', x: 5, y: 34, width: 90, height: 48, fontSize: 6, columns, repeatHeader: true, tableHeaderColor: '#ffffff', tableHeaderTextColor: text, tableRowColor: '#ffffff', tableStripeColor: '#ffffff' }, 'items-table'),
         node({ type: 'totals', label: 'Totales', x: 5, y: 84, width: 90, height: 10, fontSize: 7, backgroundColor: '#ffffff', borderColor: line }, 'totals'),
-        node({ type: 'field', label: 'Gracias por su compra', text: 'Gracias por su compra', x: 5, y: 96, width: 90, height: 3, fontSize: 6, align: 'center', borderStyle: 'none' }, 'ticket-footer'),
+        node({ type: 'field', label: 'Pago', token: 'document.notes', x: 5, y: 94.5, width: 90, height: 3, fontSize: 5.5, borderStyle: 'none' }, 'ticket-payment'),
+        node({ type: 'field', label: 'Gracias por su compra', text: 'Gracias por su compra', x: 5, y: 98, width: 90, height: 2, fontSize: 5.5, align: 'center', borderStyle: 'none' }, 'ticket-footer'),
       ],
       metadata: { preset: 'system-default-cash-ticket' },
     };
@@ -788,7 +809,7 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
         node({ type: 'image', label: 'Logotipo de la sucursal', x: 68, y: 1, width: 25, height: 6, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent', align: 'right' }, 'label-logo'),
         node({ type: 'barcode', label: 'Código de barras', token: 'product.barcode', x: 7, y: 7, width: 86, height: 38, fontSize: 7, color: text, borderStyle: 'none', padding: 0.2 }, 'label-barcode'),
         node({ type: 'field', label: 'Nombre del producto', token: 'product.name', x: 7, y: 47, width: 86, height: 17, fontSize: 7.5, fontWeight: 700, color: text, align: 'center', lineHeight: 1.05, borderStyle: 'none', padding: 0.2 }, 'label-name'),
-        node({ type: 'field', label: 'Precio', token: 'product.price', x: 7, y: 65, width: 86, height: 13, fontSize: 9, fontWeight: 800, color: primary, align: 'center', lineHeight: 1, borderStyle: 'none', padding: 0.2 }, 'label-price'),
+        node({ type: 'field', label: 'Precio', token: 'product.price', x: 7, y: 64, width: 86, height: 16, fontSize: 9, fontWeight: 800, color: primary, align: 'center', lineHeight: 1.05, borderStyle: 'none', padding: 0.2 }, 'label-price'),
         node({ type: 'field', label: 'Empresa', token: 'company.name', x: 7, y: 80, width: 86, height: 9, fontSize: 5.5, color: text, align: 'center', lineHeight: 1, borderStyle: 'none', padding: 0.2 }, 'label-company'),
         node({ type: 'field', label: 'Fecha', token: 'document.date', x: 7, y: 90, width: 86, height: 7, fontSize: 4.5, color: text, align: 'center', lineHeight: 1, borderStyle: 'none', padding: 0.2 }, 'label-date'),
       ],
@@ -994,6 +1015,13 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   };
 }
 
+/** Añade las gráficas estándar a definiciones de dashboard antiguas que aún no tenían nodos de gráfica. */
+export function ensureDashboardChartNodes(definition: PdfTemplateDefinition, targetKey: string, settings?: Record<string, unknown>) {
+  if (getPdfTemplateTarget(targetKey).structure !== 'dashboard' || definition.nodes.some(item => item.type === 'chart')) return definition;
+  const chartNodes = createDefaultTemplateDefinition(targetKey, settings).nodes.filter(item => item.type === 'chart');
+  return { ...definition, nodes: [...definition.nodes, ...chartNodes] };
+}
+
 /**
  * Registro virtual del predeterminado nativo para una salida concreta.
  *
@@ -1007,6 +1035,8 @@ export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Reco
   const target = getPdfTemplateTarget(targetKey);
   const settings = createSystemDefaultPdfSettings({
     ...(target.key === 'inventario.product-labels' ? { paperSize: 'LABEL', orientation: 'landscape', margins: 2, fontFamily: 'helvetica', fontSize: 8 } : {}),
+    ...(target.family === 'cash-ticket' ? { paperSize: 'ROLL-80', orientation: 'portrait', margins: 3, fontFamily: 'helvetica', fontSize: 8, primaryColor: '#000000', secondaryColor: '#000000', textColor: '#000000', lineColor: '#000000' } : {}),
+    ...(target.structure === 'dashboard' || target.key === 'portal.customer-summary' ? { paperSize: 'A4', orientation: 'landscape' } : {}),
     ...(overrides || {}),
   });
   return {
@@ -1057,22 +1087,20 @@ function safeColorMap(value: unknown) {
 
 function safeReportSectionStyles(value: unknown): Record<string, PdfTemplateReportSectionStyle> | undefined {
   if (!value || typeof value !== 'object') return undefined;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .slice(0, 120)
-    .map(([key, rawStyle]) => {
-      if (!rawStyle || typeof rawStyle !== 'object') return null;
-      const style = rawStyle as Record<string, unknown>;
-      return [key.slice(0, 80), {
+  const entries: Array<[string, PdfTemplateReportSectionStyle]> = [];
+  for (const [key, rawStyle] of Object.entries(value as Record<string, unknown>).slice(0, 120)) {
+    if (!rawStyle || typeof rawStyle !== 'object' || Array.isArray(rawStyle)) continue;
+    const style = rawStyle as Record<string, unknown>;
+    entries.push([key.slice(0, 80), {
         headerColor: safeText(style.headerColor, ''),
         headerTextColor: safeText(style.headerTextColor, ''),
         rowColor: safeText(style.rowColor, ''),
         stripeColor: safeText(style.stripeColor, ''),
         columnColors: safeColorMap(style.columnColors),
         columnTextColors: safeColorMap(style.columnTextColors),
-      }] as const;
-    })
-    .filter((entry): entry is readonly [string, Record<string, unknown>] => Boolean(entry));
-  return entries.length ? Object.fromEntries(entries) as Record<string, PdfTemplateReportSectionStyle> : undefined;
+    }]);
+  }
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 function upgradeReportTemplateNodes(nodes: PdfTemplateNode[], targetKey: string, settings?: Record<string, unknown>) {
@@ -1171,7 +1199,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
   const nodes = candidate.nodes.slice(0, 120).flatMap((raw, index) => {
     if (!raw || typeof raw !== 'object') return [];
     const item = raw as Partial<PdfTemplateNode>;
-    const type: PdfTemplateNodeType = ['section', 'text', 'field', 'table', 'report-sections', 'totals', 'image', 'barcode', 'divider', 'spacer'].includes(String(item.type))
+    const type: PdfTemplateNodeType = ['section', 'text', 'field', 'table', 'report-sections', 'chart', 'totals', 'image', 'barcode', 'divider', 'spacer'].includes(String(item.type))
       ? item.type as PdfTemplateNodeType
       : 'text';
     const sanitizedNode = {
@@ -1199,6 +1227,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
           align: column?.align === 'center' || column?.align === 'right' ? column.align : 'left',
           backgroundColor: safeText(column?.backgroundColor, ''), color: safeText(column?.color, ''),
         })) : undefined,
+        chartType: item.chartType === 'area' || item.chartType === 'donut' ? item.chartType : type === 'chart' ? 'bar' : undefined,
         tableHeaderColor: safeText(item.tableHeaderColor, ''), tableHeaderTextColor: safeText(item.tableHeaderTextColor, ''),
         tableRowColor: safeText(item.tableRowColor, ''), tableStripeColor: safeText(item.tableStripeColor, ''),
         reportSectionVisibility: item.reportSectionVisibility && typeof item.reportSectionVisibility === 'object'
@@ -1220,7 +1249,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
       return [{
         ...sanitizedNode,
         height: Math.max(sanitizedNode.height, 3.2),
-        align: 'center',
+        align: 'center' as const,
         lineHeight: Math.min(sanitizedNode.lineHeight || 1.25, 1.05),
       }];
     }

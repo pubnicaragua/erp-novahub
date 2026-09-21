@@ -11,6 +11,11 @@ export type ManagerBranchAccessRule = {
   mode: 'FULL' | 'CUSTOM' | 'NONE';
   permissions: Array<Record<string, unknown> & { module: string }>;
 };
+export type ManagerBranchScopeRule = {
+  businessUnitId: string;
+  branchMode: 'ALL_CURRENT_AND_FUTURE' | 'SELECTED_BRANCHES';
+  branchIds?: string[];
+};
 
 type ModuleOption = { id: string; label: string; parent: string };
 
@@ -111,7 +116,7 @@ function RuleEditor({ rule, label, modeOptions, onChange }: {
 }) {
   return <div className="rounded-xl border border-border/60 bg-muted/15 p-3">
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0"><p className="truncate text-sm font-bold">{label}</p><p className="text-xs text-muted-foreground">{rule.mode === 'FULL' ? 'Módulos operativos habilitados, sin configuración ni datos sensibles' : rule.mode === 'CUSTOM' ? `${rule.permissions.length} vista(s) configurada(s)` : 'Sin operación en esta sucursal'}</p></div>
+      <div className="min-w-0"><p className="truncate text-sm font-bold">{label}</p><p className="text-xs text-muted-foreground">{rule.mode === 'FULL' ? 'Módulos operativos habilitados, sin configuración ni datos sensibles' : rule.mode === 'CUSTOM' ? `${rule.permissions.length} vista(s) configurada(s)` : 'Sin acceso operativo'}</p></div>
       <select aria-label={`Nivel de acceso para ${label}`} value={rule.mode} onChange={(event) => onChange({ ...rule, mode: event.target.value as ManagerBranchAccessRule['mode'], permissions: event.target.value === 'CUSTOM' ? rule.permissions : [] })} className="h-9 w-full shrink-0 rounded-xl border border-border bg-background px-2 text-xs font-bold sm:w-52">
         {modeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
@@ -124,94 +129,146 @@ function RuleEditor({ rule, label, modeOptions, onChange }: {
 }
 
 export function ManagerBranchAccessEditor({
-  scopeMode,
-  setScopeMode,
-  businessUnitIds,
-  setBusinessUnitIds,
-  branchIds,
-  setBranchIds,
+  scopeRules,
+  setScopeRules,
   branchAccess,
   setBranchAccess,
   businessUnits,
   branches,
 }: {
-  scopeMode: 'BRANCHES' | 'BUSINESS_UNITS';
-  setScopeMode: (mode: 'BRANCHES' | 'BUSINESS_UNITS') => void;
-  businessUnitIds: string[];
-  setBusinessUnitIds: (ids: string[]) => void;
-  branchIds: string[];
-  setBranchIds: (ids: string[]) => void;
+  scopeRules: ManagerBranchScopeRule[];
+  setScopeRules: (rules: ManagerBranchScopeRule[]) => void;
   branchAccess: ManagerBranchAccessRule[];
   setBranchAccess: (rules: ManagerBranchAccessRule[]) => void;
   businessUnits: Array<{ id: string; name: string; isActive?: boolean }>;
   branches: Array<{ id: string; name: string; businessUnitId?: string | null }>;
 }) {
   const activeUnits = businessUnits.filter((unit) => unit.isActive !== false);
-  const selectedBranches = useMemo(
-    () => scopeMode === 'BUSINESS_UNITS'
-      ? branches.filter((branch) => businessUnitIds.includes(String(branch.businessUnitId || '')))
-      : branches.filter((branch) => branchIds.includes(branch.id)),
-    [scopeMode, branches, businessUnitIds, branchIds],
-  );
-  const selectedUnitSet = useMemo(() => new Set(businessUnitIds), [businessUnitIds]);
+  const selectedUnitSet = useMemo(() => new Set(scopeRules.map((rule) => rule.businessUnitId)), [scopeRules]);
   const setRule = (rule: ManagerBranchAccessRule) => setBranchAccess([
     ...branchAccess.filter((candidate) => !(candidate.scopeType === rule.scopeType && candidate.scopeId === rule.scopeId)),
     rule,
   ]);
   const getRule = (scopeType: ManagerBranchAccessRule['scopeType'], scopeId: string): ManagerBranchAccessRule =>
     branchAccess.find((candidate) => candidate.scopeType === scopeType && candidate.scopeId === scopeId)
-      || { scopeType, scopeId, mode: 'CUSTOM', permissions: [] };
+      || { scopeType, scopeId, mode: scopeType === 'BUSINESS_UNIT' ? 'NONE' : 'CUSTOM', permissions: [] };
 
-  const toggleBranch = (branchId: string) => {
-    const exists = branchIds.includes(branchId);
-    setBranchIds(exists ? branchIds.filter((id) => id !== branchId) : [...branchIds, branchId]);
-    if (exists) setBranchAccess(branchAccess.filter((rule) => !(rule.scopeType === 'BRANCH' && rule.scopeId === branchId)));
-    else setRule({ scopeType: 'BRANCH', scopeId: branchId, mode: 'CUSTOM', permissions: [] });
-  };
+  const branchesForUnit = (unitId: string) => branches.filter((branch) => String(branch.businessUnitId || '') === unitId);
+  const branchesInScope = (scope: ManagerBranchScopeRule) => scope.branchMode === 'ALL_CURRENT_AND_FUTURE'
+    ? branchesForUnit(scope.businessUnitId)
+    : branchesForUnit(scope.businessUnitId).filter((branch) => (scope.branchIds || []).includes(branch.id));
+
   const toggleUnit = (unitId: string) => {
-    const exists = selectedUnitSet.has(unitId);
-    setBusinessUnitIds(exists ? businessUnitIds.filter((id) => id !== unitId) : [...businessUnitIds, unitId]);
-    if (exists) {
-      const branchIdsInUnit = new Set(branches.filter((branch) => branch.businessUnitId === unitId).map((branch) => branch.id));
+    const current = scopeRules.find((rule) => rule.businessUnitId === unitId);
+    if (current) {
+      const branchIdsInUnit = new Set([...branchesForUnit(unitId).map((branch) => branch.id), ...(current.branchIds || [])]);
+      setScopeRules(scopeRules.filter((rule) => rule.businessUnitId !== unitId));
       setBranchAccess(branchAccess.filter((rule) => !(rule.scopeType === 'BUSINESS_UNIT' && rule.scopeId === unitId) && !(rule.scopeType === 'BRANCH' && branchIdsInUnit.has(rule.scopeId))));
-    } else setRule({ scopeType: 'BUSINESS_UNIT', scopeId: unitId, mode: 'CUSTOM', permissions: [] });
+      return;
+    }
+    const currentBranchIds = branchesForUnit(unitId).map((branch) => branch.id);
+    setScopeRules([...scopeRules, { businessUnitId: unitId, branchMode: 'SELECTED_BRANCHES', branchIds: currentBranchIds }]);
+    if (!branchAccess.some((rule) => rule.scopeType === 'BUSINESS_UNIT' && rule.scopeId === unitId)) {
+      setRule({ scopeType: 'BUSINESS_UNIT', scopeId: unitId, mode: 'CUSTOM', permissions: [] });
+    }
   };
 
-  return <div className="space-y-4 rounded-2xl border border-border/60 bg-muted/15 p-4">
-    <div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Alcance y operación de sucursales</p><p className="mt-1 text-xs text-muted-foreground">Elige una lista fija de sucursales o una plantilla por rubro que también se aplicará a sucursales futuras.</p></div>
-    <label className="block space-y-1.5 text-xs font-bold"><span>Alcance geográfico</span><select value={scopeMode} onChange={(event) => { const next = event.target.value as 'BRANCHES' | 'BUSINESS_UNITS'; setScopeMode(next); setBusinessUnitIds([]); setBranchIds([]); setBranchAccess([]); }} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">
-      <option value="BRANCHES">Sucursales específicas</option><option value="BUSINESS_UNITS">Rubros (sucursales actuales y futuras)</option>
-    </select></label>
+  const updateScopeRule = (next: ManagerBranchScopeRule) => {
+    setScopeRules(scopeRules.map((rule) => rule.businessUnitId === next.businessUnitId ? next : rule));
+  };
 
-    {scopeMode === 'BUSINESS_UNITS' ? <>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {activeUnits.map((unit) => <label key={unit.id} className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-background p-3 text-sm"><input type="checkbox" checked={selectedUnitSet.has(unit.id)} onChange={() => toggleUnit(unit.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{unit.name}</span></label>)}
-        {!activeUnits.length && <p className="text-sm text-muted-foreground">El grupo todavía no tiene rubros.</p>}
+  const setBranchMode = (scope: ManagerBranchScopeRule, mode: ManagerBranchScopeRule['branchMode']) => {
+    if (mode === 'ALL_CURRENT_AND_FUTURE') {
+      const { branchIds: _branchIds, ...next } = scope;
+      updateScopeRule({ ...next, branchMode: mode });
+      return;
+    }
+    updateScopeRule({ ...scope, branchMode: mode, branchIds: branchesForUnit(scope.businessUnitId).map((branch) => branch.id) });
+  };
+
+  const toggleScopedBranch = (scope: ManagerBranchScopeRule, branchId: string) => {
+    const current = scope.branchIds || [];
+    const branchIds = current.includes(branchId) ? current.filter((id) => id !== branchId) : [...current, branchId];
+    updateScopeRule({ ...scope, branchMode: 'SELECTED_BRANCHES', branchIds });
+  };
+
+  const selectedBranchCount = scopeRules.reduce((count, scope) => count + (scope.branchMode === 'ALL_CURRENT_AND_FUTURE' ? branchesForUnit(scope.businessUnitId).length : (scope.branchIds || []).length), 0);
+  const operationalModes = [{ value: 'FULL' as const, label: 'Completo en módulos operativos' }, { value: 'CUSTOM' as const, label: 'Personalizado por módulo y acción' }, { value: 'NONE' as const, label: 'Sin acceso operativo' }];
+
+  return <div className="space-y-4">
+    <details open className="group rounded-2xl border border-border/60 bg-muted/15">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0"><span className="block text-xs font-black uppercase tracking-widest">Alcance por rubro</span><span className="mt-1 block text-xs text-muted-foreground">{scopeRules.length} rubro(s), {selectedBranchCount} sucursal(es) actuales visibles</span></span>
+        <ChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="space-y-2 border-t border-border/50 p-4">
+        <p className="text-xs text-muted-foreground">Define qué sucursales puede consultar en los módulos Manager. Esto no determina si puede operar dentro de ellas.</p>
+        {activeUnits.map((unit) => {
+          const scope = scopeRules.find((rule) => rule.businessUnitId === unit.id);
+          const currentBranches = branchesForUnit(unit.id);
+          const scopeSummary = !scope ? 'Sin acceso' : scope.branchMode === 'ALL_CURRENT_AND_FUTURE'
+            ? `${currentBranches.length} actual(es) y futuras`
+            : `${(scope.branchIds || []).length} sucursal(es) fija(s)`;
+          return <details key={unit.id} className="group rounded-xl border border-border/60 bg-background">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 marker:hidden [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0"><span className="block truncate text-sm font-bold">{unit.name}</span><span className="mt-0.5 block text-xs text-muted-foreground">{scopeSummary}</span></span>
+              <span className="flex shrink-0 items-center gap-2"><Badge variant={scope ? 'default' : 'outline'}>{scope ? 'Incluido' : 'No incluido'}</Badge><ChevronDown className="size-4 transition-transform group-open:rotate-180" /></span>
+            </summary>
+            <div className="space-y-3 border-t border-border/50 p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={Boolean(scope)} onChange={() => toggleUnit(unit.id)} className="size-4 accent-primary" /><span>Incluir este rubro en su alcance</span></label>
+              {scope && <>
+                <label className="block space-y-1.5 text-xs font-bold"><span>Sucursales que puede consultar</span><select value={scope.branchMode} onChange={(event) => setBranchMode(scope, event.target.value as ManagerBranchScopeRule['branchMode'])} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">
+                  <option value="ALL_CURRENT_AND_FUTURE">Todas las actuales y futuras</option><option value="SELECTED_BRANCHES">Solo sucursales seleccionadas</option>
+                </select></label>
+                {scope.branchMode === 'SELECTED_BRANCHES' && <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-bold">Sucursales actuales incluidas</p><Badge variant="outline">{(scope.branchIds || []).length}</Badge></div>
+                  {currentBranches.length ? <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2">{currentBranches.map((branch) => <label key={branch.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-border/50 bg-background px-2.5 py-2 text-xs"><input type="checkbox" checked={(scope.branchIds || []).includes(branch.id)} onChange={() => toggleScopedBranch(scope, branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 break-words">{branch.name}</span></label>)}</div> : <p className="text-xs text-muted-foreground">Este rubro todavía no tiene sucursales actuales. Usa la opción anterior para incluir las futuras.</p>}
+                </div>}
+              </>}
+            </div>
+          </details>;
+        })}
+        {!activeUnits.length && <p className="py-3 text-sm text-muted-foreground">El grupo todavía no tiene rubros activos.</p>}
       </div>
-      <div className="space-y-2">
-        {activeUnits.filter((unit) => selectedUnitSet.has(unit.id)).map((unit) => <div key={unit.id} className="space-y-2 rounded-2xl border border-border/60 bg-background p-3">
-          <RuleEditor label={`Regla base · ${unit.name}`} rule={getRule('BUSINESS_UNIT', unit.id)} modeOptions={[{ value: 'FULL', label: 'Completo en módulos operativos' }, { value: 'CUSTOM', label: 'Personalizado por vista/acción' }]} onChange={setRule} />
-          <details className="rounded-xl border border-border/50 p-3">
-            <summary className="cursor-pointer text-xs font-bold">Excepciones por sucursal ({branches.filter((branch) => branch.businessUnitId === unit.id).length})</summary>
-            <div className="mt-3 space-y-2">{branches.filter((branch) => branch.businessUnitId === unit.id).map((branch) => {
-              const override = branchAccess.find((rule) => rule.scopeType === 'BRANCH' && rule.scopeId === branch.id);
-              return <div key={branch.id} className="space-y-2">
-                <label className="flex items-center justify-between gap-3 rounded-xl bg-muted/30 px-3 py-2 text-xs"><span className="min-w-0 truncate font-semibold">{branch.name}</span><select aria-label={`Excepción para ${branch.name}`} value={override?.mode || 'INHERIT'} onChange={(event) => {
-                  if (event.target.value === 'INHERIT') setBranchAccess(branchAccess.filter((rule) => !(rule.scopeType === 'BRANCH' && rule.scopeId === branch.id)));
-                  else setRule({ scopeType: 'BRANCH', scopeId: branch.id, mode: event.target.value as ManagerBranchAccessRule['mode'], permissions: override?.permissions || [] });
-                }} className="h-8 max-w-52 rounded-lg border border-border bg-background px-2"><option value="INHERIT">Heredar rubro</option><option value="NONE">Sin acceso operativo</option><option value="FULL">Completo operativo</option><option value="CUSTOM">Personalizado</option></select></label>
-                {override?.mode === 'CUSTOM' && <RuleEditor label={`Excepción · ${branch.name}`} rule={override} modeOptions={[{ value: 'CUSTOM', label: 'Personalizado por vista/acción' }, { value: 'FULL', label: 'Completo operativo' }, { value: 'NONE', label: 'Sin acceso' }]} onChange={setRule} />}
-              </div>;
-            })}</div>
-          </details>
-        </div>)}
+    </details>
+
+    <details className="group rounded-2xl border border-border/60 bg-muted/15">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0"><span className="block text-xs font-black uppercase tracking-widest">Operación en sucursales</span><span className="mt-1 block text-xs text-muted-foreground">Permisos por rubro con excepciones por sucursal · {scopeRules.length} regla(s) base</span></span>
+        <ChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="space-y-2 border-t border-border/50 p-4">
+        <p className="text-xs text-muted-foreground">Una sucursal seguirá visible en la Vista Manager aunque su operación esté en «Sin acceso».</p>
+        {scopeRules.map((scope) => {
+          const unit = businessUnits.find((candidate) => candidate.id === scope.businessUnitId);
+          const scopedBranches = branchesInScope(scope);
+          const baseRule = getRule('BUSINESS_UNIT', scope.businessUnitId);
+          const overrideCount = scopedBranches.filter((branch) => branchAccess.some((rule) => rule.scopeType === 'BRANCH' && rule.scopeId === branch.id)).length;
+          return <details key={scope.businessUnitId} className="group rounded-xl border border-border/60 bg-background">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 marker:hidden [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0"><span className="block truncate text-sm font-bold">{unit?.name || 'Rubro'}</span><span className="mt-0.5 block text-xs text-muted-foreground">{baseRule.mode === 'FULL' ? 'Operación completa' : baseRule.mode === 'NONE' ? 'Sin operación' : `${baseRule.permissions.length} módulo(s) personalizado(s)`} · {scopedBranches.length}{scope.branchMode === 'ALL_CURRENT_AND_FUTURE' ? '+' : ''} sucursal(es)</span></span>
+              <span className="flex shrink-0 items-center gap-2"><Badge variant="outline">{overrideCount} excepción(es)</Badge><ChevronDown className="size-4 transition-transform group-open:rotate-180" /></span>
+            </summary>
+            <div className="space-y-3 border-t border-border/50 p-3">
+              <RuleEditor label={`Regla base · ${unit?.name || 'Rubro'}`} rule={baseRule} modeOptions={operationalModes} onChange={setRule} />
+              <details className="rounded-xl border border-border/50 p-3">
+                <summary className="cursor-pointer text-xs font-bold">Excepciones por sucursal ({scopedBranches.length})</summary>
+                <div className="mt-3 space-y-2">{scopedBranches.map((branch) => {
+                  const override = branchAccess.find((rule) => rule.scopeType === 'BRANCH' && rule.scopeId === branch.id);
+                  return <div key={branch.id} className="space-y-2">
+                    <label className="flex flex-col items-start justify-between gap-2 rounded-xl bg-muted/30 px-3 py-2 text-xs sm:flex-row sm:items-center"><span className="min-w-0 break-words font-semibold">{branch.name}</span><select aria-label={`Excepción operativa para ${branch.name}`} value={override?.mode || 'INHERIT'} onChange={(event) => {
+                      if (event.target.value === 'INHERIT') setBranchAccess(branchAccess.filter((rule) => !(rule.scopeType === 'BRANCH' && rule.scopeId === branch.id)));
+                      else setRule({ scopeType: 'BRANCH', scopeId: branch.id, mode: event.target.value as ManagerBranchAccessRule['mode'], permissions: override?.permissions || [] });
+                    }} className="h-9 w-full max-w-full rounded-lg border border-border bg-background px-2 sm:w-56"><option value="INHERIT">Heredar rubro</option><option value="NONE">Sin acceso operativo</option><option value="FULL">Completo operativo</option><option value="CUSTOM">Personalizado</option></select></label>
+                    {override?.mode === 'CUSTOM' && <RuleEditor label={`Excepción · ${branch.name}`} rule={override} modeOptions={operationalModes} onChange={setRule} />}
+                  </div>;
+                })}{!scopedBranches.length && <p className="py-2 text-xs text-muted-foreground">No hay sucursales actuales dentro de esta selección.</p>}</div>
+              </details>
+            </div>
+          </details>;
+        })}
+        {!scopeRules.length && <p className="rounded-xl border border-dashed border-border/60 p-4 text-center text-sm text-muted-foreground">Selecciona primero el alcance por rubro.</p>}
       </div>
-    </> : <>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {branches.map((branch) => <label key={branch.id} className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-background p-3 text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span><Badge variant="outline" className="ml-auto shrink-0 text-[10px]">{businessUnits.find((unit) => unit.id === branch.businessUnitId)?.name || 'Rubro'}</Badge></label>)}
-        {!branches.length && <p className="text-sm text-muted-foreground">No hay sucursales activas.</p>}
-      </div>
-      <div className="space-y-2">{selectedBranches.map((branch) => <RuleEditor key={branch.id} label={branch.name} rule={getRule('BRANCH', branch.id)} modeOptions={[{ value: 'FULL', label: 'Completo en módulos operativos' }, { value: 'CUSTOM', label: 'Personalizado por vista/acción' }, { value: 'NONE', label: 'Sin acceso operativo' }]} onChange={setRule} />)}</div>
-    </>}
+    </details>
   </div>;
 }

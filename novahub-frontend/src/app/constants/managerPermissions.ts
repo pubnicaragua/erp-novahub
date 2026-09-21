@@ -38,6 +38,42 @@ export const MANAGER_PERMISSION_ACTIONS: Array<{ key: ManagerPermissionAction; l
   { key: 'manage', label: 'Administrar' },
 ];
 
+// Actions are limited to the operations exposed by the consolidated Manager
+// experience. Branch edits still use the separate per-branch policy matrix.
+const READ_EXPORT: readonly ManagerPermissionAction[] = ['read', 'export'];
+export const MANAGER_PERMISSION_ACTIONS_BY_MODULE: Record<string, readonly ManagerPermissionAction[]> = {
+  MANAGER_OVERVIEW: READ_EXPORT,
+  MANAGER_INVENTORY: ['read', 'create', 'edit', 'export'],
+  MANAGER_INVENTORY_COST: ['read'],
+  MANAGER_SALES: ['read', 'edit', 'export'],
+  MANAGER_PURCHASES: READ_EXPORT,
+  MANAGER_FINANCE: READ_EXPORT,
+  MANAGER_ACCOUNTING: ['read', 'create', 'export'],
+  MANAGER_REPORTS: READ_EXPORT,
+  MANAGER_HR: READ_EXPORT,
+  MANAGER_ACTIVITIES: READ_EXPORT,
+  MANAGER_PROJECTS: READ_EXPORT,
+  MANAGER_TICKETS: READ_EXPORT,
+  MANAGER_DOCUMENTS: READ_EXPORT,
+  MANAGER_RESTAURANT: READ_EXPORT,
+  MANAGER_LOGISTICS: READ_EXPORT,
+  MANAGER_FINANCING: READ_EXPORT,
+  MANAGER_LEGAL: READ_EXPORT,
+  MANAGER_NOVACHAT: READ_EXPORT,
+  MANAGER_SUPPORT: READ_EXPORT,
+  MANAGER_CONSOLIDATED: READ_EXPORT,
+  MANAGER_TRANSFERS: ['read', 'create', 'edit', 'export'],
+  MANAGER_CATALOG: ['read', 'create', 'edit'],
+  MANAGER_USERS: ['read', 'edit'],
+  MANAGER_WAREHOUSES: ['read', 'create', 'edit'],
+  MANAGER_MANAGERS: ['read', 'manage'],
+};
+
+export function managerPermissionActionsFor(module: string) {
+  const supported = new Set(MANAGER_PERMISSION_ACTIONS_BY_MODULE[module] || ['read']);
+  return MANAGER_PERMISSION_ACTIONS.filter((action) => supported.has(action.key));
+}
+
 const emptyActions = (): Record<ManagerPermissionAction, boolean> => ({ read: false, create: false, edit: false, delete: false, export: false, manage: false });
 
 export const emptyManagerPermissionState = (): ManagerPermissionState => Object.fromEntries(

@@ -29,9 +29,10 @@ export interface ManagerGroup {
     isOwner: boolean;
     canManageManagers: boolean;
     canEdit: boolean;
-    accessScopeMode?: 'ALL_GROUP' | 'BRANCHES' | 'BUSINESS_UNITS' | 'LEGACY';
+    accessScopeMode?: 'ALL_GROUP' | 'BRANCHES' | 'BUSINESS_UNITS' | 'RUBRIC_RULES' | 'LEGACY';
     businessUnitIds: string[];
     branchIds: string[];
+    scopeRules?: Array<{ businessUnitId: string; branchMode: 'ALL_CURRENT_AND_FUTURE' | 'SELECTED_BRANCHES'; branchIds?: string[] }>;
     warehouseIds: string[];
     branchAccess?: Array<{ scopeType: 'GROUP' | 'BUSINESS_UNIT' | 'BRANCH'; scopeId: string; mode: 'FULL' | 'CUSTOM' | 'NONE'; permissions: any[] }>;
     permissions: unknown;

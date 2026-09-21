@@ -75,7 +75,7 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'reportes.providers', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de proveedores', structure: 'report', source: 'ProvidersReportTab.exportPDF' },
   { key: 'reportes.finance', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte financiero', structure: 'report', source: 'FinanceReportTab.exportPDF' },
   { key: 'reportes.hr', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de capital humano', structure: 'report', source: 'HRReportTab.exportPDF' },
-  { key: 'dashboard.tenant-overview', module: 'dashboard', moduleLabel: 'Dashboard', label: 'Reporte del dashboard', structure: 'dashboard', source: 'TenantOverview.handleExport' },
+  { key: 'dashboard.tenant-overview', module: 'dashboard', moduleLabel: 'Dashboard', label: 'Reporte del dashboard', structure: 'dashboard', source: 'ExecutiveTenantOverview.exportDashboard' },
   { key: 'portal.customer-summary', module: 'portal-clientes', moduleLabel: 'Portal de clientes', label: 'Resumen del portal de clientes', structure: 'report', source: 'exportCustomerPortalPdf' },
 ];
 
