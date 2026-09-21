@@ -5,9 +5,10 @@ import { Event } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Search, CalendarDays, DollarSign, TrendingUp, TrendingDown, Copy, Mail, Users, Eye, CheckCircle2, Loader2, Video, Download, Share2, QrCode, Phone, ExternalLink } from 'lucide-react';
+import { Plus, Search, CalendarDays, DollarSign, TrendingUp, TrendingDown, Copy, Mail, Users, Eye, CheckCircle2, Loader2, Video, Download, Share2, QrCode, Phone, ExternalLink, UserPlus, UserCheck, Trash2, Building2, Globe } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { eventsService } from '../../services/actividades.service';
+import { hrService } from '../../services/hr.service';
 import { incomeService, expensesService, accountsService } from '../../services/finanzas.service';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
@@ -86,6 +87,115 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   const [newEvent, setNewEvent] = useState({
     title: '', description: '', location: '', startDate: '', endDate: '', cost: '', income: '', guestEmails: '', expenseAccountId: '', incomeAccountId: '',
   });
+
+  const employeesQuery = useTenantQuery<any[]>(
+    ['hr', 'event-employees-lookup'],
+    (signal) => hrService.getEmployeeLookup(undefined, signal),
+  );
+  const companyEmployees = asList(employeesQuery.data);
+
+  const [guestTypeMode, setGuestTypeMode] = useState<'INTERNAL' | 'EXTERNAL'>('INTERNAL');
+  const [selectedInternalUserId, setSelectedInternalUserId] = useState<string>('');
+  const [guestDraft, setGuestDraft] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    role: 'GUEST' | 'SPEAKER' | 'STAFF' | 'HOST';
+  }>({
+    name: '',
+    email: '',
+    phone: '',
+    role: 'GUEST',
+  });
+  const [addedGuests, setAddedGuests] = useState<Array<{
+    guestType: 'INTERNAL' | 'EXTERNAL';
+    internalUserId?: string;
+    name: string;
+    email: string;
+    phone?: string;
+    role: 'GUEST' | 'SPEAKER' | 'STAFF' | 'HOST';
+  }>>([]);
+
+  const handleSelectInternalUser = (employeeId: string) => {
+    setSelectedInternalUserId(employeeId);
+    const empFound = companyEmployees.find((e: any) => String(e.id) === employeeId);
+    if (empFound) {
+      const fullName = `${empFound.firstName || ''} ${empFound.lastName || ''}`.trim() || 'Empleado';
+      setGuestDraft(prev => ({
+        ...prev,
+        name: fullName,
+        email: empFound.email || '',
+        phone: empFound.phone || '',
+      }));
+    }
+  };
+
+  const handleAddGuestToList = () => {
+    if (guestTypeMode === 'INTERNAL') {
+      if (!selectedInternalUserId) {
+        toast.error('Selecciona un empleado de la empresa');
+        return;
+      }
+      const empFound = companyEmployees.find((e: any) => String(e.id) === selectedInternalUserId);
+      const name = guestDraft.name.trim() || `${empFound?.firstName || ''} ${empFound?.lastName || ''}`.trim() || 'Empleado';
+      const email = guestDraft.email.trim() || empFound?.email || '';
+      const phone = guestDraft.phone.trim() || empFound?.phone || '';
+
+      if (addedGuests.some(g => g.internalUserId === selectedInternalUserId)) {
+        toast.error('Este empleado ya está en la lista de invitados');
+        return;
+      }
+
+      setAddedGuests(prev => [
+        ...prev,
+        {
+          guestType: 'INTERNAL',
+          internalUserId: empFound?.user?.id || selectedInternalUserId,
+          name,
+          email,
+          phone,
+          role: guestDraft.role,
+        },
+      ]);
+      setSelectedInternalUserId('');
+      setGuestDraft({ name: '', email: '', phone: '', role: 'GUEST' });
+      toast.success(`${name} agregado a la lista`);
+    } else {
+      if (!guestDraft.name.trim()) {
+        toast.error('Ingresa el nombre del invitado');
+        return;
+      }
+      if (!guestDraft.email.trim() && !guestDraft.phone.trim()) {
+        toast.error('Ingresa al menos un correo o teléfono para poder invitarlo');
+        return;
+      }
+      if (guestDraft.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestDraft.email.trim())) {
+        toast.error('Formato de correo no válido');
+        return;
+      }
+      if (guestDraft.email.trim() && addedGuests.some(g => g.email && g.email.toLowerCase() === guestDraft.email.trim().toLowerCase())) {
+        toast.error('Ya existe un invitado con este correo');
+        return;
+      }
+
+      setAddedGuests(prev => [
+        ...prev,
+        {
+          guestType: 'EXTERNAL',
+          name: guestDraft.name.trim(),
+          email: guestDraft.email.trim(),
+          phone: guestDraft.phone.trim(),
+          role: guestDraft.role,
+        },
+      ]);
+      setGuestDraft({ name: '', email: '', phone: '', role: 'GUEST' });
+      toast.success(`${guestDraft.name.trim()} agregado como invitado externo`);
+    }
+  };
+
+  const handleRemoveGuestFromList = (index: number) => {
+    setAddedGuests(prev => prev.filter((_, i) => i !== index));
+  };
   const [invitation, setInvitation] = useState<{ text: string; guests: string[] } | null>(null);
   const [qrModalEvent, setQrModalEvent] = useState<Event | null>(null);
   const [meetingLoadingId, setMeetingLoadingId] = useState<string | null>(null);
@@ -370,7 +480,9 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
 
   const handleAdd = async () => {
     if (!newEvent.title.trim()) { toast.error('El título del evento es obligatorio'); return; }
-    const guestEmails = parseGuestEmails(newEvent.guestEmails);
+    const guestEmailsFromList = addedGuests.map(g => g.email).filter(Boolean);
+    const manualGuestEmails = parseGuestEmails(newEvent.guestEmails);
+    const allGuestEmails = [...new Set([...guestEmailsFromList, ...manualGuestEmails])];
     if (hasCostAmount && !selectedExpenseAccountIsActive) {
       toast.error('Selecciona una cuenta de gasto activa para registrar el costo del evento.');
       return;
@@ -379,7 +491,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
       toast.error('Selecciona una cuenta de ingreso activa para registrar el ingreso del evento.');
       return;
     }
-    if (guestEmails.some(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+    if (manualGuestEmails.some(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
       toast.error('Revisa los correos de invitados; deben tener un formato válido.');
       return;
     }
@@ -404,7 +516,15 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         cost: newEvent.cost === '' ? 0 : Number(newEvent.cost),
         income: newEvent.income === '' ? 0 : Number(newEvent.income),
         currency,
-        guestEmails,
+        guestEmails: allGuestEmails,
+        guests: addedGuests.map(g => ({
+          guestType: g.guestType,
+          internalUserId: g.internalUserId,
+          externalName: g.name,
+          externalEmail: g.email || undefined,
+          externalPhone: g.phone || undefined,
+          role: g.role,
+        })),
         status: 'PENDING',
       });
       const createdId = (created as any)?.id;
@@ -439,15 +559,18 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         if (income?.id) await eventsService.update(createdId, { incomeId: income.id });
       }
       toast.success('Evento creado; completa el evento para contabilizar el costo');
-      if (guestEmails.length > 0) {
+      if (allGuestEmails.length > 0) {
         setInvitation({
-          guests: guestEmails,
-          text: buildInvitationText({ title: newEvent.title.trim(), startDate, endDate, location: newEvent.location.trim(), guests: guestEmails }),
+          guests: allGuestEmails,
+          text: buildInvitationText({ title: newEvent.title.trim(), startDate, endDate, location: newEvent.location.trim(), guests: allGuestEmails }),
         });
       }
       setIsAddOpen(false);
       setCostReason('');
       setNewEvent({ title: '', description: '', location: '', startDate: '', endDate: '', cost: '', income: '', guestEmails: '', expenseAccountId: '', incomeAccountId: '' });
+      setAddedGuests([]);
+      setSelectedInternalUserId('');
+      setGuestDraft({ name: '', email: '', phone: '', role: 'GUEST' });
       onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear evento'); }
   };
@@ -690,7 +813,244 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
               </div>
               <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Ubicación</Label><Input value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder="Sala, dirección o enlace virtual" className="h-11 rounded-xl bg-background" /></div>
               <div className="space-y-2 sm:col-span-2"><Label>Descripción / notas</Label><textarea value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="min-h-24 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20" placeholder="Objetivo, agenda y notas del evento" /></div>
-              <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Invitados</Label><Input value={newEvent.guestEmails} onChange={e => setNewEvent({ ...newEvent, guestEmails: e.target.value })} placeholder="correo1@empresa.com, correo2@empresa.com" className="h-11 rounded-xl bg-background" /><p className="text-[10px] text-muted-foreground">Se guardan en el evento y se genera una invitación copiable al finalizar.</p></div>
+              {/* Sección de Gestión de Invitados */}
+              <div className="space-y-3 sm:col-span-2 rounded-2xl border border-border/60 bg-muted/15 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="size-4 text-primary" />
+                    <Label className="text-xs font-black uppercase tracking-wider text-foreground">Invitados y Roles</Label>
+                  </div>
+                  <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                    {addedGuests.length} {addedGuests.length === 1 ? 'invitado' : 'invitados'}
+                  </span>
+                </div>
+
+                {/* Conmutador: Usuario interno vs externo */}
+                <div className="grid grid-cols-2 gap-1 bg-muted/60 p-1 rounded-xl border border-border/40">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGuestTypeMode('INTERNAL');
+                      setGuestDraft({ name: '', email: '', phone: '', role: 'GUEST' });
+                    }}
+                    className={cn(
+                      'py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5',
+                      guestTypeMode === 'INTERNAL'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <Building2 className="size-3.5" />
+                    Usuario interno (Empresa)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGuestTypeMode('EXTERNAL');
+                      setSelectedInternalUserId('');
+                      setGuestDraft({ name: '', email: '', phone: '', role: 'GUEST' });
+                    }}
+                    className={cn(
+                      'py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5',
+                      guestTypeMode === 'EXTERNAL'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <Globe className="size-3.5" />
+                    Usuario externo
+                  </button>
+                </div>
+
+                {/* Formulario de incorporación según modo */}
+                {guestTypeMode === 'INTERNAL' ? (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold text-muted-foreground">Buscar empleado de la empresa</Label>
+                      <Combobox
+                        options={companyEmployees.map((e: any) => ({
+                          label: `${e.firstName || ''} ${e.lastName || ''}`.trim() + (e.email ? ` · ${e.email}` : ''),
+                          value: String(e.id),
+                          description: [e.position?.title, e.department?.name, e.employeeNumber ? `#${e.employeeNumber}` : null].filter(Boolean).join(' · '),
+                        }))}
+                        value={selectedInternalUserId}
+                        onChange={handleSelectInternalUser}
+                        placeholder={companyEmployees.length ? "Selecciona un empleado..." : "Cargando empleados..."}
+                        searchPlaceholder="Buscar por nombre o correo..."
+                        emptyMessage="No se encontraron empleados en la empresa"
+                        className="h-11 rounded-xl bg-background"
+                      />
+                    </div>
+
+                    {selectedInternalUserId && (
+                      <div className="grid gap-2.5 sm:grid-cols-3 bg-background/60 p-3 rounded-xl border border-border/40">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-muted-foreground">Nombre</Label>
+                          <Input
+                            value={guestDraft.name}
+                            onChange={e => setGuestDraft({ ...guestDraft, name: e.target.value })}
+                            className="h-9 rounded-lg text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-muted-foreground">Correo electrónico</Label>
+                          <Input
+                            type="email"
+                            value={guestDraft.email}
+                            onChange={e => setGuestDraft({ ...guestDraft, email: e.target.value })}
+                            placeholder="correo@empresa.com"
+                            className="h-9 rounded-lg text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-muted-foreground">Teléfono / WhatsApp</Label>
+                          <Input
+                            type="tel"
+                            value={guestDraft.phone}
+                            onChange={e => setGuestDraft({ ...guestDraft, phone: e.target.value })}
+                            placeholder="+505 8888 8888"
+                            className="h-9 rounded-lg text-xs"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <div className="w-48 space-y-1">
+                        <Label className="text-[10px] font-bold text-muted-foreground">Rol en el evento</Label>
+                        <select
+                          value={guestDraft.role}
+                          onChange={e => setGuestDraft({ ...guestDraft, role: e.target.value as any })}
+                          className="h-9 w-full rounded-xl border border-input bg-background px-2.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          <option value="GUEST">Invitado</option>
+                          <option value="SPEAKER">Conferencista / Ponente</option>
+                          <option value="STAFF">Staff / Personal</option>
+                          <option value="HOST">Anfitrión</option>
+                        </select>
+                      </div>
+                      <div className="flex-1 pt-4">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handleAddGuestToList}
+                          className="h-9 w-full rounded-xl text-xs font-bold gap-1.5"
+                        >
+                          <UserPlus className="size-3.5" />
+                          Agregar a la lista
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 pt-1">
+                    <div className="grid gap-2.5 sm:grid-cols-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-muted-foreground">Nombre completo *</Label>
+                        <Input
+                          value={guestDraft.name}
+                          onChange={e => setGuestDraft({ ...guestDraft, name: e.target.value })}
+                          placeholder="Ej. Ing. Roberto Gómez"
+                          className="h-10 rounded-xl text-xs bg-background"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-muted-foreground">Correo electrónico</Label>
+                        <Input
+                          type="email"
+                          value={guestDraft.email}
+                          onChange={e => setGuestDraft({ ...guestDraft, email: e.target.value })}
+                          placeholder="roberto@externo.com"
+                          className="h-10 rounded-xl text-xs bg-background"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-muted-foreground">Teléfono / WhatsApp</Label>
+                        <Input
+                          type="tel"
+                          value={guestDraft.phone}
+                          onChange={e => setGuestDraft({ ...guestDraft, phone: e.target.value })}
+                          placeholder="+505 8888 8888"
+                          className="h-10 rounded-xl text-xs bg-background"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="w-48 space-y-1">
+                        <Label className="text-[10px] font-bold text-muted-foreground">Rol en el evento</Label>
+                        <select
+                          value={guestDraft.role}
+                          onChange={e => setGuestDraft({ ...guestDraft, role: e.target.value as any })}
+                          className="h-9 w-full rounded-xl border border-input bg-background px-2.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          <option value="GUEST">Invitado</option>
+                          <option value="SPEAKER">Conferencista / Ponente</option>
+                          <option value="STAFF">Staff / Personal</option>
+                          <option value="HOST">Anfitrión</option>
+                        </select>
+                      </div>
+                      <div className="flex-1 pt-4">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handleAddGuestToList}
+                          className="h-9 w-full rounded-xl text-xs font-bold gap-1.5"
+                        >
+                          <UserPlus className="size-3.5" />
+                          Agregar invitado externo
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de Invitados ya agregados */}
+                {addedGuests.length > 0 ? (
+                  <div className="space-y-1.5 pt-2 border-t border-border/40 max-h-48 overflow-y-auto">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Invitados registrados para este evento:</p>
+                    {addedGuests.map((g, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-border/40 bg-background/80 px-3 py-2 text-xs"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-foreground truncate">{g.name}</span>
+                            <span className={cn(
+                              'text-[10px] px-1.5 py-0.2 rounded font-semibold',
+                              g.guestType === 'INTERNAL'
+                                ? 'bg-primary/10 text-primary'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                            )}>
+                              {g.guestType === 'INTERNAL' ? 'Interno' : 'Externo'}
+                            </span>
+                            <span className="text-[10px] bg-muted px-1.5 py-0.2 rounded text-muted-foreground">
+                              {g.role === 'SPEAKER' ? 'Conferencista' : g.role === 'STAFF' ? 'Staff' : g.role === 'HOST' ? 'Anfitrión' : 'Invitado'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                            {g.email && <span className="truncate">{g.email}</span>}
+                            {g.phone && <span>· 📞 {g.phone}</span>}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveGuestFromList(idx)}
+                          className="p-1 rounded-lg text-muted-foreground/60 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                          title="Remover de la lista"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground italic text-center py-2">
+                    Aún no has agregado personas a la lista de invitados.
+                  </p>
+                )}
+              </div>
               <div className="space-y-2"><Label className="text-xs font-bold">Costo ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.cost} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, cost: value, ...(value.trim() === '' ? { expenseAccountId: '' } : {}) })); if (value.trim() === '') setCostReason(''); }} className="h-11 rounded-xl bg-background" /></div>
               <div className="space-y-2"><Label className="text-xs font-bold">Ingreso ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.income} onChange={e => { const value = e.target.value; setNewEvent(current => ({ ...current, income: value, ...(value.trim() === '' ? { incomeAccountId: '' } : {}) })); }} className="h-11 rounded-xl bg-background" /></div>
               {hasCostAmount && (

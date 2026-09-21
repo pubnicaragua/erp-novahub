@@ -1,5 +1,6 @@
-import { CalendarDays, CalendarClock, CheckCircle2, Clock3, DollarSign, FileText, Flag, Hash, History, Info, Link2, MapPin, Paperclip, Trash2, Users, XCircle, BookOpen, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { CalendarDays, CalendarClock, CheckCircle2, Clock3, DollarSign, FileText, Flag, Hash, History, Info, Link2, MapPin, Paperclip, Trash2, Users, XCircle, BookOpen, ArrowDownLeft, ArrowUpRight, Copy, Check, Eye, Mail, Phone, ExternalLink } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -205,10 +206,233 @@ function AccountingMovementCard({ type, amount, currency, movement, journal, acc
   );
 }
 
+function EventGuestsList({ item }: { item: any }) {
+  const guests = item.guests || [];
+  const rawEmails = item.guestEmails || item.attendees || [];
+
+  const handleCopyLink = (token: string) => {
+    if (!token) return;
+    const url = `${window.location.origin}/rsvp/${token}`;
+    navigator.clipboard.writeText(url);
+    toast.success('Enlace de invitación RSVP copiado al portapapeles');
+  };
+
+  const handleSendEmail = (email: string, name: string, token: string) => {
+    if (!email) {
+      toast.error('Este invitado no tiene un correo registrado');
+      return;
+    }
+    const url = `${window.location.origin}/rsvp/${token}`;
+    const subject = encodeURIComponent(`Invitación: ${item.title || 'Evento'}`);
+    const body = encodeURIComponent(
+      `Hola ${name},\n\nTe invitamos cordialmente a participar en el evento:\n\n` +
+      `📌 ${item.title}\n` +
+      (item.startDate ? `🗓️ Fecha: ${new Date(item.startDate).toLocaleString('es-NI')}\n` : '') +
+      (item.location ? `📍 Lugar: ${item.location}\n` : '') +
+      (item.meetingUrl ? `💻 Enlace virtual: ${item.meetingUrl}\n` : '') +
+      `\nPor favor confirma tu asistencia en el siguiente enlace:\n${url}\n\n¡Te esperamos!`
+    );
+    window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
+    toast.success(`Abriendo correo para ${email}`);
+  };
+
+  const handleSendWhatsApp = (phone: string, name: string, token: string) => {
+    if (!phone) {
+      toast.error('Este invitado no tiene un número de teléfono registrado');
+      return;
+    }
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const url = `${window.location.origin}/rsvp/${token}`;
+    const text = encodeURIComponent(
+      `¡Hola ${name}! Te invitamos al evento *${item.title || 'Evento'}*.\n\n` +
+      (item.startDate ? `🗓️ *Fecha:* ${new Date(item.startDate).toLocaleString('es-NI')}\n` : '') +
+      (item.location ? `📍 *Lugar:* ${item.location}\n` : '') +
+      (item.meetingUrl ? `💻 *Reunión virtual:* ${item.meetingUrl}\n` : '') +
+      `\nPuedes confirmar tu asistencia aquí:\n${url}\n\n¡Esperamos contar contigo!`
+    );
+    window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
+    toast.success(`Abriendo WhatsApp para ${phone}`);
+  };
+
+  if (guests.length === 0 && rawEmails.length === 0) {
+    return (
+      <DetailSection title="Invitados al evento" icon={Users}>
+        <p className="text-sm text-muted-foreground">No hay invitados registrados en este evento.</p>
+      </DetailSection>
+    );
+  }
+
+  const acceptedCount = guests.filter((g: any) => g.rsvpStatus === 'ACCEPTED').length;
+  const pendingCount = guests.filter((g: any) => g.rsvpStatus === 'PENDING' || !g.rsvpStatus).length;
+  const declinedCount = guests.filter((g: any) => g.rsvpStatus === 'DECLINED').length;
+
+  return (
+    <DetailSection title="Invitados y Confirmación RSVP" icon={Users}>
+      {/* Resumen de RSVP */}
+      {guests.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-3 pb-2 border-b border-border/40 text-xs font-semibold">
+          <span className="text-emerald-600 dark:text-emerald-400">✓ {acceptedCount} confirmados</span>
+          <span className="text-muted-foreground">•</span>
+          <span className="text-amber-600 dark:text-amber-400">• {pendingCount} pendientes</span>
+          <span className="text-muted-foreground">•</span>
+          <span className="text-rose-600 dark:text-rose-400">✕ {declinedCount} rechazados</span>
+        </div>
+      )}
+
+      {/* Lista detallada de ActivityGuest */}
+      {guests.length > 0 ? (
+        <div className="space-y-2.5">
+          {guests.map((guest: any) => {
+            const isInternal = guest.guestType === 'INTERNAL';
+            const name = isInternal
+              ? (guest.internalUser?.name || guest.internalUser?.email || 'Usuario interno')
+              : (guest.externalName || guest.externalEmail || 'Invitado externo');
+            const email = isInternal ? guest.internalUser?.email : guest.externalEmail;
+            const phone = guest.externalPhone || guest.internalUser?.employee?.phone || (guest.internalUser as any)?.phone || '';
+            const rsvp = guest.rsvpStatus || 'PENDING';
+            const roleLabel = guest.role === 'HOST' ? 'Anfitrión' : guest.role === 'SPEAKER' ? 'Conferencista' : guest.role === 'STAFF' ? 'Staff' : 'Invitado';
+            const token = guest.accessToken || '';
+
+            return (
+              <div
+                key={guest.id || token}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-border/40 bg-muted/20 p-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="truncate text-xs font-bold text-foreground">{name}</p>
+                    <span className={cn(
+                      'text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase tracking-wider',
+                      isInternal ? 'bg-primary/10 text-primary' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                    )}>
+                      {isInternal ? 'Interno' : 'Externo'}
+                    </span>
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      {roleLabel}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[11px] text-muted-foreground">
+                    {email ? (
+                      <span className="truncate flex items-center gap-1">
+                        <Mail className="size-3 shrink-0 text-primary/70" /> {email}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/60 italic">Sin correo</span>
+                    )}
+                    {phone ? (
+                      <span className="flex items-center gap-1">
+                        <Phone className="size-3 shrink-0 text-emerald-600/70" /> {phone}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/60 italic">Sin teléfono</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/30">
+                  {/* Badge de RSVP */}
+                  <div>
+                    {rsvp === 'ACCEPTED' && (
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        Confirmado
+                      </span>
+                    )}
+                    {rsvp === 'DECLINED' && (
+                      <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                        Rechazado
+                      </span>
+                    )}
+                    {rsvp === 'PENDING' && (
+                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        Pendiente
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Acciones de reenvío de invitación */}
+                  <div className="flex items-center gap-1">
+                    {/* Ver enlace */}
+                    {token && (
+                      <a
+                        href={`/rsvp/${token}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Ver página de invitación RSVP"
+                        className="rounded-lg border border-border/50 bg-background p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all"
+                      >
+                        <Eye className="size-3.5" />
+                      </a>
+                    )}
+
+                    {/* Reenviar por correo */}
+                    <button
+                      type="button"
+                      disabled={!email}
+                      title={email ? `Reenviar invitación por correo a ${email}` : 'Sin correo registrado'}
+                      onClick={() => handleSendEmail(email, name, token)}
+                      className={cn(
+                        'rounded-lg border border-border/50 bg-background p-1.5 transition-all',
+                        email
+                          ? 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-600 dark:hover:text-blue-400'
+                          : 'opacity-30 cursor-not-allowed text-muted-foreground'
+                      )}
+                    >
+                      <Mail className="size-3.5" />
+                    </button>
+
+                    {/* Reenviar por WhatsApp */}
+                    <button
+                      type="button"
+                      disabled={!phone}
+                      title={phone ? `Reenviar invitación por WhatsApp a ${phone}` : 'Sin teléfono registrado'}
+                      onClick={() => handleSendWhatsApp(phone, name, token)}
+                      className={cn(
+                        'rounded-lg border border-border/50 bg-background p-1.5 transition-all',
+                        phone
+                          ? 'text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400'
+                          : 'opacity-30 cursor-not-allowed text-muted-foreground'
+                      )}
+                    >
+                      <Phone className="size-3.5" />
+                    </button>
+
+                    {/* Copiar enlace */}
+                    {token && (
+                      <button
+                        type="button"
+                        title="Copiar enlace RSVP personal"
+                        onClick={() => handleCopyLink(token)}
+                        className="rounded-lg border border-border/50 bg-background p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+                      >
+                        <Copy className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Fallback para rawEmails sencillos */
+        <div className="flex flex-wrap gap-2">
+          {rawEmails.map((guestEmail: string) => (
+            <Badge key={guestEmail} variant="outline" className="rounded-lg text-xs">
+              {guestEmail}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </DetailSection>
+  );
+}
+
 function EventDetails({ item, accounts = [], linkedExpense, linkedIncome, linkedExpenseAccount, linkedIncomeAccount, linkedExpenseJournal, linkedIncomeJournal }: { item: any; accounts?: any[]; linkedExpense?: any; linkedIncome?: any; linkedExpenseAccount?: any; linkedIncomeAccount?: any; linkedExpenseJournal?: any; linkedIncomeJournal?: any }) {
   const balance = (Number(item.income) || 0) - (Number(item.cost) || 0);
   const duration = item.startDate && item.endDate ? Math.max(0, Math.round((new Date(item.endDate).getTime() - new Date(item.startDate).getTime()) / 60000)) : 0;
   const eventStatus = String(item.status || 'PENDING').toUpperCase();
+  const guestCount = (item.guests || []).length || (item.guestEmails || item.attendees || []).length;
+
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
@@ -216,7 +440,7 @@ function EventDetails({ item, accounts = [], linkedExpense, linkedIncome, linked
         <DetailItem label="Inicio" value={formatDate(item.startDate)} icon={CalendarDays} />
         <DetailItem label="Fin" value={formatDate(item.endDate)} icon={Clock3} />
         <DetailItem label="Ubicación" value={item.location} icon={MapPin} />
-        <DetailItem label="Invitados" value={item.guestEmails?.length || item.attendees?.length || 0} icon={Users} />
+        <DetailItem label="Invitados" value={guestCount} icon={Users} />
       </div>
 
       {item.meetingUrl && (
@@ -243,7 +467,7 @@ function EventDetails({ item, accounts = [], linkedExpense, linkedIncome, linked
           {(Number(item.income) || 0) > 0 ? <AccountingMovementCard type="income" amount={item.income} currency={item.currency} movement={linkedIncome} journal={linkedIncomeJournal} account={formatAccount(linkedIncome?.accountId || item.income?.accountId || item.incomeAccountId || item.incomeId, accounts, linkedIncome?.account || linkedIncomeAccount || item.income?.account || item.incomeAccount)} /> : <p className="rounded-xl border border-dashed border-border/60 p-3 text-sm text-muted-foreground">Este evento no tiene un ingreso registrado.</p>}
         </div>
       </DetailSection>
-      {((item.guestEmails || item.attendees || []).length > 0) && <DetailSection title="Invitados" icon={Users}><div className="flex flex-wrap gap-2">{(item.guestEmails || item.attendees || []).map((guest: string) => <Badge key={guest} variant="outline" className="rounded-lg text-xs">{guest}</Badge>)}</div></DetailSection>}
+      <EventGuestsList item={item} />
     </>
   );
 }

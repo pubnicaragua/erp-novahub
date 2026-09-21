@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, getAuthHeaders, getApiUrl } from './api';
 import { resolveStorageReferences } from './storage.service';
 import type { ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
 
@@ -73,23 +73,32 @@ export const eventsService = {
     return await api.post(`/activities/events/${id}/invite`, {});
   },
   getIcsUrl: (id: string) => {
-    return `${api.getBaseUrl ? api.getBaseUrl() : '/api'}/activities/events/${id}/ics`;
+    return getApiUrl(`/activities/events/${id}/ics`);
   },
   downloadIcs: async (id: string, eventTitle?: string) => {
-    const res = await fetch(`/api/activities/events/${id}/ics`, {
+    const headers = getAuthHeaders();
+    const url = getApiUrl(`/activities/events/${id}/ics`);
+    const res = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        ...headers,
       },
     });
-    if (!res.ok) throw new Error('No se pudo descargar el archivo .ics');
+    if (!res.ok) {
+      let errMsg = 'No se pudo descargar el archivo .ics';
+      try {
+        const json = await res.json();
+        if (json?.message) errMsg = typeof json.message === 'string' ? json.message : JSON.stringify(json.message);
+      } catch {}
+      throw new Error(errMsg);
+    }
     const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
+    const blobUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = blobUrl;
     a.download = `${eventTitle ? eventTitle.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'evento'}.ics`;
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
+    window.URL.revokeObjectURL(blobUrl);
     document.body.removeChild(a);
   },
   scheduleMeeting: async (id: string, platform: 'GOOGLE_MEET' | 'TEAMS' | 'ZOOM') => {
