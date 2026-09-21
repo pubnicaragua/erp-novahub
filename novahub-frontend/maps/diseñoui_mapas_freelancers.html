@@ -296,7 +296,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <div class="confirm-modal-actions">
    <button class="cancel" id="routeClose" type="button">Cerrar</button>
    <button class="cancel" id="routeOptimize" type="button">Ordenar por cercanía</button>
-   <button class="danger" id="routeOpenMaps" type="button">Abrir ruta</button>
+   <button class="save" id="routeDraw" type="button">Mostrar ruta aquí</button>
+   <button class="cancel" id="routeOpenMaps" type="button">Abrir navegación</button>
   </div>
   <div class="confirm-modal-actions"><button class="save" id="routeSave" type="button">Guardar y asignar ruta</button></div>
  </div>
@@ -397,7 +398,7 @@ const AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
 if(!AdvancedMarkerElement)throw new Error('Nova AdvancedMarkerElement unavailable');
 window.__novaAdvancedMarkerElement = AdvancedMarkerElement;
 const seed = [{"id": "seed-001", "name": "Supermercado La Unión", "zone": "Managua", "category": "Supermercado / comercio", "address": "Carretera a Masaya, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.132629, "lng": -86.254269, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-002", "name": "PriceSmart Managua", "zone": "Managua", "category": "Mayorista / supermercado", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.135668, "lng": -86.253906, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-003", "name": "Distribuidora Reyes", "zone": "Managua", "category": "Mayorista / distribución", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.137208, "lng": -86.253336, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-004", "name": "Mercado El Mayoreo", "zone": "Carretera Norte", "category": "Mercado / mayorista", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.143278, "lng": -86.187131, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-005", "name": "La Colonia Plaza España", "zone": "Managua", "category": "Supermercado / comercio", "address": "Plaza España, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.13555, "lng": -86.252655, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-006", "name": "Joyería Garzón", "zone": "Managua", "category": "Comercio / joyería", "address": "Las Brisas, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.141675, "lng": -86.251631, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-007", "name": "Diseños y Sistemas Web", "zone": "Veracruz", "category": "Tecnología / servicios", "address": "Jardines de Veracruz, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.052797, "lng": -86.188715, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-008", "name": "Empaques Santo Domingo, S.A.", "zone": "Managua", "category": "Industria / empaques", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.136075, "lng": -86.255822, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-009", "name": "Ideas", "zone": "Managua", "category": "Construcción / servicios", "address": "Colonia Mántica, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.13577, "lng": -86.248795, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-010", "name": "Super Express Ciudad Sandino 01", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157972, "lng": -86.346451, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-011", "name": "Super Express San Andrés", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "San Andrés, Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157074, "lng": -86.345434, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-012", "name": "Super Express Praderas de Sandino", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Praderas de Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.160541, "lng": -86.347536, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-013", "name": "Super Express Ciudad Sandino 5", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157755, "lng": -86.338849, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-014", "name": "AMPM Ciudad Sandino", "zone": "Ciudad Sandino", "category": "Tienda / conveniencia", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.159319, "lng": -86.346675, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-015", "name": "Farma Value Ciudad Sandino", "zone": "Ciudad Sandino", "category": "Farmacia", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.154621, "lng": -86.340872, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-016", "name": "Plaza Calli", "zone": "Ciudad Sandino", "category": "Centro comercial", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.160602, "lng": -86.339814, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-017", "name": "Colegio Cristiano Nicaragüense", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.15771, "lng": -86.345433, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-018", "name": "Einstein College", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.155459, "lng": -86.340194, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-019", "name": "Liceo Franciscano", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.155573, "lng": -86.346966, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-020", "name": "Básculas Carmona", "zone": "Ciudad Sandino", "category": "Equipos / servicios", "address": "Carretera Nueva a León", "source": "Base inicial", "sourceUrl": "", "lat": 12.159622, "lng": -86.345584, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-021", "name": "La Colonia Plaza Veracruz", "zone": "Veracruz", "category": "Supermercado / comercio", "address": "Plaza Veracruz, Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.04978, "lng": -86.184857, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-022", "name": "Plaza Veracruz", "zone": "Veracruz", "category": "Centro comercial", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.053327, "lng": -86.183575, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-023", "name": "Placita Veracruz", "zone": "Veracruz", "category": "Centro comercial", "address": "Carretera a Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.051659, "lng": -86.187814, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-024", "name": "Super Express Jardines de Veracruz", "zone": "Veracruz", "category": "Supermercado / comercio", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.056273, "lng": -86.188509, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-025", "name": "Materiales de Construcción Veracruz", "zone": "Veracruz", "category": "Ferretería / construcción", "address": "Veracruz, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.056026, "lng": -86.189509, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-026", "name": "Farmacia Veracruz", "zone": "Veracruz", "category": "Farmacia", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.046844, "lng": -86.186535, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-027", "name": "Cyber Café Veracruz", "zone": "Veracruz", "category": "Tecnología / servicios", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.04785, "lng": -86.187313, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-028", "name": "Taller de Soldadura Veracruz", "zone": "Veracruz", "category": "Taller / industria", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.05058, "lng": -86.180574, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-029", "name": "Venta de Madera Veracruz", "zone": "Veracruz", "category": "Madera / construcción", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.056473, "lng": -86.185084, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-030", "name": "PriceSmart Carretera a Masaya", "zone": "Carretera a Masaya", "category": "Mayorista / supermercado", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.076433, "lng": -86.220965, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}];
-const centers = {"Managua": [12.1364, -86.2514], "Ciudad Sandino": [12.1587, -86.3442], "Veracruz": [12.0525, -86.186], "Carretera Norte": [12.145, -86.191], "Carretera a Masaya": [12.081, -86.219], "Mercado Oriental": [12.143, -86.247]};
+const centers = {"Managua": [12.1364, -86.2514], "Ciudad Sandino": [12.1587, -86.3442], "Veracruz": [12.0525, -86.186], "Carretera Norte": [12.145, -86.191], "Carretera a Masaya": [12.081, -86.219], "Mercado Oriental": [12.143, -86.247], "Ticuantepe": [12.0227, -86.2046], "Masaya": [11.9744, -86.0942], "Diriamba": [11.8560, -86.2390], "Jinotepe / Carazo": [11.8496, -86.1990]};
 function readStore(key, fallback){
   try{return JSON.parse(localStorage.getItem(key) || 'null') || fallback}catch(e){return fallback}
 }
@@ -419,6 +420,30 @@ const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const GOOGLE_SEARCH_MAX_RESULTS = 100;
 const GOOGLE_CATALOG_KEY = 'novaGooglePlacesCatalogV1';
 const DELETED_BUSINESSES_KEY = 'novaFuerzaDeletedBusinessesV1';
+const NOVA_SEARCH_CURSOR_KEY = 'novaDiscoveryCursorV1';
+const NOVA_DISCOVERY_AREAS = [
+  {name:'Managua',center:[12.1364,-86.2514],radius:12000},
+  {name:'Carretera a Masaya',center:[12.081,-86.219],radius:9000},
+  {name:'Carretera Norte',center:[12.145,-86.191],radius:9000},
+  {name:'Ciudad Sandino',center:[12.1587,-86.3442],radius:9000},
+  {name:'Veracruz',center:[12.0525,-86.186],radius:8000},
+  {name:'Ticuantepe',center:[12.0227,-86.2046],radius:8000},
+  {name:'Masaya',center:[11.9744,-86.0942],radius:9000},
+  {name:'Diriamba',center:[11.856,-86.239],radius:8000},
+  {name:'Jinotepe / Carazo',center:[11.8496,-86.199],radius:8000},
+];
+const NOVA_DISCOVERY_QUERIES = [
+  'empresas y negocios',
+  'tiendas y comercios',
+  'distribuidoras y mayoristas',
+  'ferreterías y materiales de construcción',
+  'farmacias clínicas y consultorios',
+  'restaurantes cafeterías y comida',
+  'talleres repuestos y automotriz',
+  'servicios profesionales oficinas y tecnología',
+  'logística transporte y bodegas',
+  'hoteles hospedajes y centros comerciales',
+];
 
 let googlePlaces = readStore(GOOGLE_CATALOG_KEY, []);
 const deletedBusinessKeys = new Set(readStore(DELETED_BUSINESSES_KEY, []));
@@ -435,6 +460,7 @@ let googleSearchRun = 0;
 let markerById = new Map();
 let userLocationMarker = null;
 let userLocationCircle = null;
+let lastKnownCoords = null;
 let pendingEvidenceBusinessId = null;
 let pendingQuickPointPhoto = false;
 let pendingQuickPointFile = null;
@@ -445,8 +471,14 @@ let presenceWatchId = null;
 let presenceWatchRequested = false;
 let lastPresenceSentAt = 0;
 let presenceSyncInFlight = false;
+let remoteProspectsLoading = false;
+let lastRemoteProspectsSignature = '';
+let legacyCatalogSyncInFlight = false;
+let lastRemoteRefreshAt = 0;
+let lastOutboxFlushAt = 0;
 let assignees = [];
 let routeBusinesses = [];
+let routePolyline = null;
 let zonePolygons = new Map();
 let zonesVisible = false;
 
@@ -739,6 +771,7 @@ async function uploadEvidence(file){
 async function flushOutbox(){
   if(flushingOutbox || !navigator.onLine || !localStorage.getItem('nh-auth-token')) return;
   flushingOutbox=true;
+  let syncedAny=false;
   try{
     const entries=await readOfflineProspects();
     for(const entry of entries){
@@ -754,9 +787,16 @@ async function flushOutbox(){
         const saved=result?.prospects?.[0];
         if(saved){const business=businesses.find(item=>keyOf(item)===entry.sourceKey);if(business)stateOf(business).remoteId=saved.id}
         await removeOfflineProspect(entry.sourceKey);
+        syncedAny=true;
       }catch(error){console.warn('La cola offline seguirá pendiente',error)}
     }
-  }finally{flushingOutbox=false}
+  }finally{
+    flushingOutbox=false;
+    if(syncedAny){
+      mergeBusinesses();
+      render();
+    }
+  }
 }
 function prospectPayload(b){
   const c=stateOf(b);
@@ -805,26 +845,57 @@ async function syncProspects(list, evidenceFile=null){
     return null;
   }
 }
+async function syncProspectsBatched(list,evidenceFile=null){
+  const items=list.filter(Boolean);
+  const results=[];
+  for(let index=0;index<items.length;index+=400){
+    results.push(await syncProspects(items.slice(index,index+400),index===0?evidenceFile:null));
+  }
+  return results.some(Boolean) ? results : null;
+}
 function remoteBusiness(prospect){
   const id=prospect.googlePlaceId ? `google-${prospect.googlePlaceId}` : prospect.sourceKey || `remote-${prospect.id}`;
-  return {id,googlePlaceId:prospect.googlePlaceId || undefined,zoneCellId:prospect.zoneCellId || undefined,name:prospect.name || 'Prospecto sin nombre',zone:prospect.zone || nearestZone(Number(prospect.lat)||12.115,Number(prospect.lng)||-86.26),category:prospect.category || 'Comercio / servicios',address:prospect.address || 'Dirección pendiente de validar',source:'Fuerza Comercial',sourceUrl:'',lat:Number(prospect.lat)||12.115,lng:Number(prospect.lng)||-86.26,precision:'Prospecto persistido en NovaHub',score:Number(prospect.novaFitScore)||0,priority:prospect.priority || 'C',owner:'Fuerza Comercial',phone:prospect.phone || '',website:prospect.website || '',rating:prospect.rating || null,reviews:prospect.reviews || 0};
+  return {id,googlePlaceId:prospect.googlePlaceId || undefined,zoneCellId:prospect.zoneCellId || undefined,name:prospect.name || 'Prospecto sin nombre',zone:prospect.zone || nearestZone(Number(prospect.lat)||12.115,Number(prospect.lng)||-86.26),category:prospect.category || 'Comercio / servicios',address:prospect.address || 'Dirección pendiente de validar',source:prospect.googlePlaceId?'Nova':'Fuerza Comercial',sourceUrl:prospect.sourceUrl || '',lat:Number(prospect.lat)||12.115,lng:Number(prospect.lng)||-86.26,precision:'Prospecto persistido en NovaHub',score:Number(prospect.novaFitScore)||0,priority:prospect.priority || 'C',owner:'Fuerza Comercial',phone:prospect.phone || '',website:prospect.website || '',rating:prospect.rating || null,reviews:prospect.reviews || 0};
 }
 async function loadRemoteProspects(){
-  if(!localStorage.getItem('nh-auth-token')) return;
+  if(!localStorage.getItem('nh-auth-token') || remoteProspectsLoading) return;
+  remoteProspectsLoading=true;
+  lastRemoteRefreshAt=Date.now();
   try{
     const data=await forceSalesRequest('/force-sales/prospects');
     if(!Array.isArray(data)) return;
+    const remoteGoogleKeys=new Set(data.filter(prospect=>prospect.googlePlaceId).map(prospect=>String(prospect.googlePlaceId)));
+    const legacyLocal=googlePlaces.filter(place=>place.googlePlaceId && !remoteGoogleKeys.has(String(place.googlePlaceId))).slice(0,500);
+    if(legacyLocal.length && !legacyCatalogSyncInFlight){
+      legacyCatalogSyncInFlight=true;
+      let migrated=null;
+      try{migrated=await syncProspects(legacyLocal)}finally{legacyCatalogSyncInFlight=false}
+      if(migrated){
+        remoteProspectsLoading=false;
+        return loadRemoteProspects();
+      }
+      return;
+    }
+    const signature=data.map(prospect=>`${prospect.id}:${prospect.updatedAt || ''}:${prospect.stage || ''}:${prospect.assignedToId || ''}`).sort().join('|');
+    if(signature===lastRemoteProspectsSignature)return;
+    lastRemoteProspectsSignature=signature;
     remoteProspects=data.map(prospect=>{
       const business=remoteBusiness(prospect); const key=keyOf(business); const current=commercialState[key] || {};
-      commercialState[key]={...current,remoteId:prospect.id,selected:Boolean(prospect.selected),kanban:true,stage:stageToUi(prospect.stage),discarded:stageToUi(prospect.stage)==='Descartado',discardReason:prospect.discardedReason || current.discardReason,assignedToId:prospect.assignedToId || current.assignedToId,assignedCellId:prospect.zoneCellId || current.assignedCellId,visitedAt:prospect.visitedAt || current.visitedAt,visitLat:prospect.visitLat ?? current.visitLat,visitLng:prospect.visitLng ?? current.visitLng,evidenceName:prospect.evidenceName || current.evidenceName,evidenceType:prospect.evidenceType || current.evidenceType,evidenceUri:prospect.evidenceUri || current.evidenceUri,whatsappPhone:prospect.phone || current.whatsappPhone,whatsappOptIn:Boolean(prospect.whatsappOptIn),whatsappOptInSource:prospect.whatsappOptInSource || current.whatsappOptInSource};
+      const stage=stageToUi(prospect.stage);
+      commercialState[key]={...current,remoteId:prospect.id,selected:Boolean(prospect.selected),kanban:current.kanban || Boolean(prospect.selected) || stage!=='Nuevo',stage,discarded:stage==='Descartado',discardReason:prospect.discardedReason || current.discardReason,assignedToId:prospect.assignedToId || current.assignedToId,assignedCellId:prospect.zoneCellId || current.assignedCellId,visitedAt:prospect.visitedAt || current.visitedAt,visitLat:prospect.visitLat ?? current.visitLat,visitLng:prospect.visitLng ?? current.visitLng,evidenceName:prospect.evidenceName || current.evidenceName,evidenceType:prospect.evidenceType || current.evidenceType,evidenceUri:prospect.evidenceUri || current.evidenceUri,whatsappPhone:prospect.phone || current.whatsappPhone,whatsappOptIn:Boolean(prospect.whatsappOptIn),whatsappOptInSource:prospect.whatsappOptInSource || current.whatsappOptInSource};
       return business;
     });
+    // Online, NovaHub is the shared catalog. The device cache remains only as
+    // a fallback while offline so different devices converge on one count.
+    googlePlaces=remoteProspects.filter(item=>item.googlePlaceId);
+    localStorage.setItem(GOOGLE_CATALOG_KEY,JSON.stringify(googlePlaces));
     persistCommercial(); mergeBusinesses(); populateFilters(); render();
   }catch(e){/* El modo local sigue operativo si el backend aún no tiene este módulo. */}
+  finally{remoteProspectsLoading=false}
 }
 function updatePipelineKpis(){
-  // This KPI is the temporary Google Places result set, not the base catalog
-  // or persisted CRM prospects. This prevents the old misleading "130".
+  // This KPI is Nova's shared discovered catalog. It is synchronized with the
+  // persisted CRM records so it stays consistent across devices.
   document.getElementById('foundCount').textContent=googlePlaces.length;
   document.getElementById('selectedCount').textContent=businesses.filter(isSelected).length;
   document.getElementById('kanbanCount').textContent=businesses.filter(isKanban).length;
@@ -1092,6 +1163,7 @@ document.getElementById('locationRetry').addEventListener('click',()=>{closeLoca
 document.getElementById('locationModal').addEventListener('click',event=>{if(event.target===event.currentTarget)closeLocationHelp()});
 document.getElementById('routeClose').addEventListener('click',()=>{document.getElementById('routeModal').hidden=true});
 document.getElementById('routeOptimize').addEventListener('click',optimizeRoute);
+document.getElementById('routeDraw').addEventListener('click',drawRouteOnMap);
 document.getElementById('routeOpenMaps').addEventListener('click',openRouteInMaps);
 document.getElementById('routeSave').addEventListener('click',()=>{void saveRouteAssignment()});
 document.getElementById('routeModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
@@ -1143,7 +1215,7 @@ function addSelectedToKanban(){
   let added=0, existing=0;
   const addedBusinesses=[];
   chosen.forEach(b=>{if(isKanban(b)){existing++;return} const c=stateOf(b);c.kanban=true;c.stage=c.stage||'Nuevo';addedBusinesses.push(b);added++});
-  persistCommercial(); render(); syncProspects(addedBusinesses); toast(`${added} agregados · ${existing} ya existían`);
+  persistCommercial(); render(); void syncProspectsBatched(addedBusinesses); toast(`${added} agregados · ${existing} ya existían`);
 }
 function registerVisit(id){
   const b=findBusiness(id); if(!b) return;
@@ -1154,7 +1226,7 @@ function registerVisit(id){
     googleMap.setZoom(17);
     const c=stateOf(b); c.visitedAt=new Date().toISOString(); c.visitLat=position.coords.latitude; c.visitLng=position.coords.longitude; c.stage='Visitado'; c.kanban=true;
     followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:new Date().toISOString()};
-    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups)); persistCommercial(); rerenderKeepingPopup(b); syncProspects([b]); toast('Visita registrada con ubicación · abre la cámara para guardar evidencia');
+  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups)); persistCommercial(); rerenderKeepingPopup(b); void syncProspects([b]); toast('Visita registrada con ubicación · abre la cámara para guardar evidencia');
     window.setTimeout(()=>requestEvidenceCapture(id),120);
   },'No se pudo obtener la ubicación para registrar la visita');
 }
@@ -1184,7 +1256,7 @@ function confirmDiscardDialog(){
     const c=stateOf(b); c.discarded=true;c.discardReason=note ? reason + ' · ' + note : reason;c.discardedAt=now;c.stage='Descartado';
     followups[b.id]={...(followups[b.id]||{}),status:'Descartado',updatedAt:now,note:note || reason};
   });
-  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();closeDiscardDialog();render();syncProspects(chosen);toast(`${chosen.length} ${chosen.length===1?'prospecto descartado':'prospectos descartados'}`);
+  localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();closeDiscardDialog();render();void syncProspectsBatched(chosen);toast(`${chosen.length} ${chosen.length===1?'prospecto descartado':'prospectos descartados'}`);
 }
 function discardBusiness(id){
   openDiscardDialog([id]);
@@ -1292,6 +1364,7 @@ function showUserLocation(coords){
     userLocationMarker=createMapMarker({map:googleMap,title:'Mi ubicación',zIndex:1200,content:locationContent});
     userLocationCircle=new google.maps.Circle({map:googleMap,fillColor:'#08785a',fillOpacity:.12,strokeColor:'#08785a',strokeOpacity:.55,strokeWeight:1.5,clickable:false});
   }
+  lastKnownCoords={latitude:Number(coords.latitude),longitude:Number(coords.longitude),accuracy:coords.accuracy,heading:coords.heading};
   const position={lat:coords.latitude,lng:coords.longitude};
   userLocationMarker.setPosition(position);
   userLocationCircle?.setCenter(position);
@@ -1344,7 +1417,7 @@ async function loadSellerPresence(){
 async function syncSellerPresence(coords){
   if(!presenceSharingEnabled || !localStorage.getItem('nh-auth-token'))return;
   const now=Date.now();
-  if(presenceSyncInFlight || now-lastPresenceSentAt<15000)return;
+  if(presenceSyncInFlight || now-lastPresenceSentAt<10000)return;
   lastPresenceSentAt=now;
   presenceSyncInFlight=true;
   try{await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:coords.latitude,lng:coords.longitude,accuracy:coords.accuracy,heading:coords.heading})});}
@@ -1374,6 +1447,13 @@ async function setPresenceSharing(enabled){
     toast('Tu ubicación quedó oculta');
   }else{
     toast('Tu ubicación volverá a compartirse al usar Mi ubicación o registrar una visita');
+    if(lastKnownCoords){
+      presenceWatchRequested=true;
+      setNovaMarkerMap(userLocationMarker,googleMap);
+      userLocationCircle?.setMap(googleMap);
+      lastPresenceSentAt=0;
+      syncSellerPresence(lastKnownCoords);
+    }
     startPresenceWatch();
   }
   updatePresenceToggle();
@@ -1566,7 +1646,7 @@ function render(){
   updateView();
 }
 function populateFilters(){
-  const zonesList = ['Todos','Managua','Ciudad Sandino','Veracruz','Carretera Norte','Carretera a Masaya','Mercado Oriental'];
+  const zonesList = ['Todos',...Object.keys(centers)];
   document.getElementById('zoneChips').innerHTML = zonesList.map(z => `<button class="chip ${z===selectedZone?'active':''}" data-zone="${z}">${z}</button>`).join('');
   document.querySelectorAll('[data-zone]').forEach(btn => btn.addEventListener('click', () => {
     selectedZone = btn.dataset.zone;
@@ -1642,7 +1722,7 @@ async function searchTextPlaces(Place,request,query,runId){
       language:'es',
       region:'ni',
       locationBias:{center:request.location,radius:request.radius},
-      maxResultCount:20,
+       maxResultCount:Math.min(20,Math.max(1,Number(request.resultLimit)||20)),
     });
     return Array.isArray(places) ? places : [];
   }catch(error){
@@ -1650,6 +1730,27 @@ async function searchTextPlaces(Place,request,query,runId){
     console.warn('Nova Places searchByText',error);
     return [];
   }
+}
+function buildNovaDiscoveryPlan(normalizedQuery,visibleOnly){
+  const cursor=Number(readStore(NOVA_SEARCH_CURSOR_KEY,0)) || 0;
+  const currentCenter=googleMap.getCenter();
+  const currentArea={name:selectedZone==='Todos'?'vista actual':selectedZone,center:[currentCenter?.lat?.() ?? 12.115,currentCenter?.lng?.() ?? -86.26],radius:15000};
+  if(visibleOnly){
+    const queries=normalizedQuery ? [normalizedQuery] : Array.from({length:5},(_,index)=>NOVA_DISCOVERY_QUERIES[(cursor+index)%NOVA_DISCOVERY_QUERIES.length]);
+    localStorage.setItem(NOVA_SEARCH_CURSOR_KEY,String((cursor+queries.length)%NOVA_DISCOVERY_QUERIES.length));
+    return queries.map(query=>({area:currentArea,query}));
+  }
+  const fixedArea=NOVA_DISCOVERY_AREAS.find(area=>area.name===selectedZone);
+  if(fixedArea){
+    const queries=normalizedQuery ? [normalizedQuery] : Array.from({length:5},(_,index)=>NOVA_DISCOVERY_QUERIES[(cursor+index)%NOVA_DISCOVERY_QUERIES.length]);
+    localStorage.setItem(NOVA_SEARCH_CURSOR_KEY,String((cursor+queries.length)%NOVA_DISCOVERY_QUERIES.length));
+    return queries.map(query=>({area:fixedArea,query}));
+  }
+  const areaCount=NOVA_DISCOVERY_AREAS.length;
+  const areas=Array.from({length:areaCount},(_,index)=>NOVA_DISCOVERY_AREAS[(cursor+index)%NOVA_DISCOVERY_AREAS.length]);
+  localStorage.setItem(NOVA_SEARCH_CURSOR_KEY,String(cursor+1));
+  const resultLimit=Math.ceil(GOOGLE_SEARCH_MAX_RESULTS/areaCount);
+  return areas.map((area,index)=>({area,query:normalizedQuery || NOVA_DISCOVERY_QUERIES[(cursor+index)%NOVA_DISCOVERY_QUERIES.length],resultLimit}));
 }
 async function searchGooglePlaces(query='', options={}){
   const force=options.force===true;
@@ -1662,26 +1763,27 @@ async function searchGooglePlaces(query='', options={}){
   const cache=force ? null : readGoogleCache(normalizedQuery,bounds);
   if(cache){
     const before=googlePlaces.length;
+    const cachedBusinesses=cache.map(googlePlaceBiz).filter(Boolean);
     mergeGoogleResults(cache); mergeBusinesses(); populateFilters(); render();
+    await syncProspects(cachedBusinesses);
+    await loadRemoteProspects();
     setSearchStatus(`${Math.max(0,googlePlaces.length-before)} nuevos · ${googlePlaces.length} negocios Nova acumulados.`);
     [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false}); return;
   }
-  const queries=normalizedQuery ? [normalizedQuery] : ['logística y transporte','tiendas de ropa','ferreterías y construcción','agencias de marketing','farmacias y clínicas'];
+  const discoveryPlan=buildNovaDiscoveryPlan(normalizedQuery,visibleOnly);
   const collected=[];
   try{
     const placesLibrary=await novaMapsLibrary('places');
     const Place=placesLibrary?.Place;
     if(!Place?.searchByText)throw new Error('Place.searchByText no está disponible. Habilita Places API (New).');
-    setSearchStatus(`Nova está buscando ${queries.length} rubro${queries.length>1?'s':''}…`);
-    const center=googleMap.getCenter();
-    const centerLat=center?.lat?.() ?? 12.115;
-    const centerLng=center?.lng?.() ?? -86.26;
-    const area=selectedZone !== 'Todos' ? selectedZone : nearestZone(centerLat,centerLng);
-    for(let index=0;index<queries.length && collected.length<GOOGLE_SEARCH_MAX_RESULTS;index+=2){
-      const batch=queries.slice(index,index+2);
-      const responses=await Promise.all(batch.map(searchQuery=>{
-        const request={query:`${searchQuery} en ${area}, Nicaragua`,location:{lat:centerLat,lng:centerLng},radius:visibleOnly?15000:25000};
-        return searchTextPlaces(Place,request,searchQuery,runId);
+    const searchedAreas=[...new Set(discoveryPlan.map(item=>item.area.name))];
+    const areasLabel=searchedAreas.length>4 ? `${searchedAreas.slice(0,4).join(', ')} +${searchedAreas.length-4} zonas` : searchedAreas.join(', ');
+    setSearchStatus(`Nova está buscando ${discoveryPlan.length} sectores en ${areasLabel}…`);
+    for(let index=0;index<discoveryPlan.length && collected.length<GOOGLE_SEARCH_MAX_RESULTS;index+=2){
+      const batch=discoveryPlan.slice(index,index+2);
+      const responses=await Promise.all(batch.map(item=>{
+        const request={query:`${item.query} en ${item.area.name}, Nicaragua`,location:{lat:item.area.center[0],lng:item.area.center[1]},radius:item.area.radius,resultLimit:item.resultLimit};
+        return searchTextPlaces(Place,request,item.query,runId);
       }));
       responses.forEach(items=>{if(collected.length<GOOGLE_SEARCH_MAX_RESULTS)collected.push(...items.slice(0,GOOGLE_SEARCH_MAX_RESULTS-collected.length))});
     }
@@ -1694,8 +1796,10 @@ async function searchGooglePlaces(query='', options={}){
       mergeGoogleResults(uniqueRaw);
       localStorage.setItem(cachedGoogleKey(normalizedQuery,bounds),JSON.stringify({savedAt:Date.now(),data:mapped}));
       mergeBusinesses(); populateFilters(); render();
+      await syncProspects(mapped);
+      await loadRemoteProspects();
       const newCount=mapped.filter(place=>!previousIds.has(place.googlePlaceId)).length;
-      setSearchStatus(`${newCount} nuevos · ${googlePlaces.length} negocios Nova acumulados · ${area}.`);
+       setSearchStatus(`${newCount} nuevos · ${googlePlaces.length} negocios Nova acumulados · ${areasLabel}.`);
       toast(`${newCount} negocios nuevos encontrados`);
     }else{
       setSearchStatus('Nova no devolvió negocios para esa búsqueda. Prueba otro rubro o acerca el mapa.'); toast('Sin resultados');
@@ -1740,6 +1844,18 @@ function optimizeRoute(){
   }
   routeBusinesses=ordered;localStorage.setItem('novaFuerzaRouteV1',JSON.stringify(routeBusinesses.map(keyOf)));renderRoutePlanner();toast('Ruta ordenada por cercanía');
 }
+function drawRouteOnMap(){
+  if(!routeBusinesses.length){toast('Selecciona negocios para armar una ruta');return}
+  const path=routeBusinesses.map(b=>({lat:Number(b.lat),lng:Number(b.lng)})).filter(point=>Number.isFinite(point.lat)&&Number.isFinite(point.lng));
+  if(!path.length)return;
+  routePolyline?.setMap(null);
+  routePolyline=new google.maps.Polyline({map:googleMap,path,geodesic:true,strokeColor:'#08785a',strokeOpacity:.9,strokeWeight:4,zIndex:1100});
+  const bounds=new google.maps.LatLngBounds();
+  path.forEach(point=>bounds.extend(point));
+  if(path.length>1)googleMap.fitBounds(bounds,64);
+  document.getElementById('routeModal').hidden=true;
+  toast(`${path.length} paradas trazadas en Nova Maps`);
+}
 function openRouteInMaps(){
   if(!routeBusinesses.length)return;
   const destination=routeBusinesses[routeBusinesses.length-1];
@@ -1763,7 +1879,7 @@ function visitSelected(){
   toast('Capturando ubicación para la visita…');
   withLocationAccess(position=>{
     const now=new Date().toISOString(); chosen.forEach(b=>{const c=stateOf(b);c.visitedAt=now;c.visitLat=position.coords.latitude;c.visitLng=position.coords.longitude;c.stage='Visitado';c.kanban=true;followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:now}});
-    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render();syncProspects(chosen);toast(`${chosen.length} visitas registradas con ubicación`);
+    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));persistCommercial();render();void syncProspectsBatched(chosen);toast(`${chosen.length} visitas registradas con ubicación`);
   },'No se pudo obtener la ubicación para registrar las visitas');
 }
 function discardSelected(){
@@ -1812,7 +1928,7 @@ function setActiveView(view){
   const changed=activeView!==view;
   activeView=view;
   if(changed)document.getElementById('sheet')?.querySelector('.scroll')?.scrollTo({top:0,behavior:'auto'});
-  if(view==='map'){pipelineFilter='all';render();return}
+  if(view==='map'){pipelineFilter='all';render();loadSellerPresence();return}
   if(view==='kanban')pipelineFilter='kanban';
   updateView();
 }
@@ -1836,10 +1952,21 @@ function updateOfflineStatus(){
   if(!label)return;
   label.textContent=navigator.onLine?'Conectado · los cambios se sincronizan con NovaHub':'Modo offline · cambios, ubicación y evidencias quedan en cola local';
 }
-window.addEventListener('online',()=>{updateOfflineStatus();flushOutbox();loadRemoteProspects();loadSellerPresence();startPresenceWatch()});
+window.addEventListener('online',()=>{updateOfflineStatus();flushOutbox().finally(()=>loadRemoteProspects());loadSellerPresence();startPresenceWatch()});
 window.addEventListener('offline',updateOfflineStatus);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&navigator.onLine){loadSellerPresence();startPresenceWatch()}else if(document.visibilityState!=='visible')stopPresenceWatch()});
-window.setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)loadSellerPresence()},15000);
+window.setInterval(()=>{
+    if(document.visibilityState!=='visible'||!navigator.onLine)return;
+    loadSellerPresence();
+    if(Date.now()-lastOutboxFlushAt>=10000){
+      lastOutboxFlushAt=Date.now();
+      flushOutbox().finally(()=>loadRemoteProspects());
+    }
+    if(Date.now()-lastRemoteRefreshAt>=12000){
+      lastRemoteRefreshAt=Date.now();
+      loadRemoteProspects();
+    }
+  },4000);
 
 const sheet = document.getElementById('sheet');
 const toggle = document.getElementById('mobileSheetToggle');
@@ -1907,10 +2034,10 @@ updateToggle();
 populateFilters();
 render();
 updateOfflineStatus();
-setTimeout(() => { loadAssignees(); loadRemoteProspects().finally(() => flushOutbox().finally(() => {
+setTimeout(() => { loadAssignees(); flushOutbox().finally(() => loadRemoteProspects()).finally(() => {
   setSearchStatus('Datos locales cargados. Pulsa Buscar zona para consultar negocios de Nova.');
   loadSellerPresence();
-})); }, 450);
+}); }, 450);
 }).catch(error => {
   console.warn('No se pudo iniciar Nova Maps',error);
   window.__novaShowMapError('Nova Maps no pudo iniciar. Verifica la clave, el dominio autorizado y vuelve a intentar.');
