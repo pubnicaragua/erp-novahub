@@ -9,6 +9,7 @@ import { pdfStatusLabel } from './pdfStatus';
 export interface PdfTemplateRenderSettings {
   paperSize: 'LETTER' | 'A4' | 'OFICIO' | 'LEGAL' | string;
   orientation: 'portrait' | 'landscape';
+  backgroundColor?: string;
   primaryColor?: string;
   secondaryColor?: string;
   textColor?: string;
@@ -880,7 +881,7 @@ function createNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfT
 
 function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRenderSettings, data: PdfTemplateData, width: number, height: number) {
   const page = document.createElement('div');
-  Object.assign(page.style, { position: 'relative', width: `${width}mm`, height: `${height}mm`, overflow: 'hidden', background: safeHtml2CanvasColor(definition.page.background, '#ffffff'), color: safeHtml2CanvasColor(settings.textColor, '#334155'), boxSizing: 'border-box' });
+  Object.assign(page.style, { position: 'relative', width: `${width}mm`, height: `${height}mm`, overflow: 'hidden', background: safeHtml2CanvasColor(settings.backgroundColor || definition.page.background, '#ffffff'), color: safeHtml2CanvasColor(settings.textColor, '#334155'), boxSizing: 'border-box' });
   const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.number || 1);
   const pageCount = Number((data.page as Record<string, unknown> | undefined)?.pages || 1);
   const hasRepeatableReportHeader = pageNumber > 1 && definition.nodes.some(item => item.enabled !== false && item.type !== 'report-sections' && !item.firstPageOnly && Number(item.y || 0) < 30);
