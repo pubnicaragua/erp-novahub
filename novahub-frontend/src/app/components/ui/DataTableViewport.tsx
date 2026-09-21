@@ -195,7 +195,7 @@ export function DataTableViewport({
       )}
       {splitTable && (
         <div
-          className="data-table-viewport__sticky-header sticky z-20 min-w-0 overflow-hidden border-b border-border/50 bg-card"
+          className="data-table-viewport__sticky-header sticky z-20 min-w-0 overflow-hidden border-b border-border/50 bg-card [&_[data-slot='table-container']]:!min-h-0 [&_[data-slot='table-container']]:!max-h-none [&_[data-slot='table-container']]:!overflow-y-visible"
           style={{ top: 'var(--table-sticky-top, 0px)', backgroundColor: 'var(--card)', backgroundClip: 'padding-box' }}
           data-sticky-table-header="true"
         >
@@ -217,7 +217,7 @@ export function DataTableViewport({
           'min-w-0 w-full flex-1 overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-primary/40 scrollbar-overlay',
           verticalScroll ? 'min-h-[36rem] max-h-[44rem] overflow-y-auto overscroll-y-auto' : 'min-h-0 overflow-y-auto',
           !allowPageScrollAtEdges && 'overscroll-contain',
-          '[&_[data-slot="table-container"]]:!w-max [&_[data-slot="table-container"]]:!min-w-full [&_[data-slot="table-container"]]:!max-w-none [&_[data-slot="table-container"]]:!overflow-visible',
+          '[&_[data-slot="table-container"]]:!w-max [&_[data-slot="table-container"]]:!min-w-full [&_[data-slot="table-container"]]:!max-w-none [&_[data-slot="table-container"]]:!overflow-visible [&_[data-slot="table-container"]]:!min-h-0 [&_[data-slot="table-container"]]:!max-h-none',
           tableClassName,
         )}
         style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y', overscrollBehaviorY: allowPageScrollAtEdges ? 'auto' : 'contain' }}

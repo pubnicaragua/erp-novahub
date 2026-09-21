@@ -1225,6 +1225,12 @@ th .column-filter-menu .column-filter-icon,
   max-width: 100%;
 }
 
+[data-table-viewport="true"] [data-slot="table-container"],
+[data-sticky-table-header="true"] [data-slot="table-container"] {
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
 [data-table-viewport-scroll="true"] {
   min-width: 0;
   max-width: 100%;
@@ -1788,7 +1794,7 @@ th .column-filter-menu .column-filter-icon,
   .subscriptions-module,
   .reports-module,
   .manager-shell
-) [data-slot="table-container"]:not(td [data-slot="table-container"]):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *),
+) [data-slot="table-container"]:not(td [data-slot="table-container"]):not([data-slot="dialog-content"] *):not([data-slot="sheet-content"] *):not([data-import-preview-shell] *):not([data-table-viewport="true"] *):not([data-sticky-table-header="true"] *),
 :where(
   .purchases-module,
   .inventory-module,
