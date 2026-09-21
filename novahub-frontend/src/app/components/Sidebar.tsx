@@ -242,7 +242,6 @@ const menuItems: MenuItem[] = [
       { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: <FileBarChart className="size-4" /> },
       { id: 'auditoria-facturas', label: 'Auditoría de Facturas', icon: <ClipboardCheck className="size-4" /> },
       { id: 'presupuestos', label: 'Presupuestos', icon: <Wallet className="size-4" /> },
-      { id: 'categorias-gastos', label: 'Categorías Gastos', icon: <Tags className="size-4" /> },
       { id: 'solicitudes-pago', label: 'Solicitudes de pago RR. HH.', icon: <ClipboardCheck className="size-4" /> },
       { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ]

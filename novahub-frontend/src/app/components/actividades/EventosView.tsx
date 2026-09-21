@@ -23,6 +23,7 @@ import { Label } from '../ui/label';
 import { Combobox } from '../ui/Combobox';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
+import { DateTimePickerField } from '../ui/DateTimePickerField';
 
 interface EventosViewProps {
   data: Event[];
@@ -382,10 +383,18 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
       toast.error('Revisa los correos de invitados; deben tener un formato válido.');
       return;
     }
+    if (newEvent.startDate && newEvent.endDate && newEvent.endDate < newEvent.startDate) {
+      toast.error('La fecha y hora de finalización debe ser posterior a la fecha de inicio');
+      return;
+    }
     try {
       const defaultDates = getDefaultEventDateRange();
       const startDate = newEvent.startDate ? new Date(newEvent.startDate).toISOString() : defaultDates.startDate;
       const endDate = newEvent.endDate ? new Date(newEvent.endDate).toISOString() : defaultDates.endDate;
+      if (new Date(endDate).getTime() <= new Date(startDate).getTime()) {
+        toast.error('La fecha de fin debe ser posterior a la fecha de inicio');
+        return;
+      }
       const created = await eventsService.create({
         title: newEvent.title.trim(),
         description: newEvent.description,
@@ -646,8 +655,39 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           <div className="grid gap-5 px-6 py-6 sm:px-8">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Título del evento</Label><Input autoFocus value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder="Ej. Reunión con clientes" className="h-11 rounded-xl bg-background" /></div>
-              <div className="space-y-2"><Label className="text-xs font-bold">Inicio</Label><Input type="datetime-local" value={newEvent.startDate} onChange={e => setNewEvent({ ...newEvent, startDate: e.target.value })} className="h-11 rounded-xl bg-background" /></div>
-              <div className="space-y-2"><Label className="text-xs font-bold">Fin</Label><Input type="datetime-local" value={newEvent.endDate} onChange={e => setNewEvent({ ...newEvent, endDate: e.target.value })} className="h-11 rounded-xl bg-background" /></div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold">Inicio</Label>
+                <DateTimePickerField
+                  value={newEvent.startDate}
+                  maxDate={newEvent.endDate || undefined}
+                  onChange={val => {
+                    setNewEvent(prev => {
+                      // Si la fecha de fin quedó antes del nuevo inicio, la adelantamos al nuevo inicio + 1 hora
+                      let nextEnd = prev.endDate;
+                      if (val && prev.endDate && prev.endDate < val) {
+                        try {
+                          const parsedStart = parseISO(val);
+                          const autoEnd = new Date(parsedStart.getTime() + 3600000);
+                          nextEnd = autoEnd.toISOString().slice(0, 16);
+                        } catch {
+                          nextEnd = val;
+                        }
+                      }
+                      return { ...prev, startDate: val, endDate: nextEnd };
+                    });
+                  }}
+                  placeholder="Fecha y hora de inicio"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold">Fin</Label>
+                <DateTimePickerField
+                  value={newEvent.endDate}
+                  minDate={newEvent.startDate || undefined}
+                  onChange={val => setNewEvent(prev => ({ ...prev, endDate: val }))}
+                  placeholder="Fecha y hora de finalización"
+                />
+              </div>
               <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Ubicación</Label><Input value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder="Sala, dirección o enlace virtual" className="h-11 rounded-xl bg-background" /></div>
               <div className="space-y-2 sm:col-span-2"><Label>Descripción / notas</Label><textarea value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="min-h-24 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20" placeholder="Objetivo, agenda y notas del evento" /></div>
               <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Invitados</Label><Input value={newEvent.guestEmails} onChange={e => setNewEvent({ ...newEvent, guestEmails: e.target.value })} placeholder="correo1@empresa.com, correo2@empresa.com" className="h-11 rounded-xl bg-background" /><p className="text-[10px] text-muted-foreground">Se guardan en el evento y se genera una invitación copiable al finalizar.</p></div>
