@@ -325,7 +325,10 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     try {
       setIsUpdatingAvatar(true);
       const uploaded = await storageService.uploadUserAvatar(avatarFile, user.id);
-      await api.patch('/auth/profile/avatar', { avatar: uploaded.url });
+      // Persist the storage reference and let the backend canonicalize it to
+      // the public URL of the `user_avatars` bucket. This also repairs older
+      // environments where the frontend and backend Supabase URLs differed.
+      await api.patch('/auth/profile/avatar', { avatar: uploaded.uri });
       await refreshProfile({ force: true });
       toast.success('Foto de perfil actualizada');
       setShowAvatarModal(false);
