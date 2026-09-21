@@ -19,6 +19,9 @@ import {
   TrendingUp,
   ArrowLeft,
   FileText,
+  Camera,
+  Loader2,
+  Trash2,
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -36,6 +39,8 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 
 
 import { useAuth, type Module } from '../contexts/AuthContext';
+import { api } from '../services/api';
+import { storageService } from '../services/storage.service';
 import { useNotifications } from '../hooks/useNotifications';
 import { navigateToNotification } from '../utils/notificationNavigation';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -136,7 +141,7 @@ function getNotificationDetail(
 }
 
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
-  const { user, logout, hasAccess, canPerform } = useAuth();
+  const { user, logout, hasAccess, canPerform, refreshProfile } = useAuth();
   const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
   const isBranchManagerSession = Boolean(isImpersonating && branch);
   const [dismissedSupervisorBranchId, setDismissedSupervisorBranchId] = useState<string | null>(null);
@@ -277,6 +282,63 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreview(null);
+      return undefined;
+    }
+    const previewUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [avatarFile]);
+
+  const closeAvatarModal = () => {
+    if (isUpdatingAvatar) return;
+    setShowAvatarModal(false);
+    setAvatarFile(null);
+  };
+
+  const saveAvatar = async (avatar: string | null) => {
+    if (!user?.id) return;
+    try {
+      setIsUpdatingAvatar(true);
+      await api.patch('/auth/profile/avatar', { avatar });
+      await refreshProfile({ force: true });
+      toast.success(avatar ? 'Foto de perfil actualizada' : 'Foto de perfil eliminada');
+      setShowAvatarModal(false);
+      setAvatarFile(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo actualizar la foto de perfil');
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
+  };
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile || !user?.id) return;
+    try {
+      setIsUpdatingAvatar(true);
+      const uploaded = await storageService.uploadUserAvatar(avatarFile, user.id);
+      // Persist the storage reference and let the backend canonicalize it to
+      // the public URL of the `user_avatars` bucket. This also repairs older
+      // environments where the frontend and backend Supabase URLs differed.
+      await api.patch('/auth/profile/avatar', { avatar: uploaded.uri });
+      await refreshProfile({ force: true });
+      toast.success('Foto de perfil actualizada');
+      setShowAvatarModal(false);
+      setAvatarFile(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo cargar la foto de perfil');
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
+  };
 
   const handleChangePassword = async () => {
     const passwordError = getPasswordError(newPassword);
@@ -802,6 +864,10 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 <span>Configuración</span>
               </DropdownMenuItem>
             )}
+            <DropdownMenuItem onClick={() => setShowAvatarModal(true)}>
+              <Camera className="mr-2 size-4 text-primary" />
+              <span>Foto de perfil</span>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowPasswordModal(true)}>
               <Lock className="mr-2 size-4 text-primary" />
               <span>Cambiar Contraseña</span>
@@ -892,6 +958,62 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             <Button variant="outline" onClick={() => setShowPasswordModal(false)} disabled={isUpdatingPassword}>Cancelar</Button>
             <Button onClick={handleChangePassword} disabled={isUpdatingPassword || !!getPasswordError(newPassword)} className="bg-primary text-primary-foreground">
               {isUpdatingPassword ? 'Guardando...' : 'Guardar Contraseña'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showAvatarModal} onOpenChange={(open) => open ? setShowAvatarModal(true) : closeAvatarModal()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Camera className="size-5 text-primary" /> Foto de perfil</DialogTitle>
+            <DialogDescription>
+              Es opcional. Si la agregas, aparecerá junto a tu nombre para identificarte en Nova Maps y en el ERP.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-4">
+            <Avatar className="size-28 rounded-full border-4 border-primary/20 shadow-sm">
+              <AvatarImage src={avatarPreview || user?.avatar} alt={user?.name || 'Foto de perfil'} className="object-cover" />
+              <AvatarFallback className="bg-primary text-2xl text-primary-foreground">{getAvatarInitials(user?.name)}</AvatarFallback>
+            </Avatar>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/avif"
+              capture="user"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.currentTarget.value = '';
+                if (!file) return;
+                if (!file.type.startsWith('image/')) {
+                  toast.error('Selecciona una imagen válida');
+                  return;
+                }
+                if (file.size > 10 * 1024 * 1024) {
+                  toast.error('La foto no puede superar 10 MB');
+                  return;
+                }
+                setAvatarFile(file);
+              }}
+            />
+            <p className="text-center text-xs text-muted-foreground">JPG, PNG, WebP o AVIF. NovaHub optimiza la imagen antes de guardarla.</p>
+            <div className="flex w-full flex-col gap-2 sm:flex-row">
+              <Button type="button" variant="outline" className="flex-1 gap-2" onClick={() => avatarInputRef.current?.click()} disabled={isUpdatingAvatar}>
+                <Camera className="size-4" /> Seleccionar foto
+              </Button>
+              {user?.avatar && (
+                <Button type="button" variant="ghost" className="gap-2 text-destructive hover:text-destructive" onClick={() => void saveAvatar(null)} disabled={isUpdatingAvatar}>
+                  <Trash2 className="size-4" /> Quitar
+                </Button>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeAvatarModal} disabled={isUpdatingAvatar}>Cancelar</Button>
+            <Button onClick={() => void handleAvatarUpload()} disabled={!avatarFile || isUpdatingAvatar} className="gap-2 bg-primary text-primary-foreground">
+              {isUpdatingAvatar ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
+              {isUpdatingAvatar ? 'Guardando…' : 'Guardar foto'}
             </Button>
           </DialogFooter>
         </DialogContent>
