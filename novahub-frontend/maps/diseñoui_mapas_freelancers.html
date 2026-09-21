@@ -341,9 +341,33 @@ window.__novaMapsReady = new Promise((resolve, reject) => {
  const params = new URLSearchParams(location.search);
  const key = params.get('mapsKey') || '';
 if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova en el frontend.'); reject(new Error('Nova Maps key missing')); return}
+ let settled = false;
+ let clusterStarted = false;
+ const loadClusterer = () => {
+  if(clusterStarted)return;
+  clusterStarted = true;
+  const clusterScript = document.createElement('script');
+  clusterScript.src = 'https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';
+  clusterScript.async = true;
+  clusterScript.onload = () => {window.__novaRefreshClusters?.()};
+  // El agrupador es opcional: Nova Maps debe poder pintar aunque ese CDN falle.
+  clusterScript.onerror = () => console.warn('Nova marker clustering unavailable; continuing without clustering');
+  document.head.appendChild(clusterScript);
+ };
+ const finish = () => {
+  if(settled)return;
+  if(window.google?.maps?.Map){
+   settled = true;
+   loadClusterer();
+   resolve();
+   return;
+  }
+  window.setTimeout(finish,50);
+ };
+ window.__novaMapsCallback = finish;
  const loadMaps = (attempt=0) => {
   const mapsScript = document.createElement('script');
-  mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places,marker&loading=async&v=weekly' + (attempt ? '&channel=novahub-retry-' + attempt : '');
+  mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places,marker&loading=async&callback=__novaMapsCallback&v=weekly' + (attempt ? '&channel=novahub-retry-' + attempt : '');
   mapsScript.async = true;
   mapsScript.defer = true;
   mapsScript.onerror = () => {
@@ -351,16 +375,7 @@ if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova e
    window.__novaShowMapError('No se pudo descargar Nova Maps. Revisa conexión, facturación y las restricciones HTTP de la clave.');
    reject(new Error('Nova Maps failed to load'));
   };
-  mapsScript.onload = () => {
-   resolve();
-   const clusterScript = document.createElement('script');
-   clusterScript.src = 'https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';
-   clusterScript.async = true;
-   clusterScript.onload = () => {window.__novaRefreshClusters?.()};
-   // El agrupador es opcional: Nova Maps debe poder pintar aunque ese CDN falle.
-   clusterScript.onerror = () => console.warn('Nova marker clustering unavailable; continuing without clustering');
-   document.head.appendChild(clusterScript);
-  };
+  mapsScript.onload = finish;
   document.head.appendChild(mapsScript);
  };
  loadMaps();
