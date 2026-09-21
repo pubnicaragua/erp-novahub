@@ -438,6 +438,10 @@ const NOVAHUB_ISOTIPO_URL = mapQuery.get('isotipo') || '';
 const CURRENT_USER_ID = mapQuery.get('userId') || '';
 const IS_PLATFORM_ADMIN = mapQuery.get('platformAdmin') === 'true';
 const CAN_DELETE_TEST = IS_PLATFORM_ADMIN;
+// Todos los usuarios que llegan a este módulo ya fueron autorizados por
+// Fuerza Comercial. La privacidad siempre es de la propia ubicación; nunca
+// permite administrar la presencia de otro vendedor.
+const CAN_SHARE_PRESENCE = true;
 const PRESENCE_STORAGE_KEY = `novaFuerzaPresenceSharingV1:${CURRENT_USER_ID || 'anonymous'}`;
 const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const GOOGLE_SEARCH_MAX_RESULTS = 100;
@@ -1488,8 +1492,8 @@ function updatePresenceToggle(){
   const button=document.getElementById('togglePresence');
   const privacy=document.getElementById('locationPrivacy');
   const settings=document.getElementById('locationSettings');
-  if(privacy)privacy.hidden=!CAN_DELETE_TEST;
-  if(settings)settings.hidden=!CAN_DELETE_TEST;
+  if(privacy)privacy.hidden=!CAN_SHARE_PRESENCE;
+  if(settings)settings.hidden=!CAN_SHARE_PRESENCE;
   if(!button)return;
   button.textContent=presenceSharingEnabled?'Ocultar mi ubicación':'Mostrar mi ubicación';
   button.title=presenceSharingEnabled?'Tu última ubicación puede verse por vendedores autorizados':'Tu ubicación está oculta para otros vendedores';
