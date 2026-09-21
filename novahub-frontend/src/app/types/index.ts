@@ -26,6 +26,7 @@ export interface ApiFilters {
   codes?: string;
   categoryId?: string;
   brand?: string;
+  stockStatus?: string;
   trackBatch?: boolean;
   type?: string;
   warehouseId?: string;

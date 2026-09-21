@@ -8,6 +8,7 @@ import { TareasView } from './actividades/TareasView';
 import { EventosView } from './actividades/EventosView';
 import { RecordatoriosView } from './actividades/RecordatoriosView';
 import { BitacoraView } from './actividades/BitacoraView';
+import { ActividadesCalendarioView } from './actividades/ActividadesCalendarioView';
 import { tasksService, eventsService, remindersService, activityLogsService } from '../services/actividades.service';
 import { useAuth } from '../contexts/AuthContext';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
@@ -29,7 +30,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
   // Cada pestaña consulta solo sus datos cuando se activa. React Query conserva
   // los resultados por tenant y aborta la petición anterior al cambiar rápido.
   const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks'], signal => tasksService.getAll(signal), {
-    enabled: activeTab === 'tareas' && canPerform('ACTIVITIES_TASKS', 'view'),
+    enabled: (activeTab === 'tareas' || activeTab === 'calendario') && canPerform('ACTIVITIES_TASKS', 'view'),
   });
   const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => eventsService.getAll(signal), {
     enabled: ['eventos', 'calendario', 'reuniones'].includes(activeTab)
@@ -146,7 +147,19 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
-                {['eventos', 'calendario', 'reuniones'].includes(activeTab) && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
+                {['eventos', 'reuniones'].includes(activeTab) && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'calendario' && (
+                  <ActividadesCalendarioView
+                    eventos={data.eventos}
+                    tareas={data.tareas}
+                    loading={loading}
+                    onRefresh={fetchData}
+                    onNewEventClick={() => {
+                      setInternalActiveTab('eventos');
+                      onSubModuleChange?.('eventos');
+                    }}
+                  />
+                )}
                 {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} />}
               </motion.div>

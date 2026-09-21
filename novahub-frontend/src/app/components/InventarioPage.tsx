@@ -123,6 +123,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const [movementFilters, setMovementFilters] = useState({ type: 'all', warehouseId: 'all', from: '', to: '' });
   const [productFilters, setProductFilters] = useState<Record<string, { categoryIds: string[]; warehouseIds: string[] }>>({});
   const [productBrandFilters, setProductBrandFilters] = useState<Record<string, string>>({});
+  const [productStockStatusFilters, setProductStockStatusFilters] = useState<Record<string, string>>({});
   const [productScope, setProductScope] = useState<'branch' | 'linkedWarehouses'>('branch');
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
   const [productTarget, setProductTarget] = useState<{ id?: string; code?: string; stockFilter?: 'all' | 'available' | 'low' | 'out' | 'expiring' } | null>(null);
@@ -150,8 +151,16 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     setProductBrandFilters((current) => ({ ...current, [section]: value }));
     updatePage(section, 1);
   };
+  const updateProductStockStatusFilter = (section: string, value: string) => {
+    setProductStockStatusFilters((current) => ({ ...current, [section]: value }));
+    updatePage(section, 1);
+  };
   const searchFor = (section: string) => debouncedSearchState[section]?.trim() || undefined;
   const statusFor = (section: string) => statusState[section] && statusState[section] !== 'ALL' && statusState[section] !== 'all' ? statusState[section] : undefined;
+  const stockStatusFor = (section: string) => {
+    const val = productStockStatusFilters[section];
+    return val && val !== 'all' ? val : undefined;
+  };
   const productStatusFor = (section: string): ProductStatusFilter => {
     const status = String(statusState[section] || 'ALL').toUpperCase();
     return status === 'ACTIVE' || status === 'INACTIVE' ? status : 'ALL';
@@ -240,7 +249,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   } as const;
   const productsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productBrandFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], selectedBranchId, productScopeWarehouseIds.join(',')],
+    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], productBrandFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], stockStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), selectedBranchId, productScopeWarehouseIds.join(',')],
     queryFn: ({ signal }) => {
       const section = activeTab === 'servicios' ? 'servicios' : 'productos';
       const page = pageFor(section);
@@ -261,7 +270,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : []),
           ])]
           : []);
-      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
+      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), stockStatus: stockStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
     },
     // Espera a que el alcance de sucursal y sus bodegas vinculadas estén
     // resueltos. Así evita pintar una página sin alcance y volver a pedirla
@@ -696,6 +705,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                         brandFilter={productBrandFilters.productos || ''}
                         productStatusFilter={productStatusFor('productos')}
                         onProductStatusFilterChange={(value) => updateStatus('productos', value)}
+                        stockStatusFilter={productStockStatusFilters.productos || ''}
+                        onStockStatusChange={(value) => updateProductStockStatusFilter('productos', value)}
                         targetProductId={productTarget?.id}
                         initialStockFilter={productTarget?.stockFilter}
                         onClearTargetProduct={() => setProductTarget(null)}
