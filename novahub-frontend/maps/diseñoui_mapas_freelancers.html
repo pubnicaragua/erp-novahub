@@ -20,8 +20,8 @@ button,input,select,textarea{font:inherit}
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sheet);background:rgba(251,253,252,.985);border-right:1px solid rgba(16,71,57,.11);display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(12,53,43,.16);z-index:1000}
 .brand{padding:18px;background:radial-gradient(circle at 82% 12%,rgba(96,225,178,.28),transparent 34%),linear-gradient(145deg,#0b2f29,#08705a);color:white}
 .topline{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.logo{display:flex;align-items:center;gap:9px;font-weight:800}
-.logoicon{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d;overflow:hidden}.logoicon img{width:100%;height:100%;object-fit:contain;padding:4px}
+.logo{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800}
+.logoicon{width:29px;height:29px;border-radius:9px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d;overflow:hidden}.logoicon img{width:100%;height:100%;object-fit:contain;padding:3px}
 .badge{font-size:9px;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 8px;background:rgba(255,255,255,.10)}
 .brand h1{font-size:21px;line-height:1.15;margin:14px 0 6px;letter-spacing:-.5px}
 .brand p{font-size:10px;line-height:1.5;margin:0;color:rgba(255,255,255,.75)}
@@ -59,6 +59,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .primary{background:linear-gradient(135deg,#087858,#12a779);color:white}
 .secondary{background:#e9f4f0;color:#0b7055;border:1px solid #d5e9e1}
 .view-tabs{display:none;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border:1px solid #d7e8e1;border-radius:12px;background:#eff7f3;margin:0 0 10px}.view-tabs button{border:0;border-radius:9px;background:transparent;color:#62756e;padding:9px 4px;font-size:9px;font-weight:800;cursor:pointer}.view-tabs button.active{background:white;color:#08785a;box-shadow:0 3px 10px rgba(18,73,59,.11)}
+.workspace-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 10px;padding:4px 2px}.workspace-heading[hidden]{display:none}.workspace-heading b{font-size:17px;color:var(--ink)}.workspace-heading span{font-size:8px;color:var(--muted)}
+.workspace-kanban .scroll>.kpis,.workspace-kanban .scroll>.seller-summary,.workspace-history .scroll>.kpis,.workspace-history .scroll>.seller-summary{display:none}.workspace-kanban .search-row,.workspace-kanban .search-meta,.workspace-kanban .sect,.workspace-kanban .actions,.workspace-kanban .bulkbar,.workspace-kanban .resultsHead,.workspace-history .search-row,.workspace-history .search-meta,.workspace-history .sect,.workspace-history .actions,.workspace-history .bulkbar,.workspace-history .resultsHead{display:none}.workspace-kanban .view-tabs,.workspace-history .view-tabs{margin-bottom:10px}.workspace-kanban .kanban-board,.workspace-history .history-list{margin-top:0}
 .resultsHead{display:flex;justify-content:space-between;align-items:center;margin:14px 2px 7px;font-size:9px;color:var(--muted)}
 .resultsHead b{font-size:10.5px;color:var(--ink)}
 .list{display:flex;flex-direction:column;gap:6px}
@@ -105,7 +107,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .quick-heading{font-size:9px;font-weight:800;color:#123f35;margin-bottom:4px}.evidence-preview{display:flex;align-items:center;gap:7px;margin:3px 0 6px;padding:5px;border:1px solid #dce8e3;border-radius:8px;background:#f7fbf9}.evidence-preview[hidden]{display:none}.evidence-preview img{width:42px;height:42px;object-fit:cover;border-radius:6px}.evidence-preview span{font-size:8px;color:#526a60;line-height:1.35}.advanced-crm{margin-top:7px;border-top:1px solid #e4ece9;padding-top:7px}.advanced-crm summary{cursor:pointer;color:#0b7155;font-size:8px;font-weight:800}.advanced-crm .advanced-content{padding-top:6px}
 .bulkbar{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:10px 0 3px;padding:8px;border-radius:12px;background:#edf7f2;border:1px solid #d5e9e1}.bulkbar b{font-size:9px;margin-right:auto}.bulkbar button{border:0;border-radius:8px;padding:6px 7px;background:white;color:#0b7155;font-size:8px;font-weight:800;cursor:pointer}.bulkbar button:hover{background:#d7f0e6}.item-actions{display:flex;gap:5px;margin-top:7px}.item-actions button{flex:1;padding:6px 4px}.item.selected-item{border-color:#4a9be4;background:#f5faff}.item.kanban-item{border-color:#77caa7}.item .check{accent-color:#08785a;width:15px;height:15px;margin-top:4px}.show-more-results{width:100%;border:1px solid #bfe2d4;border-radius:10px;background:#f2faf6;color:#08785a;padding:9px;font-size:9px;font-weight:800;cursor:pointer}
 .toast{position:fixed;z-index:2000;left:50%;bottom:22px;transform:translate(-50%,18px);opacity:0;background:#153d35;color:white;padding:10px 13px;border-radius:11px;font-size:9px;transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
-.quick-capture{position:fixed;z-index:1900;left:calc(var(--sheet) + 18px);bottom:18px;width:min(390px,calc(100vw - var(--sheet) - 36px));padding:15px;border:1px solid #bfe2d4;border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 18px 45px rgba(12,53,43,.24)}.quick-capture[hidden]{display:none}.quick-capture h2{margin:0;font-size:14px}.quick-capture p{margin:4px 0 10px;color:#6c7c77;font-size:9px}.quick-capture-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.quick-capture-grid input{min-width:0}.quick-capture input{width:100%;height:40px;border:1px solid #dce8e3;border-radius:10px;padding:0 10px;font-size:11px;outline:none}.quick-capture input:focus{border-color:#12aa7b;box-shadow:0 0 0 3px rgba(18,170,123,.12)}.quick-capture-actions{display:flex;gap:7px;margin-top:10px}.quick-capture-actions button{flex:1;border:0;border-radius:10px;padding:10px 8px;font-size:9px;font-weight:800;cursor:pointer}.quick-capture-actions .cancel{background:#edf5f1;color:#537068}.quick-capture-actions .save{background:#08785a;color:white}
+.quick-capture{position:fixed;z-index:1900;left:calc(var(--sheet) + 18px);bottom:18px;width:min(390px,calc(100vw - var(--sheet) - 36px));padding:15px;border:1px solid #bfe2d4;border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 18px 45px rgba(12,53,43,.24)}.quick-capture[hidden]{display:none}.quick-capture h2{margin:0;font-size:14px}.quick-capture p{margin:4px 0 10px;color:#6c7c77;font-size:9px}.quick-capture-grid{display:grid;grid-template-columns:1fr;gap:7px}.quick-capture input{width:100%;height:40px;border:1px solid #dce8e3;border-radius:10px;padding:0 10px;font-size:11px;outline:none}.quick-capture input:focus{border-color:#12aa7b;box-shadow:0 0 0 3px rgba(18,170,123,.12)}.quick-capture-photo{display:flex;align-items:center;gap:8px;margin:8px 0;padding:6px;border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9}.quick-capture-photo[hidden]{display:none}.quick-capture-photo img{width:56px;height:56px;border-radius:8px;object-fit:cover}.quick-capture-photo span{flex:1;font-size:8px;color:#526a60}.quick-capture-photo button{border:0;background:transparent;color:#08785a;font-size:8px;font-weight:800;cursor:pointer}.quick-capture-actions{display:flex;gap:7px;margin-top:10px}.quick-capture-actions button{flex:1;border:0;border-radius:10px;padding:10px 8px;font-size:9px;font-weight:800;cursor:pointer}.quick-capture-actions button:disabled{opacity:.45;cursor:not-allowed}.quick-capture-actions .cancel{background:#edf5f1;color:#537068}.quick-capture-actions .camera{background:#e5f5ed;color:#08785a}.quick-capture-actions .save{background:#08785a;color:white}
 .primary-float{background:#08785a;color:white;border-color:#08785a}.standalone-view #map{display:none}.standalone-view .sidebar{left:0;top:0;bottom:0;width:100%;border:0;border-radius:0;box-shadow:none}.standalone-view .sidebar .scroll{width:min(1180px,100%);margin:0 auto}.standalone-view .fabbar,.standalone-view .quick-capture{display:none}.map-fullscreen #map{left:0;width:100vw}.map-fullscreen .fabbar{left:14px}.map-fullscreen:not(.standalone-view) .sidebar{display:none}.map-fullscreen .legend{right:14px}.fullscreen-float{min-width:32px;padding:8px 9px;font-size:14px}.modal-backdrop{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:18px;background:rgba(8,31,25,.42);backdrop-filter:blur(4px)}.modal-backdrop[hidden]{display:none}.confirm-modal{width:min(430px,100%);border:1px solid #d6e7df;border-radius:20px;background:#fff;padding:19px;box-shadow:0 24px 70px rgba(8,42,32,.28)}.confirm-modal h2{margin:0;color:#123f35;font-size:16px}.confirm-modal p{margin:6px 0 14px;color:#64766f;font-size:10px;line-height:1.5}.confirm-modal label{display:block;color:#51655e;font-size:9px;font-weight:800;margin:10px 0 5px}.confirm-modal select,.confirm-modal textarea{width:100%;border:1px solid #dce8e3;border-radius:10px;background:#fbfdfc;padding:9px;font-size:10px}.confirm-modal textarea{min-height:64px;resize:vertical}.confirm-modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:15px}.confirm-modal-actions button{border:0;border-radius:10px;padding:10px 13px;font-size:9px;font-weight:800;cursor:pointer}.confirm-modal-actions .cancel{background:#edf5f1;color:#537068}.confirm-modal-actions .danger{background:#b63849;color:white}
 .evidence-modal-media{display:grid;place-items:center;min-height:120px;margin-top:12px;border-radius:12px;overflow:hidden;background:#f0f6f3}.evidence-modal-media img{display:block;max-width:100%;max-height:56vh;object-fit:contain}.evidence-modal-media iframe{width:100%;height:58vh;border:0}.evidence-modal-media a{color:#08785a;font-size:11px;font-weight:800;padding:25px}.confirm-modal-actions .save{background:#08785a;color:white}
 .route-stops{display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow:auto;margin-top:10px}.route-stop{display:flex;align-items:center;gap:8px;border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9;padding:8px}.route-stop b{font-size:10px;color:#123f35}.route-stop span{display:block;color:#6c7c77;font-size:8px}.route-stop .route-number{width:22px;height:22px;display:grid;place-items:center;border-radius:7px;background:#d8eee5;color:#08785a;font-size:9px;font-weight:800}
@@ -127,7 +129,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .brand{padding:10px 14px 11px;border-radius:22px 22px 0 0}
  .brand h1{font-size:15px;margin:8px 0 2px}
  .brand p{font-size:9px}
- .logoicon{width:31px;height:31px;border-radius:10px}
+ .logo{font-size:10px;gap:6px}.logoicon{width:25px;height:25px;border-radius:8px}
  .badge{font-size:7.5px;padding:5px 7px}
  .scroll{padding:10px 11px 18px}
  .kpis{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.kpis::-webkit-scrollbar{display:none}.kpi{flex:0 0 84px;padding:7px 6px;border-radius:11px}.kpi b{font-size:15px}.kpi span{font-size:7px}
@@ -139,11 +141,11 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .view-tabs{display:grid}.actions #kanbanToggle,.actions #historyToggle{display:none}
  .item{padding:10px}.itemname{font-size:11px}.meta{font-size:8.5px}.kanban-board{grid-template-columns:1fr 1fr}.kanban-column{padding:6px}
  .fabbar{left:10px;top:calc(env(safe-area-inset-top) + 10px);right:10px;justify-content:space-between}
- .float{font-size:8.5px}
+ .float{font-size:8px;padding:6px 8px;border-radius:10px}.fabbar{gap:5px}.fabbar #summary{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .legend{display:none}
  .toast{bottom:145px}
  .popup{min-width:0;max-width:calc(100vw - 42px)}.popup h3{font-size:15px}.grid{font-size:9px}.crm label{font-size:8px}.crm select,.crm input,.crm textarea{font-size:10px;padding:8px}.crm textarea{height:52px}.crm button{font-size:9.5px;padding:9px}.advanced-crm summary{font-size:9px}
- .quick-capture{left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 12px);width:auto}.quick-capture-grid{grid-template-columns:1fr}.fullscreen-float{font-size:12px}
+ .quick-capture{left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 12px);width:auto}.fullscreen-float{font-size:12px}.workspace-heading b{font-size:15px}
 }
 @media(max-width:390px){
  .filters{grid-template-columns:1fr}
@@ -190,6 +192,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
    <button data-view="kanban" type="button">Kanban</button>
    <button data-view="history" type="button">Historial</button>
   </div>
+  <div class="workspace-heading" id="workspaceHeading" hidden><b id="workspaceHeadingTitle"></b><span id="workspaceHeadingMeta"></span></div>
 
   <div class="search-row">
    <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar en Google Places">⌕</button></div>
@@ -219,6 +222,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <div class="actions">
    <button class="btn primary" id="refresh">↻ Actualizar Google Places</button>
    <button class="btn secondary" id="export">↓ Exportar CSV</button>
+   <button class="btn secondary" id="zoneManager">▦ Zonas y vendedores</button>
    <button class="btn secondary" id="opportunities">✦ Ver oportunidades</button>
    <button class="btn secondary" id="kanbanToggle">▦ Ver Kanban</button>
    <button class="btn secondary" id="historyToggle">◷ Ver historial</button>
@@ -255,13 +259,9 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <div class="quick-capture" id="quickCapture" hidden>
  <h2>Nuevo negocio en este punto</h2>
  <p id="quickCaptureLocation">Coordenada capturada</p>
- <div class="quick-capture-grid">
-  <input id="quickCaptureName" type="text" maxlength="180" placeholder="Nombre del negocio *" required>
-  <input id="quickCaptureOwner" type="text" maxlength="120" placeholder="Dueño o decisor">
-  <input id="quickCaptureContact" type="text" maxlength="120" placeholder="Persona de contacto">
-  <input id="quickCapturePhone" type="tel" maxlength="40" placeholder="Teléfono / WhatsApp">
- </div>
- <div class="quick-capture-actions"><button class="cancel" id="quickCaptureCancel" type="button">Cancelar</button><button class="save" id="quickCaptureSave" type="button">Guardar y tomar foto</button></div>
+ <div class="quick-capture-photo" id="quickCapturePhoto" hidden><img id="quickCapturePhotoImage" alt="Evidencia del nuevo negocio"><span id="quickCapturePhotoName">Foto lista para guardar</span><button id="quickCaptureRetake" type="button">Cambiar</button></div>
+ <div class="quick-capture-grid"><input id="quickCaptureName" type="text" maxlength="180" placeholder="Nombre del negocio *" required></div>
+ <div class="quick-capture-actions"><button class="cancel" id="quickCaptureCancel" type="button">Cancelar</button><button class="camera" id="quickCaptureTakePhoto" type="button">Tomar foto</button><button class="save" id="quickCaptureSave" type="button" disabled>Guardar negocio</button></div>
 </div>
 <div class="modal-backdrop" id="discardModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="discardTitle">
@@ -296,6 +296,18 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <div class="confirm-modal-actions"><button class="save" id="routeSave" type="button">Guardar y asignar ruta</button></div>
  </div>
 </div>
+<div class="modal-backdrop" id="zoneModal" hidden>
+ <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="zoneTitle">
+  <h2 id="zoneTitle">Zonas y vendedores</h2>
+  <p>Visualiza las zonas operativas y asigna sus prospectos cargados a un vendedor. Las zonas son operativas y se guardan en los prospectos del ERP.</p>
+  <label for="zoneAssignmentZone">Zona comercial</label>
+  <select id="zoneAssignmentZone"></select>
+  <label for="zoneAssignmentAssignee">Vendedor responsable</label>
+  <select id="zoneAssignmentAssignee"><option value="">Mi zona</option></select>
+  <div class="meta" id="zoneAssignmentSummary"></div>
+  <div class="confirm-modal-actions"><button class="cancel" id="zoneClose" type="button">Cerrar</button><button class="cancel" id="zoneTogglePolygons" type="button">Mostrar zonas</button><button class="save" id="zoneAssign" type="button">Asignar prospectos</button></div>
+ </div>
+</div>
 <div class="modal-backdrop" id="deleteModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
   <h2 id="deleteTitle">Eliminar prospecto de prueba</h2>
@@ -320,7 +332,7 @@ window.gm_authFailure = function(){
 <script>
 window.__novaMapsReady = new Promise((resolve, reject) => {
  const params = new URLSearchParams(location.search);
- const key = params.get('mapsKey') || 'AIzaSyCMwxArmM-BEJuxgbjOiON8KdH_IsNH1F4';
+ const key = params.get('mapsKey') || '';
  if(!key){window.__novaShowMapError('Falta configurar la clave de Google Maps en el frontend.'); reject(new Error('Google Maps key missing')); return}
  const mapsScript = document.createElement('script');
  mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places&loading=async';
@@ -360,8 +372,9 @@ const CAN_DELETE_TEST = mapQuery.get('platformAdmin') === 'true';
 const GOOGLE_CACHE_TTL = 6 * 60 * 60 * 1000;
 const GOOGLE_PAGE_DELAY = 2000;
 const GOOGLE_MAX_PAGES = 3;
+const GOOGLE_CATALOG_KEY = 'novaGooglePlacesCatalogV1';
 
-let googlePlaces = [];
+let googlePlaces = readStore(GOOGLE_CATALOG_KEY, []);
 let remoteProspects = [];
 let businesses = [...seed];
 let filtered = [];
@@ -376,9 +389,13 @@ let markerById = new Map();
 let userLocationMarker = null;
 let userLocationCircle = null;
 let pendingEvidenceBusinessId = null;
+let pendingQuickPointPhoto = false;
+let pendingQuickPointFile = null;
 let presenceMarkers = new Map();
 let assignees = [];
 let routeBusinesses = [];
+let zonePolygons = new Map();
+let zonesVisible = false;
 
 if(NOVAHUB_ISOTIPO_URL){
   const brandIcon=document.querySelector('.logoicon');
@@ -469,6 +486,47 @@ const cluster={
     }else this.markers.forEach(marker=>marker.setMap(googleMap));
   }
 };
+const zoneShapes={
+  Managua:[{lat:12.19,lng:-86.34},{lat:12.19,lng:-86.15},{lat:12.08,lng:-86.15},{lat:12.08,lng:-86.34}],
+  'Ciudad Sandino':[{lat:12.21,lng:-86.40},{lat:12.21,lng:-86.31},{lat:12.13,lng:-86.31},{lat:12.13,lng:-86.40}],
+  Veracruz:[{lat:12.11,lng:-86.23},{lat:12.11,lng:-86.15},{lat:12.01,lng:-86.15},{lat:12.01,lng:-86.23}],
+  'Carretera Norte':[{lat:12.20,lng:-86.25},{lat:12.20,lng:-86.13},{lat:12.12,lng:-86.13},{lat:12.12,lng:-86.25}],
+  'Carretera a Masaya':[{lat:12.14,lng:-86.29},{lat:12.14,lng:-86.19},{lat:12.03,lng:-86.19},{lat:12.03,lng:-86.29}],
+  'Mercado Oriental':[{lat:12.18,lng:-86.27},{lat:12.18,lng:-86.23},{lat:12.11,lng:-86.23},{lat:12.11,lng:-86.27}],
+};
+function clearZonePolygons(){zonePolygons.forEach(polygon=>polygon.setMap(null));zonePolygons.clear()}
+function renderZonePolygons(){
+  clearZonePolygons();
+  if(!zonesVisible)return;
+  Object.entries(zoneShapes).forEach(([zone,paths],index)=>{
+    const polygon=new google.maps.Polygon({map:googleMap,paths,strokeColor:index%2?'#0b8e69':'#2364d2',strokeOpacity:.68,strokeWeight:2,fillColor:index%2?'#0b8e69':'#2364d2',fillOpacity:.07,clickable:true,zIndex:2});
+    polygon.addListener('click',()=>{selectedZone=zone;document.querySelectorAll('[data-zone]').forEach(button=>button.classList.toggle('active',button.dataset.zone===zone));render();googleMap.fitBounds(new google.maps.LatLngBounds({lat:paths[3].lat,lng:paths[3].lng},{lat:paths[1].lat,lng:paths[1].lng}))});
+    zonePolygons.set(zone,polygon);
+  });
+}
+function populateZoneAssignment(){
+  const zoneSelect=document.getElementById('zoneAssignmentZone');
+  const assigneeSelect=document.getElementById('zoneAssignmentAssignee');
+  if(zoneSelect)zoneSelect.innerHTML=Object.keys(zoneShapes).map(zone=>`<option value="${esc(zone)}" ${zone===selectedZone?'selected':''}>${esc(zone)}</option>`).join('');
+  if(assigneeSelect)assigneeSelect.innerHTML='<option value="">Mi zona</option>' + assignees.map(item=>`<option value="${esc(item.id)}">${esc(item.name || item.email || 'Vendedor')}</option>`).join('');
+  const zone=zoneSelect?.value || selectedZone;
+  const count=businesses.filter(b=>b.zone===zone&&!isDiscarded(b)).length;
+  const summary=document.getElementById('zoneAssignmentSummary');
+  if(summary)summary.textContent=`${count} prospectos cargados en ${zone}. La asignación se aplica a los registros visibles en NovaHub.`;
+}
+function openZoneManager(){populateZoneAssignment();document.getElementById('zoneModal').hidden=false}
+async function assignZoneProspects(){
+  const zone=document.getElementById('zoneAssignmentZone')?.value || selectedZone;
+  const assigneeId=document.getElementById('zoneAssignmentAssignee')?.value || CURRENT_USER_ID || null;
+  const selected=businesses.filter(b=>b.zone===zone&&!isDiscarded(b));
+  if(!selected.length){toast('No hay prospectos cargados en esta zona');return}
+  selected.forEach(b=>{stateOf(b).assignedToId=assigneeId});
+  persistCommercial();
+  document.getElementById('zoneModal').hidden=true;
+  render();
+  await syncProspects(selected);
+  toast(`${selected.length} prospectos asignados a ${assigneeId ? 'un vendedor' : 'tu zona'}`);
+}
 
 function norm(s=''){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
@@ -685,13 +743,9 @@ function scoreFor(cat, tags={}){
 function mergeBusinesses(){
   const m = new Map();
   [...seed, ...localPoints, ...googlePlaces, ...remoteProspects].forEach(b => {
-    const key = norm(b.name) + '|' + norm(b.zone);
+    const key = b.googlePlaceId ? `google:${b.googlePlaceId}` : `record:${b.id || norm(b.name) + '|' + norm(b.zone)}`;
     if(!m.has(key)) m.set(key, b);
-    else if(b.source === 'Google Places'){
-      const old = m.get(key);
-      const source = old.source === b.source ? b.source : `${old.source} + ${b.source}`;
-      m.set(key, {...old, ...b, source});
-    }
+    else {const old=m.get(key);m.set(key,{...old,...b,source:old.source===b.source?b.source:`${old.source} + ${b.source}`})}
   });
   businesses = [...m.values()];
 }
@@ -788,6 +842,36 @@ function popupHtml(b){
 function findBusiness(id){return businesses.find(x=>x.id===id)}
 function findBusinessByKey(key){return businesses.find(x=>x.id===key || keyOf(x)===key)}
 let pendingPointCoords = null;
+function resetQuickCapture(){
+  pendingQuickPointPhoto=false;
+  pendingQuickPointFile=null;
+  const panel=document.getElementById('quickCapture');
+  const photo=document.getElementById('quickCapturePhoto');
+  const image=document.getElementById('quickCapturePhotoImage');
+  const save=document.getElementById('quickCaptureSave');
+  if(photo)photo.hidden=true;
+  if(image)image.removeAttribute('src');
+  if(save)save.disabled=true;
+  if(panel)panel.hidden=true;
+}
+function beginQuickPointCapture(){
+  const input=document.getElementById('quickEvidenceInput');
+  if(!input){toast('La cámara no está disponible en este dispositivo');return}
+  pendingQuickPointPhoto=true;
+  input.value='';
+  try{input.click()}catch(error){pendingQuickPointPhoto=false;toast('Pulsa Tomar foto para continuar')}
+}
+function renderQuickPointPhoto(file){
+  const photo=document.getElementById('quickCapturePhoto');
+  const image=document.getElementById('quickCapturePhotoImage');
+  const filename=document.getElementById('quickCapturePhotoName');
+  const save=document.getElementById('quickCaptureSave');
+  if(!photo||!image||!filename||!save)return;
+  image.src=URL.createObjectURL(file);
+  filename.textContent=`${file.name} · ${Math.round(file.size/1024)} KB`;
+  photo.hidden=false;
+  save.disabled=false;
+}
 function openQuickPointAt(lat,lng,source='mapa'){
   pendingPointCoords={lat:Number(lat),lng:Number(lng)};
   const panel=document.getElementById('quickCapture');
@@ -796,11 +880,10 @@ function openQuickPointAt(lat,lng,source='mapa'){
   if(!panel || !nameInput || !location)return;
   location.textContent=`${source === 'ubicación actual' ? 'Ubicación actual' : 'Punto seleccionado'} · ${pendingPointCoords.lat.toFixed(6)}, ${pendingPointCoords.lng.toFixed(6)}`;
   nameInput.value='';
-  document.getElementById('quickCaptureOwner').value='';
-  document.getElementById('quickCaptureContact').value='';
-  document.getElementById('quickCapturePhone').value='';
   panel.hidden=false;
-  window.setTimeout(()=>nameInput.focus(),80);
+  resetQuickCapture();
+  panel.hidden=false;
+  window.setTimeout(beginQuickPointCapture,80);
 }
 function openQuickPointFromDevice(){
   if(!navigator.geolocation){toast('Este dispositivo no permite obtener ubicación');return}
@@ -818,26 +901,23 @@ function saveQuickPoint(){
   const coords={...pendingPointCoords};
   const name=(nameInput?.value || '').trim();
   if(!name){nameInput?.focus();toast('Escribe el nombre del negocio para continuar');return}
-  const details={
-    ownerName:(document.getElementById('quickCaptureOwner')?.value || '').trim(),
-    contactName:(document.getElementById('quickCaptureContact')?.value || '').trim(),
-    contactPhone:(document.getElementById('quickCapturePhone')?.value || '').trim(),
-  };
+  if(!pendingQuickPointFile){toast('Toma primero la foto del negocio');return}
   pendingPointCoords=null;
-  createQuickPointAt(coords.lat,coords.lng,name,details);
+  createQuickPointAt(coords.lat,coords.lng,name,{},pendingQuickPointFile);
 }
-function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',details={}){
+function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',details={},evidenceFile=null){
   const coords={lat:Number(lat),lng:Number(lng)};
   if(!Number.isFinite(coords.lat)||!Number.isFinite(coords.lng))return;
   const id=`quick-${Date.now()}`;
   const name=customName || 'Negocio capturado en visita';
   const now=new Date().toISOString();
   const address='Punto capturado · ' + coords.lat.toFixed(6) + ', ' + coords.lng.toFixed(6);
-  const business={id,name,zone:nearestZone(coords.lat,coords.lng),category:'Prospecto por validar',address,source:'Captura móvil NovaHub',sourceUrl:'',lat:coords.lat,lng:coords.lng,precision:'Coordenada exacta capturada por el vendedor',score:0,priority:'C',owner:'Fuerza Comercial',phone:details.contactPhone || '',website:'',rating:null,reviews:0};
+  const business={id,name,zone:nearestZone(coords.lat,coords.lng),category:'Prospecto por validar',address,source:'Captura móvil NovaHub',sourceUrl:'',lat:coords.lat,lng:coords.lng,precision:'Coordenada exacta capturada por el vendedor',score:0,priority:'C',owner:'Fuerza Comercial',phone:'',website:'',rating:null,reviews:0};
   localPoints.unshift(business);
   localStorage.setItem('novaFuerzaLocalPointsV1',JSON.stringify(localPoints.slice(0,2000)));
-  const c=stateOf(business); Object.assign(c,{selected:true,kanban:true,stage:'Nuevo',visitedAt:now,visitLat:business.lat,visitLng:business.lng,ownerName:details.ownerName || '',contactName:details.contactName || '',contactPhone:details.contactPhone || ''});
-  followups[business.id]={status:'Visitado',updatedAt:now,note:[details.ownerName && 'Dueño/decisor: ' + details.ownerName,details.contactName && 'Contacto: ' + details.contactName].filter(Boolean).join(' · ') || 'Punto creado desde el mapa'};
+  const c=stateOf(business); Object.assign(c,{selected:true,kanban:true,stage:'Nuevo',visitedAt:now,visitLat:business.lat,visitLng:business.lng});
+  if(evidenceFile){c.evidenceName=evidenceFile.name;c.evidenceType=evidenceFile.type;c.evidencePending=true}
+  followups[business.id]={status:'Visitado',updatedAt:now,note:'Punto creado desde el mapa'};
   localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups));
   persistCommercial();
   mergeBusinesses(); populateFilters();
@@ -846,12 +926,13 @@ function createQuickPointAt(lat,lng,customName='Negocio capturado en visita',det
   activeView='map';
   updateView(); render();
   map.flyTo([business.lat,business.lng],17);
-  toast('Punto registrado · abre la cámara para agregar evidencia');
-  requestEvidenceCapture(business.id);
-  syncProspects([business]);
+  toast(evidenceFile?'Punto y foto guardados':'Punto registrado');
+  syncProspects([business],evidenceFile);
 }
 document.getElementById('newPoint').addEventListener('click',openQuickPointFromDevice);
-document.getElementById('quickCaptureCancel').addEventListener('click',()=>{document.getElementById('quickCapture').hidden=true;pendingPointCoords=null});
+document.getElementById('quickCaptureCancel').addEventListener('click',()=>{pendingPointCoords=null;resetQuickCapture()});
+document.getElementById('quickCaptureTakePhoto').addEventListener('click',beginQuickPointCapture);
+document.getElementById('quickCaptureRetake').addEventListener('click',beginQuickPointCapture);
 document.getElementById('quickCaptureSave').addEventListener('click',saveQuickPoint);
 document.getElementById('discardCancel').addEventListener('click',closeDiscardDialog);
 document.getElementById('discardConfirm').addEventListener('click',confirmDiscardDialog);
@@ -863,6 +944,12 @@ document.getElementById('routeOptimize').addEventListener('click',optimizeRoute)
 document.getElementById('routeOpenMaps').addEventListener('click',openRouteInMaps);
 document.getElementById('routeSave').addEventListener('click',()=>{void saveRouteAssignment()});
 document.getElementById('routeModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
+document.getElementById('zoneManager').addEventListener('click',openZoneManager);
+document.getElementById('zoneClose').addEventListener('click',()=>{document.getElementById('zoneModal').hidden=true});
+document.getElementById('zoneModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
+document.getElementById('zoneAssignmentZone').addEventListener('change',populateZoneAssignment);
+document.getElementById('zoneTogglePolygons').addEventListener('click',()=>{zonesVisible=!zonesVisible;renderZonePolygons();document.getElementById('zoneTogglePolygons').textContent=zonesVisible?'Ocultar zonas':'Mostrar zonas'});
+document.getElementById('zoneAssign').addEventListener('click',()=>{void assignZoneProspects()});
 document.getElementById('deleteCancel').addEventListener('click',()=>{pendingDeleteId=null;document.getElementById('deleteModal').hidden=true});
 document.getElementById('deleteConfirm').addEventListener('click',()=>{void confirmDeleteBusiness()});
 document.getElementById('deleteModal').addEventListener('click',event=>{if(event.target===event.currentTarget){pendingDeleteId=null;event.currentTarget.hidden=true}});
@@ -1007,6 +1094,17 @@ function requestEvidenceCapture(id){
 document.getElementById('quickEvidenceInput')?.addEventListener('change',async event=>{
   const input=event.currentTarget;
   const file=input.files?.[0];
+  if(pendingQuickPointPhoto){
+    pendingQuickPointPhoto=false;
+    if(!file){toast('Toma una foto para registrar el punto');return}
+    if(!file.type.startsWith('image/')){toast('Para un punto nuevo toma una foto desde la cámara');return}
+    if(file.size>10*1024*1024){toast('La evidencia supera el límite de 10 MB');return}
+    pendingQuickPointFile=file;
+    document.getElementById('quickCapture').hidden=false;
+    renderQuickPointPhoto(file);
+    document.getElementById('quickCaptureName')?.focus();
+    return;
+  }
   const id=pendingEvidenceBusinessId;
   pendingEvidenceBusinessId=null;
   if(!file || !id)return;
@@ -1168,9 +1266,16 @@ function updateView(){
   const list=document.getElementById('list'); const board=document.getElementById('kanbanBoard'); const history=document.getElementById('historyView'); const toggle=document.getElementById('kanbanToggle');
   const mapView=activeView==='map'; const kanban=activeView==='kanban';
   document.body.classList.toggle('standalone-view',!mapView);
+  document.body.classList.toggle('workspace-kanban',kanban);
+  document.body.classList.toggle('workspace-history',!mapView&&!kanban);
   if(list)list.hidden=!mapView;
   if(board)board.hidden=!kanban;
   if(history)history.hidden=mapView||kanban;
+  const heading=document.getElementById('workspaceHeading');
+  const headingTitle=document.getElementById('workspaceHeadingTitle');
+  const headingMeta=document.getElementById('workspaceHeadingMeta');
+  if(heading){heading.hidden=mapView;if(headingTitle)headingTitle.textContent=kanban?'Kanban comercial':'Historial de visitas';if(headingMeta)headingMeta.textContent=kanban?'Prospectos asignados y etapas':'Visitas, notas y evidencias'}
+  if(!mapView)infoWindow.close();
   if(toggle)toggle.textContent=kanban?'▦ Volver al mapa':'▦ Ver Kanban';
   document.querySelectorAll('#viewTabs [data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===activeView));
   const sheet=document.getElementById('sheet');
@@ -1186,7 +1291,10 @@ function render(){
   filtered = businesses.filter(pass).sort((a,b)=>a.priority.localeCompare(b.priority)||b.score-a.score||a.name.localeCompare(b.name));
   cluster.clearLayers();
   markerById.clear();
-  filtered.forEach(b => {
+  const currentBounds=googleMap.getBounds?.();
+  const mapLimit=innerWidth<=820?400:800;
+  const mapBusinesses=filtered.filter(b=>!currentBounds || currentBounds.contains({lat:Number(b.lat),lng:Number(b.lng)})).slice(0,mapLimit);
+  mapBusinesses.forEach(b => {
     const m = L.marker([b.lat, b.lng], {icon: icon(b), title:b.name});
     m._b = b;
     m.bindPopup(() => popupHtml(b), {maxWidth:340});
@@ -1223,7 +1331,7 @@ function render(){
     if(!b) return;
     map.flyTo([b.lat, b.lng], 16, {duration:.65});
     if(innerWidth <= 820) document.getElementById('sheet').classList.add('collapsed');
-    setTimeout(() => markerById.get(b.id)?.openPopup(), 600);
+    setTimeout(() => {render();markerById.get(b.id)?.openPopup()}, 700);
   }));
   document.querySelectorAll('[data-action="select"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();toggleSelected(el.dataset.id)}));
   document.querySelectorAll('[data-action="kanban"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();addToKanban(el.dataset.id)}));
@@ -1233,7 +1341,7 @@ function render(){
 }
 function populateFilters(){
   const zonesList = ['Todos','Managua','Ciudad Sandino','Veracruz','Carretera Norte','Carretera a Masaya','Mercado Oriental'];
-  document.getElementById('zoneChips').innerHTML = zonesList.map(z => `<button class="chip ${z==='Todos'?'active':''}" data-zone="${z}">${z}</button>`).join('');
+  document.getElementById('zoneChips').innerHTML = zonesList.map(z => `<button class="chip ${z===selectedZone?'active':''}" data-zone="${z}">${z}</button>`).join('');
   document.querySelectorAll('[data-zone]').forEach(btn => btn.addEventListener('click', () => {
     selectedZone = btn.dataset.zone;
     document.querySelectorAll('[data-zone]').forEach(x => x.classList.toggle('active', x === btn));
@@ -1259,6 +1367,7 @@ function placesCategory(types=[],name=''){
   return 'Comercio / servicios';
 }
 function googlePlaceBiz(place){
+  if(place?.googlePlaceId && Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)))return place;
   const location=place.geometry?.location; if(!place.place_id||!location)return null;
   const lat=typeof location.lat==='function'?location.lat():location.lat;
   const lng=typeof location.lng==='function'?location.lng():location.lng;
@@ -1291,7 +1400,8 @@ function readGoogleCache(query,bounds){
 function mergeGoogleResults(items){
   const merged=new Map(googlePlaces.map(place=>[place.googlePlaceId,place]));
   items.map(googlePlaceBiz).filter(Boolean).forEach(place=>merged.set(place.googlePlaceId,place));
-  googlePlaces=[...merged.values()];
+  googlePlaces=[...merged.values()].slice(-2500);
+  localStorage.setItem(GOOGLE_CATALOG_KEY,JSON.stringify(googlePlaces));
 }
 function searchTextPage(service, request, query, runId){
   return new Promise(resolve=>{
@@ -1320,8 +1430,9 @@ async function searchGooglePlaces(query='', options={}){
   const normalizedQuery=query.trim(); const bounds=visibleOnly ? currentBounds() : null;
   const cache=force ? null : readGoogleCache(normalizedQuery,bounds);
   if(cache){
+    const before=googlePlaces.length;
     mergeGoogleResults(cache); mergeBusinesses(); populateFilters(); render();
-    setSearchStatus(`${cache.length} negocios cargados · pulsa Actualizar datos para consultar Google de nuevo.`);
+    setSearchStatus(`${Math.max(0,googlePlaces.length-before)} nuevos · ${googlePlaces.length} negocios Google acumulados.`);
     [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false}); return;
   }
   const service=new google.maps.places.PlacesService(googleMap);
@@ -1329,24 +1440,30 @@ async function searchGooglePlaces(query='', options={}){
   const collected=[];
   try{
     setSearchStatus(`Buscando ${queries.length} rubro${queries.length>1?'s':''} en Google Places…`);
-    const responses=await Promise.all(queries.map(searchQuery=>{
-      const request={query:`${searchQuery} en Managua, Nicaragua`,language:'es',region:'ni'};
-      const center=googleMap.getCenter();
-      if(bounds && center){request.location={lat:center.lat(),lng:center.lng()};request.radius=15000}
-      else {request.location={lat:12.115,lng:-86.26};request.radius=25000}
-      return searchTextPage(service,request,searchQuery,runId);
-    }));
-    responses.forEach(items=>collected.push(...items));
+    const center=googleMap.getCenter();
+    const centerLat=center?.lat?.() ?? 12.115;
+    const centerLng=center?.lng?.() ?? -86.26;
+    const area=selectedZone !== 'Todos' ? selectedZone : nearestZone(centerLat,centerLng);
+    for(let index=0;index<queries.length;index+=2){
+      const batch=queries.slice(index,index+2);
+      const responses=await Promise.all(batch.map(searchQuery=>{
+        const request={query:`${searchQuery} en ${area}, Nicaragua`,language:'es',region:'ni',location:{lat:centerLat,lng:centerLng},radius:visibleOnly?15000:25000};
+        return searchTextPage(service,request,searchQuery,runId);
+      }));
+      responses.forEach(items=>collected.push(...items));
+    }
     if(runId!==googleSearchRun)return;
     const uniqueRaw=[]; const seen=new Set();
     collected.forEach(place=>{if(place?.place_id&&!seen.has(place.place_id)){seen.add(place.place_id);uniqueRaw.push(place)}});
     const mapped=uniqueRaw.map(googlePlaceBiz).filter(Boolean);
     if(mapped.length){
+      const previousIds=new Set(googlePlaces.map(place=>place.googlePlaceId));
       mergeGoogleResults(uniqueRaw);
       localStorage.setItem(cachedGoogleKey(normalizedQuery,bounds),JSON.stringify({savedAt:Date.now(),data:mapped}));
       mergeBusinesses(); populateFilters(); render();
-      setSearchStatus(`${mapped.length} resultados nuevos · ${googlePlaces.length} negocios Google únicos cargados.`);
-      toast(`${mapped.length} negocios nuevos encontrados`);
+      const newCount=mapped.filter(place=>!previousIds.has(place.place_id)).length;
+      setSearchStatus(`${newCount} nuevos · ${googlePlaces.length} negocios Google acumulados · ${area}.`);
+      toast(`${newCount} negocios nuevos encontrados`);
     }else{
       setSearchStatus('Google Places no devolvió negocios para esa búsqueda. Prueba otro rubro o acerca el mapa.'); toast('Sin resultados de Google Places');
     }
@@ -1475,7 +1592,9 @@ document.getElementById('clearGoogleCache').addEventListener('click', () => {
 });
 document.getElementById('export').addEventListener('click', exportCSV);
 function setActiveView(view){
+  const changed=activeView!==view;
   activeView=view;
+  if(changed)document.getElementById('sheet')?.querySelector('.scroll')?.scrollTo({top:0,behavior:'auto'});
   if(view==='map'){pipelineFilter='all';render();return}
   if(view==='kanban')pipelineFilter='kanban';
   updateView();
