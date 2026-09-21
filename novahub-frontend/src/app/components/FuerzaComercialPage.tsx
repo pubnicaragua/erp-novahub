@@ -1,10 +1,13 @@
 import { MapPinned, ShieldAlert } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 import mapUrl from '../../../maps/diseñoui_mapas_freelancers.html?url';
 
 export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: string; onSubModuleChange?: (value: string) => void }) {
   const { user, hasAccess } = useAuth();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
   const isSuperAdmin = user?.role === 'superadmin';
   const isAuthorizedCollaborator = user?.userType === 'collaborator' && hasAccess('fuerza-comercial');
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -12,6 +15,20 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   const googleMapsMapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
   const view = activeSubModule === 'fuerza-comercial-kanban' ? 'kanban' : activeSubModule === 'fuerza-comercial-historial' ? 'history' : 'map';
   const mapSrc = `${mapUrl}${mapUrl.includes('?') ? '&' : '?'}api=${encodeURIComponent(apiBase)}&isotipo=${encodeURIComponent(isotipoUrl)}&view=${view}&userId=${encodeURIComponent(user?.id || '')}&platformAdmin=${isSuperAdmin ? 'true' : 'false'}&mapId=${encodeURIComponent(googleMapsMapId)}${googleMapsKey ? `&mapsKey=${encodeURIComponent(googleMapsKey)}` : ''}`;
+
+  useEffect(() => {
+    const onMapMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      if (event.data?.source !== 'novahub-force-sales' || event.data?.type !== 'fullscreen') return;
+      setMapFullscreen(Boolean(event.data.active));
+    };
+    window.addEventListener('message', onMapMessage);
+    return () => window.removeEventListener('message', onMapMessage);
+  }, []);
+
+  useEffect(() => {
+    setMapFullscreen(false);
+  }, [activeSubModule]);
 
   if (!isSuperAdmin && !isAuthorizedCollaborator) {
     return (
@@ -28,12 +45,13 @@ export function FuerzaComercialPage({ activeSubModule }: { activeSubModule?: str
   }
 
   return (
-    <section className="relative h-[calc(100dvh-4rem)] min-h-0 overflow-hidden bg-[#e8f0ed]">
+    <section className={mapFullscreen ? 'fixed inset-0 z-[100] h-[100dvh] min-h-0 overflow-hidden bg-[#e8f0ed]' : 'relative h-[calc(100dvh-4rem)] min-h-0 overflow-hidden bg-[#e8f0ed]'}>
       <div className="pointer-events-none absolute left-4 top-4 z-10 hidden items-center gap-2 rounded-2xl border border-white/70 bg-white/90 px-3 py-2 text-xs font-bold text-[#123f35] shadow-lg backdrop-blur md:flex">
         <MapPinned className="size-4 text-[#08785a]" />
         NovaHub Force · Nova Maps
       </div>
       <iframe
+        ref={iframeRef}
         title="Fuerza Comercial NovaHub"
         src={mapSrc}
         allow="geolocation; fullscreen"

@@ -13,11 +13,11 @@
  --sheet:420px;--nova-vh:100vh;--nova-sheet-height:620px;--nova-workspace-height:760px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;min-height:100%;overflow:hidden;font-family:Poppins,system-ui,sans-serif;background:#e8f0ed;color:var(--ink);-webkit-text-size-adjust:100%;overscroll-behavior:none}
+html,body{position:fixed;inset:0;width:100%;margin:0;height:100%;min-height:100%;overflow:hidden;font-family:Poppins,system-ui,sans-serif;background:#e8f0ed;color:var(--ink);-webkit-text-size-adjust:100%;overscroll-behavior:none}
 button,input,select,textarea{font:inherit}
 #map{position:fixed;top:0;right:0;bottom:0;left:var(--sheet);width:calc(100vw - var(--sheet));height:var(--nova-vh);min-height:320px;z-index:1;transform:translateZ(0);-webkit-transform:translateZ(0)}
 .map-status{position:fixed;z-index:950;left:calc(var(--sheet) + 50%);top:50%;transform:translate(-50%,-50%);width:min(430px,calc(100% - var(--sheet) - 32px));padding:18px 20px;border:1px solid rgba(8,120,90,.18);border-radius:16px;background:rgba(255,255,255,.97);box-shadow:0 18px 45px rgba(12,53,43,.18);color:var(--ink);text-align:center}.map-status[hidden]{display:none}.map-status b{display:block;font-size:13px;margin-bottom:6px}.map-status span{display:block;font-size:10px;line-height:1.55;color:var(--muted)}
-.sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sheet);background:rgba(251,253,252,.985);border-right:1px solid rgba(16,71,57,.11);display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(12,53,43,.16);z-index:1000}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sheet);overflow:hidden;background:rgba(251,253,252,.985);border-right:1px solid rgba(16,71,57,.11);display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(12,53,43,.16);z-index:1000}
 .brand{padding:18px;background:radial-gradient(circle at 82% 12%,rgba(96,225,178,.28),transparent 34%),linear-gradient(145deg,#0b2f29,#08705a);color:white}
 .topline{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .logo{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800}
@@ -119,7 +119,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  :root{--sheet:100%}
  #map{top:0;right:0;bottom:0;left:0;width:100vw;height:var(--nova-vh);touch-action:pan-x pan-y}
  .map-status{left:16px;right:16px;top:76px;transform:none;width:auto}
- .sidebar{top:auto;left:0;right:0;width:100%;height:min(68vh,620px);height:var(--nova-sheet-height);border-radius:22px 22px 0 0;border-right:0;border-top:1px solid rgba(15,72,57,.13);box-shadow:0 -14px 38px rgba(16,53,44,.19);transition:height .2s ease,border-radius .2s ease;will-change:height;touch-action:pan-y;-webkit-overflow-scrolling:touch}
+ .sidebar{top:auto;left:0;right:0;width:100%;height:min(68vh,620px);height:var(--nova-sheet-height);max-height:var(--nova-vh);border-radius:22px 22px 0 0;border-right:0;border-top:1px solid rgba(15,72,57,.13);box-shadow:0 -14px 38px rgba(16,53,44,.19);transition:height .2s ease,border-radius .2s ease;will-change:height;touch-action:pan-y;-webkit-overflow-scrolling:touch}
  .sidebar.dragging{transition:none}
  .sidebar.workspace-view{top:auto;height:min(86vh,760px);height:var(--nova-workspace-height);border-radius:22px 22px 0 0}
  .standalone-view .sidebar.workspace-view{top:0;height:var(--nova-vh);border-radius:0}
@@ -134,7 +134,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .brand p{font-size:9px}
  .logo{font-size:10px;gap:6px}.logoicon{width:25px;height:25px;border-radius:8px}
  .badge{font-size:7.5px;padding:5px 7px}
- .scroll{padding:10px 11px 18px}
+ .scroll{padding:10px 11px 18px;overscroll-behavior-y:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
  .kpis{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.kpis::-webkit-scrollbar{display:none}.kpi{flex:0 0 84px;padding:7px 6px;border-radius:11px}.kpi b{font-size:15px}.kpi span{font-size:7px}
  .search input{height:40px;font-size:12px}.search button{height:30px;width:30px}.search-zone{padding:0 8px;font-size:8px}
  .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}.chip{flex:0 0 auto;padding:8px 10px;font-size:9.5px}
@@ -269,8 +269,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <div class="modal-backdrop" id="locationModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="locationTitle">
   <h2 id="locationTitle">Ubicación y privacidad</h2>
-  <p>La ubicación del teléfono puede estar activa, pero el navegador tiene bloqueado el permiso para este sitio.</p>
-  <ol class="location-steps"><li>Abre el candado o el icono de ajustes junto a la dirección.</li><li>En <b>Ubicación</b> selecciona <b>Permitir</b>.</li><li>Recarga NovaHub y vuelve a intentarlo.</li></ol>
+  <p id="locationHelpText">La ubicación del teléfono puede estar activa, pero el navegador tiene bloqueado el permiso para este sitio.</p>
+  <ol class="location-steps" id="locationSteps"><li>Abre el candado o el icono de ajustes junto a la dirección.</li><li>En <b>Ubicación</b> selecciona <b>Permitir</b>.</li><li>Recarga NovaHub y vuelve a intentarlo.</li></ol>
   <div class="location-privacy" id="locationPrivacy" hidden><b>Compartir mi ubicación con el equipo</b><span>Esta opción solo controla tu última ubicación visible para vendedores autorizados. No cambia el permiso del teléfono.</span><button id="togglePresence" type="button">Ocultar mi ubicación</button></div>
   <div class="confirm-modal-actions"><button class="cancel" id="locationClose" type="button">Cerrar</button><button class="save" id="locationRetry" type="button">Volver a intentar</button></div>
  </div>
@@ -1076,7 +1076,19 @@ function popupHtml(b){
 function findBusiness(id){return businesses.find(x=>x.id===id)}
 function findBusinessByKey(key){return businesses.find(x=>x.id===key || keyOf(x)===key)}
 let pendingPointCoords = null;
-function showLocationHelp(){document.getElementById('locationModal')?.removeAttribute('hidden')}
+function isAppleTouchDevice(){return /iPad|iPhone|iPod/.test(navigator.userAgent)|| (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}
+function showLocationHelp(){
+  const text=document.getElementById('locationHelpText');
+  const steps=document.getElementById('locationSteps');
+  if(isAppleTouchDevice()){
+    if(text)text.textContent='iOS bloqueó el permiso de ubicación para este sitio. Cámbialo en los ajustes del sitio y luego vuelve a intentar.';
+    if(steps)steps.innerHTML='<li>En Safari, toca el botón de ajustes de la dirección y entra a <b>Configuración del sitio web</b>.</li><li>En <b>Ubicación</b> elige <b>Permitir</b> y vuelve a NovaHub.</li><li>Si está instalado como app, revisa también <b>Ajustes del iPhone → Privacidad y seguridad → Localización → Safari</b>.</li>';
+  }else if(text&&steps){
+    text.textContent='El navegador bloqueó el permiso de ubicación para este sitio. Corrige el permiso y vuelve a intentar.';
+    steps.innerHTML='<li>Abre el candado o el icono de ajustes junto a la dirección.</li><li>En <b>Ubicación</b> selecciona <b>Permitir</b>.</li><li>Recarga NovaHub y pulsa <b>Volver a intentar</b>.</li>';
+  }
+  document.getElementById('locationModal')?.removeAttribute('hidden');
+}
 function closeLocationHelp(){document.getElementById('locationModal')?.setAttribute('hidden','')}
 async function locationPermissionState(){
   if(!navigator.permissions?.query)return 'prompt';
@@ -1207,18 +1219,27 @@ document.getElementById('zoneAssign').addEventListener('click',()=>{void assignZ
 document.getElementById('deleteCancel').addEventListener('click',()=>{pendingDeleteId=null;document.getElementById('deleteModal').hidden=true});
 document.getElementById('deleteConfirm').addEventListener('click',()=>{void confirmDeleteBusiness()});
 document.getElementById('deleteModal').addEventListener('click',event=>{if(event.target===event.currentTarget){pendingDeleteId=null;event.currentTarget.hidden=true}});
-document.getElementById('fullscreenMap').addEventListener('click',async()=>{
-  try{
-    if(document.fullscreenElement){await document.exitFullscreen();return}
-    await document.documentElement.requestFullscreen();
-  }catch(error){console.warn('Pantalla completa no disponible',error);toast('El navegador no permite pantalla completa en este momento')}
-});
-document.addEventListener('fullscreenchange',()=>{
-  const active=Boolean(document.fullscreenElement);
+function setMapFullscreenVisual(active){
   document.body.classList.toggle('map-fullscreen',active);
   const button=document.getElementById('fullscreenMap');
   if(button)button.textContent=active?'×':'⛶';
+  if(window.parent!==window)window.parent.postMessage({source:'novahub-force-sales',type:'fullscreen',active},'*');
   window.setTimeout(resizeGoogleMap,120);
+}
+document.getElementById('fullscreenMap').addEventListener('click',async()=>{
+  if(document.fullscreenElement){await document.exitFullscreen();return}
+  // Safari iOS/PWA may expose no usable Fullscreen API. The visual fallback
+  // is coordinated with the React shell so the iframe also covers its header.
+  if(!document.documentElement.requestFullscreen||isAppleTouchDevice()){
+    setMapFullscreenVisual(!document.body.classList.contains('map-fullscreen'));
+    return;
+  }
+  try{await document.documentElement.requestFullscreen()}
+  catch(error){console.warn('Pantalla completa nativa no disponible',error);setMapFullscreenVisual(true)}
+});
+document.addEventListener('fullscreenchange',()=>{
+  const active=Boolean(document.fullscreenElement);
+  setMapFullscreenVisual(active);
 });
 function rerenderKeepingPopup(b){
   const shouldReopen=Boolean(b)&&activeView==='map'&&markerById.has(b.id);
