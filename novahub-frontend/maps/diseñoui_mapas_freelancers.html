@@ -343,7 +343,7 @@ window.__novaMapsReady = new Promise((resolve, reject) => {
 if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova en el frontend.'); reject(new Error('Nova Maps key missing')); return}
  const loadMaps = (attempt=0) => {
   const mapsScript = document.createElement('script');
-  mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places,marker&loading=async' + (attempt ? '&channel=novahub-retry-' + attempt : '');
+  mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places,marker&loading=async&v=weekly' + (attempt ? '&channel=novahub-retry-' + attempt : '');
   mapsScript.async = true;
   mapsScript.defer = true;
   mapsScript.onerror = () => {
@@ -367,8 +367,17 @@ if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova e
 });
 </script>
 <script>
+async function novaMapsLibrary(name){
+  for(let attempt=0;attempt<20;attempt+=1){
+    if(typeof google.maps.importLibrary==='function')return google.maps.importLibrary(name);
+    if(name==='marker' && google.maps.marker?.AdvancedMarkerElement)return google.maps.marker;
+    if(name==='places' && google.maps.places)return google.maps.places;
+    await new Promise(resolve=>window.setTimeout(resolve,50));
+  }
+  throw new Error('Nova Maps library unavailable: '+name);
+}
 window.__novaMapsReady.then(async () => {
-const markerLibrary = await google.maps.importLibrary('marker');
+const markerLibrary = await novaMapsLibrary('marker');
 const AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
 if(!AdvancedMarkerElement)throw new Error('Nova AdvancedMarkerElement unavailable');
 window.__novaAdvancedMarkerElement = AdvancedMarkerElement;
@@ -1643,7 +1652,7 @@ async function searchGooglePlaces(query='', options={}){
   const queries=normalizedQuery ? [normalizedQuery] : ['logística y transporte','tiendas de ropa','ferreterías y construcción','agencias de marketing','farmacias y clínicas'];
   const collected=[];
   try{
-    const placesLibrary=await google.maps.importLibrary('places');
+    const placesLibrary=await novaMapsLibrary('places');
     const Place=placesLibrary?.Place;
     if(!Place?.searchByText)throw new Error('Place.searchByText no está disponible. Habilita Places API (New).');
     setSearchStatus(`Nova está buscando ${queries.length} rubro${queries.length>1?'s':''}…`);
