@@ -36,6 +36,14 @@ if (new URLSearchParams(window.location.search).has('sentry-test')) {
   (g.myUndefinedFunction as () => void)();
 }
 
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch((error) => {
+      console.warn('NovaHub offline shell unavailable', error);
+    });
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>

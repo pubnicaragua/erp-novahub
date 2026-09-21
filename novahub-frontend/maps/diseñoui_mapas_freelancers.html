@@ -21,7 +21,7 @@ button,input,select,textarea{font:inherit}
 .brand{padding:18px;background:radial-gradient(circle at 82% 12%,rgba(96,225,178,.28),transparent 34%),linear-gradient(145deg,#0b2f29,#08705a);color:white}
 .topline{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .logo{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800}
-.logoicon{width:29px;height:29px;border-radius:9px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d;overflow:hidden}.logoicon img{width:100%;height:100%;object-fit:contain;padding:3px}
+.logoicon{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#72e5ba,#c0ffe5);display:grid;place-items:center;color:#0b493d;overflow:hidden}.logoicon img{width:100%;height:100%;object-fit:contain;padding:2px}
 .badge{font-size:9px;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 8px;background:rgba(255,255,255,.10)}
 .brand h1{font-size:21px;line-height:1.15;margin:14px 0 6px;letter-spacing:-.5px}
 .brand p{font-size:10px;line-height:1.5;margin:0;color:rgba(255,255,255,.75)}
@@ -90,6 +90,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .ma{background:var(--green)}.mb{background:var(--amber)}.mc{background:var(--gray)}
 .marker.selected{--marker-ring:#3287e8}.marker.kanban{--marker-ring:#12aa7b}.marker.visited{--marker-ring:#84d795}.marker.interested{--marker-ring:#0b9d68}.marker.discarded{--marker-ring:#86958f;opacity:.62}
 .cluster-brand{width:42px;height:42px;border-radius:15px;background:#123f35;border:3px solid #b4f4d8;color:white;display:flex;align-items:center;justify-content:center;gap:3px;box-shadow:0 6px 15px rgba(12,53,43,.28);font-size:10px;font-weight:900}.cluster-brand span{font-size:13px;color:#8df1be}.cluster-brand b{font-size:11px}
+.nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Poppins,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
 .fabbar{position:fixed;z-index:900;left:calc(var(--sheet) + 14px);top:14px;display:flex;gap:7px}
 .float{border:1px solid rgba(25,77,63,.12);background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:12px;padding:8px 10px;font-size:9px;font-weight:600;color:#294c42;box-shadow:0 7px 22px rgba(18,57,47,.13)}
 .legend{position:fixed;z-index:900;right:15px;bottom:18px;background:rgba(255,255,255,.96);border:1px solid rgba(28,87,69,.12);border-radius:13px;padding:10px 11px;font-size:8px;box-shadow:0 10px 26px rgba(16,56,45,.15)}
@@ -111,7 +112,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .toast{position:fixed;z-index:2000;left:50%;bottom:22px;transform:translate(-50%,18px);opacity:0;background:#153d35;color:white;padding:10px 13px;border-radius:11px;font-size:9px;transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
 .quick-capture{position:fixed;z-index:1900;left:calc(var(--sheet) + 18px);bottom:18px;width:min(390px,calc(100vw - var(--sheet) - 36px));padding:15px;border:1px solid #bfe2d4;border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 18px 45px rgba(12,53,43,.24)}.quick-capture[hidden]{display:none}.quick-capture h2{margin:0;font-size:14px}.quick-capture p{margin:4px 0 10px;color:#6c7c77;font-size:9px}.quick-capture-grid{display:grid;grid-template-columns:1fr;gap:7px}.quick-capture input{width:100%;height:40px;border:1px solid #dce8e3;border-radius:10px;padding:0 10px;font-size:11px;outline:none}.quick-capture input:focus{border-color:#12aa7b;box-shadow:0 0 0 3px rgba(18,170,123,.12)}.quick-capture-photo{display:flex;align-items:center;gap:8px;margin:8px 0;padding:6px;border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9}.quick-capture-photo[hidden]{display:none}.quick-capture-photo img{width:56px;height:56px;border-radius:8px;object-fit:cover}.quick-capture-photo span{flex:1;font-size:8px;color:#526a60}.quick-capture-photo button{border:0;background:transparent;color:#08785a;font-size:8px;font-weight:800;cursor:pointer}.quick-capture-actions{display:flex;gap:7px;margin-top:10px}.quick-capture-actions button{flex:1;border:0;border-radius:10px;padding:10px 8px;font-size:9px;font-weight:800;cursor:pointer}.quick-capture-actions button:disabled{opacity:.45;cursor:not-allowed}.quick-capture-actions .cancel{background:#edf5f1;color:#537068}.quick-capture-actions .camera{background:#e5f5ed;color:#08785a}.quick-capture-actions .save{background:#08785a;color:white}
 .primary-float{background:#08785a;color:white;border-color:#08785a}.standalone-view #map{display:none}.standalone-view .sidebar{left:0;top:0;bottom:0;width:100%;border:0;border-radius:0;box-shadow:none}.standalone-view .sidebar .scroll{width:min(1180px,100%);margin:0 auto}.standalone-view .fabbar,.standalone-view .quick-capture{display:none}.map-fullscreen #map{left:0;width:100vw}.map-fullscreen .fabbar{left:14px}.map-fullscreen:not(.standalone-view) .sidebar{display:none}.map-fullscreen .legend{right:14px}.fullscreen-float{min-width:32px;padding:8px 9px;font-size:14px}.modal-backdrop{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:18px;background:rgba(8,31,25,.42);backdrop-filter:blur(4px)}.modal-backdrop[hidden]{display:none}.confirm-modal{width:min(430px,100%);border:1px solid #d6e7df;border-radius:20px;background:#fff;padding:19px;box-shadow:0 24px 70px rgba(8,42,32,.28)}.confirm-modal h2{margin:0;color:#123f35;font-size:16px}.confirm-modal p{margin:6px 0 14px;color:#64766f;font-size:10px;line-height:1.5}.confirm-modal label{display:block;color:#51655e;font-size:9px;font-weight:800;margin:10px 0 5px}.confirm-modal select,.confirm-modal textarea{width:100%;border:1px solid #dce8e3;border-radius:10px;background:#fbfdfc;padding:9px;font-size:10px}.confirm-modal textarea{min-height:64px;resize:vertical}.confirm-modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:15px}.confirm-modal-actions button{border:0;border-radius:10px;padding:10px 13px;font-size:9px;font-weight:800;cursor:pointer}.confirm-modal-actions .cancel{background:#edf5f1;color:#537068}.confirm-modal-actions .danger{background:#b63849;color:white}
-.evidence-modal-media{display:grid;place-items:center;min-height:120px;margin-top:12px;border-radius:12px;overflow:hidden;background:#f0f6f3}.evidence-modal-media img{display:block;max-width:100%;max-height:56vh;object-fit:contain}.evidence-modal-media iframe{width:100%;height:58vh;border:0}.evidence-modal-media a{color:#08785a;font-size:11px;font-weight:800;padding:25px}.confirm-modal-actions .save{background:#08785a;color:white}.location-steps{margin:8px 0 0;padding-left:20px;color:#64766f;font-size:10px;line-height:1.6}
+.evidence-modal-media{display:grid;place-items:center;min-height:120px;margin-top:12px;border-radius:12px;overflow:hidden;background:#f0f6f3}.evidence-modal-media img{display:block;max-width:100%;max-height:56vh;object-fit:contain}.evidence-modal-media iframe{width:100%;height:58vh;border:0}.evidence-modal-media a{color:#08785a;font-size:11px;font-weight:800;padding:25px}.confirm-modal-actions .save{background:#08785a;color:white}.location-steps{margin:8px 0 0;padding-left:20px;color:#64766f;font-size:10px;line-height:1.6}.location-privacy{margin-top:14px;padding:10px;border:1px solid #dcebe4;border-radius:12px;background:#f3faf7}.location-privacy[hidden]{display:none}.location-privacy b{display:block;font-size:10px;color:#123f35}.location-privacy span{display:block;margin-top:3px;color:#6c7c77;font-size:8.5px;line-height:1.4}.location-privacy button{margin-top:8px;border:0;border-radius:9px;background:#123f35;color:#fff;padding:8px 10px;font-size:9px;font-weight:800;cursor:pointer}
 .route-stops{display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow:auto;margin-top:10px}.route-stop{display:flex;align-items:center;gap:8px;border:1px solid #dce8e3;border-radius:10px;background:#f7fbf9;padding:8px}.route-stop b{font-size:10px;color:#123f35}.route-stop span{display:block;color:#6c7c77;font-size:8px}.route-stop .route-number{width:22px;height:22px;display:grid;place-items:center;border-radius:7px;background:#d8eee5;color:#08785a;font-size:9px;font-weight:800}
 .sheetHandle{display:none}
 @media(max-width:820px){
@@ -143,7 +144,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
  .view-tabs{display:grid}.actions #kanbanToggle,.actions #historyToggle{display:none}
  .item{padding:10px}.itemname{font-size:11px}.meta{font-size:8.5px}.kanban-board{grid-template-columns:1fr 1fr}.kanban-column{padding:6px}
  .fabbar{left:10px;top:calc(env(safe-area-inset-top) + 10px);right:10px;justify-content:space-between}
- .float{font-size:8px;padding:6px 8px;border-radius:10px}.fabbar{gap:5px}.fabbar #summary{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .float{font-size:8px;padding:6px 7px;border-radius:10px}.fabbar{gap:4px}.fabbar #routeTop{max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .legend{display:none}
  .toast{bottom:145px}
  .popup{min-width:0;max-width:calc(100vw - 42px)}.popup h3{font-size:15px}.grid{font-size:9px}.crm label{font-size:8px}.crm select,.crm input,.crm textarea{font-size:10px;padding:8px}.crm textarea{height:52px}.crm button{font-size:9.5px;padding:9px}.advanced-crm summary{font-size:9px}
@@ -158,8 +159,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 <body>
 <div id="map"></div>
 <div class="map-status" id="mapStatus" hidden>
- <b>Google Maps no pudo mostrar el mapa</b>
- <span id="mapStatusText">Verificando la conexión con Google Maps…</span>
+ <b>Nova Maps no pudo mostrar el mapa</b>
+ <span id="mapStatusText">Verificando la conexión con Nova Maps…</span>
 </div>
 
 <aside class="sidebar collapsed" id="sheet">
@@ -171,7 +172,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   </div>
   <h1>Mapa comercial ERP · Managua</h1>
   <p>Managua, Ciudad Sandino y Veracruz con enfoque comercial, filtros rápidos y uso cómodo en celular.</p>
-  <div class="live"><span class="dot"></span><span id="liveStatus">Base inicial cargada. Lista para consultar Google Places…</span></div>
+ <div class="live"><span class="dot"></span><span id="liveStatus">Base inicial cargada. Lista para consultar negocios de Nova…</span></div>
   <div class="live" id="offlineStatus"><span class="dot"></span><span id="offlineStatusText">Preparando sincronización offline…</span></div>
  </div>
  <div class="scroll">
@@ -190,7 +191,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   <div class="workspace-heading" id="workspaceHeading" hidden><b id="workspaceHeadingTitle"></b><span id="workspaceHeadingMeta"></span></div>
 
   <div class="search-row">
-   <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar en Google Places">⌕</button></div>
+   <div class="search"><input id="search" placeholder="Buscar negocio, rubro o dirección…" autocomplete="off"><button id="searchGoogle" type="button" title="Buscar negocios de Nova">⌕</button></div>
    <button class="search-zone" id="searchViewport" type="button">Buscar zona</button>
   </div>
   <div class="search-meta"><span id="searchStatus">Escribe un rubro o usa el mapa para buscar nuevos negocios.</span><button id="clearGoogleCache" type="button">Actualizar datos</button></div>
@@ -204,7 +205,7 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
    <div class="stitle"><span>Filtros comerciales</span></div>
    <div class="filters">
     <select id="category"><option value="all">Todos los rubros</option></select>
-    <select id="source"><option value="all">Todas las fuentes</option><option value="Google Places">Google Places</option><option value="Base inicial">Base inicial</option></select>
+    <select id="source"><option value="all">Todas las fuentes</option><option value="Nova">Nova</option><option value="Base inicial">Base inicial</option></select>
     <select id="state"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
    </div>
   </div>
@@ -215,7 +216,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
   </div>
 
   <div class="actions">
-   <button class="btn primary" id="refresh">↻ Actualizar Google Places</button>
+   <button class="btn primary" id="refresh">↻ Actualizar negocios Nova</button>
+   <button class="btn secondary" id="locationSettings" type="button" hidden>Privacidad de ubicación</button>
    <button class="btn secondary" id="zoneManager">▦ Zonas y vendedores</button>
    <button class="btn secondary" id="opportunities">✦ Ver oportunidades</button>
    <button class="btn secondary" id="kanbanToggle">▦ Ver Kanban</button>
@@ -241,9 +243,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 </aside>
 
 <div class="fabbar">
- <div class="float" id="summary">Managua · Fuerza Comercial</div>
+ <button class="float" id="routeTop" type="button">Armar ruta</button>
  <button class="float" id="locateMe" type="button">◎ Mi ubicación</button>
- <button class="float" id="togglePresence" type="button" hidden>Ocultar mi ubicación</button>
  <button class="float primary-float" id="newPoint" type="button">＋ Nuevo punto</button>
  <button class="float fullscreen-float" id="fullscreenMap" type="button" title="Ver mapa en pantalla completa" aria-label="Ver mapa en pantalla completa">⛶</button>
  <button class="float" id="mobileSheetToggle" type="button">Filtros ↑</button>
@@ -260,9 +261,10 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 </div>
 <div class="modal-backdrop" id="locationModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="locationTitle">
-  <h2 id="locationTitle">Permiso de ubicación bloqueado</h2>
+  <h2 id="locationTitle">Ubicación y privacidad</h2>
   <p>La ubicación del teléfono puede estar activa, pero el navegador tiene bloqueado el permiso para este sitio.</p>
   <ol class="location-steps"><li>Abre el candado o el icono de ajustes junto a la dirección.</li><li>En <b>Ubicación</b> selecciona <b>Permitir</b>.</li><li>Recarga NovaHub y vuelve a intentarlo.</li></ol>
+  <div class="location-privacy" id="locationPrivacy" hidden><b>Compartir mi ubicación con el equipo</b><span>Esta opción solo controla tu última ubicación visible para vendedores autorizados. No cambia el permiso del teléfono.</span><button id="togglePresence" type="button">Ocultar mi ubicación</button></div>
   <div class="confirm-modal-actions"><button class="cancel" id="locationClose" type="button">Cerrar</button><button class="save" id="locationRetry" type="button">Volver a intentar</button></div>
  </div>
 </div>
@@ -331,32 +333,45 @@ window.__novaShowMapError = function(message){
  if(live) live.textContent = message;
 };
 window.gm_authFailure = function(){
- window.__novaShowMapError('Google rechazó la API key. Habilita Maps JavaScript API y Places API, activa facturación y permite el dominio del ERP en las restricciones de la clave.');
+ window.__novaShowMapError('Nova Maps rechazó la clave. Habilita Maps JavaScript API y Places API, activa facturación y permite el dominio del ERP en las restricciones de la clave.');
 };
 </script>
 <script>
 window.__novaMapsReady = new Promise((resolve, reject) => {
  const params = new URLSearchParams(location.search);
  const key = params.get('mapsKey') || '';
- if(!key){window.__novaShowMapError('Falta configurar la clave de Google Maps en el frontend.'); reject(new Error('Google Maps key missing')); return}
- const mapsScript = document.createElement('script');
- mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places&loading=async';
- mapsScript.async = true;
- mapsScript.defer = true;
- mapsScript.onerror = () => {window.__novaShowMapError('No se pudo descargar Google Maps. Revisa conexión, facturación y las restricciones HTTP de la API key.'); reject(new Error('Google Maps failed to load'))};
- mapsScript.onload = () => {
-  const clusterScript = document.createElement('script');
-  clusterScript.src = 'https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';
-  clusterScript.async = true;
-  clusterScript.onload = resolve;
-  clusterScript.onerror = () => {window.__novaShowMapError('Google Maps cargó, pero no pudo cargar el agrupador de marcadores.'); reject(new Error('MarkerClusterer failed to load'))};
-  document.head.appendChild(clusterScript);
+if(!key){window.__novaShowMapError('Falta configurar la clave de mapas de Nova en el frontend.'); reject(new Error('Nova Maps key missing')); return}
+ const loadMaps = (attempt=0) => {
+  const mapsScript = document.createElement('script');
+  mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places,marker&loading=async' + (attempt ? '&channel=novahub-retry-' + attempt : '');
+  mapsScript.async = true;
+  mapsScript.defer = true;
+  mapsScript.onerror = () => {
+   if(attempt < 2){window.setTimeout(()=>loadMaps(attempt+1),450*(attempt+1));return}
+   window.__novaShowMapError('No se pudo descargar Nova Maps. Revisa conexión, facturación y las restricciones HTTP de la clave.');
+   reject(new Error('Nova Maps failed to load'));
+  };
+  mapsScript.onload = () => {
+   resolve();
+   const clusterScript = document.createElement('script');
+   clusterScript.src = 'https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';
+   clusterScript.async = true;
+   clusterScript.onload = () => {window.__novaRefreshClusters?.()};
+   // El agrupador es opcional: Nova Maps debe poder pintar aunque ese CDN falle.
+   clusterScript.onerror = () => console.warn('Nova marker clustering unavailable; continuing without clustering');
+   document.head.appendChild(clusterScript);
+  };
+  document.head.appendChild(mapsScript);
  };
- document.head.appendChild(mapsScript);
+ loadMaps();
 });
 </script>
 <script>
-window.__novaMapsReady.then(() => {
+window.__novaMapsReady.then(async () => {
+const markerLibrary = await google.maps.importLibrary('marker');
+const AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
+if(!AdvancedMarkerElement)throw new Error('Nova AdvancedMarkerElement unavailable');
+window.__novaAdvancedMarkerElement = AdvancedMarkerElement;
 const seed = [{"id": "seed-001", "name": "Supermercado La Unión", "zone": "Managua", "category": "Supermercado / comercio", "address": "Carretera a Masaya, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.132629, "lng": -86.254269, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-002", "name": "PriceSmart Managua", "zone": "Managua", "category": "Mayorista / supermercado", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.135668, "lng": -86.253906, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-003", "name": "Distribuidora Reyes", "zone": "Managua", "category": "Mayorista / distribución", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.137208, "lng": -86.253336, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-004", "name": "Mercado El Mayoreo", "zone": "Carretera Norte", "category": "Mercado / mayorista", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.143278, "lng": -86.187131, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-005", "name": "La Colonia Plaza España", "zone": "Managua", "category": "Supermercado / comercio", "address": "Plaza España, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.13555, "lng": -86.252655, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-006", "name": "Joyería Garzón", "zone": "Managua", "category": "Comercio / joyería", "address": "Las Brisas, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.141675, "lng": -86.251631, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-007", "name": "Diseños y Sistemas Web", "zone": "Veracruz", "category": "Tecnología / servicios", "address": "Jardines de Veracruz, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.052797, "lng": -86.188715, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-008", "name": "Empaques Santo Domingo, S.A.", "zone": "Managua", "category": "Industria / empaques", "address": "Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.136075, "lng": -86.255822, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-009", "name": "Ideas", "zone": "Managua", "category": "Construcción / servicios", "address": "Colonia Mántica, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.13577, "lng": -86.248795, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-010", "name": "Super Express Ciudad Sandino 01", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157972, "lng": -86.346451, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-011", "name": "Super Express San Andrés", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "San Andrés, Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157074, "lng": -86.345434, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-012", "name": "Super Express Praderas de Sandino", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Praderas de Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.160541, "lng": -86.347536, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-013", "name": "Super Express Ciudad Sandino 5", "zone": "Ciudad Sandino", "category": "Supermercado / comercio", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.157755, "lng": -86.338849, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-014", "name": "AMPM Ciudad Sandino", "zone": "Ciudad Sandino", "category": "Tienda / conveniencia", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.159319, "lng": -86.346675, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-015", "name": "Farma Value Ciudad Sandino", "zone": "Ciudad Sandino", "category": "Farmacia", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.154621, "lng": -86.340872, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-016", "name": "Plaza Calli", "zone": "Ciudad Sandino", "category": "Centro comercial", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.160602, "lng": -86.339814, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-017", "name": "Colegio Cristiano Nicaragüense", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.15771, "lng": -86.345433, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-018", "name": "Einstein College", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.155459, "lng": -86.340194, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-019", "name": "Liceo Franciscano", "zone": "Ciudad Sandino", "category": "Educación privada", "address": "Ciudad Sandino", "source": "Base inicial", "sourceUrl": "", "lat": 12.155573, "lng": -86.346966, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-020", "name": "Básculas Carmona", "zone": "Ciudad Sandino", "category": "Equipos / servicios", "address": "Carretera Nueva a León", "source": "Base inicial", "sourceUrl": "", "lat": 12.159622, "lng": -86.345584, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-021", "name": "La Colonia Plaza Veracruz", "zone": "Veracruz", "category": "Supermercado / comercio", "address": "Plaza Veracruz, Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.04978, "lng": -86.184857, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-022", "name": "Plaza Veracruz", "zone": "Veracruz", "category": "Centro comercial", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.053327, "lng": -86.183575, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-023", "name": "Placita Veracruz", "zone": "Veracruz", "category": "Centro comercial", "address": "Carretera a Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.051659, "lng": -86.187814, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-024", "name": "Super Express Jardines de Veracruz", "zone": "Veracruz", "category": "Supermercado / comercio", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.056273, "lng": -86.188509, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-025", "name": "Materiales de Construcción Veracruz", "zone": "Veracruz", "category": "Ferretería / construcción", "address": "Veracruz, Managua", "source": "Base inicial", "sourceUrl": "", "lat": 12.056026, "lng": -86.189509, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-026", "name": "Farmacia Veracruz", "zone": "Veracruz", "category": "Farmacia", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.046844, "lng": -86.186535, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-027", "name": "Cyber Café Veracruz", "zone": "Veracruz", "category": "Tecnología / servicios", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.04785, "lng": -86.187313, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 68, "priority": "B", "owner": "Fuerza Comercial"}, {"id": "seed-028", "name": "Taller de Soldadura Veracruz", "zone": "Veracruz", "category": "Taller / industria", "address": "Jardines de Veracruz", "source": "Base inicial", "sourceUrl": "", "lat": 12.05058, "lng": -86.180574, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-029", "name": "Venta de Madera Veracruz", "zone": "Veracruz", "category": "Madera / construcción", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.056473, "lng": -86.185084, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}, {"id": "seed-030", "name": "PriceSmart Carretera a Masaya", "zone": "Carretera a Masaya", "category": "Mayorista / supermercado", "address": "Carretera a Masaya", "source": "Base inicial", "sourceUrl": "", "lat": 12.076433, "lng": -86.220965, "precision": "Ubicación aproximada por zona; validar antes de visita", "score": 84, "priority": "A", "owner": "Fuerza Comercial"}];
 const centers = {"Managua": [12.1364, -86.2514], "Ciudad Sandino": [12.1587, -86.3442], "Veracruz": [12.0525, -86.186], "Carretera Norte": [12.145, -86.191], "Carretera a Masaya": [12.081, -86.219], "Mercado Oriental": [12.143, -86.247]};
 function readStore(key, fallback){
@@ -399,6 +414,10 @@ let pendingQuickPointPhoto = false;
 let pendingQuickPointFile = null;
 let presenceMarkers = new Map();
 let presenceSharingEnabled = localStorage.getItem('novaFuerzaPresenceSharingV1') !== 'false';
+let presenceWatchId = null;
+let presenceWatchRequested = false;
+let lastPresenceSentAt = 0;
+let presenceSyncInFlight = false;
 let assignees = [];
 let routeBusinesses = [];
 let zonePolygons = new Map();
@@ -410,11 +429,12 @@ if(NOVAHUB_ISOTIPO_URL){
 }
 
 if(!window.google?.maps?.Map){
-  window.__novaShowMapError('Google Maps JavaScript API no está disponible. Verifica que la clave permita el origen actual del ERP.');
+  window.__novaShowMapError('Nova Maps no está disponible. Verifica la clave y el origen actual del ERP.');
 }
 
 const googleMap = new google.maps.Map(document.getElementById('map'), {
   center: {lat:12.115,lng:-86.26}, zoom:11,
+  mapId: mapQuery.get('mapId') || 'DEMO_MAP_ID',
   mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
   zoomControl:true, clickableIcons:false, gestureHandling:'greedy', scrollwheel:true,
   styles:[
@@ -430,11 +450,11 @@ google.maps.event.addListenerOnce(googleMap, 'tilesloaded', () => {
   const status = document.getElementById('mapStatus');
   if(status) status.hidden = true;
   const live = document.getElementById('liveStatus');
-  if(live && live.textContent.includes('Google Maps')) live.textContent = 'Google Maps activo · datos comerciales listos.';
+  if(live) live.textContent = 'Nova Maps activo · datos comerciales listos.';
 });
 setTimeout(() => {
-  if(!googleTilesLoaded) window.__novaShowMapError('Google Maps cargó el contenedor, pero no entregó los mosaicos. Revisa Maps JavaScript API, facturación y las restricciones HTTP de la clave.');
-}, 8000);
+  if(!googleTilesLoaded) window.__novaShowMapError('Nova Maps cargó el contenedor, pero no entregó los mosaicos. Revisa la configuración, facturación y las restricciones HTTP de la clave.');
+}, 15000);
 function resizeGoogleMap(){
   const mapElement=document.getElementById('map');
   if(!mapElement || mapElement.offsetWidth===0 || mapElement.offsetHeight===0) return;
@@ -453,11 +473,14 @@ const map = {
   on(event, handler){return google.maps.event.addListener(googleMap,event==='zoomend'?'zoom_changed':event,handler)}
 };
 let mapViewportRenderTimer = null;
+let focusRenderLockUntil = 0;
 function scheduleMapViewportRender(){
   window.clearTimeout(mapViewportRenderTimer);
-  mapViewportRenderTimer=window.setTimeout(()=>{if(activeView==='map')render()},180);
+  if(Date.now()<focusRenderLockUntil)return;
+  mapViewportRenderTimer=window.setTimeout(()=>{if(activeView==='map' && Date.now()>=focusRenderLockUntil)render()},180);
 }
-googleMap.addListener('idle',scheduleMapViewportRender);
+googleMap.addListener('dragend',scheduleMapViewportRender);
+googleMap.addListener('zoom_changed',scheduleMapViewportRender);
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
   openQuickPointAt(event.latLng.lat(), event.latLng.lng(), 'mapa');
@@ -468,21 +491,68 @@ function markerSvg(b){
   const ring=state==='interested'?'#0b9d68':state==='visited'?'#84d795':state==='kanban'?'#12aa7b':state==='selected'?'#3287e8':state==='discarded'?'#86958f':'#9cacaa';
   const fill=b.priority==='A'?'#08785a':b.priority==='B'?'#eea13d':'#83928d';
   if(NOVAHUB_ISOTIPO_URL){
-    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(30,30),anchor:new google.maps.Point(15,15)};
+    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(20,20),anchor:new google.maps.Point(10,10)};
   }
   return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 42 42"><circle cx="21" cy="21" r="18" fill="white" stroke="${ring}" stroke-width="3"/><rect x="7" y="7" width="28" height="28" rx="9" fill="${fill}"/><path d="M14 13v16M28 13v16M14 13l14 14" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><path d="M14 29l14-16" fill="none" stroke="#8df1be" stroke-width="3.2" stroke-linecap="round"/></svg>`),scaledSize:new google.maps.Size(42,42),anchor:new google.maps.Point(21,21)};
 }
 function clusterSvg(count){
   if(NOVAHUB_ISOTIPO_URL){
-    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(36,36),anchor:new google.maps.Point(18,18)};
+    return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(24,24),anchor:new google.maps.Point(12,12)};
   }
   return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="58" height="58"><circle cx="29" cy="29" r="25" fill="#123f35" stroke="#b4f4d8" stroke-width="4"/><path d="M20 17v24M38 17v24M20 17l18 18M20 41l18-24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><text x="29" y="34" text-anchor="middle" font-family="Poppins,Arial" font-size="11" font-weight="900" fill="#8df1be">${count}</text></svg>`),scaledSize:new google.maps.Size(58,58),anchor:new google.maps.Point(29,29)};
 }
+function markerContentFromIcon(icon,title,label){
+  if(!icon?.url)return undefined;
+  const wrapper=document.createElement('div');
+  wrapper.className='nova-map-marker-content';
+  wrapper.style.position='relative';
+  const image=document.createElement('img');
+  image.src=icon.url;
+  image.alt=title || '';
+  image.width=Number(icon.scaledSize?.width)||32;
+  image.height=Number(icon.scaledSize?.height)||32;
+  image.style.width=image.width+'px';
+  image.style.height=image.height+'px';
+  wrapper.appendChild(image);
+  if(label){
+    const badge=document.createElement('span');
+    badge.className='nova-map-marker-badge';
+    badge.textContent=String(label);
+    wrapper.appendChild(badge);
+  }
+  return wrapper;
+}
+function createMapMarker(options={}){
+  const Advanced=window.__novaAdvancedMarkerElement;
+  if(!Advanced)throw new Error('Nova AdvancedMarkerElement unavailable');
+  const marker=new Advanced({
+    map:options.map ?? null,
+    position:options.position,
+    title:options.title || '',
+    content:options.content || markerContentFromIcon(options.icon,options.title,options.label),
+    gmpClickable:true,
+    zIndex:options.zIndex
+  });
+  marker.setMap=(mapInstance)=>{marker.map=mapInstance || null};
+  marker.setPosition=(position)=>{marker.position=position};
+  marker.setLabel=()=>marker;
+  return marker;
+}
 function createGoogleMarker(coords, options){
-  const marker=new google.maps.Marker({position:{lat:coords[0],lng:coords[1]},title:options.title||'',icon:options.icon||undefined,optimized:true});
+  const marker=createMapMarker({position:{lat:coords[0],lng:coords[1]},title:options.title||'',icon:options.icon||undefined});
   marker.setMap(null);
-  marker.bindPopup=function(factory){marker._popupFactory=factory;marker.addListener('click',()=>marker.openPopup());return marker};
-  marker.openPopup=function(){if(!marker._popupFactory)return;infoWindow.setContent(typeof marker._popupFactory==='function'?marker._popupFactory():marker._popupFactory);infoWindow.open(googleMap,marker)};
+  marker.bindPopup=function(factory){
+    marker._popupFactory=factory;
+    const open=()=>marker.openPopup();
+    if(typeof marker.addEventListener==='function')marker.addEventListener('gmp-click',open);
+    else marker.addListener('click',open);
+    return marker;
+  };
+  marker.openPopup=function(){
+    if(!marker._popupFactory)return;
+    infoWindow.setContent(typeof marker._popupFactory==='function'?marker._popupFactory():marker._popupFactory);
+    try{infoWindow.open({map:googleMap,anchor:marker})}catch(error){infoWindow.open(googleMap,marker)}
+  };
   marker.bindTooltip=function(content,options={}){if(options.permanent){marker.setLabel({text:String(content).replace(/<[^>]+>/g,''),color:'#173b31',fontSize:'10px',fontWeight:'600'})}return marker};
   marker.unbindTooltip=function(){marker.setLabel(null);return marker};
   return marker;
@@ -495,10 +565,11 @@ const cluster={
   refresh(){
     this.clusterer?.clearMarkers();
     if(window.markerClusterer?.MarkerClusterer){
-       this.clusterer=new window.markerClusterer.MarkerClusterer({map:googleMap,markers:this.markers,renderer:{render:({count,position})=>new google.maps.Marker({position,icon:clusterSvg(count),label:NOVAHUB_ISOTIPO_URL?{text:String(count),color:'#ffffff',fontSize:'11px',fontWeight:'800'}:undefined,zIndex:1000+count})}});
+       this.clusterer=new window.markerClusterer.MarkerClusterer({map:googleMap,markers:this.markers,renderer:{render:({count,position})=>createMapMarker({map:googleMap,position,icon:clusterSvg(count),label:NOVAHUB_ISOTIPO_URL?String(count):undefined,zIndex:1000+count})}});
     }else this.markers.forEach(marker=>marker.setMap(googleMap));
   }
 };
+window.__novaRefreshClusters=()=>cluster.refresh();
 function hexPath(lat,lng,latRadius=.045,lngRadius=.065){
   return Array.from({length:6},(_,index)=>{
     const angle=Math.PI/6 + index * Math.PI/3;
@@ -575,7 +646,7 @@ function isKanban(b){return stateOf(b).kanban === true}
 function isVisited(b){return Boolean(stateOf(b).visitedAt || statusOf(b)==='Visitado')}
 function isInterested(b){return statusOf(b)==='Interesado'}
 function isDiscarded(b){return stateOf(b).discarded === true || statusOf(b)==='Descartado'}
-function isGoogleFound(b){return String(b?.source || '').includes('Google Places')}
+function isGoogleFound(b){return String(b?.source || '').includes('Nova')}
 function stateClass(b){if(isDiscarded(b)) return 'discarded'; if(isInterested(b)) return 'interested'; if(isVisited(b)) return 'visited'; if(isKanban(b)) return 'kanban'; if(isSelected(b)) return 'selected'; return ''}
 function selectedBusinesses(){return businesses.filter(isSelected)}
 const stages = ['Nuevo','Contactado','Visitado','Interesado','Demo','Negociación','Cliente','Descartado'];
@@ -998,6 +1069,7 @@ document.getElementById('routeOptimize').addEventListener('click',optimizeRoute)
 document.getElementById('routeOpenMaps').addEventListener('click',openRouteInMaps);
 document.getElementById('routeSave').addEventListener('click',()=>{void saveRouteAssignment()});
 document.getElementById('routeModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
+document.getElementById('routeTop').addEventListener('click',()=>{if(selectedBusinesses().length)addSelectedToRoute();else openRoutePlanner([])});
 document.getElementById('zoneManager').addEventListener('click',openZoneManager);
 document.getElementById('zoneClose').addEventListener('click',()=>{document.getElementById('zoneModal').hidden=true});
 document.getElementById('zoneModal').addEventListener('click',event=>{if(event.target===event.currentTarget)event.currentTarget.hidden=true});
@@ -1021,16 +1093,22 @@ document.addEventListener('fullscreenchange',()=>{
   if(button)button.textContent=active?'×':'⛶';
   window.setTimeout(resizeGoogleMap,120);
 });
+function rerenderKeepingPopup(b){
+  const shouldReopen=Boolean(b)&&activeView==='map'&&markerById.has(b.id);
+  if(shouldReopen)focusRenderLockUntil=Date.now()+900;
+  render();
+  if(shouldReopen)window.requestAnimationFrame(()=>markerById.get(b.id)?.openPopup());
+}
 function toggleSelected(id, value){
   const b=findBusiness(id); if(!b) return;
   stateOf(b).selected = value === undefined ? !isSelected(b) : value;
-  persistCommercial(); render(); toast(stateOf(b).selected ? 'Negocio seleccionado' : 'Selección retirada');
+  persistCommercial(); rerenderKeepingPopup(b); toast(stateOf(b).selected ? 'Negocio seleccionado' : 'Selección retirada');
 }
 window.toggleSelected = toggleSelected;
 function addToKanban(id){
   const b=findBusiness(id); if(!b) return;
   if(isKanban(b)){toast('Este negocio ya pertenece a Fuerza Comercial');return}
-  const c=stateOf(b); c.kanban=true; c.stage=c.stage || 'Nuevo'; persistCommercial(); render();
+  const c=stateOf(b); c.kanban=true; c.stage=c.stage || 'Nuevo'; persistCommercial(); rerenderKeepingPopup(b);
   syncProspects([b]); toast('Negocio agregado a Fuerza Comercial');
 }
 window.addToKanban = addToKanban;
@@ -1050,7 +1128,7 @@ function registerVisit(id){
     googleMap.setZoom(17);
     const c=stateOf(b); c.visitedAt=new Date().toISOString(); c.visitLat=position.coords.latitude; c.visitLng=position.coords.longitude; c.stage='Visitado'; c.kanban=true;
     followups[b.id]={...(followups[b.id]||{}),status:'Visitado',updatedAt:new Date().toISOString()};
-    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups)); persistCommercial(); render(); syncProspects([b]); toast('Visita registrada con ubicación · abre la cámara para guardar evidencia');
+    localStorage.setItem('novaManaguaFollowupsV4',JSON.stringify(followups)); persistCommercial(); rerenderKeepingPopup(b); syncProspects([b]); toast('Visita registrada con ubicación · abre la cámara para guardar evidencia');
     window.setTimeout(()=>requestEvidenceCapture(id),120);
   },'No se pudo obtener la ubicación para registrar la visita');
 }
@@ -1182,28 +1260,55 @@ document.getElementById('quickEvidenceInput')?.addEventListener('change',async e
 });
 function showUserLocation(coords){
   if(!userLocationMarker){
-    userLocationMarker=new google.maps.Marker({map:googleMap,title:'Mi ubicación',zIndex:1200,icon:{path:google.maps.SymbolPath.CIRCLE,scale:11,fillColor:'#08785a',fillOpacity:1,strokeColor:'#ffffff',strokeWeight:4}});
-    userLocationMarker.setMap(googleMap);
+    const locationContent=document.createElement('div');
+    locationContent.className='nova-user-location-marker';
+    locationContent.setAttribute('aria-label','Mi ubicación');
+    userLocationMarker=createMapMarker({map:googleMap,title:'Mi ubicación',zIndex:1200,content:locationContent});
     userLocationCircle=new google.maps.Circle({map:googleMap,fillColor:'#08785a',fillOpacity:.12,strokeColor:'#08785a',strokeOpacity:.55,strokeWeight:1.5,clickable:false});
   }
   const position={lat:coords.latitude,lng:coords.longitude};
   userLocationMarker.setPosition(position);
   userLocationCircle?.setCenter(position);
   userLocationCircle?.setRadius(Math.max(18,Math.min(Number(coords.accuracy)||40,160)));
+  presenceWatchRequested=true;
+  startPresenceWatch();
   syncSellerPresence(coords);
 }
 function presenceSvg(initials){
   return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><circle cx="24" cy="24" r="20" fill="#2364d2" stroke="white" stroke-width="4"/><text x="24" y="29" text-anchor="middle" font-family="Poppins,Arial" font-size="13" font-weight="800" fill="white">${esc(initials || 'V')}</text></svg>`),scaledSize:new google.maps.Size(48,48),anchor:new google.maps.Point(24,24)};
 }
 function renderPresence(rows){
-  presenceMarkers.forEach(marker=>marker.setMap(null));
-  presenceMarkers=new Map();
+  const activeIds=new Set();
   (Array.isArray(rows)?rows:[]).forEach(row=>{
     const lat=Number(row.lat); const lng=Number(row.lng);
     if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
-    const marker=new google.maps.Marker({map:googleMap,position:{lat,lng},title:`${row.name || 'Vendedor'} · actualizado ${new Date(row.lastSeenAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'})}`,icon:presenceSvg(row.initials),zIndex:1300});
-    presenceMarkers.set(String(row.userId),marker);
+    const id=String(row.userId);
+    activeIds.add(id);
+    const title=(row.name || 'Vendedor') + ' · actualizado ' + new Date(row.lastSeenAt).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
+    let marker=presenceMarkers.get(id);
+    if(marker){
+      marker.setPosition({lat,lng});
+      marker.title=title;
+      marker.setMap(googleMap);
+    }else{
+      marker=createMapMarker({map:googleMap,position:{lat,lng},title,icon:presenceSvg(row.initials),zIndex:1300});
+      presenceMarkers.set(id,marker);
+    }
   });
+  presenceMarkers.forEach((marker,id)=>{if(!activeIds.has(id)){marker.setMap(null);presenceMarkers.delete(id)}});
+}
+function stopPresenceWatch(){
+  if(presenceWatchId===null)return;
+  navigator.geolocation?.clearWatch(presenceWatchId);
+  presenceWatchId=null;
+}
+function startPresenceWatch(){
+  if(!presenceWatchRequested||!presenceSharingEnabled||presenceWatchId!==null||!navigator.geolocation)return;
+  presenceWatchId=navigator.geolocation.watchPosition(
+    position=>showUserLocation(position.coords),
+    error=>console.warn('No se pudo actualizar la ubicación en vivo',error),
+    {enableHighAccuracy:false,maximumAge:15000,timeout:20000}
+  );
 }
 async function loadSellerPresence(){
   if(activeView!=='map'||document.visibilityState!=='visible'||!localStorage.getItem('nh-auth-token'))return;
@@ -1212,13 +1317,21 @@ async function loadSellerPresence(){
 }
 async function syncSellerPresence(coords){
   if(!presenceSharingEnabled || !localStorage.getItem('nh-auth-token'))return;
-  try{await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:coords.latitude,lng:coords.longitude,accuracy:coords.accuracy,heading:coords.heading})});await loadSellerPresence();}
+  const now=Date.now();
+  if(presenceSyncInFlight || now-lastPresenceSentAt<15000)return;
+  lastPresenceSentAt=now;
+  presenceSyncInFlight=true;
+  try{await forceSalesRequest('/force-sales/presence',{method:'POST',body:JSON.stringify({lat:coords.latitude,lng:coords.longitude,accuracy:coords.accuracy,heading:coords.heading})});}
   catch(error){console.warn('No se pudo sincronizar la presencia comercial',error)}
+  finally{presenceSyncInFlight=false}
 }
 function updatePresenceToggle(){
   const button=document.getElementById('togglePresence');
+  const privacy=document.getElementById('locationPrivacy');
+  const settings=document.getElementById('locationSettings');
+  if(privacy)privacy.hidden=!CAN_DELETE_TEST;
+  if(settings)settings.hidden=!CAN_DELETE_TEST;
   if(!button)return;
-  button.hidden=!CAN_DELETE_TEST;
   button.textContent=presenceSharingEnabled?'Ocultar mi ubicación':'Mostrar mi ubicación';
   button.title=presenceSharingEnabled?'Tu última ubicación puede verse por vendedores autorizados':'Tu ubicación está oculta para otros vendedores';
 }
@@ -1226,6 +1339,8 @@ async function setPresenceSharing(enabled){
   presenceSharingEnabled=enabled;
   localStorage.setItem('novaFuerzaPresenceSharingV1',String(enabled));
   if(!enabled){
+    stopPresenceWatch();
+    presenceWatchRequested=false;
     userLocationMarker?.setMap(null);
     userLocationCircle?.setMap(null);
     try{await forceSalesRequest('/force-sales/presence/me',{method:'DELETE'});}catch(error){console.warn('No se pudo ocultar la presencia comercial',error)}
@@ -1233,6 +1348,7 @@ async function setPresenceSharing(enabled){
     toast('Tu ubicación quedó oculta');
   }else{
     toast('Tu ubicación volverá a compartirse al usar Mi ubicación o registrar una visita');
+    startPresenceWatch();
   }
   updatePresenceToggle();
 }
@@ -1265,7 +1381,7 @@ window.saveFollowup = async function(id){
   persistCommercial();
   await syncProspects([b],validFile);
   if(!validFile)toast('Seguimiento guardado');
-  render();
+  rerenderKeepingPopup(b);
 };
 window.saveWhatsAppConsent = async function(id){
   const sid=safeId(id); const b=findBusiness(id); if(!b)return;
@@ -1278,7 +1394,7 @@ window.saveWhatsAppConsent = async function(id){
   if(localStorage.getItem('nh-auth-token')){
     try{await forceSalesRequest('/force-sales/prospects/bulk',{method:'POST',body:JSON.stringify({prospects:[prospectPayload(b)]})});toast(optedIn?'Consentimiento guardado en el ERP':'Consentimiento retirado')}catch(error){console.warn(error);toast('No se pudo guardar el consentimiento en el ERP')}
   }else toast(optedIn?'Consentimiento guardado localmente':'Consentimiento retirado localmente');
-  render();
+  rerenderKeepingPopup(b);
 };
 function applyLabels(){
   markerById.forEach((m) => {
@@ -1384,7 +1500,9 @@ function render(){
   updatePipelineKpis();
   document.getElementById('resultText').textContent = `${filtered.length} de ${businesses.length}`;
   const selectedCount=selectedBusinesses().length;
-  document.getElementById('summary').textContent = selectedZone === 'Todos' ? 'Managua' : selectedZone;
+  const routeCount=routeBusinessesFromStore().length;
+  const routeTop=document.getElementById('routeTop');
+  if(routeTop)routeTop.textContent=selectedCount ? `Armar ruta (${selectedCount})` : routeCount ? `Ruta (${routeCount})` : 'Armar ruta';
   document.getElementById('bulkbar')?.classList.toggle('is-empty',selectedCount===0);
 
   const list = document.getElementById('list');
@@ -1409,9 +1527,10 @@ function render(){
   document.querySelectorAll('.item[data-id]').forEach(el => el.addEventListener('click', () => {
     const b = businesses.find(x => x.id === el.dataset.id);
     if(!b) return;
+    focusRenderLockUntil=Date.now()+1400;
     map.flyTo([b.lat, b.lng], 16, {duration:.65});
     if(innerWidth <= 820) document.getElementById('sheet').classList.add('collapsed');
-    setTimeout(() => {render();markerById.get(b.id)?.openPopup()}, 700);
+    setTimeout(() => {render();requestAnimationFrame(()=>markerById.get(b.id)?.openPopup())}, 620);
   }));
   document.querySelectorAll('[data-action="select"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();toggleSelected(el.dataset.id)}));
   document.querySelectorAll('[data-action="kanban"]').forEach(el => el.addEventListener('click', e => {e.stopPropagation();addToKanban(el.dataset.id)}));
@@ -1462,7 +1581,7 @@ function googlePlaceBiz(place){
   if(rating)score+=Math.round(Math.max(0,rating-3.5)*5);
   if(reviews>=100)score+=5;
   score=Math.min(95,score);
-  return {id:`google-${placeId}`,googlePlaceId:placeId,name,zone:nearestZone(lat,lng),category,address:place.formattedAddress||place.formatted_address||'Dirección disponible en Google Maps',source:'Google Places',sourceUrl:place.googleMapsURI||place.url||`https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${encodeURIComponent(placeId)}`,lat,lng,precision:'Ubicación y ficha devueltas por Google Places',score,priority:score>=78?'A':score>=60?'B':'C',owner:'Fuerza Comercial',phone:place.nationalPhoneNumber||place.formattedPhoneNumber||place.formatted_phone_number||'',website:place.websiteURI||place.website||'',rating,reviews};
+  return {id:`google-${placeId}`,googlePlaceId:placeId,name,zone:nearestZone(lat,lng),category,address:place.formattedAddress||place.formatted_address||'Dirección disponible en Nova',source:'Nova',sourceUrl:place.googleMapsURI||place.url||`https://www.google.com/maps/search/?api=1&query=Nova&query_place_id=${encodeURIComponent(placeId)}`,lat,lng,precision:'Ubicación y ficha devueltas por Nova',score,priority:score>=78?'A':score>=60?'B':'C',owner:'Fuerza Comercial',phone:place.nationalPhoneNumber||place.formattedPhoneNumber||place.formatted_phone_number||'',website:place.websiteURI||place.website||'',rating,reviews};
 }
 function boundsKey(bounds){
   if(!bounds)return 'managua';
@@ -1501,7 +1620,7 @@ async function searchTextPlaces(Place,request,query,runId){
     });
     return Array.isArray(places) ? places : [];
   }catch(error){
-    setSearchStatus(`Google Places no pudo buscar ${query}.`);
+    setSearchStatus(`Nova no pudo buscar ${query}.`);
     console.warn('Google Places searchByText',error);
     return [];
   }
@@ -1512,13 +1631,13 @@ async function searchGooglePlaces(query='', options={}){
   const runId=++googleSearchRun;
   const btn=document.getElementById('refresh'); const searchBtn=document.getElementById('searchGoogle'); const zoneBtn=document.getElementById('searchViewport');
   [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=true});
-  if(!window.google?.maps?.places){setSearchStatus('Google Maps no está disponible. Revisa la key y las APIs habilitadas.');toast('No se pudo cargar Google Maps');[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});return}
+  if(!window.google?.maps?.places){setSearchStatus('El servicio de mapas no está disponible. Revisa la configuración de Nova.');toast('No se pudo cargar el mapa');[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});return}
   const normalizedQuery=query.trim(); const bounds=visibleOnly ? currentBounds() : null;
   const cache=force ? null : readGoogleCache(normalizedQuery,bounds);
   if(cache){
     const before=googlePlaces.length;
     mergeGoogleResults(cache); mergeBusinesses(); populateFilters(); render();
-    setSearchStatus(`${Math.max(0,googlePlaces.length-before)} nuevos · ${googlePlaces.length} negocios Google acumulados.`);
+    setSearchStatus(`${Math.max(0,googlePlaces.length-before)} nuevos · ${googlePlaces.length} negocios Nova acumulados.`);
     [btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false}); return;
   }
   const queries=normalizedQuery ? [normalizedQuery] : ['logística y transporte','tiendas de ropa','ferreterías y construcción','agencias de marketing','farmacias y clínicas'];
@@ -1527,7 +1646,7 @@ async function searchGooglePlaces(query='', options={}){
     const placesLibrary=await google.maps.importLibrary('places');
     const Place=placesLibrary?.Place;
     if(!Place?.searchByText)throw new Error('Place.searchByText no está disponible. Habilita Places API (New).');
-    setSearchStatus(`Buscando ${queries.length} rubro${queries.length>1?'s':''} en Google Places…`);
+    setSearchStatus(`Nova está buscando ${queries.length} rubro${queries.length>1?'s':''}…`);
     const center=googleMap.getCenter();
     const centerLat=center?.lat?.() ?? 12.115;
     const centerLng=center?.lng?.() ?? -86.26;
@@ -1550,14 +1669,14 @@ async function searchGooglePlaces(query='', options={}){
       localStorage.setItem(cachedGoogleKey(normalizedQuery,bounds),JSON.stringify({savedAt:Date.now(),data:mapped}));
       mergeBusinesses(); populateFilters(); render();
       const newCount=mapped.filter(place=>!previousIds.has(place.googlePlaceId)).length;
-      setSearchStatus(`${newCount} nuevos · ${googlePlaces.length} negocios Google acumulados · ${area}.`);
+      setSearchStatus(`${newCount} nuevos · ${googlePlaces.length} negocios Nova acumulados · ${area}.`);
       toast(`${newCount} negocios nuevos encontrados`);
     }else{
-      setSearchStatus('Google Places no devolvió negocios para esa búsqueda. Prueba otro rubro o acerca el mapa.'); toast('Sin resultados de Google Places');
+      setSearchStatus('Nova no devolvió negocios para esa búsqueda. Prueba otro rubro o acerca el mapa.'); toast('Sin resultados');
     }
   }catch(error){
-    setSearchStatus('No se pudo completar la búsqueda en Google Places. Revisa la consola y la configuración de la API.'); toast('Error consultando Google Places'); console.error(error);
-  }finally{[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});if(btn)btn.textContent='↻ Actualizar Google Places'}
+    setSearchStatus('No se pudo completar la búsqueda de Nova. Revisa la configuración del servicio.'); toast('Error consultando Nova'); console.error(error);
+  }finally{[btn,searchBtn,zoneBtn].forEach(node=>{if(node)node.disabled=false});if(btn)btn.textContent='↻ Actualizar negocios Nova'}
 }
 function loadGooglePlaces(force=false){return searchGooglePlaces('',{force})}
 function routeBusinessesFromStore(){
@@ -1661,7 +1780,7 @@ document.getElementById('searchViewport').addEventListener('click', () => search
 document.getElementById('search').addEventListener('keydown', event => {if(event.key==='Enter'){event.preventDefault();searchGooglePlaces(event.currentTarget.value,{force:true})}});
 document.getElementById('clearGoogleCache').addEventListener('click', () => {
   Object.keys(localStorage).filter(key=>key.startsWith('novaGooglePlacesCacheV')).forEach(key=>localStorage.removeItem(key));
-  setSearchStatus('Caché de Google Places limpiada. La próxima búsqueda será en vivo.'); toast('Caché limpiada');
+  setSearchStatus('Datos locales de Nova limpiados. La próxima búsqueda será en vivo.'); toast('Datos limpiados');
 });
 function setActiveView(view){
   const changed=activeView!==view;
@@ -1684,16 +1803,17 @@ document.getElementById('bulkVisit').addEventListener('click',visitSelected);
 document.getElementById('bulkWhatsApp').addEventListener('click',sendSelectedWhatsApp);
 document.getElementById('bulkDiscard').addEventListener('click',discardSelected);
 document.getElementById('locateMe').addEventListener('click',locateMe);
+document.getElementById('locationSettings').addEventListener('click',()=>{document.getElementById('locationModal').hidden=false;updatePresenceToggle()});
 map.on('zoomend', applyLabels);
 function updateOfflineStatus(){
   const label=document.getElementById('offlineStatusText');
   if(!label)return;
   label.textContent=navigator.onLine?'Conectado · los cambios se sincronizan con NovaHub':'Modo offline · cambios, ubicación y evidencias quedan en cola local';
 }
-window.addEventListener('online',()=>{updateOfflineStatus();flushOutbox();loadRemoteProspects();loadSellerPresence()});
+window.addEventListener('online',()=>{updateOfflineStatus();flushOutbox();loadRemoteProspects();loadSellerPresence();startPresenceWatch()});
 window.addEventListener('offline',updateOfflineStatus);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&navigator.onLine)loadSellerPresence()});
-window.setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)loadSellerPresence()},60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&navigator.onLine){loadSellerPresence();startPresenceWatch()}else if(document.visibilityState!=='visible')stopPresenceWatch()});
+window.setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)loadSellerPresence()},15000);
 
 const sheet = document.getElementById('sheet');
 const toggle = document.getElementById('mobileSheetToggle');
@@ -1762,10 +1882,13 @@ populateFilters();
 render();
 updateOfflineStatus();
 setTimeout(() => { loadAssignees(); loadRemoteProspects().finally(() => flushOutbox().finally(() => {
-  setSearchStatus('Datos locales cargados. Pulsa Buscar zona para consultar Google Places.');
+  setSearchStatus('Datos locales cargados. Pulsa Buscar zona para consultar negocios de Nova.');
   loadSellerPresence();
 })); }, 450);
-}).catch(() => {});
+}).catch(error => {
+  console.warn('No se pudo iniciar Nova Maps',error);
+  window.__novaShowMapError('Nova Maps no pudo iniciar. Verifica la clave, el dominio autorizado y vuelve a intentar.');
+});
 </script>
 </body>
 </html>
