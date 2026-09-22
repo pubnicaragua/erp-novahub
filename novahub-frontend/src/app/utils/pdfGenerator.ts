@@ -2372,7 +2372,7 @@ export async function generateProductLabelsPDF({ products, configs, tenantName, 
     const config = configs.get(product.id);
     if (!config) return [];
     const quantity = Math.max(0, Math.min(500, Math.floor(Number(config.quantity) || 0)));
-    const barcode = product.code || String(product.id || '').slice(0, 12) || '000000000000';
+    const barcode = product.barcode || product.code || String(product.id || '').slice(0, 12) || '000000000000';
     return Array.from({ length: quantity }, () => ({
       barcode,
       name: config.showName ? product.name || 'Producto' : '',
@@ -2389,7 +2389,7 @@ export async function generateProductLabelsPDF({ products, configs, tenantName, 
     definition,
     settings,
     targetKey,
-    data: { logo: resolvedLogo, company: { name: tenantName, logo: resolvedLogo }, items: rows, rows },
+    data: { logo: resolvedLogo, company: { name: tenantName, logo: resolvedLogo }, items: rows, rows, renderScale: 3.5 },
     fileName: buildPdfFileName(['etiquetas_productos'], 'configured'),
     save: true,
   });

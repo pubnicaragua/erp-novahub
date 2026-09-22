@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 interface LabelProduct {
   id: string;
   code: string;
+  barcode?: string;
   name: string;
   salePrice?: number;
   category?: { name?: string };
