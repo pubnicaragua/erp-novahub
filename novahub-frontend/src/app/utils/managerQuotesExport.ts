@@ -181,7 +181,7 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
   if (configured) return configured;
   const settings = await getPdfDesignSettings('reportes.sales');
   const primary = pdfDesignColor(settings.primaryColor || options.primaryColor, [16, 185, 129]);
-  const doc = new jsPDF({ ...pdfDesignPaper(settings), orientation: 'landscape' });
+  const doc = new jsPDF(pdfDesignPaper(settings));
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;

@@ -66,7 +66,7 @@ export function ActivosFijosDepreciationTab() {
   const [exporting, setExporting] = useState(false);
 
   const assetsQuery = useAccountingQuery<AssetSummary[]>(['fixed-asset-details'], async (signal) =>
-    accountingList(await contabilidadService.getFixedAssetsDetail(signal)) as AssetSummary[],
+    accountingList(await contabilidadService.getFixedAssetsDetail(undefined, signal)) as AssetSummary[],
   );
   const assets = assetsQuery.data || [];
   const loading = assetsQuery.isLoading || assetsQuery.isFetching;

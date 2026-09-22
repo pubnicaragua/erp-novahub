@@ -11,6 +11,9 @@ import { Input } from './ui/input';
 import { Combobox } from './ui/Combobox';
 import { toast } from '@/app/services/toast';
 import { cn } from './ui/utils';
+import { ExportMenu } from './ui/ExportMenu';
+import { generateFastGlobalReportPDF, getPdfDesignSettings } from '../utils/pdfGenerator';
+import { createReportWorkbook } from '../utils/reportWorkbook';
 
 const EMPTY_FILTERS: AuditLogQuery = { page: 1, pageSize: 25 };
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
@@ -185,8 +188,6 @@ function AuditDetail({ log, platformScope, showTechnicalDetails }: { log: AuditL
   return <div className="min-w-0 space-y-5 overflow-y-auto px-1 pb-2"><div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">{values.map(([label, value]) => <div key={label} className="min-w-0 rounded-lg border border-border/50 bg-card/60 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1 break-words text-sm font-semibold text-foreground">{value || '—'}</p></div>)}</div><div className="space-y-2"><h3 className="text-sm font-black uppercase tracking-tight">Descripción</h3><p className="rounded-lg border border-border/60 bg-muted/20 p-3 text-sm text-foreground">{functionalDescription(log)}</p></div>{technical && <details className="rounded-lg border border-border/60 bg-muted/10 p-3"><summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-muted-foreground">Detalle técnico · solo SuperAdmin</summary><pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background p-3 text-xs text-muted-foreground">{technical}</pre></details>}<p className="text-xs text-muted-foreground">{showTechnicalDetails ? 'Este detalle muestra información funcional y permite revisar el detalle técnico autorizado.' : 'Este detalle muestra únicamente información funcional del registro.'}</p></div>;
 }
 
-function toCsvValue(value: unknown) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
-
 export function AuditoriaPage() {
   const { user } = useAuth();
   const platformScope = Boolean(user?.isPlatformAdmin);
@@ -230,15 +231,45 @@ export function AuditoriaPage() {
   const setBusinessUnit = (value: string) => setFilters((current) => ({ ...current, businessUnitId: value || undefined, branchId: undefined, page: 1 }));
   const clearFilters = () => { setSearchDraft(''); setFilters(EMPTY_FILTERS); };
 
-  const exportLogs = async () => {
+  const exportLogs = async (format: 'pdf' | 'xlsx') => {
     if (!canExport) return;
     try {
       const response = await auditService.export(filters);
-      const header = platformScope ? ['Fecha', 'Autor', 'Rol', 'Grupo empresarial', 'Rubro', 'Sucursal', 'Módulo', 'Acción', 'Registro', 'Resultado', 'Descripción'] : ['Fecha', 'Autor', 'Rol', 'Módulo', 'Acción', 'Registro', 'Resultado', 'Descripción'];
-      const lines = response.items.map((row) => (platformScope ? [row.createdAt, row.actorName || 'Sistema', auditRoleLabel(row.actorRole), scopeDisplay(row.companyName, 'Sin grupo asociado'), scopeDisplay(row.businessUnitName, 'No aplica'), scopeDisplay(row.branchName, 'No aplica'), auditModuleLabel(row.module, platformScope), auditActionLabel(row.action), `${auditEntityLabel(row.entity)} · ${recordDisplay(row)}`, row.result === 'SUCCESS' ? 'Correcto' : 'Fallido', functionalDescription(row)] : [row.createdAt, row.actorName || 'Sistema', auditRoleLabel(row.actorRole), auditModuleLabel(row.module, platformScope), auditActionLabel(row.action), `${auditEntityLabel(row.entity)} · ${recordDisplay(row)}`, row.result === 'SUCCESS' ? 'Correcto' : 'Fallido', functionalDescription(row)]).map(toCsvValue).join(','));
-      const blob = new Blob([`\uFEFF${header.map(toCsvValue).join(',')}\n${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `novahub-auditoria-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
-      toast.success(response.total > response.items.length ? `Se exportaron los primeros ${response.items.length} registros del filtro.` : 'Auditoría exportada.');
+      const rows = response.items.map((row) => ({
+        fecha: row.createdAt,
+        autor: row.actorName || 'Sistema',
+        rol: auditRoleLabel(row.actorRole),
+        grupo: scopeDisplay(row.companyName, 'Sin grupo asociado'),
+        rubro: scopeDisplay(row.businessUnitName, 'No aplica'),
+        sucursal: scopeDisplay(row.branchName, 'No aplica'),
+        modulo: auditModuleLabel(row.module, platformScope),
+        accion: auditActionLabel(row.action),
+        registro: `${auditEntityLabel(row.entity)} · ${recordDisplay(row)}`,
+        resultado: row.result === 'SUCCESS' ? 'Correcto' : 'Fallido',
+        descripcion: functionalDescription(row),
+      }));
+      if (format === 'xlsx') {
+        createReportWorkbook({ fileName: `novahub-auditoria-${new Date().toISOString().slice(0, 10)}.xlsx`, sheets: [{ name: 'Auditoría', rows }], filters: { ...filters, alcance: platformScope ? 'Plataforma' : 'Sucursal' } });
+      } else {
+        const pdfSettings = await getPdfDesignSettings('auditoria.logs');
+        await generateFastGlobalReportPDF({
+          targetKey: 'auditoria.logs',
+          title: 'Bitácora de auditoría',
+          tenantName: user?.tenantName || 'Mi Empresa',
+          settings: pdfSettings,
+          rows,
+          columns: [
+            { header: 'Fecha', value: row => row.fecha || '—' },
+            { header: 'Autor', value: row => row.autor },
+            { header: 'Módulo', value: row => row.modulo },
+            { header: 'Acción', value: row => row.accion },
+            { header: 'Registro', value: row => row.registro },
+            { header: 'Resultado', value: row => row.resultado },
+          ],
+          fileName: `novahub-auditoria-${new Date().toISOString().slice(0, 10)}.pdf`,
+        });
+      }
+      toast.success(response.total > response.items.length ? `Se exportaron los primeros ${response.items.length} registros del filtro.` : `Auditoría exportada en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
     } catch (error: unknown) { toast.error(error instanceof Error ? error.message : 'No se pudo exportar la auditoría.'); }
   };
 
@@ -246,7 +277,7 @@ export function AuditoriaPage() {
   const platformFilters = platformScope && <><Field label="Grupo empresarial"><Combobox value={selectedEnterpriseGroupId} onChange={setEnterpriseGroup} options={(options?.companies || []).map((item) => ({ value: item.id, label: item.name }))} placeholder="Todos los grupos" searchPlaceholder="Buscar grupo empresarial..." emptyMessage="No se encontraron grupos empresariales." maxVisibleOptions={200} /></Field><SelectField label="Rubro" value={filters.businessUnitId} onChange={setBusinessUnit} options={visibleBusinessUnits.map((item) => ({ value: item.id, label: item.name }))} placeholder={selectedEnterpriseGroupId ? 'Todos los rubros' : 'Selecciona un grupo'} disabled={!selectedEnterpriseGroupId} /><SelectField label="Sucursal" value={filters.branchId} onChange={(value) => setFilter('branchId', value)} options={visibleBranches.map((item) => ({ value: item.id, label: item.name }))} placeholder={filters.businessUnitId ? 'Todas las sucursales' : 'Selecciona un rubro'} disabled={!filters.businessUnitId} /></>;
 
   return <div className="min-w-0 max-w-full overflow-x-hidden p-4 sm:p-6 md:p-10"><div className="mx-auto min-w-0 max-w-[1700px] space-y-6">
-    <header className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between"><div className="flex min-w-0 items-start gap-3"><div className="mt-1 flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><History className="size-6" /></div><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Control y trazabilidad</p><h1 className="break-words text-2xl font-black uppercase italic tracking-tight text-foreground sm:text-3xl">Logs y auditoría</h1><p className="mt-1 max-w-3xl text-sm text-muted-foreground">{platformScope ? 'Consulta por grupo empresarial, rubro y sucursal dentro del alcance administrativo.' : 'Consulta la actividad de esta sucursal con filtros operativos y lenguaje claro.'}</p></div></div><div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={() => void logsQuery.refetch()} disabled={logsQuery.isFetching} aria-label="Actualizar logs"><RefreshCw className={cn('size-4', logsQuery.isFetching && 'animate-spin')} />Actualizar</Button>{canExport && <Button onClick={() => void exportLogs()}><Download className="size-4" />Exportar</Button>}</div></header>
+    <header className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between"><div className="flex min-w-0 items-start gap-3"><div className="mt-1 flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><History className="size-6" /></div><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Control y trazabilidad</p><h1 className="break-words text-2xl font-black uppercase italic tracking-tight text-foreground sm:text-3xl">Logs y auditoría</h1><p className="mt-1 max-w-3xl text-sm text-muted-foreground">{platformScope ? 'Consulta por grupo empresarial, rubro y sucursal dentro del alcance administrativo.' : 'Consulta la actividad de esta sucursal con filtros operativos y lenguaje claro.'}</p></div></div><div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={() => void logsQuery.refetch()} disabled={logsQuery.isFetching} aria-label="Actualizar logs"><RefreshCw className={cn('size-4', logsQuery.isFetching && 'animate-spin')} />Actualizar</Button>{canExport && <ExportMenu onPdf={() => void exportLogs('pdf')} onExcel={() => void exportLogs('xlsx')} />}</div></header>
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"><Card><CardContent className="p-4"><p className="text-xs font-bold uppercase text-muted-foreground">Registros filtrados</p><p className="mt-2 text-2xl font-black">{data?.total ?? '—'}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-xs font-bold uppercase text-muted-foreground">Correctos en página</p><p className="mt-2 text-2xl font-black text-emerald-600">{successCount}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-xs font-bold uppercase text-muted-foreground">Incidentes en página</p><p className="mt-2 text-2xl font-black text-destructive">{failureCount}</p></CardContent></Card><Card><CardContent className="flex items-center gap-3 p-4"><ShieldCheck className="size-8 shrink-0 text-primary" /><div><p className="text-xs font-bold uppercase text-muted-foreground">Integridad</p><p className="mt-1 text-sm font-bold">Solo lectura</p></div></CardContent></Card></div>
     <Card><CardHeader className="gap-4"><div><CardTitle className="flex items-center gap-2 text-lg font-black"><FileSearch className="size-5 text-primary" />Filtros de auditoría</CardTitle><CardDescription>{platformScope ? 'Filtra por grupo empresarial, rubro, sucursal y los datos funcionales del evento.' : 'En esta sucursal solo están disponibles los filtros de búsqueda, fecha, usuario y módulo.'}</CardDescription></div><Button variant="ghost" size="sm" className="self-start" onClick={clearFilters}><X className="size-4" />Limpiar</Button></CardHeader><CardContent className={cn('grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2', platformScope ? 'lg:grid-cols-4 xl:grid-cols-5' : 'lg:grid-cols-3')}>{commonFilters}{platformFilters}</CardContent></Card>
     <Card className="min-w-0 overflow-hidden"><CardHeader><CardTitle className="text-lg font-black">Actividad registrada</CardTitle><CardDescription>{data ? `Página ${data.page} de ${data.totalPages} · ${data.total} registro(s)` : 'Cargando registros...'}</CardDescription></CardHeader><CardContent className="min-w-0 p-0"><div className="overflow-x-auto"><table className={cn('w-full text-left text-sm', platformScope ? 'min-w-[1350px]' : 'min-w-[880px]')}><thead className="border-y border-border/60 bg-muted/30 text-[11px] uppercase tracking-wide text-muted-foreground"><tr><th className="p-3">Fecha</th><th className="p-3">Autor</th>{platformScope && <><th className="p-3">Grupo empresarial</th><th className="p-3">Rubro</th><th className="p-3">Sucursal</th></>}<th className="p-3">Módulo</th><th className="p-3">Acción</th><th className="p-3">Registro</th><th className="p-3">Resultado</th><th className="p-3 text-right">Ver</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b border-border/50 align-top last:border-0 hover:bg-muted/20"><td className="whitespace-nowrap p-3 text-xs text-muted-foreground">{formatDate(row.createdAt)}</td><td className="max-w-[190px] p-3"><p className="truncate font-semibold">{row.actorName || 'Sistema'}</p><p className="truncate text-xs text-muted-foreground">{auditRoleLabel(row.actorRole)}</p></td>{platformScope && <><td className="max-w-[180px] p-3"><span className="break-words font-semibold">{scopeDisplay(row.companyName, 'Sin grupo asociado')}</span></td><td className="max-w-[180px] p-3"><span className="break-words">{scopeDisplay(row.businessUnitName, 'No aplica')}</span></td><td className="max-w-[180px] p-3"><span className="break-words">{scopeDisplay(row.branchName, 'No aplica')}</span></td></>}<td className="p-3"><span className="font-semibold">{auditModuleLabel(row.module, platformScope)}</span></td><td className="p-3 font-semibold">{auditActionLabel(row.action)}</td><td className="max-w-[230px] p-3"><p className="font-semibold">{auditEntityLabel(row.entity)}</p><p className="break-words text-xs text-muted-foreground">{recordDisplay(row)}</p></td><td className="p-3"><ResultBadge value={row.result} /></td><td className="p-3 text-right"><Button variant="ghost" size="sm" onClick={() => setSelectedId(row.id)} aria-label="Ver detalle de la actividad"><Eye className="size-4" />Ver</Button></td></tr>)}</tbody></table></div>{logsQuery.isLoading && <div className="p-10 text-center text-sm text-muted-foreground">Cargando registros...</div>}{logsQuery.error && <div className="m-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">No se pudieron cargar los registros: {logsQuery.error.message}</div>}{!logsQuery.isLoading && !logsQuery.error && !rows.length && <div className="p-10 text-center text-sm text-muted-foreground">No hay registros para los filtros elegidos.</div>}<div className="flex flex-col gap-3 border-t border-border/60 p-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-muted-foreground">Los registros no se editan ni eliminan desde NovaHub.</p><div className="flex items-center gap-2"><Button variant="outline" size="sm" disabled={(data?.page || 1) <= 1 || logsQuery.isFetching} onClick={() => setFilters((current) => ({ ...current, page: Math.max(1, (current.page || 1) - 1) }))}>Anterior</Button><span className="min-w-[100px] text-center text-xs font-semibold">{data ? `${data.page} / ${data.totalPages}` : '—'}</span><Button variant="outline" size="sm" disabled={!data || data.page >= data.totalPages || logsQuery.isFetching} onClick={() => setFilters((current) => ({ ...current, page: (current.page || 1) + 1 }))}>Siguiente</Button></div></div></CardContent></Card>

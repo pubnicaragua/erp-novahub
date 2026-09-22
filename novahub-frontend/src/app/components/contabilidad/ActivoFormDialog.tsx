@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -66,7 +66,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
   const categoriesQuery = useAccountingQuery<any[]>(['fixed-asset-categories'], async (signal) =>
     accountingList(await contabilidadService.getFixedAssetCategories(signal)),
   );
-  const categories = categoriesQuery.data || [];
+  const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
   const [companyAssets, setCompanyAssets] = useState<any[]>([]);
 
   useEffect(() => {

@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { Download, FileSpreadsheet, BarChart3 } from 'lucide-react';
+import { Download, FileSpreadsheet, BarChart3, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 import { FinanceReportTab } from './reportes/FinanceReportTab';
@@ -16,6 +16,7 @@ import { InventoryReportTab } from './reportes/InventoryReportTab';
 import { HRReportTab } from './reportes/HRReportTab';
 import type { ReportExportRef } from './reportes/types';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 
 interface ReportesPageProps {
   activeSubModule?: string;
@@ -127,12 +128,13 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <SelectItem value="todo">Histórico completo</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={!canExportActiveReport} className="gap-2">
-            <Download className="w-4 h-4" /> PDF
-          </Button>
-          <Button variant="default" size="sm" onClick={handleExportExcel} disabled={!canExportActiveReport} className="gap-2">
-            <FileSpreadsheet className="w-4 h-4" /> Excel
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="outline" size="sm" disabled={!canExportActiveReport} className="gap-2"><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportPDF}><Download className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportExcel}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
       </div>
 
       <CurrencyValuationBanner />

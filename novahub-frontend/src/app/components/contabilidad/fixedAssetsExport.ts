@@ -34,7 +34,7 @@ export async function fetchFixedAssetDetails(ids: string[]): Promise<any[]> {
   const details: any[] = [];
   for (let i = 0; i < ids.length; i += 10) {
     const chunk = ids.slice(i, i + 10);
-    const results = await Promise.all(chunk.map(id => contabilidadService.getFixedAssetDetail(id)));
+    const results = await Promise.all(chunk.map(id => contabilidadService.getFixedAssetDetail(id, { report: true, export: true })));
     details.push(...results);
   }
   return details;

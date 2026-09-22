@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import App from './app/App.tsx';
 import './styles/index.css';
 import { queryClient } from './app/services/query-client';
+import { installVitePreloadRecovery } from './app/utils/chunk-recovery';
 
 Sentry.init({
   dsn:
@@ -29,6 +30,8 @@ Sentry.init({
   replaysOnErrorSampleRate: 1.0,
 });
 
+installVitePreloadRecovery();
+
 // Test trigger: visit /?sentry-test to send a metric + force a captured error
 if (new URLSearchParams(window.location.search).has('sentry-test')) {
   const g = globalThis as typeof globalThis & { myUndefinedFunction?: () => void };
@@ -38,7 +41,8 @@ if (new URLSearchParams(window.location.search).has('sentry-test')) {
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch((error) => {
+    const serviceWorkerUrl = `/sw.js?v=${encodeURIComponent(__NOVAHUB_BUILD_ID__)}`;
+    navigator.serviceWorker.register(serviceWorkerUrl, { updateViaCache: 'none' }).catch((error) => {
       console.warn('NovaHub offline shell unavailable', error);
     });
   });

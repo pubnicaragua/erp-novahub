@@ -13,13 +13,33 @@ import { tasksService, eventsService, remindersService, activityLogsService } fr
 import { useAuth } from '../contexts/AuthContext';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { ExportMenu } from './ui/ExportMenu';
 import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
+import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import { createReportWorkbook } from '../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import { toast } from '../services/toast';
 
 interface ActividadesPageProps {
   activeSubModule?: string;
   isSidebarCollapsed?: boolean;
   onSubModuleChange?: (sub: string) => void;
 }
+
+const ACTIVITY_EXPORT_TARGETS: Record<string, { targetKey: string; label: string; permission: string }> = {
+  tareas: { targetKey: 'actividades.tasks', label: 'Tareas', permission: 'ACTIVITIES_TASKS' },
+  eventos: { targetKey: 'actividades.events', label: 'Eventos', permission: 'ACTIVITIES_EVENTS' },
+  recordatorios: { targetKey: 'actividades.reminders', label: 'Recordatorios', permission: 'ACTIVITIES_REMINDERS' },
+  bitacora: { targetKey: 'actividades.logs', label: 'Bitácora de actividades', permission: 'ACTIVITIES_LOGS' },
+  calendario: { targetKey: 'actividades.calendar', label: 'Calendario de actividades', permission: 'ACTIVITIES_CALENDAR' },
+  reuniones: { targetKey: 'actividades.meetings', label: 'Reuniones', permission: 'ACTIVITIES_MEETINGS' },
+};
+
+const activityExportDate = (value: unknown) => {
+  if (!value) return '—';
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('es-NI');
+};
 
 export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: ActividadesPageProps) => {
   const { user, canPerform } = useAuth();
@@ -73,6 +93,44 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
     : logsQuery;
   const loading = activeQuery.isLoading || activeQuery.isFetching;
   const fetchData = () => queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
+  const activeExportTarget = ACTIVITY_EXPORT_TARGETS[activeTab];
+  const canExportActive = Boolean(activeExportTarget && canPerform(activeExportTarget.permission, 'export'));
+
+  const exportActivities = async (format: 'pdf' | 'xlsx') => {
+    if (!activeExportTarget || !canExportActive) return;
+    const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de ${activeExportTarget.label}…`);
+    try {
+      const params = { report: true, export: true };
+      const [tasks, events, reminders, logs] = await Promise.all([
+        activeTab === 'calendario' ? tasksService.getAll(undefined, params) : Promise.resolve([]),
+        ['eventos', 'calendario', 'reuniones'].includes(activeTab) ? eventsService.getAll(undefined, params) : Promise.resolve([]),
+        activeTab === 'recordatorios' ? remindersService.getAll(undefined, params) : Promise.resolve([]),
+        activeTab === 'bitacora' ? activityLogsService.getAll(undefined, params) : Promise.resolve([]),
+      ]);
+      const sourceRows = activeTab === 'tareas' ? asList(await tasksService.getAll(undefined, params))
+        : activeTab === 'eventos' || activeTab === 'reuniones' ? asList(events)
+          : activeTab === 'calendario' ? [...asList(tasks), ...asList(events)]
+            : activeTab === 'recordatorios' ? asList(reminders)
+              : asList(logs);
+      const rows = sourceRows.map((row: any) => {
+        if (activeTab === 'tareas') return { Título: row.title || row.name || '—', Responsable: row.assignedTo?.name || row.assignee?.name || row.assignedToName || '—', Prioridad: row.priority || '—', Vencimiento: activityExportDate(row.dueDate), Estado: row.status || '—' };
+        if (activeTab === 'eventos' || activeTab === 'reuniones') return { Evento: row.title || row.name || '—', Inicio: activityExportDate(row.startAt || row.startDate), Fin: activityExportDate(row.endAt || row.endDate), Lugar: row.location || '—', Responsable: row.organizer?.name || row.createdBy?.name || '—', Estado: row.status || '—' };
+        if (activeTab === 'calendario') return { Tipo: row.title ? 'Evento' : 'Tarea', Título: row.title || row.name || '—', Inicio: activityExportDate(row.startAt || row.startDate || row.dueDate), Fin: activityExportDate(row.endAt || row.endDate), Responsable: row.assignedTo?.name || row.organizer?.name || '—', Estado: row.status || '—' };
+        if (activeTab === 'recordatorios') return { Recordatorio: row.title || row.message || row.description || '—', Fecha: activityExportDate(row.remindAt || row.date || row.dueDate), Alcance: row.scope || '—', Responsable: row.createdBy?.name || row.user?.name || '—', Estado: row.status || '—' };
+        return { Fecha: activityExportDate(row.createdAt || row.date), Acción: row.action || row.type || '—', Usuario: row.user?.name || row.actor?.name || '—', Módulo: row.module || '—', Registro: row.recordId || row.entityId || '—', Resultado: row.result || row.status || '—' };
+      });
+      const headers = rows.length ? Object.keys(rows[0]) : ['Mensaje'];
+      const sections = [{ id: activeExportTarget.targetKey, title: activeExportTarget.label, headers, rows: rows.length ? rows.map((row) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }];
+      if (format === 'xlsx') {
+        createReportWorkbook({ fileName: buildDatedDownloadFileName([`reporte_actividades_${activeTab}`], 'xlsx'), sheets: [{ name: activeExportTarget.label, rows }], filters: { Vista: activeExportTarget.label, Alcance: 'Todos los registros autorizados' } });
+      } else {
+        await generateConfiguredReportSectionsPDF({ targetKey: activeExportTarget.targetKey, title: activeExportTarget.label, tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, fileName: buildDatedDownloadFileName([`reporte_actividades_${activeTab}`], 'pdf') });
+      }
+      toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`, { id: toastId });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo generar la exportación', { id: toastId });
+    }
+  };
 
   useNotificationDomainRefresh({
     module: 'actividades',
@@ -118,7 +176,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
           <CurrencyValuationBanner className="mb-3" />
 
           <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
-            <div className="mb-4 w-full min-w-0 max-w-full overscroll-x-contain overflow-x-auto custom-scrollbar">
+            <div className="mb-4 flex w-full min-w-0 max-w-full items-center gap-2">
+            <div className="min-w-0 flex-1 overscroll-x-contain overflow-x-auto custom-scrollbar">
             <TabsList className="flex h-auto w-max min-w-full max-w-none gap-1.5 rounded-2xl border border-border/50 bg-card/80 p-1.5 shadow-sm backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {visibleTabs.map((tab) => {
                 return (
@@ -135,6 +194,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                 );
               })}
             </TabsList>
+            </div>
+            {canExportActive && <ExportMenu onPdf={() => void exportActivities('pdf')} onExcel={() => void exportActivities('xlsx')} className="shrink-0" pdfDescription="Plantilla configurada para esta vista" excelDescription="Todos los registros autorizados" />}
             </div>
             
             <AnimatePresence mode="wait">

@@ -31,6 +31,7 @@ import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalIn
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
 import { buildVariantDisplayName } from '../../types/variants';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; warehouseCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -196,7 +197,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     const exportToastId = toast.loading('Generando reporte de compras recurrentes...');
     try {
       const allRows = scope === 'all'
-        ? await fetchAllPaginatedRows<RecurringSupplierInvoice>((page, pageSize) => recurringSupplierInvoicesService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, report: true, light: true }))
+        ? await fetchAllPaginatedRows<RecurringSupplierInvoice>((page, pageSize) => recurringSupplierInvoicesService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, report: true, export: true, light: true }))
         : data;
       const exportRows = allRows.filter((row) => {
         const status = String(row.status || '').toUpperCase();
@@ -720,7 +721,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-invoices" />
-            {canPerform('PURCHASES_INVOICES_REC', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
+            {canPerform('PURCHASES_INVOICES_REC', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => createReportWorkbook({ fileName: 'compras_recurrentes.xlsx', sheets: [{ name: 'Registros', rows: filtered.map(row => ({ Descripcion: row.description || 'Compra automática', Proveedor: row.supplier?.name || 'Sin proveedor', Monto: Number(row.total || row.amount || 0), Frecuencia: freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—', Estado: row.status || '—' })) }] })} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de compras recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES_REC', 'create') && (

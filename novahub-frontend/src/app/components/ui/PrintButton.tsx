@@ -24,9 +24,6 @@ interface PrintButtonProps {
 
 const PAPER_OPTIONS: { label: string; value: PaperSize; description: string; group: 'standard' | 'roll' }[] = [
   { label: 'Carta', value: 'letter', description: '8.5" × 11"', group: 'standard' },
-  { label: 'Oficio', value: 'oficio', description: '8.5" × 13"', group: 'standard' },
-  { label: 'A4', value: 'A4', description: '210mm × 297mm', group: 'standard' },
-  { label: 'Legal', value: 'legal', description: '8.5" × 14"', group: 'standard' },
   { label: 'Rollo 80mm', value: 'roll-80', description: 'Papel continuo', group: 'roll' },
   { label: 'Rollo 58mm', value: 'roll-58', description: 'Papel continuo', group: 'roll' },
 ];

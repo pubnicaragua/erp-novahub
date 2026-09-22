@@ -24,6 +24,10 @@ import {
   type ReconciliationPreviewResult,
   type ReconciliationConfirmResult,
 } from '../../services/logistics.service';
+import { ExportMenu } from '../ui/ExportMenu';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 interface SupplierOption { id: string; name: string; code: string; }
 interface OrderOption { id: string; number: string; status: string; }
@@ -33,7 +37,7 @@ const formatDate = (value?: string | Date) => (value ? format(new Date(value), '
 const formatInputDate = (value?: string | Date) => (value ? format(new Date(value), 'yyyy-MM-dd') : '');
 
 export function Reconciliation() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canReadReconciliation = canPerform('TRACKING_RECONCILIATION', 'view');
   const canApproveReconciliation = canPerform('TRACKING_RECONCILIATION', 'approve');
   const [page, setPage] = useState(1);
@@ -106,6 +110,19 @@ export function Reconciliation() {
       }
     })();
   }, []);
+
+  const exportReconciliation = async (format: 'pdf' | 'xlsx') => {
+    if (!canPerform('TRACKING_RECONCILIATION', 'export')) return;
+    try {
+      const response = await logisticsService.reconciliationAvailable({ page: 1, pageSize: 5000, search: search || undefined, receptionBatchId: receptionBatchId || undefined, report: true, export: true });
+      const rows = (response.items || []).map((pkg) => ({ Tracking: pkg.trackingCode || '—', Cliente: pkg.customerName || pkg.subagencyName || '—', SKU: pkg.skuName || pkg.sku || '—', Bodega: pkg.warehouseValue || pkg.warehouseName || '—', 'Peso factura': pkg.supplierWeight ?? '—', 'Peso real': pkg.physicalWeight ?? '—', Recibido: formatDate(pkg.receivedAt) || '—' }));
+      if (format === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_tracking_conciliacion'], 'xlsx'), sheets: [{ name: 'Conciliación', rows }], filters: { Búsqueda: search || '—', Referencia: receptionBatchId || 'Todas' } });
+      else await generateConfiguredReportSectionsPDF({ targetKey: 'tracking.reconciliation', title: 'Conciliación de compras', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections: [{ id: 'reconciliation', title: 'Paquetes por conciliar', headers: Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' }), rows: rows.length ? rows.map((row) => Object.values(row) as Array<string | number>) : [['Sin registros para el alcance seleccionado']] }], fileName: buildDatedDownloadFileName(['reporte_tracking_conciliacion'], 'pdf') });
+      toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'No se pudo exportar la conciliación'));
+    }
+  };
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -207,6 +224,7 @@ export function Reconciliation() {
             {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n} por página</option>)}
           </select>
           <Badge variant="outline" className="rounded-lg text-[11px]">{data?.total ?? 0} disponibles</Badge>
+          {canPerform('TRACKING_RECONCILIATION', 'export') && <ExportMenu onPdf={() => void exportReconciliation('pdf')} onExcel={() => void exportReconciliation('xlsx')} pdfDescription="Reporte configurado de conciliación" excelDescription="Todos los paquetes filtrados" />}
         </div>
       </Card>
 

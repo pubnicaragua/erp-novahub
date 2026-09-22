@@ -41,6 +41,10 @@ import {
 } from '../../services/logistics.service';
 import { QuickReception } from './QuickReception';
 import { BulkImport } from './BulkImport';
+import { ExportMenu } from '../ui/ExportMenu';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 type View = 'list' | 'quick' | 'import';
 
@@ -52,7 +56,7 @@ function formatWeight(value?: number, unit?: string) {
 }
 
 export function ReceivedPackages() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canCreatePackages = canPerform('TRACKING_PACKAGES', 'create');
   const canReadPackages = canPerform('TRACKING_PACKAGES', 'view');
   const [result, setResult] = useState<ReceivedPackageListResult | null>(null);
@@ -142,6 +146,27 @@ export function ReceivedPackages() {
 
   const hasFilters = Object.values(filters).some((v) => Boolean(v));
 
+  const exportPackages = async (outputFormat: 'pdf' | 'xlsx') => {
+    if (!canPerform('TRACKING_PACKAGES', 'export')) return;
+    try {
+      const response = await logisticsService.listReceivedPackages({ page: 1, pageSize: 5000, search: search || undefined, sortBy, sortOrder, ...filters, report: true, export: true });
+      const rows = (response.items || []).map((pkg) => ({
+        Tracking: pkg.trackingCode || '—',
+        Cliente: pkg.customerName || pkg.subagencyName || '—',
+        SKU: pkg.skuName || pkg.sku || '—',
+        Bodega: pkg.warehouseValue || pkg.warehouseName || '—',
+        'Peso real': formatWeight(pkg.physicalWeight, pkg.weightUnit),
+        'Peso cobrable': formatWeight(pkg.billableWeight, pkg.weightUnit),
+        Recibido: pkg.receivedAt ? format(new Date(pkg.receivedAt), 'dd/MM/yyyy', { locale: es }) : '—',
+      }));
+      if (outputFormat === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_tracking_paquetes'], 'xlsx'), sheets: [{ name: 'Paquetes', rows }], filters: { Búsqueda: search || '—', ...filters } });
+      else await generateConfiguredReportSectionsPDF({ targetKey: 'tracking.packages', title: 'Paquetes recibidos', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections: [{ id: 'packages', title: 'Paquetes recibidos', headers: Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' }), rows: rows.length ? rows.map((row) => Object.values(row)) : [['Sin registros para el alcance seleccionado']] }], fileName: buildDatedDownloadFileName(['reporte_tracking_paquetes'], 'pdf') });
+      toast.success(`${outputFormat === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'No se pudo exportar paquetes recibidos'));
+    }
+  };
+
   const kpis = result?.kpis;
 
   return (
@@ -169,6 +194,7 @@ export function ReceivedPackages() {
         </div>
         {canCreatePackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('quick')} data-tour="log-reception-quick"><Zap className="size-4" /> Recepción rápida</Button>}
         {canCreatePackages && <Button variant="outline" className="rounded-xl text-xs" onClick={() => setView('import')} data-tour="log-reception-import"><Download className="size-4" /> Importar Excel</Button>}
+        {canPerform('TRACKING_PACKAGES', 'export') && <ExportMenu onPdf={() => void exportPackages('pdf')} onExcel={() => void exportPackages('xlsx')} pdfDescription="Reporte configurado de paquetes" excelDescription="Todos los paquetes filtrados" />}
       </div>
 
       {/* Filtros */}

@@ -12,6 +12,7 @@ import {
   CircleHelp,
   Clock3,
   FileDown,
+  FileSpreadsheet,
   Loader2,
   Package,
   RefreshCw,
@@ -44,8 +45,10 @@ import { cajaService } from '../services/caja.service';
 import { inventoryService } from '../services/inventario.service';
 import { safeGetItem, safeSetItem } from '../services/safe-storage';
 import type { PdfTemplateChart } from '../services/pdf-template-definition';
+import { loadModuleWithChunkRecovery } from '../utils/chunk-recovery';
 import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { Button } from './ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
@@ -55,9 +58,15 @@ import { toast } from '@/app/services/toast';
 import { BLOCKS, changeLabel, chartRows, dashboardRange, DEFAULT_PREFERENCES, INDICATORS, normalizePreferences, type DashboardBlock, type DashboardPeriod, type DashboardPreferences, type IndicatorDefinition } from './dashboard/executive-model';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import { createReportWorkbook } from '../utils/reportWorkbook';
 import './dashboard/executive-dashboard.css';
 
-const ProductDetailDrawer = lazy(() => import('./inventory/ProductDetailDrawer').then((module) => ({ default: module.ProductDetailDrawer })));
+const ProductDetailDrawer = lazy(() =>
+  loadModuleWithChunkRecovery(
+    () => import('./inventory/ProductDetailDrawer').then((module) => ({ default: module.ProductDetailDrawer })),
+    'executive-product-detail-drawer',
+  ),
+);
 
 interface ExecutiveTenantOverviewProps {
   onNavigate?: (module: Module) => void;
@@ -320,10 +329,6 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   };
 
   const exportDashboard = async () => {
-    if (!hasData) {
-      toast.error('No hay datos para exportar');
-      return;
-    }
     setIsExporting(true);
     try {
       const selectedKpis = preferences.indicators.map((id) => {
@@ -388,6 +393,31 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       toast.error(error?.message || 'No se pudo exportar el resumen');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const exportDashboardExcel = () => {
+    try {
+      const selectedKpis = preferences.indicators.map((id) => {
+        const definition = INDICATORS.find((item) => item.id === id);
+        const value = indicatorValue(id, kpis, performance, data);
+        return { Indicador: definition?.label || id, Valor: typeof value === 'number' ? value : String(value), Detalle: definition?.description || '' };
+      });
+      const productRows = [...(performance.topSelling || []), ...(performance.topMargin || [])].map((item: any) => ({ Producto: getProductName(item), Unidades: safeNumber(item.totalQty), Venta: safeNumber(item.totalRevenue), Utilidad: safeNumber(item.profit) }));
+      createReportWorkbook({
+        fileName: buildDatedDownloadFileName(['resumen_gestion'], 'xlsx'),
+        sheets: [
+          { name: 'Indicadores', rows: selectedKpis },
+          { name: 'Tendencia', rows: trend.map((item) => ({ Fecha: item.date, Ventas: safeNumber(item.revenue), Gastos: safeNumber(item.expenses) })) },
+          { name: 'Ventas por caja', rows: registers.map((item: any) => ({ Caja: item.registerName || item.registerCode || 'Caja', Operaciones: safeNumber(item.count), Ventas: safeNumber(item.total) })) },
+          { name: 'Actividad reciente', rows: transactions.map((item: any, index: number) => ({ Documento: item.number || `Factura ${index + 1}`, Fecha: item.date || '', Origen: item.register?.name || item.origin || 'Factura de venta', Cliente: item.customer || 'Cliente general', Monto: safeNumber(item.sourceTotal ?? item.total), Estado: formatTransactionStatus(item.status) })) },
+          { name: 'Productos', rows: productRows },
+        ],
+        filters: { Periodo: rangeLabel, Alcance: hasData ? 'Datos disponibles' : 'Sin datos para el periodo' },
+      });
+      toast.success('Resumen exportado en Excel');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo exportar el resumen en Excel');
     }
   };
   const navigate = (module: Module, detail?: Record<string, unknown>) => {
@@ -461,7 +491,13 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
             <SelectTrigger className="executive-period"><CalendarDays className="size-4" /><SelectValue /></SelectTrigger>
             <SelectContent>{Object.entries(PERIOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
           </Select>
-          <Button variant="outline" className="executive-toolbar-button" onClick={() => void exportDashboard()} disabled={isExporting || currentQuery.isFetching}><FileDown className="size-4" /> {isExporting ? 'Exportando…' : 'Exportar'}</Button>
+          {canPerform('DASHBOARD', 'export') && <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="outline" className="executive-toolbar-button" disabled={isExporting || currentQuery.isFetching}><FileDown className="size-4" /> {isExporting ? 'Exportando…' : 'Exportar'} <ChevronRight className="size-3.5 rotate-90" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportDashboard()}><FileDown className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" onClick={exportDashboardExcel}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>}
           <Button variant="outline" className="executive-toolbar-button" onClick={() => { setDraftPreferences(preferences); setConfigOpen(true); }}><Settings2 className="size-4" /> Configurar</Button>
           <Button className="executive-toolbar-button" onClick={() => askNova()}><NovaHubLogo size={17} className="rounded-full bg-white p-0.5" /> Preguntar a Nova</Button>
           <Button variant="outline" size="icon" className="executive-toolbar-icon" onClick={() => void currentQuery.refetch()} aria-label="Actualizar dashboard"><RefreshCw className={`size-4 ${currentQuery.isFetching ? 'animate-spin' : ''}`} /></Button>

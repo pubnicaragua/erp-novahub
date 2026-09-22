@@ -30,6 +30,10 @@ import {
   type PaginatedSimple,
   type ReceptionBatch,
 } from '../../services/logistics.service';
+import { ExportMenu } from '../ui/ExportMenu';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 interface GridRow extends BatchPackageRow {
   id: string;
@@ -58,7 +62,7 @@ const emptyRow = (index: number): GridRow => ({
 });
 
 export function BatchReception() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canCreateBatch = canPerform('TRACKING_BATCHES', 'create');
   const canEditBatch = canPerform('TRACKING_BATCHES', 'edit');
   const canApproveBatch = canPerform('TRACKING_BATCHES', 'approve');
@@ -131,6 +135,29 @@ export function BatchReception() {
     const timer = setTimeout(load, 250);
     return () => clearTimeout(timer);
   }, [load]);
+
+  const exportBatches = async (format: 'pdf' | 'xlsx') => {
+    if (!canPerform('TRACKING_BATCHES', 'export')) return;
+    try {
+      const response = await logisticsService.listBatches({ page: 1, pageSize: 5000, search: search || undefined, status: statusFilter || undefined, report: true, export: true });
+      const rows = (response.items || []).map((batch) => ({
+        Referencia: batch.number || '—',
+        Proveedor: batch.provider || '—',
+        Fecha: formatDate(batch.date),
+        Paquetes: (batch as any).packageCount ?? (batch as any).packagesCount ?? '—',
+        'Peso real': (batch as any).physicalWeight ?? '—',
+        'Peso factura': (batch as any).supplierWeight ?? '—',
+        Total: (batch as any).total ?? '—',
+        Factura: (batch as any).invoiceNumber || '—',
+        Estado: batch.status === 'OPEN' ? 'Abierta' : 'Confirmada',
+      }));
+      if (format === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_tracking_referencias'], 'xlsx'), sheets: [{ name: 'Referencias', rows }], filters: { Búsqueda: search || '—', Estado: statusFilter || 'Todas' } });
+      else await generateConfiguredReportSectionsPDF({ targetKey: 'tracking.batches', title: 'Referencias de recepción', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections: [{ id: 'batches', title: 'Referencias de recepción', headers: Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' }), rows: rows.length ? rows.map((row) => Object.values(row) as Array<string | number>) : [['Sin registros para el alcance seleccionado']] }], fileName: buildDatedDownloadFileName(['reporte_tracking_referencias'], 'pdf') });
+      toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'No se pudo exportar referencias de recepción'));
+    }
+  };
 
   const openDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
@@ -589,6 +616,7 @@ export function BatchReception() {
             {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n} por página</option>)}
           </select>
           <Badge variant="outline" className="rounded-lg text-[11px]">{data?.total ?? 0} referencias</Badge>
+          {canPerform('TRACKING_BATCHES', 'export') && <ExportMenu onPdf={() => void exportBatches('pdf')} onExcel={() => void exportBatches('xlsx')} pdfDescription="Reporte configurado de referencias" excelDescription="Todas las referencias filtradas" />}
         </div>
       </Card>
 

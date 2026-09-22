@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Database, Copy, Check, ChevronDown, ChevronRight, Table2, Key, Link2, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
@@ -1279,10 +1279,21 @@ enum TransferStatus {
 // UI COMPONENT
 // ============================================================
 
-export function PrismaSchemaPage() {
+export function PrismaSchemaPage({ activeSubModule, onSubModuleChange }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'visual' | 'code'>(() => activeSubModule === 'code' ? 'code' : 'visual');
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [copiedModel, setCopiedModel] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveTab(activeSubModule === 'code' ? 'code' : 'visual');
+  }, [activeSubModule]);
+
+  const handleTabChange = (tab: string) => {
+    if (tab !== 'visual' && tab !== 'code') return;
+    setActiveTab(tab);
+    onSubModuleChange?.(tab);
+  };
 
   const modules = [...new Set(prismaModels.map(m => m.module))];
   const filteredModels = prismaModels.filter(m =>
@@ -1351,7 +1362,7 @@ export function PrismaSchemaPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="visual" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <TabsList>
             <TabsTrigger value="visual"><Table2 className="mr-1.5 size-3.5" />Vista Visual</TabsTrigger>

@@ -99,7 +99,7 @@ const OPERATIONAL_GUIDES = [
   },
 ];
 
-export function TrainingHubView() {
+export function TrainingHubView({ activeSubModule, onSubModuleChange }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void }) {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'superadmin';
   
@@ -107,7 +107,7 @@ export function TrainingHubView() {
   const videos = asList(videosQuery.data);
   const loading = videosQuery.isLoading || videosQuery.isFetching;
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('ALL');
+  const [activeCategory, setActiveCategory] = useState(() => MODULE_CATEGORIES.some(category => category.id === activeSubModule) ? activeSubModule! : 'ALL');
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingVideo, setEditingVideo] = useState<any | null>(null);
@@ -123,6 +123,15 @@ export function TrainingHubView() {
   });
 
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setActiveCategory(MODULE_CATEGORIES.some(category => category.id === activeSubModule) ? activeSubModule! : 'ALL');
+  }, [activeSubModule]);
+
+  const handleCategoryChange = (category: string) => {
+    setActiveCategory(category);
+    onSubModuleChange?.(category);
+  };
 
   useEffect(() => {
     if (selectedVideo) {
@@ -282,7 +291,7 @@ export function TrainingHubView() {
             className="h-11 rounded-xl border-border/50 bg-card/80 pl-11 text-sm font-bold shadow-sm focus:bg-background"
           />
         </div>
-        <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
+        <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
           <div className="w-full overflow-x-auto custom-scrollbar">
             <div className="flex w-full min-w-max justify-center">
               <TabsList className="flex h-auto w-max shrink-0 flex-nowrap gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">

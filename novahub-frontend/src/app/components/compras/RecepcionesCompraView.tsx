@@ -41,6 +41,7 @@ import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadF
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; selectedBranchId?: string; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
@@ -708,6 +709,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           page,
           pageSize,
           report: true,
+          export: true,
           light: true,
           search: searchTerm.trim() || undefined,
           branchId: selectedBranchId || undefined,
@@ -1833,7 +1835,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
-            {canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} filterSelector={{ label: 'Estado de recepciones', defaultValue: 'all', options: [{ value: 'all', label: 'Todas las recepciones', description: 'Incluye todos los estados' }, { value: 'paid', label: 'Solo pagadas', description: 'Incluye únicamente estado Pagada' }] }} onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)} />}
+            {canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} filterSelector={{ label: 'Estado de recepciones', defaultValue: 'all', options: [{ value: 'all', label: 'Todas las recepciones', description: 'Incluye todos los estados' }, { value: 'paid', label: 'Solo pagadas', description: 'Incluye únicamente estado Pagada' }] }} onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)} onExcel={() => createReportWorkbook({ fileName: 'recepciones_compra.xlsx', sheets: [{ name: 'Recepciones', rows: filteredData.map(row => ({ Numero: row.number || '—', Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Comprometido: Number(expectedReceiptPayment(row) || 0), Pagado: Number(paidReceiptAmount(row) || 0), Estado: getReceiptDisplayStatus(row) })) }] })} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}

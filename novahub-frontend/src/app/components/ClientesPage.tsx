@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { UserCircle, Plus, Search, Edit, Mail, Phone, Download } from 'lucide-react';
+import { UserCircle, Plus, Search, Edit, Mail, Phone, Download, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -19,9 +20,12 @@ import { getApiErrorMessage } from '../services/api';
 import { normalizeCurrency } from '../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './ventas/CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, isCustomerIdentifierValid, isCustomerPhoneValid } from '../utils/customer-data';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 
 export function ClientesPage() {
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const { countries, defaultCountryCode } = useCustomerFormOptions();
   const { baseCurrency, exchangeRate, formatConvertedAmount } = useCurrency();
   const [clientesData, setClientesData] = useState<Customer[]>([]);
@@ -67,6 +71,42 @@ export function ClientesPage() {
     (c.contactName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const exportCustomers = async (format: 'pdf' | 'xlsx') => {
+    if (!canPerform('SALES_CLIENTS', 'export')) return;
+    const exportResponse = await customersService.getAll({
+      search: searchTerm.trim() || undefined,
+      page: 1,
+      pageSize: 5000,
+      report: true,
+      export: true,
+    });
+    const exportCustomersRows = Array.isArray(exportResponse?.data) ? exportResponse.data : filtered;
+    const rows = exportCustomersRows.map((customer) => ({
+      Código: customer.code || customer.id?.slice(0, 8) || '—',
+      Cliente: customer.name || '—',
+      Contacto: customer.contactName || '—',
+      Correo: customer.email || '—',
+      Teléfono: customer.phone || '—',
+      Estado: String(customer.status || '').toUpperCase() === 'INACTIVE' ? 'Inactivo' : 'Activo',
+    }));
+    if (!rows.length) { toast.error('No hay clientes para exportar con los filtros actuales.'); return; }
+    try {
+      if (format === 'xlsx') {
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Clientes');
+        XLSX.writeFile(workbook, buildDatedDownloadFileName(['reporte_clientes'], 'xlsx'));
+      } else {
+        await generateConfiguredReportSectionsPDF({
+          targetKey: 'ventas.customers', title: 'Listado de clientes', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
+          periodLabel: `Registros filtrados: ${rows.length}`,
+          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), rows: rows.map((row) => Object.values(row)) }],
+          fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
+        });
+      }
+      toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
+    } catch (error: any) { toast.error(error?.message || 'No se pudo exportar el reporte de clientes.'); }
+  };
 
   const handleOpenDialog = (cliente: Customer | null = null) => {
     if (cliente) {
@@ -126,9 +166,13 @@ export function ClientesPage() {
       <CurrencyValuationBanner />
       <div className="flex min-w-0 justify-end">
         <div className="flex flex-wrap items-center gap-2">
-          {canPerform('SALES_CLIENTS', 'export') && (
-            <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
-          )}
+          {canPerform('SALES_CLIENTS', 'export') && <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportCustomers('pdf')}><FileText className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportCustomers('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('SALES_CLIENTS', 'create') && (
               <DialogTrigger asChild>

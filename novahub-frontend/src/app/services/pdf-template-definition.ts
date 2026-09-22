@@ -1,4 +1,4 @@
-import { getPdfTemplatePartyConfig, getPdfTemplateTarget, type PdfTemplateTarget } from './pdf-document-catalog';
+import { getPdfTemplatePartyConfig, getPdfTemplateTarget, isPdfTemplateFixed, type PdfTemplateTarget } from './pdf-document-catalog';
 
 export type PdfTemplateNodeType = 'section' | 'text' | 'field' | 'table' | 'report-sections' | 'chart' | 'totals' | 'image' | 'barcode' | 'divider' | 'spacer';
 export type PdfTemplateChartType = 'area' | 'bar' | 'donut';
@@ -211,6 +211,22 @@ export const SYSTEM_DEFAULT_PDF_SETTINGS: Record<string, unknown> = {
   separator: 'solid',
   paletteMode: 'corporate',
 };
+
+/**
+ * Política de papel para las salidas PDF del ERP.
+ *
+ * Los documentos semánticos se imprimen siempre en Carta vertical. Los
+ * destinos físicos (tickets, rollos y etiquetas) conservan sus dimensiones
+ * porque dependen de una impresora o material no estándar.
+ */
+export function normalizePdfPaperSettings(targetKey: string, settings?: Record<string, unknown>) {
+  const target = getPdfTemplateTarget(targetKey);
+  const next = { ...(settings || {}) };
+  if (!isPdfTemplateFixed(target)) return { ...next, paperSize: 'LETTER', orientation: 'portrait' as const };
+  if (target.family === 'label' || target.key === 'inventario.product-labels') return { ...next, paperSize: 'LABEL', orientation: 'landscape' as const };
+  if (target.family === 'cash-ticket' || target.structure === 'print') return { ...next, paperSize: 'ROLL-80', orientation: 'portrait' as const };
+  return next;
+}
 
 /** Limpia ejemplos que versiones anteriores guardaban como si fueran datos reales de empresa. */
 export function normalizePdfCompanySettings<T extends Record<string, unknown>>(settings: T): T {
@@ -610,6 +626,39 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
       rows: [],
     };
   }
+  if (target.module === 'actividades') {
+    const sectionsByTarget: Record<string, PdfTemplateReportSection[]> = {
+      'actividades.tasks': [reportSection('activities-tasks', 'Tareas', ['Título', 'Responsable', 'Prioridad', 'Vencimiento', 'Estado'])],
+      'actividades.events': [reportSection('activities-events', 'Eventos', ['Evento', 'Inicio', 'Fin', 'Lugar', 'Responsable', 'Estado'])],
+      'actividades.reminders': [reportSection('activities-reminders', 'Recordatorios', ['Recordatorio', 'Fecha', 'Alcance', 'Responsable', 'Estado'])],
+      'actividades.logs': [reportSection('activities-logs', 'Bitácora de actividades', ['Fecha', 'Acción', 'Usuario', 'Módulo', 'Registro', 'Resultado'])],
+      'actividades.calendar': [reportSection('activities-calendar', 'Calendario', ['Tipo', 'Título', 'Inicio', 'Fin', 'Responsable', 'Estado'])],
+      'actividades.meetings': [reportSection('activities-meetings', 'Reuniones', ['Reunión', 'Inicio', 'Fin', 'Participantes', 'Plataforma', 'Estado'])],
+    };
+    const sections = sectionsByTarget[target.key] || [reportSection('activities-summary', 'Resumen de actividades', ['Indicador', 'Valor', 'Detalle'])];
+    return { ...base, party: undefined, document: { ...base.document, title: target.label.toUpperCase(), number: `ACT-${target.key.split('.').pop()?.toUpperCase() || '0001'}` }, reportSections: sections, items: sections.flatMap(section => section.rows), rows: sections.flatMap(section => section.rows) };
+  }
+  if (target.module === 'proyectos') {
+    const sections = [reportSection('projects-list', 'Proyectos', ['Código', 'Proyecto', 'Estado', 'Prioridad', 'Responsable', 'Inicio', 'Fin', 'Avance', 'Presupuesto', 'Ejecutado'])];
+    return { ...base, party: undefined, document: { ...base.document, title: 'LISTADO DE PROYECTOS', number: 'PROY-0001' }, reportSections: sections, items: sections[0].rows, rows: sections[0].rows };
+  }
+  if (target.module === 'tracking') {
+    const sections = [reportSection('tracking-transit', 'Envíos en tránsito', ['Ticket', 'Código tracking', 'Cliente', 'Ruta', 'Estado', 'Última actualización'])];
+    return { ...base, party: undefined, document: { ...base.document, title: 'ENVÍOS EN TRÁNSITO', number: 'TRK-0001' }, reportSections: sections, items: sections[0].rows, rows: sections[0].rows };
+  }
+  if (target.module === 'tickets') {
+    const sectionsByTarget: Record<string, PdfTemplateReportSection[]> = {
+      'tickets.list': [reportSection('tickets-list', 'Tickets de soporte', ['Ticket', 'Asunto', 'Cliente', 'Prioridad', 'Estado', 'Creado'])],
+      'tickets.knowledge': [reportSection('tickets-knowledge', 'Base de conocimiento', ['Artículo', 'Categoría', 'Visibilidad', 'Actualizado', 'Estado'])],
+      'tickets.agents': [reportSection('tickets-agents', 'Agentes de soporte', ['Agente', 'Correo', 'Rol', 'Estado', 'Último acceso'])],
+    };
+    const sections = sectionsByTarget[target.key] || [reportSection('tickets-summary', 'Resumen de soporte', ['Indicador', 'Valor', 'Detalle'])];
+    return { ...base, party: undefined, document: { ...base.document, title: target.label.toUpperCase(), number: `TKT-${target.key.split('.').pop()?.toUpperCase() || '0001'}` }, reportSections: sections, items: sections.flatMap(section => section.rows), rows: sections.flatMap(section => section.rows) };
+  }
+  if (target.module === 'financiamiento') {
+    const sections = [reportSection('financing-applications', 'Solicitudes de financiamiento', ['Número', 'Estado', 'Monto solicitado', 'Plazo', 'Destino', 'Garantías', 'Creada'])];
+    return { ...base, party: undefined, document: { ...base.document, title: 'SOLICITUDES DE FINANCIAMIENTO', number: 'FIN-PYME-0001' }, reportSections: sections, items: sections[0].rows, rows: sections[0].rows };
+  }
   if (target.module === 'compras' || target.key.includes('supplier')) {
     const sampleParty = target.key === 'compras.purchase-request' ? requester : target.key === 'compras.expense' || target.key === 'compras.recurring-expense' ? payee : supplier;
     return { ...base, party: sampleParty, document: { ...base.document, title: target.label.toUpperCase(), number: 'COM-000123' }, items: transactionItems.map(item => ({ ...item, description: item.description.replace('Producto', 'Insumo') })) };
@@ -630,7 +679,41 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     ];
     return { ...base, party: { name: 'Balance de comprobación' }, account: { name: 'Catálogo contable' }, document: { ...base.document, title: 'BALANCE DE COMPROBACIÓN', number: 'BC-0001' }, items: accounts, totals: { subtotal: 'C$ 50,600.00', tax: 'C$ 50,600.00', discount: 'C$ 0.00', total: 'C$ 0.00' } };
   }
-  if (target.module === 'recursos-humanos' || target.key.includes('payroll')) {
+  if (target.module === 'recursos-humanos') {
+    const hrSections: Record<string, PdfTemplateReportSection[]> = {
+      'recursos-humanos.dashboard': [
+        reportSection('hr-dashboard-headcount', 'Plantilla activa', ['Indicador', 'Valor', 'Detalle'], [['Colaboradores activos', '42', 'Alcance de la sucursal'], ['Departamentos', '6', 'Departamentos con personal']]),
+        reportSection('hr-dashboard-absence', 'Ausencias y desempeño', ['Indicador', 'Valor', 'Detalle'], [['Ausencias pendientes', '4', 'Solicitudes por revisar'], ['Evaluaciones del período', '18', 'Revisiones registradas']]),
+      ],
+      'recursos-humanos.employees': [reportSection('hr-employees', 'Directorio de colaboradores', ['Colaborador', 'Identificación', 'Cargo', 'Departamento', 'Estado', 'Ingreso'])],
+      'recursos-humanos.departments': [reportSection('hr-departments', 'Departamentos y cargos', ['Departamento', 'Responsable', 'Colaboradores', 'Cargos', 'Estado'])],
+      'recursos-humanos.attendance': [reportSection('hr-attendance', 'Registro de asistencia', ['Fecha', 'Colaborador', 'Entrada', 'Salida', 'Horas', 'Estado'])],
+      'recursos-humanos.leave': [reportSection('hr-leave', 'Vacaciones y ausencias', ['Colaborador', 'Tipo', 'Inicio', 'Fin', 'Días', 'Estado'])],
+      'recursos-humanos.performance': [reportSection('hr-performance-view', 'Evaluaciones de desempeño', ['Colaborador', 'Período', 'Evaluador', 'Puntuación', 'Estado'])],
+      'recursos-humanos.kpi': [reportSection('hr-kpi', 'Indicadores de colaboradores', ['Indicador', 'Colaborador', 'Meta', 'Resultado', 'Estado'])],
+      'recursos-humanos.training': [reportSection('hr-training-view', 'Capacitaciones', ['Capacitación', 'Colaborador', 'Inicio', 'Fin', 'Estado', 'Resultado'])],
+      'recursos-humanos.benefits': [reportSection('hr-benefits-view', 'Beneficios asignados', ['Beneficio', 'Colaborador', 'Valor', 'Inicio', 'Fin', 'Estado'])],
+      'recursos-humanos.commissions': [reportSection('hr-commissions', 'Comisiones de ventas', ['Vendedor', 'Período', 'Ventas', 'Base', 'Comisión', 'Estado'])],
+      'recursos-humanos.payrolls': [reportSection('hr-payroll-view', 'Reporte de nóminas', ['Colaborador', 'Período', 'Salario bruto', 'Deducciones', 'Neto', 'Estado'])],
+    };
+    const reportSections = hrSections[target.key] || [reportSection('hr-summary', 'Resumen de Recursos Humanos', ['Indicador', 'Valor', 'Detalle'])];
+    const isDashboard = target.key === 'recursos-humanos.dashboard';
+    return {
+      ...base,
+      party: undefined,
+      document: { ...base.document, title: target.label.toUpperCase(), number: `RH-${target.key.split('.').pop()?.toUpperCase() || '0001'}` },
+      reportSections,
+      reportKpis: isDashboard ? [
+        { label: 'COLABORADORES ACTIVOS', value: '42', detail: 'Plantilla actual' },
+        { label: 'COSTO DE NÓMINA', value: 'C$ 84,500.00', detail: 'Período consultado' },
+        { label: 'ASISTENCIA', value: '96.5%', detail: 'Promedio del período' },
+        { label: 'AUSENCIAS PENDIENTES', value: '4', detail: 'Solicitudes por revisar' },
+      ] : undefined,
+      items: reportSections.flatMap(section => section.rows),
+      rows: reportSections.flatMap(section => section.rows),
+    };
+  }
+  if (target.key.includes('payroll')) {
     const payroll = [
       { description: 'Ana Martínez', quantity: 'Administración', unitPrice: 'C$ 18,000.00', total: 'C$ 18,000.00' },
       { description: 'Luis Pérez', quantity: 'Ventas', unitPrice: 'C$ 16,500.00', total: 'C$ 16,500.00' },
@@ -689,6 +772,9 @@ function defaultBorderStyle(type: PdfTemplateNodeType): PdfTemplateNode['borderS
  */
 function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
   const presets: Record<string, string[]> = {
+    'inventario.products': ['Código', 'Nombre', 'Categoría', 'Unidad', 'Stock', 'Precio', 'Estado'],
+    'inventario.services': ['Código', 'Nombre', 'Categoría', 'Unidad', 'Precio', 'Estado'],
+    'inventario.assets': ['Código', 'Nombre', 'Categoría', 'Ubicación', 'Responsable', 'Costo', 'Estado'],
     'ventas.customer-history': ['Movimiento', 'Estado', 'Fecha', 'Monto'],
     'ventas.cash-historical-report': ['Fecha', 'Sucursal', 'Caja', 'Cajero', 'Estado', 'Ventas', 'Ventas NIO', 'Ventas USD', 'Dif. NIO', 'Depósito NIO'],
     'ventas.cash-session': ['Referencia', 'Tipo', 'Descripción', 'Monto'],
@@ -699,6 +785,32 @@ function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
     'finanzas.balance': ['Concepto', 'Tipo', 'Fecha', 'Monto'],
     'finanzas.transactions': ['Fecha', 'Concepto', 'Tipo', 'Monto'],
     'recursos-humanos.payrolls': ['Colaborador', 'Periodo', 'Neto', 'Estado'],
+    'recursos-humanos.dashboard': ['Indicador', 'Valor', 'Detalle'],
+    'recursos-humanos.employees': ['Colaborador', 'Identificación', 'Cargo', 'Departamento', 'Estado', 'Ingreso'],
+    'recursos-humanos.departments': ['Departamento', 'Responsable', 'Colaboradores', 'Cargos', 'Estado'],
+    'recursos-humanos.attendance': ['Fecha', 'Colaborador', 'Entrada', 'Salida', 'Horas', 'Estado'],
+    'recursos-humanos.leave': ['Colaborador', 'Tipo', 'Inicio', 'Fin', 'Días', 'Estado'],
+    'recursos-humanos.performance': ['Colaborador', 'Período', 'Evaluador', 'Puntuación', 'Estado'],
+    'recursos-humanos.kpi': ['Indicador', 'Colaborador', 'Meta', 'Resultado', 'Estado'],
+    'recursos-humanos.training': ['Capacitación', 'Colaborador', 'Inicio', 'Fin', 'Estado', 'Resultado'],
+    'recursos-humanos.benefits': ['Beneficio', 'Colaborador', 'Valor', 'Inicio', 'Fin', 'Estado'],
+    'recursos-humanos.commissions': ['Vendedor', 'Período', 'Ventas', 'Base', 'Comisión', 'Estado'],
+    'actividades.tasks': ['Título', 'Responsable', 'Prioridad', 'Vencimiento', 'Estado'],
+    'actividades.events': ['Evento', 'Inicio', 'Fin', 'Lugar', 'Responsable', 'Estado'],
+    'actividades.reminders': ['Recordatorio', 'Fecha', 'Alcance', 'Responsable', 'Estado'],
+    'actividades.logs': ['Fecha', 'Acción', 'Usuario', 'Módulo', 'Registro', 'Resultado'],
+    'actividades.calendar': ['Tipo', 'Título', 'Inicio', 'Fin', 'Responsable', 'Estado'],
+    'actividades.meetings': ['Reunión', 'Inicio', 'Fin', 'Participantes', 'Plataforma', 'Estado'],
+    'proyectos.list': ['Código', 'Proyecto', 'Estado', 'Prioridad', 'Responsable', 'Inicio', 'Fin', 'Avance', 'Presupuesto', 'Ejecutado'],
+    'tracking.transit': ['Ticket', 'Código tracking', 'Cliente', 'Ruta', 'Estado', 'Última actualización'],
+    'tracking.batches': ['Referencia', 'Proveedor', 'Fecha', 'Paquetes', 'Estado'],
+    'tracking.packages': ['Tracking', 'Cliente', 'SKU', 'Bodega', 'Peso real', 'Peso cobrable', 'Recibido'],
+    'tracking.reconciliation': ['Tracking', 'Cliente', 'SKU', 'Bodega', 'Peso factura', 'Peso real', 'Recibido'],
+    'tracking.billing': ['Tracking', 'Cliente', 'SKU', 'Peso cobrable', 'Estado', 'Recibido'],
+    'tickets.list': ['Ticket', 'Asunto', 'Cliente', 'Prioridad', 'Estado', 'Creado'],
+    'tickets.knowledge': ['Artículo', 'Categoría', 'Visibilidad', 'Actualizado', 'Estado'],
+    'tickets.agents': ['Agente', 'Correo', 'Rol', 'Estado', 'Último acceso'],
+    'financiamiento.applications': ['Número', 'Estado', 'Monto solicitado', 'Plazo', 'Destino', 'Garantías', 'Creada'],
     'reportes.customers': ['Cliente', 'Identificación', 'Teléfono', 'Estado'],
     'reportes.sales': ['Indicador', 'Valor', 'Detalle'],
     'reportes.purchases': ['Producto', 'Monto', 'Unidades', 'Precio promedio'],
@@ -743,7 +855,8 @@ const DIAGONAL_CLIP_PATH = 'polygon(0 0,100% 0,78% 100%,0 100%)';
 const TICKET_CLIP_PATH = 'polygon(0 0,100% 0,100% 88%,96% 100%,92% 88%,88% 100%,84% 88%,80% 100%,76% 88%,72% 100%,68% 88%,64% 100%,60% 88%,56% 100%,52% 88%,48% 100%,44% 88%,40% 100%,36% 88%,32% 100%,28% 88%,24% 100%,20% 88%,16% 100%,12% 88%,8% 100%,4% 88%,0 100%)';
 const NOTCH_CLIP_PATH = 'polygon(0 0,100% 0,100% 72%,96% 100%,92% 72%,88% 100%,84% 72%,80% 100%,76% 72%,72% 100%,68% 72%,64% 100%,60% 72%,56% 100%,52% 72%,48% 100%,44% 72%,40% 100%,36% 72%,32% 100%,28% 72%,24% 100%,20% 72%,16% 100%,12% 72%,8% 100%,4% 72%,0 100%)';
 
-export function createDefaultTemplateDefinition(targetKey: string, settings?: Record<string, unknown>): PdfTemplateDefinition {
+export function createDefaultTemplateDefinition(targetKey: string, requestedSettings?: Record<string, unknown>): PdfTemplateDefinition {
+  const settings = normalizePdfPaperSettings(targetKey, requestedSettings);
   const target = getPdfTemplateTarget(targetKey);
   const family = getFamily(target);
   const primary = settingsValue(settings, 'primaryColor', '#10b981');
@@ -888,19 +1001,26 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
     node({ type: 'field', label: 'Datos de la sucursal', token: 'company.summary', x: headerLayout === 'ribbon' ? 43 : headerLayout === 'portal' ? 50 : 8, y: headerLayout === 'compact' ? 16 : 16, width: headerLayout === 'ribbon' ? 52 : headerLayout === 'portal' ? 41 : 46, height: 7, fontSize: 5.8, lineHeight: 1.15, color: headerLayout === 'ribbon' || headerLayout === 'portal' ? text : headerTextColor, align: 'left', borderStyle: 'none', padding: 0.2 }, 'company-summary'),
   ];
   const logoNode = node({ type: 'image', label: 'Logotipo', x: 8, y: 7, width: headerLayout === 'ribbon' ? 11 : 16, height: 8, enabled: hasLogo, borderStyle: 'none', backgroundColor: 'transparent' }, 'company-logo');
-  const reportHeaderFields = target.module === 'reportes' || isDashboard || isPortalSummary
+  const reportHeaderFields = isDashboard
     ? [
-      ...headerFields.filter(item => ['company-name', 'company-summary', 'document-title'].includes(item.id)),
-      node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 24, width: 84, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+      node({ type: 'field', label: 'Empresa', token: 'company.name', x: 24, y: 6, width: 36, height: 9, fontSize: 7, color: headerTextColor, bold: true, borderStyle: 'none', padding: 0.25 }, 'company-name'),
+      node({ type: 'field', label: 'Título', token: 'document.title', x: 61, y: 6, width: 34, height: 9, fontSize: 7, color: titleColor, bold: true, align: 'right', borderStyle: 'none', padding: 0.25 }, 'document-title'),
+      node({ type: 'field', label: 'Datos de la sucursal', token: 'company.summary', x: 8, y: 17, width: 84, height: 5, fontSize: 5.5, lineHeight: 1.1, color: text, align: 'center', borderStyle: 'none', padding: 0.2 }, 'company-summary'),
+      node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 23, width: 84, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
     ]
-    : headerFields;
+    : target.module === 'reportes' || isPortalSummary
+      ? [
+        ...headerFields.filter(item => ['company-name', 'company-summary', 'document-title'].includes(item.id)),
+        node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 24, width: 84, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+      ]
+      : headerFields;
   const historicalHeaderFields: PdfTemplateNode[] = [
     ...headerFields.filter(item => !['document-number', 'document-status'].includes(item.id)),
     node({ type: 'field', label: 'Período', token: 'document.period', x: 8, y: 24, width: 48, height: 4, fontSize: 8, color: text }, 'document-date'),
   ];
   const nodes: PdfTemplateNode[] = [...headerNodes, logoNode, ...(isHistoricalCashReport ? historicalHeaderFields : reportHeaderFields),
     ...(isHistoricalCashReport ? [node({ type: 'field', label: 'Generado', token: 'document.generated', x: 58, y: 24, width: 34, height: 4, fontSize: 7, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated')] : []),
-    ...(isHistoricalCashReport ? [] : [node({ type: 'field', label: 'Fecha', token: 'document.date', x: 8, y: headerLayout === 'compact' ? 20 : 24, width: 35, height: 4, fontSize: 8, color: text }, 'document-date')]),
+    ...(isHistoricalCashReport || isDashboard ? [] : [node({ type: 'field', label: 'Fecha', token: 'document.date', x: 8, y: headerLayout === 'compact' ? 20 : 24, width: 35, height: 4, fontSize: 8, color: text }, 'document-date')]),
     node({ type: 'section', label: partySectionLabel, x: 5, y: 31, width: 90, height: 19, backgroundColor: '#f8fafc', borderColor: line, borderRadius: 3, color: text, borderStyle: 'none' }, 'party-section'),
     node({ type: 'field', label: partyLabel, token: partyToken, x: 8, y: 34, width: 50, height: 5.5, fontSize: 10, color: text, bold: true, borderStyle: 'none' }, 'party-name'),
     node({ type: 'field', label: party.labels.taxId, token: `${party.tokenPrefix}.taxId`, x: 62, y: 34, width: 30, height: 5.5, fontSize: 8, color: text, align: 'right', borderStyle: 'none' }, 'party-tax-id'),
@@ -923,9 +1043,9 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
       const x = 5 + rowOffset + column * (kpiWidth + 2);
       const y = 30 + row * (reportKpiHeight + reportKpiRowGap);
       nodes.push(node({ type: 'section', label: '', text: '', x, y, width: kpiWidth, height: reportKpiHeight, backgroundColor: kpiColors[index], borderColor: kpiColors[index], borderRadius: 3, firstPageOnly: true }, `report-kpi-card-${index}`));
-      nodes.push(node({ type: 'field', label: 'Indicador', token: `reportKpis.${index}.label`, x: x + 1, y: y + 1, width: kpiWidth - 2, height: 3.2, fontSize: 5.2, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-label-${index}`));
-      nodes.push(node({ type: 'field', label: 'Valor', token: `reportKpis.${index}.value`, x: x + 1, y: y + 4.2, width: kpiWidth - 2, height: 4.5, fontSize: 9, color: '#ffffff', bold: true, align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-value-${index}`));
-      nodes.push(node({ type: 'field', label: 'Detalle', token: `reportKpis.${index}.detail`, x: x + 1, y: y + 9.4, width: kpiWidth - 2, height: 2.6, fontSize: 4.6, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-detail-${index}`));
+      nodes.push(node({ type: 'field', label: 'Indicador', token: `reportKpis.${index}.label`, x: x + 1, y: y + 1, width: kpiWidth - 2, height: 2.5, fontSize: isDashboard ? 4 : 5.2, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-label-${index}`));
+      nodes.push(node({ type: 'field', label: 'Valor', token: `reportKpis.${index}.value`, x: x + 1, y: y + 4, width: kpiWidth - 2, height: 4.7, fontSize: isDashboard ? 7 : 9, color: '#ffffff', bold: true, align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-value-${index}`));
+      nodes.push(node({ type: 'field', label: 'Detalle', token: `reportKpis.${index}.detail`, x: x + 1, y: y + 9.4, width: kpiWidth - 2, height: 3, fontSize: isDashboard ? 3.8 : 4.6, color: '#ffffff', align: 'center', borderStyle: 'none', padding: 0, firstPageOnly: true }, `report-kpi-detail-${index}`));
     }
   }
 
@@ -964,11 +1084,11 @@ export function createDefaultTemplateDefinition(targetKey: string, settings?: Re
   }
 
   if (isDashboard) {
-    nodes.push(node({ type: 'chart', label: 'Evolución del período', token: 'dashboard.trend', chartType: 'area', x: 5, y: 46, width: 90, height: 13, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-trend'));
-    nodes.push(node({ type: 'chart', label: 'Atención requerida', token: 'dashboard.attention', chartType: 'donut', x: 5, y: 61, width: 28, height: 12, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-attention'));
-    nodes.push(node({ type: 'chart', label: 'Productos más vendidos', token: 'dashboard.products-sales', chartType: 'bar', x: 35, y: 61, width: 28, height: 12, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-sales'));
-    nodes.push(node({ type: 'chart', label: 'Utilidad de referencia', token: 'dashboard.products-margin', chartType: 'bar', x: 65, y: 61, width: 30, height: 12, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-margin'));
-    nodes.push(node({ type: 'chart', label: 'Ventas por caja', token: 'dashboard.registers', chartType: 'bar', x: 5, y: 75, width: 90, height: 8, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-registers'));
+    nodes.push(node({ type: 'chart', label: 'Evolución del período', token: 'dashboard.trend', chartType: 'area', x: 5, y: 46, width: 90, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-trend'));
+    nodes.push(node({ type: 'chart', label: 'Atención requerida', token: 'dashboard.attention', chartType: 'donut', x: 5, y: 61, width: 28, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-attention'));
+    nodes.push(node({ type: 'chart', label: 'Productos más vendidos', token: 'dashboard.products-sales', chartType: 'bar', x: 35, y: 61, width: 28, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-sales'));
+    nodes.push(node({ type: 'chart', label: 'Utilidad de referencia', token: 'dashboard.products-margin', chartType: 'bar', x: 65, y: 61, width: 30, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-margin'));
+    nodes.push(node({ type: 'chart', label: 'Ventas por caja', token: 'dashboard.registers', chartType: 'bar', x: 5, y: 76, width: 90, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-registers'));
   }
 
   if ((family === 'transaction' || family === 'receipt' || family === 'cash') && !isHistoricalCashReport) {
@@ -1032,12 +1152,11 @@ export function ensureDashboardChartNodes(definition: PdfTemplateDefinition, tar
  */
 export function createSystemDefaultPdfDesign(targetKey: string, overrides?: Record<string, unknown>) {
   const target = getPdfTemplateTarget(targetKey);
-  const settings = createSystemDefaultPdfSettings({
+  const settings = normalizePdfPaperSettings(target.key, createSystemDefaultPdfSettings({
     ...(target.key === 'inventario.product-labels' ? { paperSize: 'LABEL', orientation: 'landscape', margins: 2, fontFamily: 'helvetica', fontSize: 8 } : {}),
     ...(target.family === 'cash-ticket' ? { paperSize: 'ROLL-80', orientation: 'portrait', margins: 3, fontFamily: 'helvetica', fontSize: 8, primaryColor: '#000000', secondaryColor: '#000000', textColor: '#000000', lineColor: '#000000' } : {}),
-    ...(target.structure === 'dashboard' || target.key === 'portal.customer-summary' ? { paperSize: 'A4', orientation: 'landscape' } : {}),
     ...(overrides || {}),
-  });
+  }));
   return {
     id: `system-default:${target.key}`,
     clientTenantId: undefined,
@@ -1190,7 +1309,8 @@ function upgradeReportTemplateNodes(nodes: PdfTemplateNode[], targetKey: string,
 }
 
 export function sanitizeTemplateDefinition(value: unknown, targetKey: string, settings?: Record<string, unknown>): PdfTemplateDefinition {
-  const fallback = createDefaultTemplateDefinition(targetKey, settings);
+  const normalizedSettings = normalizePdfPaperSettings(targetKey, settings);
+  const fallback = createDefaultTemplateDefinition(targetKey, normalizedSettings);
   const party = getPdfTemplatePartyConfig(targetKey);
   if (!value || typeof value !== 'object') return fallback;
   const candidate = value as Partial<PdfTemplateDefinition>;
@@ -1295,11 +1415,15 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
         token: item.type === 'field' ? `${party.tokenPrefix}.${tokenSuffix}` : item.token,
       };
     });
+  const normalizedPaper = normalizePdfPaperSettings(targetKey, {
+    paperSize: safeText(candidate.page?.paperSize, fallback.page.paperSize),
+    orientation: candidate.page?.orientation === 'landscape' ? 'landscape' : fallback.page.orientation,
+  });
   return {
     version: 1,
     page: {
-      paperSize: safeText(candidate.page?.paperSize, fallback.page.paperSize),
-      orientation: candidate.page?.orientation === 'landscape' ? 'landscape' : fallback.page.orientation,
+      paperSize: normalizedPaper.paperSize as string,
+      orientation: normalizedPaper.orientation as 'portrait' | 'landscape',
       background: safeText(candidate.page?.background, fallback.page.background),
     },
     nodes: upgradeReportTemplateNodes(normalizedNodes.length ? normalizedNodes : fallback.nodes, targetKey, settings),
@@ -1375,12 +1499,16 @@ export function definitionFromHtml(html: string, targetKey: string, settings?: R
   const explicitElements = Array.from(body.querySelectorAll('[data-novahub-type], table, [data-novahub-bind]')).slice(0, 120);
   if (explicitElements.some(element => element.hasAttribute('data-novahub-type'))) {
     const parsed = explicitElements.flatMap((element, index) => htmlElementToNode(element, index));
+    const importedPage = normalizePdfPaperSettings(targetKey, {
+      paperSize: pagePaperSize || definition.page.paperSize,
+      orientation: pageOrientation === 'landscape' ? 'landscape' : pageOrientation === 'portrait' ? 'portrait' : definition.page.orientation,
+    });
     return {
       ...definition,
       page: {
         ...definition.page,
-        paperSize: pagePaperSize && ['LETTER', 'A4', 'OFICIO', 'LEGAL'].includes(pagePaperSize.toUpperCase()) ? pagePaperSize.toUpperCase() : definition.page.paperSize,
-        orientation: pageOrientation === 'landscape' ? 'landscape' : pageOrientation === 'portrait' ? 'portrait' : definition.page.orientation,
+        paperSize: importedPage.paperSize as string,
+        orientation: importedPage.orientation as 'portrait' | 'landscape',
         background: pageBackground || definition.page.background,
       },
       nodes: parsed.length ? parsed : definition.nodes,

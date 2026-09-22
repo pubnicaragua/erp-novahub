@@ -39,6 +39,8 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatDateEs } from '../../utils/dateFormat';
+import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
+import { ExportMenu } from '../ui/ExportMenu';
 
 interface AccountNode {
   id: string;
@@ -514,6 +516,35 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     }
   };
 
+  const handleExportPdf = async () => {
+    if (!canExportAccounts) return;
+    const rows = flatList.map(account => ({
+      code: account.code,
+      name: account.name,
+      type: getTypeLabel(account.type),
+      subtype: getSubtypeLabel(account.subtype),
+      balance: formatConvertedAmount(account.balance, baseCurrency),
+      status: account.isActive ? 'Activo' : 'Inactivo',
+    }));
+    await generateConfiguredReportTemplate({
+      targetKey: 'contabilidad.chart',
+      title: 'Plan de cuentas',
+      tenantName: 'Mi Empresa',
+      rows,
+      columns: [
+        { header: 'Código', value: row => row.code },
+        { header: 'Cuenta', value: row => row.name },
+        { header: 'Tipo', value: row => row.type },
+        { header: 'Subtipo', value: row => row.subtype },
+        { header: 'Saldo', value: row => row.balance, align: 'right' },
+        { header: 'Estado', value: row => row.status },
+      ],
+      tableSummary: { label: 'Cuentas', value: rows.length },
+      fileName: 'plan_cuentas.pdf',
+    });
+    toast.success(`PDF exportado con ${rows.length} cuenta(s)`);
+  };
+
   const parseImportFile = async () => {
     if (!importFile) { toast.error('Selecciona un archivo Excel'); return null; }
     setPreviewLoading(true);
@@ -775,11 +806,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         </div>
         <div className="erp-toolbar-primary-group flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {helpTrigger}
-          {canExportAccounts && (
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <FileDown className="w-4 h-4 mr-1" /> Exportar
-            </Button>
-          )}
+          {canExportAccounts && <ExportMenu onPdf={() => void handleExportPdf()} onExcel={() => void handleExport()} />}
           {canPerform('ACCOUNTING_CHART', 'create') && (
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload className="w-4 h-4 mr-1" /> Importar

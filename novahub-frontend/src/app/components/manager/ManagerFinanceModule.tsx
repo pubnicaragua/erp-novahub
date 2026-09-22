@@ -16,6 +16,8 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { managerStatusLabel as statusLabel } from '../../utils/managerLabels';
+import { ExportMenu } from '../ui/ExportMenu';
+import { generateManagerTablePDF } from '../../utils/managerReportPdf';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -64,12 +66,11 @@ export function ManagerFinanceModule({ view, onViewChange, groupId, businessUnit
 
   useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search), 300); return () => window.clearTimeout(timer); }, [search]);
   const changeView = (next: ManagerFinanceView) => { setPage(1); setSearch(''); setStatus(''); setDateFrom(''); setDateTo(''); onViewChange(next); };
-  const exportReport = async () => {
+  const exportReport = async (format: 'xlsx' | 'pdf' = 'xlsx') => {
     if (!canExport) return;
     setExporting(true);
     try {
       const report = await enterpriseGroupsService.getFinanceModule(groupId, { view, businessUnitId, branchId, search: search || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, reportCurrency, page: 1, pageSize: 5000, report: true, export: true });
-      const workbook = XLSX.utils.book_new();
       const exportRows = (report.data || []).map((row: any) => {
         const original = row.amount ?? row.total ?? row.balance ?? (view === 'analysis' ? row.net : undefined);
         const equivalent = row.reportAmount ?? row.reportTotal ?? row.reportBalance ?? (view === 'analysis' ? row.net : undefined);
@@ -77,6 +78,11 @@ export function ManagerFinanceModule({ view, onViewChange, groupId, businessUnit
         const amount = displayMode === 'ORIGINAL' || equivalent == null ? formatMoney(original, originalCurrency) : formatMoney(equivalent, reportCurrency);
         return { Sucursal: row.branchName || 'Sucursal no identificada', Vista: labels[view], Identificador: row.number || row.name || row.id, Fecha: formatDate(row.date || row.createdAt || row.nextExecutionDate), Descripción: row.description || row.source || row.category || '', Estado: statusLabel(row.status), Monto: amount, 'Tasa aplicada': row.reportRateLabel || '', Rubro: row.businessUnitName || '' };
       });
+      if (format === 'pdf') {
+        await generateManagerTablePDF({ title: `Finanzas consolidadas · ${labels[view]}`, rows: exportRows, fileName: buildDateFilteredDownloadFileName(['reporte_finanzas', labels[view]], 'pdf', dateFrom, dateTo) });
+        return;
+      }
+      const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows.length ? exportRows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]), 'Finanzas');
       XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_finanzas', labels[view]], 'xlsx', dateFrom, dateTo));
     } finally { setExporting(false); }
@@ -85,7 +91,7 @@ export function ManagerFinanceModule({ view, onViewChange, groupId, businessUnit
   return <div className="finance-module min-w-0 space-y-5 overflow-x-hidden p-4 sm:p-6 md:p-8">
     <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div className="flex min-w-0 items-start gap-3"><div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="size-6" /></div><div className="min-w-0"><h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">Finanzas <span className="text-primary">consolidadas</span></h1><Badge variant="outline" className="mt-3 rounded-md border-primary/20 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">{branches.length} sucursal(es) en el alcance</Badge></div></div>
-      <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" className="rounded-xl" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw className={cn('mr-2 size-4', query.isFetching && 'animate-spin')} />Actualizar</Button>{canExport && <Button variant="outline" className="rounded-xl" onClick={() => void exportReport()} disabled={exporting}>{exporting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}Exportar Excel</Button>}</div>
+      <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" className="rounded-xl" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw className={cn('mr-2 size-4', query.isFetching && 'animate-spin')} />Actualizar</Button>{canExport && <ExportMenu disabled={exporting} onPdf={() => void exportReport('pdf')} onExcel={() => void exportReport('xlsx')} pdfDescription="Consolidado financiero de Manager" excelDescription="Todos los registros del alcance" />}</div>
     </div>
     {sidebarCollapsed && <div className="manager-module-subnav flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm">{MANAGER_FINANCE_VIEWS.map((item) => <button key={item.id} type="button" onClick={() => changeView(item.id)} className={cn('flex-none shrink-0 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-wide text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', view === item.id && 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg hover:from-primary hover:to-primary/80 hover:text-primary-foreground')}><span className="sm:hidden">{item.label.slice(0, 3)}</span><span className="hidden sm:inline">{item.label}</span></button>)}</div>}
     {view === 'overview' ? <FinanceOverview metrics={metrics} reportCurrency={reportCurrency} /> : <><FinanceFilters view={view} search={search} setSearch={(value) => { setSearch(value); setPage(1); }} status={status} setStatus={(value) => { setStatus(value); setPage(1); }} dateFrom={dateFrom} setDateFrom={(value) => { setDateFrom(value); setPage(1); }} dateTo={dateTo} setDateTo={(value) => { setDateTo(value); setPage(1); }} layoutMode={effectiveLayoutMode} setLayoutMode={setLayoutMode} /><FinanceKpis view={view} metrics={metrics} reportCurrency={reportCurrency} />{query.isLoading ? <LoadingState /> : query.error ? <EmptyState title="No se pudo cargar la vista" description="Verifica el permiso Manager de Finanzas y vuelve a actualizar." /> : effectiveLayoutMode === 'cards' ? <FinanceCards view={view} rows={rows} showBranch={showBranch} reportCurrency={reportCurrency} /> : <FinanceTable view={view} rows={rows} showBranch={showBranch} reportCurrency={reportCurrency} />}<Pagination page={response?.meta.page || page} totalPages={response?.meta.totalPages || 1} total={response?.meta.total || 0} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} /></>}

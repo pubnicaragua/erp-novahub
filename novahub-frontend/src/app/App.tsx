@@ -26,34 +26,13 @@ import { PublicTrackingPage } from './components/public/PublicTrackingPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
+import { loadModuleWithChunkRecovery } from './utils/chunk-recovery';
 import { readPersistedDarkMode } from './utils/theme-mode';
 import { useResponsiveNativeTables } from './hooks/useResponsiveNativeTables';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from './utils/sidebarPermissions';
 
-function recoverFromChunk(moduleName: string) {
-  const now = Date.now();
-  try {
-    const key = `novahub:chunk-recovery:${moduleName}`;
-    const previous = Number(sessionStorage.getItem(key) || 0);
-    if (previous && now - previous <= 60_000) return;
-    sessionStorage.setItem(key, String(now));
-  } catch {
-    // Private browsing or a disabled storage API must not prevent recovery.
-  }
-  const url = new URL(window.location.href);
-  url.searchParams.set('__asset_recovery', `${moduleName}-${now}`);
-  window.location.replace(url.toString());
-}
-
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
-  return lazy(async () => {
-    try {
-      return await loader();
-    } catch (error) {
-      recoverFromChunk(moduleName);
-      throw error;
-    }
-  });
+  return lazy(() => loadModuleWithChunkRecovery(loader, moduleName));
 }
 
 const OverviewDashboard = lazyWithChunkRecovery(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })), 'dashboard');
@@ -433,21 +412,21 @@ function DashboardLayout() {
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'transferencias': return <InventarioPage activeSubModule="transferencias" isSidebarCollapsed={isCollapsed} />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
+      case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} onTabChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'auditoria': return <ModuleErrorBoundary moduleName="Logs y auditoría"><AuditoriaPage /></ModuleErrorBoundary>;
-      case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView initialTab={activeSubModule === 'plan-sucursal' ? 'module-requests' : undefined} /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
+      case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView initialTab={activeSubModule === 'plan-sucursal' ? 'module-requests' : activeSubModule} onTabChange={setActiveSubModule} /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'platform-users': return user?.role === 'superadmin' ? <PlatformUsersView /> : <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6"><div className="text-center"><h1 className="text-2xl font-semibold tracking-tight">Acceso Denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para gestionar usuarios de plataforma</p></div></div>;
       // Alias de compatibilidad para enlaces antiguos: la administración de
       // sucursales ahora vive dentro de Grupos empresariales.
-      case 'tenant-admin': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage />;
-      case 'schema': return <PrismaSchemaPage />;
+      case 'tenant-admin': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView initialTab={activeSubModule} onTabChange={setActiveSubModule} /> : <SuscripcionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
+      case 'schema': return <PrismaSchemaPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'financiamiento-pyme': return <FinanciamientoPymePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
-      case 'centro-capacitacion': return <TrainingHubView />;
+      case 'centro-capacitacion': return <TrainingHubView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /> : <SoporteTecnicoView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'contabilidad': return <ContabilidadPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'novachat': return <NovaChatView />;
-      case 'qa-console': return <ModuleErrorBoundary moduleName="Validador QA"><QaConsoleView /></ModuleErrorBoundary>;
+      case 'qa-console': return <ModuleErrorBoundary moduleName="Validador QA"><QaConsoleView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'guia-implementacion': return user?.role === 'superadmin' ? <ImplementationGuideView onNavigate={handleNavigate} /> : <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6"><div className="text-center"><h1 className="text-2xl font-semibold tracking-tight">Acceso Denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para acceder a esta guía</p></div></div>;
       default: return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} /></ModuleErrorBoundary>;
     }

@@ -16,6 +16,8 @@ import { DateField } from '../ui/DateField';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
+import { ExportMenu } from '../ui/ExportMenu';
 
 interface PnLAccount {
   accountId: string;
@@ -144,6 +146,39 @@ export function EstadoResultadosView() {
     ]), 'Resumen');
     XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['estado_resultados'], 'xlsx', dateFrom, dateTo));
     toast.success(`Estado de resultados exportado con ${rows.length} fila(s)`);
+  };
+
+  const handleExportPdf = async () => {
+    if (!canExportProfitLoss || !data) return;
+    const sections = data.sections && data.sections.length > 0
+      ? data.sections
+      : [
+        { id: 'income', label: 'INGRESOS', sign: 'INCOME' as const, accounts: data.ingresos, total: data.totalIngresos },
+        { id: 'expense', label: 'GASTOS', sign: 'EXPENSE' as const, accounts: data.gastos, total: data.totalGastos },
+      ];
+    const rows = sections.flatMap(section => section.accounts.map(account => ({
+      section: section.label,
+      code: account.codigo,
+      account: account.cuenta,
+      type: section.sign === 'INCOME' ? 'Ingreso' : 'Gasto',
+      amount: fmt(account.currentAmount),
+    })));
+    await generateConfiguredReportTemplate({
+      targetKey: 'contabilidad.profit-loss',
+      title: 'Estado de resultados',
+      tenantName: 'Mi Empresa',
+      rows,
+      columns: [
+        { header: 'Sección', value: row => row.section },
+        { header: 'Código', value: row => row.code },
+        { header: 'Cuenta', value: row => row.account },
+        { header: 'Tipo', value: row => row.type },
+        { header: 'Período actual', value: row => row.amount, align: 'right' },
+      ],
+      totals: { 'Total ingresos': fmt(data.totalIngresos), 'Total gastos': fmt(data.totalGastos), 'Resultado neto': fmt(netIncome) },
+      fileName: buildDateFilteredDownloadFileName(['estado_resultados'], 'pdf', dateFrom, dateTo),
+    });
+    toast.success(`PDF exportado con ${rows.length} cuenta(s)`);
   };
 
   const filterAccounts = (accounts: PnLAccount[]) => {
@@ -329,11 +364,7 @@ export function EstadoResultadosView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
-          {canExportProfitLoss && (
-            <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9 gap-1.5" disabled={!data || loading}>
-              <Download className="size-4" /> Exportar Excel
-            </Button>
-          )}
+          {canExportProfitLoss && <ExportMenu disabled={!data || loading} onPdf={() => void handleExportPdf()} onExcel={handleExportExcel} />}
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración
           </Button>

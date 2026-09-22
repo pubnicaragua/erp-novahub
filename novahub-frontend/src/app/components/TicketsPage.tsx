@@ -13,6 +13,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { customersService } from '../services/ventas.service';
 import { invoicesService } from '../services/ventas.service';
 import { inventoryService } from '../services/inventario.service';
+import { ExportMenu } from './ui/ExportMenu';
+import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import { createReportWorkbook } from '../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import { toast } from '../services/toast';
 
 interface SupportAgent {
   id: string;
@@ -46,7 +51,7 @@ interface TicketsPageProps {
 }
 
 export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageProps) => {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canViewTickets = canPerform('TICKETS_LIST', 'view');
   const canViewKnowledge = canPerform('TICKETS_KNOWLEDGE_BASE', 'view');
   const canViewAgents = canPerform('TICKETS_AGENTS', 'view');
@@ -126,6 +131,39 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
     : activeTab === 'tickets'
       ? Promise.all([ticketsQuery.refetch(), customersQuery.refetch(), categoriesQuery.refetch(), agentsQuery.refetch(), invoicesQuery.refetch(), productsQuery.refetch()])
       : activeQuery.refetch();
+  const ticketExportTargets: Record<string, { targetKey: string; label: string; permission: string }> = {
+    tickets: { targetKey: 'tickets.list', label: 'Listado de tickets', permission: 'TICKETS_LIST' },
+    faqs: { targetKey: 'tickets.knowledge', label: 'Base de conocimiento', permission: 'TICKETS_KNOWLEDGE_BASE' },
+    agents: { targetKey: 'tickets.agents', label: 'Agentes de soporte', permission: 'TICKETS_AGENTS' },
+  };
+  const activeExportTarget = ticketExportTargets[activeTab];
+  const canExportActive = Boolean(activeExportTarget && canPerform(activeExportTarget.permission, 'export'));
+
+  const exportTickets = async (format: 'pdf' | 'xlsx') => {
+    if (!activeExportTarget || !canExportActive) return;
+    const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de ${activeExportTarget.label}…`);
+    try {
+      const params = { page: 1, pageSize: 5000, report: true, export: true };
+      const sourceRows = activeTab === 'tickets'
+        ? asList(await supportService.getAll(params as any))
+        : activeTab === 'faqs'
+          ? asList(await knowledgeBaseService.getAll(params as any))
+          : asList(await supportAgentsService.getAll(params as any));
+      const rows = sourceRows.map((row: any) => activeTab === 'tickets'
+        ? ({ Ticket: row.number || row.ticketNumber || row.id || '—', Asunto: row.subject || row.title || row.description || '—', Cliente: row.customer?.name || row.customerName || '—', Prioridad: row.priority || '—', Estado: row.status || '—', Creado: row.createdAt ? new Date(row.createdAt).toLocaleString('es-NI') : '—' })
+        : activeTab === 'faqs'
+          ? ({ Artículo: row.title || row.name || '—', Categoría: row.category?.name || row.category || '—', Visibilidad: row.visibility || (row.isPublic ? 'Público' : 'Interno'), Actualizado: row.updatedAt ? new Date(row.updatedAt).toLocaleString('es-NI') : '—', Estado: row.status || (row.isActive === false ? 'Inactivo' : 'Activo') })
+          : ({ Agente: row.name || '—', Correo: row.email || '—', Rol: row.role || '—', Estado: row.isActive === false ? 'Inactivo' : 'Activo', 'Último acceso': row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleString('es-NI') : '—' }));
+      const headers = Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' });
+      const sections = [{ id: activeExportTarget.targetKey, title: activeExportTarget.label, headers, rows: rows.length ? rows.map((row) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }];
+      const filters = { Vista: activeExportTarget.label, Alcance: 'Todos los registros autorizados' };
+      if (format === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName([`reporte_${activeTab === 'tickets' ? 'tickets' : activeTab === 'faqs' ? 'base_conocimiento' : 'agentes'}`], 'xlsx'), sheets: [{ name: activeExportTarget.label, rows }], filters });
+      else await generateConfiguredReportSectionsPDF({ targetKey: activeExportTarget.targetKey, title: activeExportTarget.label, tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, fileName: buildDatedDownloadFileName([`reporte_${activeTab}`], 'pdf') });
+      toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`, { id: toastId });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo generar la exportación', { id: toastId });
+    }
+  };
 
   const handleTabChange = (value: string) => {
     if (!visibleTabs.some((tab) => tab.id === value)) return;
@@ -140,7 +178,8 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
       <main className="relative min-w-0 flex-1 overflow-x-hidden">
         <div className="mx-auto min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-[1700px] overflow-x-hidden p-4 sm:p-6 md:px-10 md:pb-10 md:pt-4">
           <Tabs value={activeTab} className="w-full min-w-0" onValueChange={handleTabChange}>
-            <div className="mb-4 w-full min-w-0 max-w-full overflow-x-auto custom-scrollbar">
+            <div className="mb-4 flex w-full min-w-0 max-w-full items-center gap-2">
+              <div className="min-w-0 flex-1 overflow-x-auto custom-scrollbar">
               <TabsList className="flex h-auto min-w-full w-max max-w-none gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
               {visibleTabs.map((tab) => (
                 <TabsTrigger 
@@ -155,6 +194,8 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
                 </TabsTrigger>
               ))}
               </TabsList>
+              </div>
+              {canExportActive && <ExportMenu onPdf={() => void exportTickets('pdf')} onExcel={() => void exportTickets('xlsx')} className="shrink-0" pdfDescription="Reporte configurado de soporte" excelDescription="Todos los registros autorizados" />}
             </div>
             
             <AnimatePresence mode="wait">

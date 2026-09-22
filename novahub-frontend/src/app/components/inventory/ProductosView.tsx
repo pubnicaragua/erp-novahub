@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -53,6 +53,9 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { resolveInventoryValuation } from '../../utils/inventory-valuation';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -135,6 +138,7 @@ export type ProductExportOptions = {
   sortOrder: 'asc' | 'desc';
   scope: 'page' | 'custom' | 'all';
   rows?: any[];
+  kind?: 'product' | 'service';
 };
 type InitialImportReimportMode = 'REJECT' | 'MERGE';
 type SimilarityAlertMode = 'preview' | 'confirm';
@@ -1879,12 +1883,43 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         sortOrder: productExportSortOrder,
         scope: productExportScope,
         rows: sourceRows,
+        kind: isServiceView ? 'service' : 'product',
       });
       setProductExportDialogOpen(false);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al exportar productos');
     } finally {
       setIsProductExporting(false);
+    }
+  };
+  const handleProductPdfExport = async () => {
+    if (!canPerform(catalogPermissionModule, 'export')) return;
+    const sourceRows = summaryProducts && summaryProducts.length > 0 ? filteredSummaryProducts : filteredProducts;
+    const rows = sourceRows.map((item: any) => isServiceView
+      ? [item.code || '', item.name || '', item.category?.name || item.categoryName || '', item.unit || item.details?.unit || 'servicio', item.salePrice ?? item.price ?? '', item.isActive === false ? 'Inactivo' : 'Activo']
+      : [item.code || '', item.name || '', item.category?.name || item.categoryName || '', item.unit || item.details?.unit || 'unidad', Number(item.stock || 0), item.salePrice ?? item.salePriceOriginal ?? '', item.isActive === false ? 'Inactivo' : 'Activo']);
+    if (!rows.length) {
+      toast.error(`No hay ${isServiceView ? 'servicios' : 'productos'} para exportar con los filtros actuales.`);
+      return;
+    }
+    try {
+      await generateConfiguredReportSectionsPDF({
+        targetKey: isServiceView ? 'inventario.services' : 'inventario.products',
+        title: isServiceView ? 'Listado de servicios' : 'Listado de productos',
+        tenantName: user?.clientTenant?.name || user?.tenantName || 'Mi Empresa',
+        tenantLogo: user?.clientTenant?.logo || '',
+        periodLabel: `Registros filtrados: ${rows.length}`,
+        sections: [{
+          id: isServiceView ? 'inventory-services' : 'inventory-products',
+          title: isServiceView ? 'Servicios' : 'Productos',
+          headers: isServiceView ? ['Código', 'Nombre', 'Categoría', 'Unidad', 'Precio', 'Estado'] : ['Código', 'Nombre', 'Categoría', 'Unidad', 'Stock', 'Precio', 'Estado'],
+          rows,
+        }],
+        fileName: buildDatedDownloadFileName([isServiceView ? 'reporte_servicios' : 'reporte_inventario_productos'], 'pdf'),
+      });
+      toast.success(`PDF de ${isServiceView ? 'servicios' : 'productos'} descargado.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el PDF.');
     }
   };
   const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
@@ -3877,18 +3912,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               Actualizar
             </Button>
-            {!isServiceView && onExport && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={openProductExportDialog}
-                className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
-                title="Exportar productos registrados a Excel"
-              >
-                <Download className="size-4" />
-                Exportar Excel
-              </Button>
+            {onExport && canPerform(catalogPermissionModule, 'export') && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none" title={`Exportar ${isServiceView ? 'servicios' : 'productos'}`}><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="rounded-xl">
+                  <DropdownMenuItem className="gap-2 text-xs" onClick={() => void handleProductPdfExport()}><FileText className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
+                  <DropdownMenuItem className="gap-2 text-xs" onClick={openProductExportDialog}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -4601,8 +4634,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       <Dialog open={productExportDialogOpen} onOpenChange={(open) => { if (!isProductExporting) setProductExportDialogOpen(open); }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Download className="size-5 text-primary" /> Exportar productos</DialogTitle>
-            <DialogDescription>Hay {totalProductsForExport.toLocaleString('es-NI')} producto(s) disponibles con los filtros actuales.</DialogDescription>
+             <DialogTitle className="flex items-center gap-2"><Download className="size-5 text-primary" /> Exportar {isServiceView ? 'servicios' : 'productos'}</DialogTitle>
+             <DialogDescription>Hay {totalProductsForExport.toLocaleString('es-NI')} {isServiceView ? 'servicio(s)' : 'producto(s)'} disponibles con los filtros actuales.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -4610,9 +4643,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <Select value={productExportScope} onValueChange={(value) => setProductExportScope(value as 'page' | 'custom' | 'all')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="page">Página actual ({filteredData.length} producto(s))</SelectItem>
+                   <SelectItem value="page">Página actual ({filteredData.length} {isServiceView ? 'servicio(s)' : 'producto(s)'})</SelectItem>
                   <SelectItem value="custom" disabled={totalProductsForExport < 1}>Cantidad personalizada</SelectItem>
-                  <SelectItem value="all">Todos ({totalProductsForExport.toLocaleString('es-NI')})</SelectItem>
+                   <SelectItem value="all">Todos ({totalProductsForExport.toLocaleString('es-NI')})</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -4634,8 +4667,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setProductExportDialogOpen(false)} disabled={isProductExporting}>Cancelar</Button>
-            <Button type="button" onClick={handleProductExport} disabled={isProductExporting || !onExport}>
-              {isProductExporting ? <><Loader2 className="size-4 animate-spin" /> Preparando…</> : <><Download className="size-4" /> Exportar Excel</>}
+             <Button type="button" onClick={handleProductExport} disabled={isProductExporting || !onExport}>
+               {isProductExporting ? <><Loader2 className="size-4 animate-spin" /> Preparando…</> : <><FileSpreadsheet className="size-4" /> Exportar Excel</>}
             </Button>
           </DialogFooter>
         </DialogContent>

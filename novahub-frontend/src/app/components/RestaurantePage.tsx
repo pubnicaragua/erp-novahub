@@ -19,7 +19,12 @@ import {
   ShoppingBag,
   Utensils,
   X,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  ChevronDown,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { toast } from '@/app/services/toast';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from './ui/button';
@@ -35,6 +40,9 @@ import type { NotificationDomainRefreshDetail } from '../services/notification-d
 import { cajaService } from '../services/caja.service';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { RestaurantViewTutorial } from './RestaurantViewTutorial';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import {
   restaurantService,
   type RestaurantKitchenTicket,
@@ -91,7 +99,7 @@ const kitchenStatus: Record<string, { label: string; className: string }> = {
 const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function RestaurantePage({ activeSubModule, onSubModuleChange }: RestaurantePageProps) {
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const { accessibleBranches, selectedBranchId, setSelectedBranchId } = useBranchScope();
   const canViewTables = canPerform('RESTAURANT_SALON', 'view');
   const canViewOrders = canPerform('RESTAURANT_ORDERS', 'view');
@@ -339,6 +347,36 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
 
   const refresh = () => void loadData();
 
+  const exportRestaurantReport = async (format: 'pdf' | 'xlsx') => {
+    if (!canPerform('RESTAURANT_REPORTS', 'export')) return;
+    if (!summary) { toast.error('No hay datos de restaurante para exportar.'); return; }
+    const topItems = (summary.topItems || []).map((item) => ({ Platillo: item.description, Total: Number(item._sum.total || 0) }));
+    const rows = [
+      { Indicador: 'Ventas operativas', Valor: money(summary.total) },
+      { Indicador: 'Comandas no canceladas', Valor: summary.orders },
+      { Indicador: 'Subtotal', Valor: money(summary.subtotal) },
+      { Indicador: 'Impuestos', Valor: money(summary.tax) },
+    ];
+    try {
+      if (format === 'xlsx') {
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Resumen');
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(topItems.length ? topItems : [{ Platillo: 'Sin datos', Total: 0 }]), 'Platillos');
+        XLSX.writeFile(workbook, buildDatedDownloadFileName(['reporte_restaurante'], 'xlsx'));
+      } else {
+        await generateConfiguredReportSectionsPDF({
+          targetKey: 'restaurante.reports', title: 'Reporte operativo de restaurante', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
+          sections: [
+            { id: 'restaurant-summary', title: 'Resumen operativo', headers: ['Indicador', 'Valor'], rows: rows.map((row) => [row.Indicador, row.Valor]) },
+            { id: 'restaurant-top-items', title: 'Platillos destacados', headers: ['Platillo', 'Total'], rows: topItems.map((row) => [row.Platillo, money(row.Total)]) },
+          ],
+          fileName: buildDatedDownloadFileName(['reporte_restaurante'], 'pdf'),
+        });
+      }
+      toast.success(`Reporte de restaurante exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
+    } catch (error: any) { toast.error(error?.message || 'No se pudo exportar el reporte de restaurante.'); }
+  };
+
   const addToCart = (itemId: string) => setCart((current) => ({ ...current, [itemId]: (current[itemId] || 0) + 1 }));
   const removeFromCart = (itemId: string) => setCart((current) => {
     const next = { ...current };
@@ -556,7 +594,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange }: Restaura
                 {tab === 'comandas' && <div data-tour="restaurant-orders"><OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} canApproveKitchen={canApproveKitchen} canApproveOrders={canApproveOrders} onSend={sendToKitchen} onStatus={changeOrderStatus} onCheckout={openCheckout} /></div>}
                 {tab === 'cocina' && <div data-tour="restaurant-kitchen"><KitchenBoard tickets={tickets} canApprove={canApproveKitchen} onStatus={updateKitchen} /></div>}
                 {tab === 'carta' && <div data-tour="restaurant-menu"><MenuBoard menu={menu} canCreate={canCreateMenu} canEdit={canEditMenu} onSaved={() => loadData()} /></div>}
-                {tab === 'reportes' && <div data-tour="restaurant-reports"><ReportsBoard summary={summary} /></div>}
+                {tab === 'reportes' && <div data-tour="restaurant-reports"><ReportsBoard summary={summary} canExport={canPerform('RESTAURANT_REPORTS', 'export')} onExport={exportRestaurantReport} /></div>}
               </motion.div>
             </AnimatePresence>
           </Tabs>
@@ -753,6 +791,6 @@ function MenuBoard({ menu, onSaved, canCreate, canEdit }: { menu: RestaurantMenu
   </section>;
 }
 
-function ReportsBoard({ summary }: { summary: RestaurantSummary | null }) {
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5"><p className="text-xs font-black uppercase tracking-widest text-primary">Rendimiento de restaurante</p><h2 className="mt-1 text-2xl font-black">Ventas y productos destacados</h2></div>{!summary ? <EmptyState icon={<BarChart3 className="size-8" />} title="Sin datos todavía" description="El resumen aparecerá cuando se registren comandas." /> : <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Ventas operativas</p><p className="mt-2 text-4xl font-black">{money(summary.total)}</p><p className="mt-2 text-sm text-primary-foreground/70">{summary.orders} comandas no canceladas</p><div className="mt-6 space-y-3 text-sm"><div className="flex justify-between"><span>Subtotal</span><span>{money(summary.subtotal)}</span></div><div className="flex justify-between"><span>Impuestos</span><span>{money(summary.tax)}</span></div></div></div><div><h3 className="font-black">Top de platillos</h3><div className="mt-3 space-y-2">{summary.topItems?.map((item) => <div key={item.description} className="flex items-center justify-between rounded-xl border border-border/60 p-3"><span className="text-sm font-semibold">{item.description}</span><span className="text-sm font-black">{money(item._sum.total)}</span></div>)}</div></div></div>}</section>;
+function ReportsBoard({ summary, canExport, onExport }: { summary: RestaurantSummary | null; canExport: boolean; onExport: (format: 'pdf' | 'xlsx') => void }) {
+  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Rendimiento de restaurante</p><h2 className="mt-1 text-2xl font-black">Ventas y productos destacados</h2></div>{canExport && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="gap-2"><Download className="size-4" />Exportar<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="rounded-xl"><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('pdf')}><FileText className="size-3.5 text-rose-600" />Exportar PDF</DropdownMenuItem><DropdownMenuItem className="gap-2 text-xs" onClick={() => onExport('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" />Exportar Excel</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}</div>{!summary ? <EmptyState icon={<BarChart3 className="size-8" />} title="Sin datos todavía" description="El resumen aparecerá cuando se registren comandas." /> : <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><div className="rounded-2xl bg-primary p-5 text-primary-foreground"><p className="text-xs uppercase tracking-widest text-primary-foreground/70">Ventas operativas</p><p className="mt-2 text-4xl font-black">{money(summary.total)}</p><p className="mt-2 text-sm text-primary-foreground/70">{summary.orders} comandas no canceladas</p><div className="mt-6 space-y-3 text-sm"><div className="flex justify-between"><span>Subtotal</span><span>{money(summary.subtotal)}</span></div><div className="flex justify-between"><span>Impuestos</span><span>{money(summary.tax)}</span></div></div></div><div><h3 className="font-black">Top de platillos</h3><div className="mt-3 space-y-2">{summary.topItems?.map((item) => <div key={item.description} className="flex items-center justify-between rounded-xl border border-border/60 p-3"><span className="text-sm font-semibold">{item.description}</span><span className="text-sm font-black">{money(item._sum.total)}</span></div>)}</div></div></div>}</section>;
 }

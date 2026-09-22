@@ -275,8 +275,18 @@ function ModuleCard({ mod }: { mod: QaModuleSummary }) {
   );
 }
 
-export function QaConsoleView() {
-  const [activeTab, setActiveTab] = useState('resumen');
+export function QaConsoleView({ activeSubModule, onSubModuleChange }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void }) {
+  const [activeTab, setActiveTab] = useState(() => ['resumen', 'checks', 'hallazgos'].includes(activeSubModule || '') ? activeSubModule! : 'resumen');
+
+  useEffect(() => {
+    setActiveTab(['resumen', 'checks', 'hallazgos'].includes(activeSubModule || '') ? activeSubModule! : 'resumen');
+  }, [activeSubModule]);
+
+  const handleTabChange = (tab: string) => {
+    if (!['resumen', 'checks', 'hallazgos'].includes(tab)) return;
+    setActiveTab(tab);
+    onSubModuleChange?.(tab);
+  };
   const [summary, setSummary] = useState<QaSummary | null>(null);
   const [checks, setChecks] = useState<QaCheck[]>([]);
   const [findings, setFindings] = useState<QaFinding[]>([]);
@@ -372,7 +382,7 @@ export function QaConsoleView() {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="resumen">Resumen por módulo</TabsTrigger>
           <TabsTrigger value="checks">Checks ({checks.length})</TabsTrigger>

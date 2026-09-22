@@ -34,6 +34,7 @@ import { getPurchasePriorityOption } from '../../utils/purchasePriority';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { beginNotificationAction, completeNotificationAction } from '../../services/notification-action-coordinator';
 import { WORKFLOW_DEPENDENCIES, workflowDependencyState } from '../../types/workflow-dependencies';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-primary/10 text-primary',
@@ -160,6 +161,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           page,
           pageSize,
           report: true,
+          export: true,
           light: true,
           search: search.trim() || undefined,
           status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -209,6 +211,38 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       toast.success('Reporte PDF descargado', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
+
+  const handleExportListExcel = async (scope: PdfExportScope = 'page', exportFilter = 'all') => {
+    const exportToastId = toast.loading('Preparando Excel de solicitudes de compra...');
+    try {
+      const allRows = scope === 'all'
+        ? await fetchAllPaginatedRows<PurchaseRequest>((page, pageSize) => purchaseRequestsService.getAll({
+          page, pageSize, report: true, export: true, light: true,
+          search: search.trim() || undefined,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
+          branchId: selectedBranchId || undefined,
+        }))
+        : data;
+      const exportRows = allRows.filter((request) => {
+        if (exportFilter === 'approved' && normalizeRequestStatus(request.status) !== 'APPROVED') return false;
+        if (statusFilter !== 'all' && normalizeRequestStatus(request.status) !== statusFilter) return false;
+        if (!search) return true;
+        const value = search.toLowerCase();
+        return [request.number, request.requestedBy?.firstName, request.requestedBy?.lastName, request.warehouse?.name, request.supplier?.name, request.management?.[0]?.supplier?.name].filter(Boolean).join(' ').toLowerCase().includes(value);
+      });
+      createReportWorkbook({
+        fileName: 'solicitudes_de_compra.xlsx',
+        sheets: [
+          { name: 'Solicitudes', rows: exportRows.map((request) => { const management = request.management?.[0]; return { Numero: request.number || '—', Solicitante: [request.requestedBy?.firstName, request.requestedBy?.lastName].filter(Boolean).join(' ') || '—', Proveedor: request.supplier?.name || management?.supplier?.name || 'Sin proveedor', Fecha: request.date || '—', Estado: STATUS_LABELS[normalizeRequestStatus(request.status)], Total: Number(management?.total || 0), Moneda: management?.currency || '—' }; }) },
+          { name: 'Detalle', rows: exportRows.flatMap((request) => (request.items || []).map((item: any) => ({ Solicitud: request.number || request.id, Producto: item.product?.name || item.name || item.description || '—', Codigo: item.product?.code || item.sku || '—', Cantidad: Number(item.quantity || 0), Observaciones: item.notes || '—' }))) },
+        ],
+        filters: { Buscar: search, Estado: statusFilter, Alcance: scope === 'all' ? 'Todos los registros' : 'Página visible' },
+      });
+      toast.success('Excel de solicitudes descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el Excel', { id: exportToastId });
     }
   };
 
@@ -534,6 +568,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
             ],
           }}
           onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
+          onExcel={(scope, filter) => void handleExportListExcel(scope, filter)}
         />
         <PurchaseViewTutorial view="requests" />
         <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de solicitudes de compra" />

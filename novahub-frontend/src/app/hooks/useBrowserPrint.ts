@@ -277,7 +277,10 @@ export function useBrowserPrint() {
       logoUrl,
     } = options;
 
-    const config = PAGE_CONFIGS[paperSize] || PAGE_CONFIGS.letter;
+    // Las salidas estándar se imprimen siempre en Carta vertical. Solo los
+    // formatos físicos pueden conservar una dimensión distinta.
+    const normalizedPaperSize: PaperSize = paperSize === 'roll-58' || paperSize === 'roll-80' ? paperSize : 'letter';
+    const config = PAGE_CONFIGS[normalizedPaperSize] || PAGE_CONFIGS.letter;
     const pageCss = buildPageCss(config);
     const commonCss = buildCommonCss(config.isRoll);
     const displayCompany = companyName || defaultCompanyName;

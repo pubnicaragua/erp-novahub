@@ -395,6 +395,8 @@ export const logisticsService = {
     dateTo?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
+    report?: boolean;
+    export?: boolean;
   }) {
     return api.get('/logistics/reception', { params }) as Promise<ReceivedPackageListResult>;
   },
@@ -422,6 +424,8 @@ export const logisticsService = {
     receptionBatchId?: string;
     dateFrom?: string;
     dateTo?: string;
+    report?: boolean;
+    export?: boolean;
   }) {
     return api.get('/logistics/reconciliation/available', { params }) as Promise<PaginatedSimple<ReceivedPackage>>;
   },
@@ -452,6 +456,8 @@ export const logisticsService = {
     warehouseId?: string;
     dateFrom?: string;
     dateTo?: string;
+    report?: boolean;
+    export?: boolean;
   }) {
     return api.get('/logistics/batches', { params }) as Promise<PaginatedSimple<ReceptionBatch>>;
   },
@@ -494,6 +500,8 @@ export const logisticsService = {
     shipmentModeCode?: string;
     dateFrom?: string;
     dateTo?: string;
+    report?: boolean;
+    export?: boolean;
   }) {
     return api.get('/logistics/billing/available', { params }) as Promise<BillingAvailableResult>;
   },

@@ -98,8 +98,8 @@ const GUARANTEE_LABELS: Record<string, string> = {
 };
 
 export const financingService = {
-  list: () =>
-    api.get<FinancingApplication[]>('/financing/applications'),
+  list: (params?: Record<string, unknown>) =>
+    api.get<FinancingApplication[]>('/financing/applications', { params }),
 
   getById: (id: string) =>
     api.get<FinancingApplication>(`/financing/applications/${id}`),

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp, Package, X, ArrowRightLeft, CalendarDays, UserRound, Warehouse, Loader2 } from 'lucide-react';
+import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp, Package, X, ArrowRightLeft, CalendarDays, UserRound, Warehouse, Loader2, FileText, FileSpreadsheet } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -18,6 +18,7 @@ import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 
 export type MovementExportOptions = {
   amount: number | 'all';
@@ -200,6 +201,7 @@ export function MovimientosView({ movements, warehouses, pagination, onExportDat
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportScope, setExportScope] = useState<'page' | 'custom' | 'all'>('page');
   const [exportAmount, setExportAmount] = useState(String(pagination?.pageSize || 50));
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'xlsx'>('pdf');
   const [exportSortOrder, setExportSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isExporting, setIsExporting] = useState(false);
   const openMovement = (movement: any) => startOpening(movement.id, () => setSelectedMovement(movement));
@@ -297,6 +299,22 @@ export function MovimientosView({ movements, warehouses, pagination, onExportDat
     return orderedRows.length;
   };
 
+  const downloadPdf = async (rows: any[], sortOrder: 'asc' | 'desc') => {
+    const orderedRows = sortMovements(rows, sortOrder);
+    const exportRows = orderedRows.map(m => [
+      formatDateEs(m.date), getTypeLabel(m.type), m.product?.code || '—', m.product?.name || 'Producto sin nombre',
+      m.warehouse?.name || '—', formatMovementNumberForExport(m.quantity), formatMovementNumberForExport(m.previousQty),
+      formatMovementNumberForExport(m.resultingQty), m.user?.name || m.userName || 'Movimiento automático', formatMovementReferenceForExport(m.reference),
+    ]);
+    await generateConfiguredReportSectionsPDF({
+      targetKey: 'inventario.movements', title: 'Movimientos de inventario', tenantName: 'Mi Empresa',
+      periodLabel: `${orderedRows.length} movimiento(s)`,
+      sections: [{ id: 'inventory-movements', title: 'Movimientos', headers: ['Fecha', 'Tipo', 'Código', 'Producto', 'Almacén', 'Cantidad', 'Stock anterior', 'Stock resultante', 'Usuario', 'Referencia'], rows: exportRows }],
+      fileName: buildDateFilteredDownloadFileName(['reporte_movimientos_inventario'], 'pdf', dateFrom, dateTo),
+    });
+    return orderedRows.length;
+  };
+
   const openExportDialog = () => {
     const pageAmount = Math.max(1, Math.min(pagination?.pageSize || filteredData.length || 50, totalMovements || pagination?.pageSize || filteredData.length || 50));
     setExportScope('page');
@@ -336,9 +354,11 @@ export function MovimientosView({ movements, warehouses, pagination, onExportDat
       } else if (exportScope === 'custom') {
         exportRows = filteredData.slice(0, requestedAmount);
       }
-      const exportedCount = downloadXlsx(exportRows, exportSortOrder);
+      const exportedCount = exportFormat === 'xlsx'
+        ? downloadXlsx(exportRows, exportSortOrder)
+        : await downloadPdf(exportRows, exportSortOrder);
       setExportDialogOpen(false);
-      toast.success(`${exportedCount} movimiento(s) exportado(s)`);
+      toast.success(`${exportedCount} movimiento(s) exportado(s) en ${exportFormat === 'xlsx' ? 'Excel' : 'PDF'}`);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al exportar');
     } finally {
@@ -498,6 +518,16 @@ export function MovimientosView({ movements, warehouses, pagination, onExportDat
             <DialogDescription>Hay {totalMovements.toLocaleString('es-NI')} movimiento(s) disponibles con los filtros actuales.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Formato</label>
+              <Select value={exportFormat} onValueChange={(value) => setExportFormat(value as 'pdf' | 'xlsx')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pdf"><span className="inline-flex items-center gap-2"><FileText className="size-3.5 text-rose-600" />PDF</span></SelectItem>
+                  <SelectItem value="xlsx"><span className="inline-flex items-center gap-2"><FileSpreadsheet className="size-3.5 text-emerald-600" />Excel</span></SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Cantidad a exportar</label>
               <Select value={exportScope} onValueChange={(value) => setExportScope(value as 'page' | 'custom' | 'all')}>
