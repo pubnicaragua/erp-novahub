@@ -2,6 +2,7 @@ import React from 'react';
 import * as Sentry from '@sentry/react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from './button';
+import { isDynamicImportLoadError } from '../../utils/chunk-recovery';
 
 interface Props {
   children: React.ReactNode;
@@ -32,11 +33,18 @@ export class ModuleErrorBoundary extends React.Component<Props, State> {
   }
 
   handleRetry = () => {
+    if (isDynamicImportLoadError(this.state.error)) {
+      // React.lazy caches a rejected import promise; a full reload creates a fresh one.
+      window.location.reload();
+      return;
+    }
+
     this.setState({ hasError: false, error: undefined });
   };
 
   render() {
     if (this.state.hasError) {
+      const isChunkLoadError = isDynamicImportLoadError(this.state.error);
       return (
         <div className="flex min-h-[400px] items-center justify-center p-8">
           <div className="max-w-md text-center space-y-4">
@@ -58,11 +66,13 @@ export class ModuleErrorBoundary extends React.Component<Props, State> {
             )}
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={this.handleRetry} className="gap-2">
-                <RefreshCw className="size-4" /> Reintentar
+                <RefreshCw className="size-4" /> {isChunkLoadError ? 'Recargar y reintentar' : 'Reintentar'}
               </Button>
-              <Button onClick={() => window.location.reload()} className="gap-2">
-                <RefreshCw className="size-4" /> Recargar página
-              </Button>
+              {!isChunkLoadError && (
+                <Button onClick={() => window.location.reload()} className="gap-2">
+                  <RefreshCw className="size-4" /> Recargar página
+                </Button>
+              )}
             </div>
           </div>
         </div>

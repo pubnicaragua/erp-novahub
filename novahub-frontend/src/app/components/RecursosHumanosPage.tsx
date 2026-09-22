@@ -36,15 +36,40 @@ import { BeneficiosView } from './hr/BeneficiosView';
 import { ConfigNominaView } from './hr/ConfigNominaView';
 import { ComisionesView } from './hr/ComisionesView';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { ExportMenu } from './ui/ExportMenu';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { fetchAllReportPages } from '../hooks/useTenantQuery';
 import { getNotificationDomainQueryKeys, type NotificationDomainRefreshDetail } from '../services/notification-domain-refresh';
+import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import { createReportWorkbook } from '../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../utils/exportFileNames';
+import { toast } from '../services/toast';
 
 interface RecursosHumanosPageProps {
   activeSubModule?: string;
   isSidebarCollapsed?: boolean;
   onSubModuleChange?: (subModule?: string) => void;
 }
+
+const HR_EXPORT_TARGETS: Record<string, { targetKey: string; label: string; permission: string }> = {
+  dashboard: { targetKey: 'recursos-humanos.dashboard', label: 'Dashboard de RR. HH.', permission: 'HR_DASHBOARD' },
+  empleados: { targetKey: 'recursos-humanos.employees', label: 'Directorio de empleados', permission: 'HR_EMPLOYEES' },
+  departamentos: { targetKey: 'recursos-humanos.departments', label: 'Departamentos y cargos', permission: 'HR_EMPLOYEES' },
+  asistencia: { targetKey: 'recursos-humanos.attendance', label: 'Asistencia', permission: 'HR_ATTENDANCE' },
+  ausencias: { targetKey: 'recursos-humanos.leave', label: 'Vacaciones y ausencias', permission: 'HR_LEAVES' },
+  evaluaciones: { targetKey: 'recursos-humanos.performance', label: 'Evaluaciones de desempeño', permission: 'HR_PERFORMANCE' },
+  kpi: { targetKey: 'recursos-humanos.kpi', label: 'Indicadores de RR. HH.', permission: 'HR_PERFORMANCE' },
+  capacitaciones: { targetKey: 'recursos-humanos.training', label: 'Capacitaciones', permission: 'HR_TRAINING' },
+  beneficios: { targetKey: 'recursos-humanos.benefits', label: 'Beneficios', permission: 'HR_BENEFITS' },
+};
+
+const exportDate = (value: unknown) => {
+  if (!value) return '—';
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('es-NI');
+};
+
+const responseRows = (value: any): any[] => Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : [];
 
 export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: RecursosHumanosPageProps) {
   const { user, canPerform } = useAuth();
@@ -204,6 +229,187 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
   const loading = activeTab !== 'comisiones' && hrQuery.isLoading;
   const queryError = hrQuery.error as any;
   const errorMessage = queryError?.response?.data?.message || queryError?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
+  const activeExportTarget = HR_EXPORT_TARGETS[activeTab];
+  const canExportActiveHr = Boolean(activeExportTarget && canPerform(activeExportTarget.permission, 'export'));
+
+  const loadHrExportData = async (tab: string) => {
+    const reportFilters = { pageSize: 5000, report: true, export: true };
+    switch (tab) {
+      case 'dashboard': {
+        const [stats, employees, departments, leaveRequests, reviews] = await Promise.all([
+          hrService.getDashboardStats(),
+          fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters),
+          hrService.getDepartments(),
+          fetchAllReportPages((filters) => hrService.getLeaveRequests({ ...filters, status: 'PENDING' }), reportFilters),
+          fetchAllReportPages((filters) => hrService.getPerformanceReviews(undefined, undefined, filters), reportFilters),
+        ]);
+        return { stats, employees, departments, leaveRequests, reviews };
+      }
+      case 'empleados':
+        return { employees: await fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters) };
+      case 'departamentos': {
+        const [departments, employees, positions] = await Promise.all([
+          hrService.getDepartments(),
+          fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters),
+          hrService.getPositions(),
+        ]);
+        return { departments, employees, positions };
+      }
+      case 'asistencia': {
+        const [attendance, employees] = await Promise.all([
+          fetchAllReportPages((filters) => hrService.getAttendanceRecords(filters), reportFilters),
+          fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters),
+        ]);
+        return { attendance, employees };
+      }
+      case 'ausencias': {
+        const [leaveRequests, employees] = await Promise.all([
+          fetchAllReportPages((filters) => hrService.getLeaveRequests(filters), reportFilters),
+          fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters),
+        ]);
+        return { leaveRequests, employees };
+      }
+      case 'evaluaciones': {
+        const [reviews, employees] = await Promise.all([
+          fetchAllReportPages((filters) => hrService.getPerformanceReviews(undefined, undefined, filters), reportFilters),
+          fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters),
+        ]);
+        return { reviews, employees };
+      }
+      case 'kpi':
+        return {
+          employees: await fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters),
+          departments: await hrService.getDepartments(),
+        };
+      case 'capacitaciones': {
+        const [trainings, employees] = await Promise.all([
+          fetchAllReportPages((filters) => hrService.getTrainings(filters), reportFilters),
+          fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters),
+        ]);
+        return { trainings, employees };
+      }
+      case 'beneficios': {
+        const [benefits, employees] = await Promise.all([
+          fetchAllReportPages((filters) => hrService.getBenefits(filters), reportFilters),
+          fetchAllReportPages((filters) => hrService.getEmployees(filters), reportFilters),
+        ]);
+        return { benefits, employees };
+      }
+      default:
+        return {};
+    }
+  };
+
+  const buildHrExport = (tab: string, payload: any) => {
+    const employees = responseRows(payload.employees);
+    const departments = responseRows(payload.departments);
+    const positions = responseRows(payload.positions);
+    const rowsByTab: Record<string, Array<Record<string, unknown>>> = {
+      empleados: employees.map((employee) => ({
+        Colaborador: [employee.firstName, employee.lastName].filter(Boolean).join(' ') || employee.name || '—',
+        Identificación: employee.identification || employee.taxId || employee.documentNumber || '—',
+        Cargo: employee.position?.name || employee.position || '—',
+        Departamento: employee.department?.name || employee.department || '—',
+        Estado: employee.status || '—',
+        Ingreso: exportDate(employee.hireDate),
+      })),
+      departamentos: departments.map((department) => ({
+        Departamento: department.name || department.label || '—',
+        Responsable: department.manager?.name || department.managerName || '—',
+        Colaboradores: Number((department.employeeCount ?? department._count?.employees ?? employees.filter((employee) => employee.departmentId === department.id).length) || 0),
+        Cargos: positions.filter((position) => position.departmentId === department.id).length || '—',
+        Estado: department.status || 'Activo',
+      })),
+      asistencia: responseRows(payload.attendance).map((record) => ({
+        Fecha: exportDate(record.date || record.attendanceDate || record.createdAt),
+        Colaborador: record.employee?.name || record.employeeName || '—',
+        Entrada: record.checkIn || record.clockIn || '—',
+        Salida: record.checkOut || record.clockOut || '—',
+        Horas: record.hoursWorked ?? record.totalHours ?? '—',
+        Estado: record.status || '—',
+      })),
+      ausencias: responseRows(payload.leaveRequests).map((request) => ({
+        Colaborador: request.employee?.name || request.employeeName || '—',
+        Tipo: request.leaveType || request.type || '—',
+        Inicio: exportDate(request.startDate),
+        Fin: exportDate(request.endDate),
+        Días: request.days ?? request.totalDays ?? '—',
+        Estado: request.status || '—',
+      })),
+      evaluaciones: responseRows(payload.reviews).map((review) => ({
+        Colaborador: review.employee?.name || review.employeeName || '—',
+        Período: review.period || exportDate(review.reviewDate || review.createdAt),
+        Evaluador: review.reviewer?.name || review.reviewerName || '—',
+        Puntuación: review.score ?? review.rating ?? '—',
+        Estado: review.status || '—',
+      })),
+      kpi: employees.map((employee) => ({
+        Indicador: 'Colaborador activo',
+        Colaborador: [employee.firstName, employee.lastName].filter(Boolean).join(' ') || employee.name || '—',
+        Meta: '—',
+        Resultado: employee.status || 'Activo',
+        Estado: employee.status || '—',
+      })),
+      capacitaciones: responseRows(payload.trainings).map((training) => ({
+        Capacitación: training.name || training.title || '—',
+        Colaborador: training.employee?.name || training.employeeName || '—',
+        Inicio: exportDate(training.startDate),
+        Fin: exportDate(training.endDate),
+        Estado: training.status || '—',
+        Resultado: training.result || training.score || '—',
+      })),
+      beneficios: responseRows(payload.benefits).map((benefit) => ({
+        Beneficio: benefit.name || benefit.title || '—',
+        Colaborador: benefit.employee?.name || benefit.employeeName || '—',
+        Valor: benefit.amount ?? benefit.value ?? '—',
+        Inicio: exportDate(benefit.startDate),
+        Fin: exportDate(benefit.endDate),
+        Estado: benefit.status || '—',
+      })),
+    };
+    if (tab === 'dashboard') {
+      const stats = payload.stats && typeof payload.stats === 'object' ? payload.stats : {};
+      const dashboardRows = Object.entries(stats).map(([key, value]) => ({ Indicador: key, Valor: value as unknown, Detalle: 'Resumen del período' }));
+      const employeeRows = rowsByTab.empleados || [];
+      return {
+        rows: dashboardRows,
+        sections: [
+          { id: 'hr-dashboard-kpis', title: 'Indicadores', headers: ['Indicador', 'Valor', 'Detalle'], rows: dashboardRows.map((row) => [row.Indicador, row.Valor as any, row.Detalle]) },
+          { id: 'hr-dashboard-employees', title: 'Plantilla', headers: ['Colaborador', 'Cargo', 'Departamento', 'Estado'], rows: employeeRows.slice(0, 5000).map((row) => [row.Colaborador, row.Cargo, row.Departamento, row.Estado]) },
+        ],
+      };
+    }
+    const rows = rowsByTab[tab] || [];
+    const headers = rows.length ? Object.keys(rows[0]) : ['Mensaje'];
+    return { rows, sections: [{ id: `hr-${tab}`, title: HR_EXPORT_TARGETS[tab]?.label || 'Reporte de RR. HH.', headers, rows: rows.length ? rows.map((row) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }] };
+  };
+
+  const exportHr = async (format: 'pdf' | 'xlsx') => {
+    if (!activeExportTarget || !canExportActiveHr) return;
+    const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de ${activeExportTarget.label}…`);
+    try {
+      const payload = await loadHrExportData(activeTab);
+      const exportData = buildHrExport(activeTab, payload);
+      const fileStem = `reporte_rrhh_${activeTab}`;
+      if (format === 'xlsx') {
+        createReportWorkbook({ fileName: buildDatedDownloadFileName([fileStem], 'xlsx'), sheets: [{ name: activeExportTarget.label, rows: exportData.rows }], filters: { Vista: activeExportTarget.label, Alcance: 'Todos los registros autorizados' } });
+      } else {
+        const stats = payload.stats && typeof payload.stats === 'object' ? payload.stats : {};
+        await generateConfiguredReportSectionsPDF({
+          targetKey: activeExportTarget.targetKey,
+          title: activeExportTarget.label,
+          tenantName: user?.tenantName || 'Mi Empresa',
+          tenantLogo: user?.sessionBranding?.logo || null,
+          sections: exportData.sections,
+          kpis: activeTab === 'dashboard' ? Object.entries(stats).slice(0, 6).map(([label, value]) => ({ label, value: String(value ?? '—'), detail: 'Resumen del período' })) : undefined,
+          fileName: buildDatedDownloadFileName([fileStem], 'pdf'),
+        });
+      }
+      toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`, { id: toastId });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo generar la exportación', { id: toastId });
+    }
+  };
   const refreshData = (detail?: NotificationDomainRefreshDetail) => {
     const navigation = detail?.navigation || { module: 'rh', subModule: activeTab };
     const tenantKey = String(user?.clientTenantId || '');
@@ -221,7 +427,9 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
 
       {/* Main Navigation Tabs - Estilo Compras (Píldoras Flexibles y con Scroll) */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-4 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
+        <div className="mb-4 flex min-w-0 items-center gap-2">
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },
             { id: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },
@@ -260,7 +468,18 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               </TabsTrigger>
             );
           })}
-        </TabsList>
+            </TabsList>
+          </div>
+          {canExportActiveHr && (
+            <ExportMenu
+              onPdf={() => void exportHr('pdf')}
+              onExcel={() => void exportHr('xlsx')}
+              className="shrink-0"
+              pdfDescription="Plantilla configurada para esta vista"
+              excelDescription="Todos los registros autorizados"
+            />
+          )}
+        </div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}

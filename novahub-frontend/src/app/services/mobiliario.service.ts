@@ -4,7 +4,7 @@ import { api } from './api';
 // (edificios, vehículos, mobiliario, equipos de cómputo, maquinaria).
 // El costo, cuenta contable y depreciación los maneja Contabilidad → Activos Fijos.
 export const mobiliarioService = {
-  getAssets: (params?: { search?: string; category?: string; status?: string; branchId?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+  getAssets: (params?: { search?: string; category?: string; status?: string; branchId?: string; page?: number; pageSize?: number; report?: boolean; export?: boolean }, signal?: AbortSignal) =>
     api.get<any>('/company-assets', { params, signal }),
   getAsset: (id: string, signal?: AbortSignal) =>
     api.get<any>(`/company-assets/${id}`, { signal }),

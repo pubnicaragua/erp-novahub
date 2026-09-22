@@ -32,6 +32,10 @@ import {
   type BillingCancelResult,
   type ReceivedPackage,
 } from '../../services/logistics.service';
+import { ExportMenu } from '../ui/ExportMenu';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 const formatDate = (value?: string | Date) => (value ? format(new Date(value), 'dd/MM/yyyy', { locale: es }) : '');
 const today = () => format(new Date(), 'yyyy-MM-dd');
@@ -39,7 +43,7 @@ const today = () => format(new Date(), 'yyyy-MM-dd');
 type SubView = 'available' | 'delivery' | 'traceability';
 
 export function Billing() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canReadBilling = canPerform('TRACKING_BILLING', 'view');
   const canApproveBilling = canPerform('TRACKING_BILLING', 'approve');
   const canDeleteBilling = canPerform('TRACKING_BILLING', 'delete');
@@ -370,6 +374,19 @@ export function Billing() {
     setSelected(new Set());
   }, [customers]);
 
+  const exportBilling = async (format: 'pdf' | 'xlsx') => {
+    if (!canPerform('TRACKING_BILLING', 'export')) return;
+    try {
+      const response = await logisticsService.billingAvailable({ page: 1, pageSize: 5000, search: search || undefined, report: true, export: true });
+      const rows = (response.items || []).map((pkg) => ({ Tracking: pkg.trackingCode || '—', Cliente: pkg.customerName || pkg.subagencyName || '—', 'Item / producto': (pkg as any).skuName || (pkg as any).item || '—', Bodega: pkg.warehouseValue || pkg.warehouseName || '—', 'Peso factura': pkg.supplierWeight ?? '—', 'Peso real': pkg.physicalWeight ?? '—', 'Peso cobrable': pkg.billableWeight ?? '—', Estado: (pkg as any).saleStatus || 'Disponible', Recibido: formatDate(pkg.receivedAt) || '—' }));
+      if (format === 'xlsx') createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_tracking_facturacion'], 'xlsx'), sheets: [{ name: 'Por facturar', rows }], filters: { Búsqueda: search || '—' } });
+      else await generateConfiguredReportSectionsPDF({ targetKey: 'tracking.billing', title: 'Paquetes disponibles para facturar', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections: [{ id: 'billing', title: 'Paquetes disponibles para facturar', headers: Object.keys(rows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' }), rows: rows.length ? rows.map((row) => Object.values(row) as Array<string | number>) : [['Sin registros para el alcance seleccionado']] }], fileName: buildDatedDownloadFileName(['reporte_tracking_facturacion'], 'pdf') });
+      toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} exportado correctamente`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'No se pudo exportar paquetes disponibles'));
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -395,6 +412,7 @@ export function Billing() {
             </button>
           ))}
         </div>
+        {canPerform('TRACKING_BILLING', 'export') && <ExportMenu onPdf={() => void exportBilling('pdf')} onExcel={() => void exportBilling('xlsx')} pdfDescription="Reporte configurado de facturación" excelDescription="Todos los paquetes disponibles" />}
       </div>
 
       {alerts && alerts.alerts.length > 0 && (

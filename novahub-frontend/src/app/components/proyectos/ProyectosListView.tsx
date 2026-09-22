@@ -18,7 +18,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { DateField } from '../ui/DateField';
+import { ExportMenu } from '../ui/ExportMenu';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import {
   PROJECT_STATUS_META, PRIORITY_META, PROJECT_STATUS_OPTIONS, PRIORITY_OPTIONS,
   money, formatDate, fromLocalDate, toLocalDate,
@@ -36,7 +40,7 @@ interface ProyectosListViewProps {
 }
 
 export function ProyectosListView({ loading, onSelect, onChanged, canCreate, canEdit, canDelete }: ProyectosListViewProps) {
-  const { userBranches } = useAuth();
+  const { userBranches, user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string>('ALL');
@@ -71,6 +75,50 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
   const total = Number(listQuery.data?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const users = asList(usersQuery.data);
+  const canExport = canPerform('PROJECTS_LIST', 'export');
+
+  const exportProjects = async (format: 'pdf' | 'xlsx') => {
+    if (!canExport) return;
+    const toastId = toast.loading(`Preparando ${format === 'pdf' ? 'PDF' : 'Excel'} de proyectos…`);
+    try {
+      const response = await projectsService.list({
+        search: search || undefined,
+        status: (status === 'ALL' ? undefined : status) as any,
+        priority: (priority === 'ALL' ? undefined : priority) as any,
+        branchId: branchId === 'ALL' ? undefined : branchId,
+        managerId: managerId === 'ALL' ? undefined : managerId,
+        page: 1,
+        pageSize: 5000,
+        sort: 'createdAt',
+        order: 'desc',
+        report: true,
+        export: true,
+      });
+      const exportRows = (asList(response) as ProjectListItem[]).map((project) => ({
+        Código: project.code,
+        Proyecto: project.name,
+        Estado: project.status,
+        Prioridad: project.priority,
+        Responsable: project.manager?.name || '—',
+        Inicio: project.startDate ? new Date(project.startDate).toLocaleDateString('es-NI') : '—',
+        Fin: project.endDate ? new Date(project.endDate).toLocaleDateString('es-NI') : '—',
+        Avance: `${Number(project.progress || 0).toFixed(2)}%`,
+        Presupuesto: project.plannedBudget,
+        Ejecutado: project.executedCost,
+      }));
+      const headers = Object.keys(exportRows[0] || { Mensaje: 'Sin registros para el alcance seleccionado' });
+      const sections = [{ id: 'projects-list', title: 'Listado de proyectos', headers, rows: exportRows.length ? exportRows.map((row) => headers.map((header) => row[header] as string | number)) : [['Sin registros para el alcance seleccionado']] }];
+      const filters = { Búsqueda: search || '—', Estado: status === 'ALL' ? 'Todos' : status, Prioridad: priority === 'ALL' ? 'Todas' : priority, Sucursal: branchId === 'ALL' ? 'Todas' : branchId, Responsable: managerId === 'ALL' ? 'Todos' : managerId };
+      if (format === 'xlsx') {
+        createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_proyectos'], 'xlsx'), sheets: [{ name: 'Proyectos', rows: exportRows }], filters });
+      } else {
+        await generateConfiguredReportSectionsPDF({ targetKey: 'proyectos.list', title: 'Listado de proyectos', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, sections, fileName: buildDatedDownloadFileName(['reporte_proyectos'], 'pdf') });
+      }
+      toast.success(`${format === 'pdf' ? 'PDF' : 'Excel'} de proyectos exportado`, { id: toastId });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo exportar proyectos', { id: toastId });
+    }
+  };
 
   const saveMutation = useMutation({
     mutationFn: (payload: any) => editing
@@ -142,9 +190,11 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
             </div>
             {canCreate && (
               <div className="md:col-span-12 lg:col-span-12 xl:col-span-0 flex justify-end">
+              {canExport && <ExportMenu onPdf={() => void exportProjects('pdf')} onExcel={() => void exportProjects('xlsx')} className="mr-2" pdfDescription="Reporte configurado de proyectos" excelDescription="Todos los proyectos filtrados" />}
               <Button data-testid="projects-new-project" onClick={openCreate} className="gap-2"><Plus className="size-4" /> Nuevo proyecto</Button>
               </div>
             )}
+            {!canCreate && canExport && <div className="md:col-span-12 flex justify-end"><ExportMenu onPdf={() => void exportProjects('pdf')} onExcel={() => void exportProjects('xlsx')} pdfDescription="Reporte configurado de proyectos" excelDescription="Todos los proyectos filtrados" /></div>}
           </div>
         </CardContent>
       </Card>

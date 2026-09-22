@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Building2, X, Upload, FileDown, Paperclip, ExternalLink, FileSpreadsheet, CalendarClock } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Building2, X, Upload, FileDown, Download, Paperclip, ExternalLink, FileSpreadsheet, CalendarClock, ChevronDown, FileText } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { toast } from '@/app/services/toast';
 import * as XLSX from 'xlsx';
@@ -24,6 +24,9 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 const CATEGORIES = [
   { value: 'BUILDING', label: 'Edificios' },
@@ -237,12 +240,13 @@ const EMPTY_FORM: FormState = {
 export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?: string }) {
   const queryClient = useQueryClient();
   const { displayMode, formatConvertedAmount } = useCurrency();
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_ASSETS', 'viewCost');
   const canCreateAssets = canPerform('INVENTORY_ASSETS', 'create');
   const canEditAssets = canPerform('INVENTORY_ASSETS', 'edit');
   const canDeleteAssets = canPerform('INVENTORY_ASSETS', 'delete');
   const canImportAssets = canPerform('INVENTORY_ASSETS', 'import');
+  const canExportAssets = canPerform('INVENTORY_ASSETS', 'export');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -589,6 +593,67 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     setPage(1);
   };
 
+  const exportAssets = async (format: 'pdf' | 'xlsx') => {
+    if (!canExportAssets) return;
+    try {
+      let exportSource = assets;
+      if (!cutoffDate && Number(meta.total || 0) > assets.length) {
+        const pageSizeForExport = 200;
+        const totalPagesForExport = Math.max(1, Math.ceil(Number(meta.total || 0) / pageSizeForExport));
+        const fullData: AssetRow[] = [];
+        for (let exportPage = 1; exportPage <= totalPagesForExport; exportPage += 1) {
+          const fullResponse = await mobiliarioService.getAssets({
+            search: search.trim() || undefined,
+            category: categoryFilter === 'all' ? undefined : categoryFilter,
+            status: statusFilter === 'all' ? undefined : statusFilter,
+            branchId: effectiveBranchId,
+            page: exportPage,
+            pageSize: pageSizeForExport,
+            report: true,
+            export: true,
+          });
+          const pageData = Array.isArray(fullResponse) ? fullResponse : Array.isArray((fullResponse as any)?.data) ? (fullResponse as any).data : [];
+          fullData.push(...(pageData as AssetRow[]));
+          if (pageData.length < pageSizeForExport) break;
+        }
+        if (fullData.length) exportSource = fullData;
+      }
+      const rows = exportSource.map((asset) => ({
+      Código: asset.code,
+      Nombre: asset.name,
+      Categoría: asset.categoryLabel || CATEGORIES.find((item) => item.value === asset.category)?.label || asset.category,
+      Ubicación: asset.location || '—',
+      Responsable: asset.responsibleUser?.name || userNameOf(asset.responsibleUserId),
+      Adquisición: asset.acquisitionDate ? String(asset.acquisitionDate).slice(0, 10) : '—',
+      Costo: canViewInventoryCost ? Number(asset.cost || 0) : undefined,
+      Moneda: asset.currency || '',
+      Estado: asset.statusLabel || STATUSES.find((item) => item.value === asset.status)?.label || asset.status,
+      }));
+      if (!rows.length) {
+        toast.error('No hay mobiliario o equipos para exportar con los filtros actuales.');
+        return;
+      }
+      if (format === 'xlsx') {
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Mobiliario y equipos');
+        XLSX.writeFile(workbook, buildDatedDownloadFileName(['reporte_mobiliario_equipos'], 'xlsx'));
+      } else {
+        await generateConfiguredReportSectionsPDF({
+          targetKey: 'inventario.assets',
+          title: 'Mobiliario y equipos',
+          tenantName: user?.clientTenant?.name || user?.tenantName || 'Mi Empresa',
+          tenantLogo: user?.clientTenant?.logo || '',
+          periodLabel: `Registros filtrados: ${rows.length}`,
+          sections: [{ id: 'inventory-assets', title: 'Mobiliario y equipos', headers: Object.keys(rows[0]), rows: rows.map((row) => Object.values(row)) }],
+          fileName: buildDatedDownloadFileName(['reporte_mobiliario_equipos'], 'pdf'),
+        });
+      }
+      toast.success(`Reporte de mobiliario y equipos exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo exportar el reporte de mobiliario y equipos.');
+    }
+  };
+
   const renderCostCell = (asset: AssetRow) => {
     const original = `${currencySymbol(asset.currency || 'USD')} ${fmtCost(asset.cost)}`;
     const amount = displayMode === 'ORIGINAL'
@@ -617,9 +682,16 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
         </div>
         <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="mobiliario-list-actions">
           <InventoryViewTutorial label="Cómo gestionar mobiliario" targetPrefix="mobiliario-list" copy={{ data: { description: 'Busca y filtra los activos por nombre, código, categoría, estado o sucursal.' }, actions: { description: 'Registra, importa, descarga la plantilla o actualiza los activos existentes.' } }} />
-          <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+           <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
-          </Button>
+           </Button>
+           {canExportAssets && <DropdownMenu>
+             <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Download className="size-4" /> Exportar <ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
+             <DropdownMenuContent align="end" className="rounded-xl">
+               <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportAssets('pdf')}><FileText className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
+               <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportAssets('xlsx')}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
+             </DropdownMenuContent>
+           </DropdownMenu>}
           {canImportAssets && <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <FileDown className="size-4" /> Plantilla
           </Button>}

@@ -2,7 +2,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
-import { createDefaultTemplateDefinition, ensureDashboardChartNodes, normalizePdfCompanySettings, PDF_DEFAULT_FONT_SCALE, resolveTemplateToken, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
+import { createDefaultTemplateDefinition, ensureDashboardChartNodes, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, resolveTemplateToken, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { pdfStatusLabel } from './pdfStatus';
 
@@ -772,14 +772,20 @@ function createBarcodeNode(node: PdfTemplateNode, data: PdfTemplateData, setting
 function createChartNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings) {
   const element = document.createElement('div');
   setBaseNodeStyle(element, node, settings);
-  Object.assign(element.style, { display: 'flex', flexDirection: 'column', padding: '4px 6px', gap: '2px', overflow: 'hidden', borderWidth: '1px', boxSizing: 'border-box' });
+  Object.assign(element.style, { display: 'flex', flexDirection: 'column', alignItems: 'stretch', padding: '4px 6px', gap: '2px', overflow: 'hidden', borderWidth: '1px', boxSizing: 'border-box' });
   const chart = data.dashboardCharts?.find(item => item.id === node.token);
   if (!chart) return element;
   const title = document.createElement('div');
   title.textContent = chart.title || node.label;
-  Object.assign(title.style, { flex: '0 0 auto', fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(7.5), fontWeight: '700', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155'), lineHeight: '1.15', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' });
+  Object.assign(title.style, { flex: '0 0 auto', height: pdfPointsToCss(8), fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(7.5), fontWeight: '700', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155'), lineHeight: '1', whiteSpace: 'nowrap', overflow: 'visible', textOverflow: 'ellipsis', position: 'relative', zIndex: '1' });
   element.appendChild(title);
   const svg = svgElement('svg', { viewBox: '0 0 320 92', preserveAspectRatio: 'none', width: '100%', height: '100%' });
+  // El SVG no debe ocupar de nuevo toda la altura del contenedor: al hacerlo
+  // se monta sobre el título de la gráfica y recorta su primera línea en los
+  // PDFs del dashboard. El flex restante se reparte después del título.
+  svg.style.flex = '1 1 auto';
+  svg.style.minHeight = '0';
+  svg.style.height = 'auto';
   const labels = chart.labels || [];
   const values = chart.values || chart.series?.[0]?.values || [];
   const palette = chart.colors?.length ? chart.colors : ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#ef4444'];
@@ -1021,8 +1027,9 @@ function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition
   }
 }
 
-export async function renderPdfTemplateToPdf({ definition, settings, targetKey, data, fileName, save = true }: PdfTemplateRenderOptions) {
+export async function renderPdfTemplateToPdf({ definition, settings: requestedSettings, targetKey, data, fileName, save = true }: PdfTemplateRenderOptions) {
   if (typeof document === 'undefined') throw new Error('La plantilla PDF requiere un navegador.');
+  const settings = normalizePdfPaperSettings(targetKey, requestedSettings as unknown as Record<string, unknown>) as PdfTemplateRenderSettings & Record<string, unknown>;
   // Las vistas reciben el branding por distintas capas (ThemeContext,
   // sessionBranding o clientTenant). El almacenamiento de sesión es la fuente
   // común del contexto de sucursal y evita que un reporte pierda el logo solo

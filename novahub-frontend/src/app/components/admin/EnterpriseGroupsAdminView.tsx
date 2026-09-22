@@ -30,7 +30,10 @@ function formatStorage(value: unknown) {
   return `${amount >= 10 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
 }
 
-export function EnterpriseGroupsAdminView({ embedded = false, initialTab }: { embedded?: boolean; initialTab?: 'groups' | 'legacy' | 'requests' | 'module-requests' | 'quotes' }) {
+const ENTERPRISE_GROUP_TABS = ['groups', 'legacy', 'requests', 'module-requests', 'quotes'] as const;
+type EnterpriseGroupTab = typeof ENTERPRISE_GROUP_TABS[number];
+
+export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabChange }: { embedded?: boolean; initialTab?: string; onTabChange?: (tab: string) => void }) {
   const { user } = useAuth();
   const quoteOnly = user?.role === 'platform_quote_user';
   const isSuperAdmin = String(user?.role || '').toUpperCase().replace(/[-\s]/g, '_') === 'SUPER_ADMIN';
@@ -38,7 +41,15 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab }: { em
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [groupsPage, setGroupsPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<'groups' | 'legacy' | 'requests' | 'module-requests' | 'quotes'>(quoteOnly ? 'quotes' : initialTab || 'groups');
+  const resolvedInitialTab: EnterpriseGroupTab = quoteOnly
+    ? 'quotes'
+    : ENTERPRISE_GROUP_TABS.find((tab) => tab === initialTab) || 'groups';
+  const [activeTab, setActiveTab] = useState<EnterpriseGroupTab>(resolvedInitialTab);
+  useEffect(() => setActiveTab(resolvedInitialTab), [resolvedInitialTab]);
+  const handleTabChange = (tab: EnterpriseGroupTab) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearchTerm(searchTerm.trim());
@@ -101,7 +112,7 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab }: { em
           ['module-requests', 'Cotizar módulos', FileText],
           ['quotes', 'Cotizaciones', FileText],
         ] as const).filter(([tab]) => !quoteOnly && (tab !== 'module-requests' || isSuperAdmin) || quoteOnly && tab === 'quotes').map(([tab, label, Icon]) => (
-          <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide transition ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
+          <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => handleTabChange(tab)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide transition ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
             <Icon className="size-4" /> {label}{tab === 'module-requests' && moduleQuotePendingCount > 0 && <Badge className="ml-1 bg-background/20 px-1.5 py-0 text-[9px]">{moduleQuotePendingCount}</Badge>}
           </button>
         ))}
@@ -194,7 +205,7 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab }: { em
       ) : activeTab === 'requests' ? (
         <TrialExtensionRequestsPanel />
       ) : activeTab === 'module-requests' ? (
-        <ModuleQuoteRequestsPanel onOpenQuotes={() => setActiveTab('quotes')} />
+        <ModuleQuoteRequestsPanel onOpenQuotes={() => handleTabChange('quotes')} />
       ) : (
         <PlatformQuotesPanel groups={data?.groupOptions?.length ? data.groupOptions : data?.groups || []} />
       )}

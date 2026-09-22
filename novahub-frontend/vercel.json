@@ -7,19 +7,22 @@
       ]
     },
     {
-      "source": "/",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
-      ]
-    },
-    {
       "source": "/index.html",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
       ]
     },
     {
-      "source": "/modulos",
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        { "type": "header", "key": "accept", "value": ".*text/html.*" }
+      ],
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
       ]

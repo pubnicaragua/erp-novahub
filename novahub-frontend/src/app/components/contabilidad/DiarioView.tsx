@@ -176,16 +176,16 @@ export function DiarioView() {
   const viewJournal = journalDetailQuery.data || null;
   const formatCurrency = (value: number) => formatAmount(Number(value || 0), baseCurrency);
 
-  const canExport = canPerform('ACCOUNTING_JOURNAL', 'export') || canPerform('ACCOUNTING_JOURNAL', 'read');
+  const canExport = canPerform('ACCOUNTING_JOURNAL', 'export');
 
   const handleExportPDF = async () => {
-    if (journals.length === 0) {
-      toast.error('No hay asientos contables para exportar');
-      return;
-    }
+    if (!canExport) return;
     setExportingPdf(true);
     try {
-      const exportRows = journals.map((j) => {
+      const exportResponse = await contabilidadService.getJournals({ ...journalParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+      const exportJournals = accountingList(exportResponse) as JournalEntry[];
+      if (exportJournals.length === 0) throw new Error('No hay asientos contables para exportar');
+      const exportRows = exportJournals.map((j) => {
         const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
         const totalCred = j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0;
         return {
@@ -200,8 +200,8 @@ export function DiarioView() {
         };
       });
 
-      const totalDebitsSum = journals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0), 0);
-      const totalCreditsSum = journals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0), 0);
+      const totalDebitsSum = exportJournals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0), 0);
+      const totalCreditsSum = exportJournals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0), 0);
 
       await generateJournalPDF({
         rows: exportRows,
@@ -215,7 +215,7 @@ export function DiarioView() {
           creditos: formatAmount(totalCreditsSum, baseCurrency),
         },
       });
-      toast.success(`PDF exportado con ${journals.length} asiento(s)`);
+      toast.success(`PDF exportado con ${exportJournals.length} asiento(s)`);
     } catch (error: any) {
       toast.error(error?.message || 'Error al exportar a PDF');
     } finally {
@@ -224,14 +224,15 @@ export function DiarioView() {
   };
 
   const handleExportExcel = () => {
-    if (journals.length === 0) {
-      toast.error('No hay asientos contables para exportar');
-      return;
-    }
+    if (!canExport) return;
     setExportingExcel(true);
-    try {
+    void (async () => {
+      try {
+      const exportResponse = await contabilidadService.getJournals({ ...journalParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+      const exportJournals = accountingList(exportResponse) as JournalEntry[];
+      if (exportJournals.length === 0) throw new Error('No hay asientos contables para exportar');
       const excelRows: any[] = [];
-      journals.forEach((j) => {
+      exportJournals.forEach((j) => {
         const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
         const totalCred = j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0;
         excelRows.push({
@@ -263,8 +264,8 @@ export function DiarioView() {
         }
       });
 
-      const totalDebitsSum = journals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0), 0);
-      const totalCreditsSum = journals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0), 0);
+      const totalDebitsSum = exportJournals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0), 0);
+      const totalCreditsSum = exportJournals.reduce((acc, j) => acc + (j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0), 0);
 
       const workbook = XLSX.utils.book_new();
       const detailSheet = XLSX.utils.json_to_sheet(excelRows);
@@ -286,7 +287,7 @@ export function DiarioView() {
         ['Estado filtrado', filterStatus || 'Todos'],
         ['Desde', filterDateFrom || 'Inicio'],
         ['Hasta', filterDateTo || 'Actual'],
-        ['Total asientos', journals.length],
+        ['Total asientos', exportJournals.length],
         ['Total débitos', totalDebitsSum],
         ['Total créditos', totalCreditsSum],
       ]);
@@ -294,12 +295,13 @@ export function DiarioView() {
       XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');
 
       XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['libro_diario'], 'xlsx', filterDateFrom, filterDateTo));
-      toast.success(`Excel exportado con ${journals.length} asiento(s)`);
+      toast.success(`Excel exportado con ${exportJournals.length} asiento(s)`);
     } catch (error: any) {
       toast.error(error?.message || 'Error al exportar a Excel');
     } finally {
       setExportingExcel(false);
     }
+    })();
   };
   const journalGridCols = viewJournal
     ? '48px 1fr 1.15fr 0.85fr 1.35fr 1.35fr 1fr 1.35fr 84px'

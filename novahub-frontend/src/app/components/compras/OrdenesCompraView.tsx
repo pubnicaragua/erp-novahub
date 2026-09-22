@@ -56,6 +56,7 @@ import { ProductSimilarityAlert } from '../inventory/ProductSimilarityAlert';
 import type { SimilarProductGroup, SimilarProductMatch } from '../../services/inventario.service';
 import { buildVariantDisplayName } from '../../types/variants';
 import { resolveStandardProductPriceLists } from '../../utils/product-price-lists';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 interface Props {
   data: PurchaseOrder[];
@@ -2061,6 +2062,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           page,
           pageSize,
           report: true,
+          export: true,
           light: true,
           search: searchTerm.trim() || undefined,
           status: statusFilter !== 'ALL' && statusFilter !== 'TO_APPROVE' ? statusFilter : undefined,
@@ -2115,6 +2117,40 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       toast.success('Reporte PDF descargado', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
+
+  const handleExportListExcel = async (scope: PdfExportScope = 'page', exportFilter = 'all') => {
+    const exportToastId = toast.loading('Preparando Excel de órdenes de compra...');
+    try {
+      const allRows = scope === 'all'
+        ? await fetchAllPaginatedRows<PurchaseOrder>((page, pageSize) => purchaseOrdersService.getAll({
+          page, pageSize, report: true, export: true, light: true,
+          search: searchTerm.trim() || undefined,
+          status: statusFilter !== 'ALL' && statusFilter !== 'TO_APPROVE' ? statusFilter : undefined,
+          branchId: selectedBranchId || undefined,
+        }))
+        : data;
+      const exportRows = colFilters.applyTo(allRows.filter((order) => {
+        const orderStatus = normalizePurchaseOrderStatus(order.status);
+        if (exportFilter === 'approved' && orderStatus !== 'APPROVED') return false;
+        if (statusFilter === 'TO_APPROVE' && !PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(orderStatus)) return false;
+        if (statusFilter !== 'ALL' && statusFilter !== 'TO_APPROVE' && normalizePurchaseOrderStatus(statusFilter) !== orderStatus) return false;
+        if (!normalizedSearchTerm) return true;
+        const haystack = [order.number, order.supplier?.name, order.address, order.requestedBy, order.notes, ...(order.items || []).flatMap((item: any) => [item.code, item.name, item.category, item.description])].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(normalizedSearchTerm);
+      }), filterGetters);
+      createReportWorkbook({
+        fileName: 'ordenes_de_compra.xlsx',
+        sheets: [
+          { name: 'Ordenes', rows: exportRows.map((order) => ({ Numero: order.number || '—', Proveedor: order.supplier?.name || 'Sin proveedor', Fecha: order.date || '—', Estado: getPurchaseOrderStatusOption(order.status).label, Moneda: order.currency || '—', Total: Number(order.total || 0), Items: order.items?.length || 0 })) },
+          { name: 'Detalle', rows: exportRows.flatMap((order) => (order.items || []).map((item: any) => ({ Orden: order.number || order.id, Codigo: item.code || item.sku || '—', Producto: item.name || item.description || '—', Cantidad: Number(item.quantity || 0), Precio: Number(item.unitPrice || item.price || 0), Total: Number(item.total || 0) }))) },
+        ],
+        filters: { Buscar: searchTerm, Estado: statusFilter, Alcance: scope === 'all' ? 'Todos los registros' : 'Página visible' },
+      });
+      toast.success('Excel de órdenes descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el Excel', { id: exportToastId });
     }
   };
 
@@ -3374,6 +3410,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 ],
               }}
               onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
+              onExcel={(scope, filter) => void handleExportListExcel(scope, filter)}
             />}
             <PurchaseViewTutorial view="orders" />
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes de compra" />

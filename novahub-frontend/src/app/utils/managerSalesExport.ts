@@ -30,7 +30,7 @@ function pdfPaperForFormat(settings: Record<string, any>, format?: PdfDownloadFo
   if (!format || format === 'configured') return pdfDesignPaper(settings);
   if (format === 'roll-80') return { unit: 'mm' as const, format: [80, 220] as [number, number] };
   if (format === 'roll-58') return { unit: 'mm' as const, format: [58, 220] as [number, number] };
-  return { unit: 'mm' as const, format: format === 'A4' ? 'a4' as const : format === 'legal' ? 'legal' as const : format === 'oficio' ? [216, 330] as [number, number] : 'letter' as const };
+  return pdfDesignPaper({ ...settings, paperSize: 'LETTER', orientation: 'portrait' });
 }
 
 function safeHex(value: unknown, fallback = '#10b981') {
@@ -162,7 +162,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
   const settings = (configuredSettings && typeof configuredSettings === 'object' ? configuredSettings : await getPdfDesignSettings('reportes.sales')) as Record<string, any>;
   const primary = pdfDesignColor(settings.primaryColor || options.primaryColor, [16, 185, 129]);
   const rollFormat = options.pdfFormat === 'roll-80' || options.pdfFormat === 'roll-58';
-  const doc = new jsPDF({ ...pdfPaperForFormat(settings, options.pdfFormat), orientation: rollFormat ? 'portrait' : 'landscape' });
+  const doc = new jsPDF(rollFormat ? { ...pdfPaperForFormat(settings, options.pdfFormat), orientation: 'portrait' } : pdfPaperForFormat(settings, options.pdfFormat));
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;

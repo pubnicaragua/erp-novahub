@@ -78,7 +78,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   // permiso también debe habilitar la pantalla y sus consultas autorizadas.
   const canReadInventory = canPerform('INVENTORY', 'view')
     || INVENTORY_SECTIONS.some((section) => canViewInventorySection(section.id));
-  const canExportInventory = canPerform('INVENTORY_PRODUCTS', 'export');
+  const canExportInventory = canPerform('INVENTORY_PRODUCTS', 'export') || canPerform('INVENTORY_SERVICES', 'export');
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const queryClient = useQueryClient();
   const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches, accessibleBranches, refreshBranches, isLoading: branchScopeLoading } = useBranchScope();
@@ -425,6 +425,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       from: movementFilters.from || undefined,
       to: movementFilters.to || undefined,
       report: true,
+      export: true,
       includeUsers: true,
       sortOrder,
       pageSize: 5000,
@@ -509,7 +510,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     if (activeTab !== 'productos') setCreateProductViewOpen(false);
   }, [activeTab]);
 
-  const handleExportData = async ({ amount, sortOrder, rows }: ProductExportOptions = { amount: 'all', sortOrder: 'asc', scope: 'all', rows: undefined }) => {
+  const handleExportData = async ({ amount, sortOrder, rows, kind = 'product' }: ProductExportOptions = { amount: 'all', sortOrder: 'asc', scope: 'all', rows: undefined }) => {
     if (!canExportInventory) return;
     try {
       // La consulta de resumen contiene el catálogo completo dentro del
@@ -518,7 +519,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         ? rows
         : (summaryProducts.length > 0 ? summaryProducts : productItems);
       const orderedProducts = [...sourceProducts]
-        .filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE')
+        .filter((product: any) => kind === 'service'
+          ? String(product.itemType || product.type || '').toUpperCase() === 'SERVICE'
+          : String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE')
         .sort((left: any, right: any) => {
           const comparison = String(left.code || left.name || '').localeCompare(String(right.code || right.name || ''), 'es', { numeric: true, sensitivity: 'base' });
           return sortOrder === 'desc' ? -comparison : comparison;
@@ -542,8 +545,11 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         const values = levels.map((level: any) => Number(level?.[field])).filter((value) => Number.isFinite(value));
         return values.length > 0 ? Math.max(...values) : '';
       };
-      const productHeaders = ['Código', 'Nombre', 'Marca', 'Cliente', 'Categoría', 'Unidad', 'Nota comercial', 'Stock', 'Stock mínimo', 'Stock máximo', 'Bodegas', 'Precio de venta', ...(canViewInventoryCost ? ['Costo'] : []), 'Estado'];
+      const productHeaders = kind === 'service'
+        ? ['Código', 'Nombre', 'Categoría', 'Unidad', 'Precio', ...(canViewInventoryCost ? ['Costo'] : []), 'Estado']
+        : ['Código', 'Nombre', 'Marca', 'Cliente', 'Categoría', 'Unidad', 'Nota comercial', 'Stock', 'Stock mínimo', 'Stock máximo', 'Bodegas', 'Precio de venta', ...(canViewInventoryCost ? ['Costo'] : []), 'Estado'];
       const productRows = productsToExport.map((product: any) => {
+        if (kind === 'service') return [product.code || '', product.name || '', product.category?.name || product.categoryName || '', product.unit || product.details?.unit || 'servicio', product.salePrice ?? product.price ?? '', ...(canViewInventoryCost ? [product.costPrice ?? product.details?.costPrice ?? ''] : []), product.isActive === false ? 'Inactivo' : 'Activo'];
         const levels = getScopedLevels(product);
         return [
           product.code || '',
@@ -585,8 +591,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         ['Variantes', 'Incluye el SKU, nombre, atributos y costo de cada variante disponible.'],
         ['Alcance', selectedBranchId ? 'Se exportaron los registros disponibles para la sucursal seleccionada.' : 'Se exportaron los registros disponibles para el alcance actual del usuario.'],
       ]);
-      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_inventario_productos_registrados'], 'xlsx'));
-      toast.success(`Archivo Excel descargado con ${productsToExport.length} producto(s)`);
+       XLSX.writeFile(workbook, buildDateFilteredDownloadFileName([kind === 'service' ? 'reporte_inventario_servicios' : 'reporte_inventario_productos_registrados'], 'xlsx'));
+       toast.success(`Archivo Excel descargado con ${productsToExport.length} ${kind === 'service' ? 'servicio(s)' : 'producto(s)'}`);
     } catch {
       toast.error('Error al exportar datos');
     }
@@ -752,8 +758,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     warehouses={scopedWarehouses}
                     series={data.series}
                     movements={data.movements}
-                    onRefresh={() => fetchData()}
-                    isRefreshing={refreshing}
+                     onRefresh={() => fetchData()}
+                     onExport={canPerform('INVENTORY_SERVICES', 'export') ? handleExportData : undefined}
+                     isRefreshing={refreshing}
                     pagination={productsPagination}
                     onSearchChange={(value) => updateSearch('servicios', value)}
                     onCategoryChange={(value) => updateProductFilters('servicios', 'categoryIds', value)}

@@ -190,6 +190,8 @@ export interface ProjectListQuery {
   order?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
+  report?: boolean;
+  export?: boolean;
 }
 
 function qs(params?: Record<string, unknown>): string {

@@ -3,8 +3,8 @@ import { resolveStorageReferences } from './storage.service';
 import type { ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
 
 const createCrudService = <T>(endpoint: string) => ({
-  getAll: async (signal?: AbortSignal) => {
-    const data = await api.get(endpoint, { signal }) as T[];
+  getAll: async (signal?: AbortSignal, params?: Record<string, unknown>) => {
+    const data = await api.get(endpoint, { signal, params }) as T[];
     return resolveStorageReferences(data);
   },
   getById: async (id: string, signal?: AbortSignal) => {

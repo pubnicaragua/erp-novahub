@@ -10,22 +10,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery } from '../hooks/useTenantQuery';
 import { useImpersonation } from '../contexts/ImpersonationContext';
+import { useAuth } from '../contexts/AuthContext';
+import { safeGetItem, safeSetItem } from '../services/safe-storage';
 import { enterpriseGroupsService, type ManagerOverview, type ManagerOperationsModule, type ManagerUserActivityResponse } from '../services/enterprise-groups.service';
 import { MANAGER_SECTIONS, ManagerShell, type ManagerSection, type ManagerSettingsView } from './ManagerShell';
 import { ManagerInventoryModule } from './manager/ManagerInventoryModule';
-import type { ManagerInventoryView } from './manager/manager-inventory.types';
+import { MANAGER_INVENTORY_VIEWS, type ManagerInventoryView } from './manager/manager-inventory.types';
 import { ManagerSalesModule } from './manager/ManagerSalesModule';
-import type { ManagerSalesView } from './manager/manager-sales.types';
+import { MANAGER_SALES_VIEWS, type ManagerSalesView } from './manager/manager-sales.types';
 import { ManagerPurchasesModule } from './manager/ManagerPurchasesModule';
-import type { ManagerPurchasesView } from './manager/manager-purchases.types';
+import { MANAGER_PURCHASES_VIEWS, type ManagerPurchasesView } from './manager/manager-purchases.types';
 import { ManagerFinanceModule } from './manager/ManagerFinanceModule';
-import type { ManagerFinanceView } from './manager/manager-finance.types';
+import { MANAGER_FINANCE_VIEWS, type ManagerFinanceView } from './manager/manager-finance.types';
 import { ManagerAccountingModule } from './manager/ManagerAccountingModule';
-import type { ManagerAccountingView } from './manager/manager-accounting.types';
+import { MANAGER_ACCOUNTING_VIEWS, type ManagerAccountingView } from './manager/manager-accounting.types';
 import { ManagerReportsModule } from './manager/ManagerReportsModule';
-import type { ManagerReportsView } from './manager/manager-reports.types';
+import { MANAGER_REPORTS_VIEWS, type ManagerReportsView } from './manager/manager-reports.types';
 import { ManagerHRModule } from './manager/ManagerHRModule';
-import type { ManagerHrView } from './manager/manager-hr.types';
+import { MANAGER_HR_VIEWS, type ManagerHrView } from './manager/manager-hr.types';
+import { MANAGER_OPERATION_VIEWS } from './manager/manager-operations.types';
 import { ManagerOperationsModule as ManagerOperationsView } from './manager/ManagerOperationsModule';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { BrandLogo } from './BrandLogo';
@@ -69,6 +72,69 @@ const formatStorage = (value: unknown) => {
   }
   return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 };
+
+type ManagerNavigationSnapshot = {
+  section: ManagerSection;
+  usersTab: 'users' | 'managers' | 'access';
+  settingsView: ManagerSettingsView;
+  inventoryView: ManagerInventoryView;
+  salesView: ManagerSalesView;
+  purchasesView: ManagerPurchasesView;
+  financeView: ManagerFinanceView;
+  accountingView: ManagerAccountingView;
+  reportView: ManagerReportsView;
+  hrView: ManagerHrView;
+  operationViews: Partial<Record<ManagerOperationsModule, string>>;
+};
+
+function storedManagerOption<T extends string>(options: readonly { id: T }[], value: unknown, fallback: T): T {
+  return options.find((option) => option.id === value)?.id || fallback;
+}
+
+function readManagerNavigation(userId: string): ManagerNavigationSnapshot {
+  const defaults: ManagerNavigationSnapshot = {
+    section: 'overview',
+    usersTab: 'users',
+    settingsView: 'theme',
+    inventoryView: 'products',
+    salesView: 'overview',
+    purchasesView: 'overview',
+    financeView: 'overview',
+    accountingView: 'overview',
+    reportView: 'overview',
+    hrView: 'overview',
+    operationViews: {},
+  };
+
+  try {
+    const saved = JSON.parse(safeGetItem(`erp-manager-navigation:${userId}`) || 'null');
+    if (!saved || typeof saved !== 'object') return defaults;
+    const operationViews: ManagerNavigationSnapshot['operationViews'] = {};
+    if (saved.operationViews && typeof saved.operationViews === 'object') {
+      Object.entries(MANAGER_OPERATION_VIEWS).forEach(([module, views]) => {
+        const selectedView = (saved.operationViews as Record<string, unknown>)[module];
+        if (views.some((view) => view.id === selectedView)) {
+          operationViews[module as ManagerOperationsModule] = String(selectedView);
+        }
+      });
+    }
+    return {
+      section: storedManagerOption(MANAGER_SECTIONS, saved.section, defaults.section),
+      usersTab: ['users', 'managers', 'access'].includes(saved.usersTab) ? saved.usersTab : defaults.usersTab,
+      settingsView: ['theme', 'audit'].includes(saved.settingsView) ? saved.settingsView : defaults.settingsView,
+      inventoryView: storedManagerOption(MANAGER_INVENTORY_VIEWS, saved.inventoryView, defaults.inventoryView),
+      salesView: storedManagerOption(MANAGER_SALES_VIEWS, saved.salesView, defaults.salesView),
+      purchasesView: storedManagerOption(MANAGER_PURCHASES_VIEWS, saved.purchasesView, defaults.purchasesView),
+      financeView: storedManagerOption(MANAGER_FINANCE_VIEWS, saved.financeView, defaults.financeView),
+      accountingView: storedManagerOption(MANAGER_ACCOUNTING_VIEWS, saved.accountingView, defaults.accountingView),
+      reportView: storedManagerOption(MANAGER_REPORTS_VIEWS, saved.reportView, defaults.reportView),
+      hrView: storedManagerOption(MANAGER_HR_VIEWS, saved.hrView, defaults.hrView),
+      operationViews,
+    };
+  } catch {
+    return defaults;
+  }
+}
 
 const MANAGER_OPERATION_BY_SECTION: Partial<Record<ManagerSection, ManagerOperationsModule>> = {
   activities: 'activities',
@@ -117,18 +183,20 @@ async function readSpreadsheet(file: File) {
 }
 
 export function ManagerPage() {
+  const { user } = useAuth();
   const { displayMode, baseCurrency } = useCurrency();
-  const [section, setSection] = useState<ManagerSection>('overview');
-  const [usersTab, setUsersTab] = useState<'users' | 'managers' | 'access'>('users');
-  const [settingsView, setSettingsView] = useState<ManagerSettingsView>('theme');
-  const [inventoryView, setInventoryView] = useState<ManagerInventoryView>('products');
-  const [salesView, setSalesView] = useState<ManagerSalesView>('overview');
-  const [purchasesView, setPurchasesView] = useState<ManagerPurchasesView>('overview');
-  const [financeView, setFinanceView] = useState<ManagerFinanceView>('overview');
-  const [accountingView, setAccountingView] = useState<ManagerAccountingView>('overview');
-  const [reportView, setReportView] = useState<ManagerReportsView>('overview');
-  const [hrView, setHrView] = useState<ManagerHrView>('overview');
-  const [operationViews, setOperationViews] = useState<Partial<Record<ManagerOperationsModule, string>>>({});
+  const managerNavigation = useMemo(() => readManagerNavigation(user?.id || 'anonymous'), [user?.id]);
+  const [section, setSection] = useState<ManagerSection>(managerNavigation.section);
+  const [usersTab, setUsersTab] = useState<'users' | 'managers' | 'access'>(managerNavigation.usersTab);
+  const [settingsView, setSettingsView] = useState<ManagerSettingsView>(managerNavigation.settingsView);
+  const [inventoryView, setInventoryView] = useState<ManagerInventoryView>(managerNavigation.inventoryView);
+  const [salesView, setSalesView] = useState<ManagerSalesView>(managerNavigation.salesView);
+  const [purchasesView, setPurchasesView] = useState<ManagerPurchasesView>(managerNavigation.purchasesView);
+  const [financeView, setFinanceView] = useState<ManagerFinanceView>(managerNavigation.financeView);
+  const [accountingView, setAccountingView] = useState<ManagerAccountingView>(managerNavigation.accountingView);
+  const [reportView, setReportView] = useState<ManagerReportsView>(managerNavigation.reportView);
+  const [hrView, setHrView] = useState<ManagerHrView>(managerNavigation.hrView);
+  const [operationViews, setOperationViews] = useState<Partial<Record<ManagerOperationsModule, string>>>(managerNavigation.operationViews);
   const [transferToApprove, setTransferToApprove] = useState<any | null>(null);
   const [selectedBusinessUnitId, setSelectedBusinessUnitId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
@@ -158,6 +226,24 @@ export function ManagerPage() {
   const [accountingImportRows, setAccountingImportRows] = useState<any[]>([]);
   const [accountingImportFileName, setAccountingImportFileName] = useState('');
   const { enterBranch } = useImpersonation();
+
+  useEffect(() => {
+    setSection(managerNavigation.section);
+    setUsersTab(managerNavigation.usersTab);
+    setSettingsView(managerNavigation.settingsView);
+    setInventoryView(managerNavigation.inventoryView);
+    setSalesView(managerNavigation.salesView);
+    setPurchasesView(managerNavigation.purchasesView);
+    setFinanceView(managerNavigation.financeView);
+    setAccountingView(managerNavigation.accountingView);
+    setReportView(managerNavigation.reportView);
+    setHrView(managerNavigation.hrView);
+    setOperationViews(managerNavigation.operationViews);
+  }, [managerNavigation]);
+
+  useEffect(() => {
+    safeSetItem(`erp-manager-navigation:${user?.id || 'anonymous'}`, JSON.stringify({ section, usersTab, settingsView, inventoryView, salesView, purchasesView, financeView, accountingView, reportView, hrView, operationViews }));
+  }, [accountingView, financeView, hrView, inventoryView, operationViews, purchasesView, reportView, salesView, section, settingsView, user?.id, usersTab]);
 
   const groupsQuery = useTenantQuery(
     ['manager-groups'],

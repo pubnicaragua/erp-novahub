@@ -566,7 +566,7 @@ const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
   'nova-pulse': 'CONFIG_NOVA_PULSE',
 };
 
-export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
+export function ConfiguracionPage({ initialTab = 'branding', onTabChange }: { initialTab?: string; onTabChange?: (tab: string) => void }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
   const { user, userBranches, canPerform } = useAuth();
   const { refreshRate: refreshCurrencyContext } = useCurrency();
@@ -694,6 +694,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   useEffect(() => {
     setActiveTab(resolvedInitialTab);
   }, [resolvedInitialTab]);
+
+  const handleConfigurationTabChange = (tab: string) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   // Security state
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
@@ -1313,7 +1318,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     <div className="space-y-6 p-4 pb-24 md:mx-auto md:max-w-[1920px] md:px-8 md:pt-4">
 
       {/* —— TABS —— */}
-      <Tabs value={activeTab} className="space-y-6" onValueChange={setActiveTab}>
+      <Tabs value={activeTab} className="space-y-6" onValueChange={handleConfigurationTabChange}>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
             {visibleTabs.map((tab) => {

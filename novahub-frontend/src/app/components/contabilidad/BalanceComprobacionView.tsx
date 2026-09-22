@@ -29,6 +29,7 @@ import { AccountChecklistDialog } from './AccountChecklistDialog';
 import { DateField } from '../ui/DateField';
 import { generateTrialBalancePDF } from '../../utils/pdfGenerator';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { ExportMenu } from '../ui/ExportMenu';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -675,14 +676,7 @@ export function BalanceComprobacionView() {
           {/* Grupo 2: Exportaciones y Configuración */}
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             {canExportTrialBalance && (
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-                <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9 w-full sm:w-auto text-xs">
-                  <Download className="size-4" /> Exportar Excel
-                </Button>
-                <Button variant="outline" size="sm" onClick={handlePrint} className="h-9 w-full sm:w-auto text-xs">
-                  <Download className="size-4" /> Exportar PDF
-                </Button>
-              </div>
+              <ExportMenu size="sm" onExcel={handleExportExcel} onPdf={handlePrint} />
             )}
 
             <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">

@@ -111,7 +111,7 @@ export function trackingStatusTone(status: TrackingStatus): string {
 }
 
 export const trackingService = {
-  async list(params?: { search?: string; status?: string }) {
+  async list(params?: { search?: string; status?: string; report?: boolean; export?: boolean; page?: number; pageSize?: number }) {
     return api.get('/tracking/shipments', { params }) as Promise<TrackingShipment[]>;
   },
 

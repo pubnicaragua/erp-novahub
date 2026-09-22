@@ -20,6 +20,8 @@ import { ActivosFijosCategoriesTab } from './ActivosFijosCategoriesTab';
 import { ActivosFijosDepreciationTab } from './ActivosFijosDepreciationTab';
 import { ActivosFijosImportTab } from './ActivosFijosImportTab';
 import { ActivoFormDialog } from './ActivoFormDialog';
+import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 interface FixedAsset {
   id: string;
@@ -43,7 +45,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export function ActivosFijosView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const canExportAssets = canPerform('ACCOUNTING_ASSETS', 'export');
   const { displayCurrency, formatConvertedAmount, convertAmount, toBaseAmount, baseCurrency } = useCurrency();
   const queryClient = useQueryClient();
@@ -55,14 +57,14 @@ export function ActivosFijosView() {
 
   const detailQuery = useAccountingQuery<any>(
     ['fixed-asset-detail', selectedAssetId],
-    async (signal) => (selectedAssetId ? contabilidadService.getFixedAssetDetail(selectedAssetId, signal) : null),
+    async (signal) => (selectedAssetId ? contabilidadService.getFixedAssetDetail(selectedAssetId, undefined, signal) : null),
     { enabled: !!selectedAssetId },
   );
   const detail = detailQuery.data;
   const detailLoading = detailQuery.isLoading || detailQuery.isFetching;
 
   const assetsQuery = useAccountingQuery<FixedAsset[]>(['fixed-assets'], async (signal) =>
-    accountingList(await contabilidadService.getFixedAssetsDetail(signal)) as FixedAsset[],
+    accountingList(await contabilidadService.getFixedAssetsDetail(undefined, signal)) as FixedAsset[],
   );
   const assets = assetsQuery.data || [];
   const loading = assetsQuery.isLoading || assetsQuery.isFetching;
@@ -96,14 +98,33 @@ export function ActivosFijosView() {
     }
   };
 
-  async function handleExport(scope: 'all' | 'selected') {
+  async function handleExport(scope: 'all' | 'selected', format: 'pdf' | 'xlsx' = 'xlsx') {
     if (!canExportAssets) return;
     const ids = scope === 'selected' ? selectedIds : assets.map(a => a.id);
-    if (ids.length === 0) { toast.error(scope === 'selected' ? 'No hay activos seleccionados' : 'No hay activos para exportar'); return; }
+    if (scope === 'selected' && ids.length === 0) { toast.error('No hay activos seleccionados'); return; }
     setExporting(true);
     try {
-      const details = await fetchFixedAssetDetails(ids);
-      exportFixedAssetsExcel(details, { toBase: toBaseAmount, baseCurrency });
+      const details = ids.length ? await fetchFixedAssetDetails(ids) : [];
+      if (format === 'xlsx') {
+        exportFixedAssetsExcel(details, { toBase: toBaseAmount, baseCurrency });
+      } else {
+        await generateConfiguredReportTemplate({
+          targetKey: 'contabilidad.fixed-assets',
+          title: 'Reporte de activos fijos',
+          tenantName: user?.tenantName || 'Mi Empresa',
+          rows: details,
+          columns: [
+            { header: 'Código', value: (row) => row.code || '—' },
+            { header: 'Activo', value: (row) => row.name || '—' },
+            { header: 'Categoría', value: (row) => row.category?.name || '—' },
+            { header: 'Estado', value: (row) => STATUS_LABELS[row.status] || row.status || '—' },
+            { header: 'Costo', value: (row) => formatCurrency(Number(row.cost || 0), row.currency, row.exchangeRate), align: 'right' },
+            { header: 'Valor en libros', value: (row) => formatCurrency(Number(row.derived?.bookValue || 0), row.currency, row.exchangeRate), align: 'right' },
+          ],
+          totals: { 'Total de activos': details.length, 'Costo de adquisición': formatCurrency(details.reduce((sum, row) => sum + convertAmount(Number(row.cost || 0), row.currency, row.exchangeRate), 0), displayCurrency) },
+          fileName: buildDatedDownloadFileName(['reporte_activos_fijos'], 'pdf'),
+        });
+      }
       toast.success(`Exportados ${details.length} activo${details.length !== 1 ? 's' : ''}`);
     } catch (err: any) {
       toast.error(err.message || 'Error al exportar activos');
@@ -136,7 +157,7 @@ export function ActivosFijosView() {
           )}
           {canExportAssets && <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={exporting || assets.length === 0} className="gap-2">
+              <Button variant="outline" disabled={exporting} className="gap-2">
                 {exporting ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
                 {exporting ? 'Exportando...' : 'Exportar'}
               </Button>
@@ -144,11 +165,17 @@ export function ActivosFijosView() {
             <DropdownMenuContent align="end" className="min-w-56">
               <DropdownMenuLabel className="text-xs">Exportar activos fijos</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleExport('all')} disabled={exporting || assets.length === 0} className="cursor-pointer gap-2 text-xs">
-                <Download className="size-3.5" /> Exportar todos ({assets.length})
+              <DropdownMenuItem onClick={() => handleExport('all', 'pdf')} disabled={exporting} className="cursor-pointer gap-2 text-xs">
+                <Download className="size-3.5" /> Todos en PDF ({assets.length})
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('selected')} disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs">
-                <Download className="size-3.5" /> Exportar seleccionados ({selectedIds.length})
+              <DropdownMenuItem onClick={() => handleExport('all', 'xlsx')} disabled={exporting} className="cursor-pointer gap-2 text-xs">
+                <FileSpreadsheet className="size-3.5" /> Todos en Excel ({assets.length})
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('selected', 'pdf')} disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs">
+                <Download className="size-3.5" /> Seleccionados en PDF ({selectedIds.length})
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('selected', 'xlsx')} disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs">
+                <FileSpreadsheet className="size-3.5" /> Seleccionados en Excel ({selectedIds.length})
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>}

@@ -44,6 +44,7 @@ import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { isBankPaymentMethod } from '../../utils/paymentMethods';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -200,6 +201,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           page,
           pageSize,
           report: true,
+          export: true,
           light: true,
           search: searchTerm.trim() || undefined,
           dateFrom: appliedRange?.from,
@@ -942,7 +944,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2></div>
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" />
-            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} />}
+            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => createReportWorkbook({ fileName: 'gastos.xlsx', sheets: [{ name: 'Gastos', rows: filteredData.map(row => ({ Fecha: row.date || '—', Categoria: row.category || '—', Descripcion: row.description || '—', Monto: Number(row.amount || 0), Moneda: row.currency || '—', Estado: row.status || '—' })) }] })} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">

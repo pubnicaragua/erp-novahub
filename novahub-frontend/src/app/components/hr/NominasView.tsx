@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt, Send, Pencil, CalendarDays } from 'lucide-react';
+import { DollarSign, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt, Send, Pencil, CalendarDays } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -23,6 +23,8 @@ import { HRViewTutorial } from './HRViewTutorial';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
+import { ExportMenu } from '../ui/ExportMenu';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 type PayrollFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'ALL';
 
@@ -336,10 +338,32 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     }
   };
 
+  const loadPayrollExportRows = async () => {
+    const response = await hrService.getPayrolls({ page: 1, pageSize: 5000, report: true, export: true });
+    const payload: any = (response as any)?.data ?? response;
+    const rows: any[] = Array.isArray(payload) ? payload : payload?.items || payload?.rows || payload?.data || [];
+    return rows.filter((payroll) => {
+      const employeeMatch = filterEmployee === 'all' || payroll.employeeId === filterEmployee;
+      const statusMatch = filterStatus === 'all' || payrollEffectiveStatus(payroll) === filterStatus;
+      return employeeMatch && statusMatch;
+    });
+  };
+
+  const payrollExportRows = (rows: any[]) => rows.map((payroll: any) => ({
+    Empleado: payrollEmployeeName(payroll),
+    Periodo: `${new Date(payroll.periodStart).toLocaleDateString()} - ${new Date(payroll.periodEnd).toLocaleDateString()}`,
+    Periodicidad: payrollFrequencyLabel(payroll.frequency || payroll.employee?.payFrequency),
+    'Salario bruto': payrollDisplay(payroll, 'grossPay', 'grossPayBase'),
+    'Neto a pagar': payrollDisplay(payroll, 'netPay', 'netPayBase'),
+    'Costo empresa': payrollDisplay(payroll, 'costoTotalEmpresa', 'costoTotalEmpresaBase'),
+    Estado: pdfStatusLabel(payroll.status),
+  }));
+
   const handleExportPDF = async () => {
     if (!canPerform('HR_PAYROLL', 'export')) return;
     try {
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: filteredPayrolls, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => pdfStatusLabel(row.status) }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
+      const exportRows = await loadPayrollExportRows();
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: exportRows, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => pdfStatusLabel(row.status) }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
       if (configured) { toast.success('Reporte PDF descargado'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings)) as any;
@@ -347,7 +371,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       doc.setFontSize(10);
       doc.text(`Generado: ${new Date().toLocaleDateString()}`, 14, 22);
 
-      const tableData = filteredPayrolls.map((p: any) => {
+      const tableData = exportRows.map((p: any) => {
         return [
           `${p.employee?.firstName} ${p.employee?.lastName}`,
           `${new Date(p.periodStart).toLocaleDateString()} - ${new Date(p.periodEnd).toLocaleDateString()}`,
@@ -369,6 +393,24 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       toast.success('Reporte PDF descargado');
     } catch {
       toast.error('Error generando PDF');
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!canPerform('HR_PAYROLL', 'export')) return;
+    try {
+      const rows = await loadPayrollExportRows();
+      createReportWorkbook({
+        fileName: buildDatedDownloadFileName(['reporte_nominas'], 'xlsx'),
+        sheets: [{ name: 'Nóminas', rows: payrollExportRows(rows) }],
+        filters: {
+          Empleado: filterEmployee === 'all' ? 'Todos' : employeeOptions.find((option) => option.value === filterEmployee)?.label || filterEmployee,
+          Estado: filterStatus === 'all' ? 'Todos' : filterStatus,
+        },
+      });
+      toast.success('Reporte Excel descargado');
+    } catch {
+      toast.error('Error generando Excel');
     }
   };
 
@@ -453,10 +495,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         </div>
         <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="hr-payroll-actions">
           {canPerform('HR_PAYROLL', 'export') && (
-            <Button variant="outline" size="sm" onClick={handleExportPDF}>
-              <Download className="size-4 mr-2" />
-              Descargar PDF
-            </Button>
+            <ExportMenu onPdf={() => void handleExportPDF()} onExcel={() => void handleExportExcel()} pdfDescription="Nóminas con la estructura configurada" excelDescription="Todas las nóminas filtradas" />
           )}
           {pendingCount > 0 && canPerform('HR_PAYROLL', 'approve') && (
             <Button size="sm" onClick={handleRequestAllPayments} className="bg-primary hover:bg-primary/90 !text-primary-foreground">

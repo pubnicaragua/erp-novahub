@@ -17,7 +17,7 @@ export const contabilidadService = {
     api.get<any>('/financials/transactions', { params: { accountId, ...params }, signal }),
 
   // Asientos Contables
-  getJournals: (params?: { status?: string; dateFrom?: string; dateTo?: string; accountId?: string; referenceType?: string; referenceId?: string; search?: string; costCenterId?: string; branchId?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+  getJournals: (params?: { status?: string; dateFrom?: string; dateTo?: string; accountId?: string; referenceType?: string; referenceId?: string; search?: string; costCenterId?: string; branchId?: string; page?: number; pageSize?: number; report?: boolean; export?: boolean }, signal?: AbortSignal) =>
     api.get<any>('/accounting/journals', { params, signal }),
   getWarehouseAccountingAllocations: (params?: { warehouseId?: string; accountId?: string; productId?: string; sourceType?: string; sourceId?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
     api.get<any>('/accounting/warehouse-allocations', { params, signal }),
@@ -99,7 +99,7 @@ export const contabilidadService = {
   deleteFiscalReport: (id: string) => api.delete<any>(`/accounting/fiscal-reports/${id}`),
 
   // Libro Mayor
-  getLedger: (params?: { accountId?: string; dateFrom?: string; dateTo?: string; branchId?: string }, signal?: AbortSignal) =>
+  getLedger: (params?: { accountId?: string; dateFrom?: string; dateTo?: string; branchId?: string; report?: boolean; export?: boolean; page?: number; pageSize?: number }, signal?: AbortSignal) =>
     api.get<any[]>('/accounting/ledger', { params, signal }),
 
   // Estado de Cambios en el Patrimonio
@@ -116,8 +116,8 @@ export const contabilidadService = {
   createFixedAssetCategory: (data: any) => api.post<any>('/accounting/fixed-assets/categories', data),
   updateFixedAssetCategory: (id: string, data: any) => api.patch<any>(`/accounting/fixed-assets/categories/${id}`, data),
   deleteFixedAssetCategory: (id: string) => api.delete(`/accounting/fixed-assets/categories/${id}`),
-  getFixedAssetsDetail: (signal?: AbortSignal) => api.get<any[]>('/accounting/fixed-assets/records', { signal }),
-  getFixedAssetDetail: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/fixed-assets/${id}`, { signal }),
+  getFixedAssetsDetail: (params?: { report?: boolean; export?: boolean }, signal?: AbortSignal) => api.get<any[]>('/accounting/fixed-assets/records', { params, signal }),
+  getFixedAssetDetail: (id: string, params?: { report?: boolean; export?: boolean }, signal?: AbortSignal) => api.get<any>(`/accounting/fixed-assets/${id}`, { params, signal }),
   createFixedAsset: (data: any) => api.post<any>('/accounting/fixed-assets/records', data),
   updateFixedAsset: (id: string, data: any) => api.patch<any>(`/accounting/fixed-assets/${id}`, data),
   generateFixedAssetProjection: (id: string) => api.post<any>(`/accounting/fixed-assets/${id}/depreciation/generate-projection`, {}),

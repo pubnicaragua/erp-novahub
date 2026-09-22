@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
+import { jsPDF } from 'jspdf';
 
 const server = await createServer({
   configFile: false,
@@ -14,6 +15,7 @@ try {
   const catalog = await server.ssrLoadModule('/src/app/services/pdf-document-catalog.ts');
   const definitions = await server.ssrLoadModule('/src/app/services/pdf-template-definition.ts');
   const renderer = await server.ssrLoadModule('/src/app/utils/pdf-template-renderer.ts');
+  const generator = await server.ssrLoadModule('/src/app/utils/pdfGenerator.ts');
   const targets = catalog.PDF_TEMPLATE_TARGETS;
 
   const normalizedCompany = definitions.normalizePdfCompanySettings({
@@ -33,13 +35,22 @@ try {
   assert.equal(normalizedCompany.bankInfo, 'Cuenta real de la empresa', 'La normalización debe conservar los otros ajustes del diseño.');
   assert.equal(definitions.SYSTEM_DEFAULT_PDF_SETTINGS.email, '', 'Las plantillas nuevas deben dejar vacíos los datos de empresa no configurados.');
 
-  assert.equal(targets.length, 40, 'El catálogo debe incluir las 40 salidas activas.');
+  assert.equal(targets.length, 76, 'El catálogo debe incluir las 76 salidas activas montadas.');
   assert.equal(new Set(targets.map(({ key }) => key)).size, targets.length, 'Las claves del catálogo deben ser únicas.');
   for (const key of ['contabilidad.journal', 'contabilidad.ledger', 'portal.customer-summary']) {
     assert.ok(targets.some(target => target.key === key), `Falta el destino ${key}.`);
   }
   assert.equal(catalog.getPdfTemplateTarget('ventas.cash-ticket').family, 'cash-ticket');
   assert.equal(catalog.getPdfTemplateTarget('inventario.product-labels').family, 'label');
+  for (const target of targets) {
+    assert.ok(target.viewId, `${target.key} necesita una vista montada.`);
+    assert.ok(target.adapterId, `${target.key} necesita un adaptador semántico.`);
+    assert.ok(target.capabilities?.exportPdf, `${target.key} necesita capacidad PDF.`);
+    if (target.templateMode === 'fixed') {
+      assert.equal(target.capabilities?.editableCanvas, false, `${target.key} no debe aparecer como canvas editable.`);
+      assert.equal(target.capabilities?.exportExcel, false, `${target.key} físico no debe ofrecer Excel.`);
+    }
+  }
 
   const labelSettings = definitions.createSystemDefaultPdfDesign('inventario.product-labels').settings;
   const labelDefinition = definitions.createDefaultTemplateDefinition('inventario.product-labels', labelSettings);
@@ -58,6 +69,18 @@ try {
     const hasKpis = Boolean(sample.reportKpis?.length);
     const hasProductLabel = Boolean(sample.product?.barcode);
     assert.ok(hasRows || hasKpis || hasProductLabel, `${target.key} necesita contenido de muestra no vacío.`);
+    if (target.templateMode === 'fixed') {
+      assert.ok(['LABEL', 'ROLL-80'].includes(settings.paperSize), `${target.key} debe conservar su papel físico.`);
+    } else {
+      assert.equal(settings.paperSize, 'LETTER', `${target.key} debe iniciar en Carta.`);
+      assert.equal(settings.orientation, 'portrait', `${target.key} debe iniciar en orientación vertical.`);
+      const paper = generator.pdfDesignPaper({ paperSize: 'A4', orientation: 'landscape' });
+      assert.equal(paper.format, 'letter', 'La política estándar debe normalizar A4 a Carta.');
+      assert.equal(paper.orientation, 'portrait', 'La política estándar debe normalizar horizontal a vertical.');
+      const pdf = new jsPDF(paper);
+      assert.equal(Math.round(pdf.internal.pageSize.getWidth()), 216, 'Carta debe medir 216 mm de ancho.');
+      assert.equal(Math.round(pdf.internal.pageSize.getHeight()), 279, 'Carta debe medir 279 mm de alto.');
+    }
   }
 
   const dashboard = definitions.createPdfTemplateSampleData('dashboard.tenant-overview');
@@ -69,6 +92,9 @@ try {
   const sanitizedDashboard = definitions.sanitizeTemplateDefinition(dashboardDefinition, 'dashboard.tenant-overview', definitions.createSystemDefaultPdfDesign('dashboard.tenant-overview').settings);
   const sanitizedCharts = sanitizedDashboard.nodes.filter(node => node.type === 'chart');
   assert.deepEqual(new Set(sanitizedCharts.map(node => node.chartType)), new Set(['area', 'bar', 'donut']), 'La normalización debe conservar el tipo de cada gráfica.');
+  const legacyDashboard = definitions.sanitizeTemplateDefinition({ ...dashboardDefinition, page: { ...dashboardDefinition.page, paperSize: 'A4', orientation: 'landscape' } }, 'dashboard.tenant-overview', { paperSize: 'A4', orientation: 'landscape' });
+  assert.equal(legacyDashboard.page.paperSize, 'LETTER', 'Los diseños Dashboard antiguos deben pasar a Carta.');
+  assert.equal(legacyDashboard.page.orientation, 'portrait', 'Los diseños Dashboard antiguos deben pasar a vertical.');
 
   const journal = definitions.createPdfTemplateSampleData('contabilidad.journal');
   const ledger = definitions.createPdfTemplateSampleData('contabilidad.ledger');

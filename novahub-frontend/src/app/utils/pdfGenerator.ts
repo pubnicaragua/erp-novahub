@@ -10,7 +10,7 @@ import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
 import { renderPdfTemplateToPdf } from './pdf-template-renderer';
-import { createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
+import { createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 
@@ -198,6 +198,10 @@ function basePdfPageSizeMm(paperSize: unknown): PdfPageSizeMm {
       return { width: 216, height: 330 };
     case 'LABEL':
       return { width: 70, height: 38 };
+    case 'ROLL-80':
+      return { width: 80, height: 200 };
+    case 'ROLL-58':
+      return { width: 58, height: 200 };
     case 'LETTER':
     default:
       return { width: 216, height: 279 };
@@ -205,8 +209,10 @@ function basePdfPageSizeMm(paperSize: unknown): PdfPageSizeMm {
 }
 
 export function pdfDesignPageSize(settings: Record<string, any>): PdfPageSizeMm {
-  const size = basePdfPageSizeMm(settings.paperSize);
-  return settings.orientation === 'landscape'
+  const paperSize = String(settings.paperSize || '').toUpperCase();
+  const physical = paperSize === 'LABEL' || paperSize === 'ROLL-80';
+  const size = basePdfPageSizeMm(physical ? paperSize : 'LETTER');
+  return physical && settings.orientation === 'landscape'
     ? { width: size.height, height: size.width }
     : size;
 }
@@ -236,7 +242,7 @@ async function loadPdfDesign(targetKey: string) {
       // elevamos al contrato semántico para que también sean editables y no
       // vuelvan a caer en un exportador nativo aislado.
       if (!savedDesign.layoutZones?.definition && savedDesign.sourceType === 'SYSTEM') {
-        const settings = createSystemDefaultPdfSettings((savedDesign.settings || {}) as Record<string, unknown>);
+        const settings = normalizePdfPaperSettings(target.key, createSystemDefaultPdfSettings((savedDesign.settings || {}) as Record<string, unknown>));
         return {
           ...savedDesign,
           isSystemDefaultRuntime: true,
@@ -286,9 +292,9 @@ export async function getPdfDesign(targetKey: string) {
 }
 
 export async function getPdfDesignSettings(targetKey: string, timeoutMs?: number) {
-  const request = getPdfDesign(targetKey).then((design) => (design?.settings || {}) as Record<string, any>);
+  const request = getPdfDesign(targetKey).then((design) => normalizePdfPaperSettings(targetKey, (design?.settings || {}) as Record<string, unknown>) as Record<string, any>);
   if (!timeoutMs || timeoutMs <= 0) return request;
-  const fallback = (createSystemDefaultPdfDesign(targetKey).settings || {}) as Record<string, any>;
+  const fallback = normalizePdfPaperSettings(targetKey, (createSystemDefaultPdfDesign(targetKey).settings || {}) as Record<string, unknown>) as Record<string, any>;
   return Promise.race([
     request,
     new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
@@ -395,18 +401,24 @@ function rememberedPdfSessionLogo(): string {
 }
 
 export function pdfDesignPaper(settings: Record<string, any>) {
-  const paperSize = String(settings.paperSize || 'LETTER').toUpperCase();
+  const requestedPaperSize = String(settings.paperSize || 'LETTER').toUpperCase();
+  const physical = requestedPaperSize === 'LABEL' || requestedPaperSize === 'ROLL-58' || requestedPaperSize === 'ROLL-80';
+  const paperSize = physical ? requestedPaperSize : 'LETTER';
   return {
     format: paperSize === 'A4'
       ? 'a4'
       : paperSize === 'LEGAL'
-        ? 'legal'
-        : paperSize === 'OFICIO'
-          ? [216, 330]
-          : paperSize === 'LABEL'
-            ? [70, 38]
-          : 'letter',
-    orientation: String(settings.orientation || 'portrait').toLowerCase() === 'landscape' ? 'landscape' : 'portrait',
+          ? 'legal'
+          : paperSize === 'OFICIO'
+            ? [216, 330]
+            : paperSize === 'LABEL'
+              ? [70, 38]
+              : paperSize === 'ROLL-58'
+                ? [58, 200]
+                : paperSize === 'ROLL-80'
+                  ? [80, 200]
+            : 'letter',
+    orientation: physical && String(settings.orientation || 'portrait').toLowerCase() === 'landscape' ? 'landscape' : 'portrait',
   } as any;
 }
 
@@ -427,7 +439,8 @@ function fitPdfImage(doc: jsPDF, image: string, maxWidth: number, maxHeight: num
 }
 
 function paperSettingForDownload(format: Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>) {
-  return format === 'A4' ? 'A4' : format === 'legal' ? 'LEGAL' : format === 'oficio' ? 'OFICIO' : 'LETTER';
+  void format;
+  return 'LETTER';
 }
 
 function withPdfDownloadFormat(design: any, format: PdfDownloadFormat) {
@@ -437,7 +450,7 @@ function withPdfDownloadFormat(design: any, format: PdfDownloadFormat) {
     settings: {
       ...((design && design.settings) || {}),
       paperSize: paperSettingForDownload(format as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>),
-      orientation: design?.settings?.orientation === 'landscape' ? 'landscape' : 'portrait',
+      orientation: 'portrait',
     },
   };
 }
@@ -513,7 +526,8 @@ function getSalesPdfAdditionalCharges(transaction: any): Array<{ label: string; 
 
 async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo, documentType, format = 'configured', save }: { savedDesign: any; estimate: any; tenantName: string; formatAmount: (amount: number, currency: string, rate: number) => string; tenantLogo?: string; documentType: string; format?: PdfDownloadFormat; save: boolean }): Promise<{ doc: jsPDF; blob: Blob }> {
   void format;
-  const design = savedDesign.settings || {};
+  const targetKey = getPdfTemplateTarget(documentType).key;
+  const design = normalizePdfPaperSettings(targetKey, savedDesign.settings || {});
   const fields = Array.isArray(savedDesign.layoutZones?.fields) ? savedDesign.layoutZones.fields : [];
   const field = (id: string, fallback: any) => fields.find((item: any) => item.id === id) || { id, x: fallback.x, y: fallback.y, width: fallback.width, height: fallback.height, enabled: true };
   const titleMap: Record<string, string> = { estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'NOTA DE CRÉDITO', 'credit-note': 'CRÉDITO' };
@@ -1941,16 +1955,23 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
       reportSections: [{ id: 'report-results', title, columns: templateColumns, rows: mappedRows }],
     } : {}),
   };
-  const configured = await renderConfiguredDefinition({
-    targetKey,
-    data: semanticData,
-    tenantName,
-    tenantLogo,
-    fileName,
-    save,
-    designOverride: { ...design, settings: { ...(design?.settings || {}), ...settings } },
-  });
-  if (configured) return configured;
+  // Las bitácoras y otros listados administrativos pueden contener miles de
+  // filas. Rasterizar una página HTML por cada bloque vuelve la descarga
+  // impracticable; para esos volúmenes usamos la salida vectorial de abajo,
+  // conservando los ajustes de marca y papel. Los reportes pequeños siguen
+  // usando la definición semántica editable.
+  if (rows.length <= 500) {
+    const configured = await renderConfiguredDefinition({
+      targetKey,
+      data: semanticData,
+      tenantName,
+      tenantLogo,
+      fileName,
+      save,
+      designOverride: { ...design, settings: { ...(design?.settings || {}), ...settings } },
+    });
+    if (configured) return configured;
+  }
 
   const doc = new jsPDF(pdfDesignPaper(settings));
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -2076,7 +2097,7 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
   const design = designOverride || await getPdfDesign(targetKey);
   const baseSettings = { ...(createSystemDefaultPdfDesign(targetKey).settings || {}), ...(design?.settings && typeof design.settings === 'object' ? design.settings : {}) } as Record<string, any>;
   const settings = configuredHistoryPaper(baseSettings, format);
-  const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...settings };
+  const renderSettings = normalizePdfPaperSettings(targetKey, { paperSize: 'LETTER', orientation: 'portrait' as const, ...settings });
   const sourceDefinition = design?.layoutZones?.definition || createDefaultTemplateDefinition(targetKey, renderSettings);
   const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
   const resolvedLogo = configuredLogo || tenantLogo || (typeof data.company?.logo === 'string' ? data.company.logo : undefined);
@@ -2102,7 +2123,9 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
 export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, tableSummary, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; tableSummary?: { label: string; value: unknown; columnIndex?: number }; fileName: string; designOverride?: any }) {
   const design = designOverride || await getPdfDesign(targetKey);
   const mappedColumns = columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' as const }));
-  const mappedRows = rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])));
+  const mappedRows = rows.length > 0
+    ? rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])))
+    : [Object.fromEntries(columns.map((column, index) => [`column-${index}`, index === 0 ? 'Sin registros para el alcance seleccionado' : '']))];
   const target = getPdfTemplateTarget(targetKey);
   const data: PdfTemplateData = {
     company: { name: tenantName, logo: tenantLogo },
@@ -2170,7 +2193,14 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     const rows = section.rows.map(row => Object.fromEntries(columns.map((column, columnIndex) => [column.token, row[columnIndex] ?? '—'])));
     return { id: section.id || `report-section-${sectionIndex + 1}`, title: section.title, columns, rows };
   });
-  if (!reportSections.length && !kpis?.length && !charts?.length) return null;
+  if (!reportSections.length && !kpis?.length && !charts?.length) {
+    reportSections.push({
+      id: 'empty-report',
+      title: 'Sin registros para el alcance seleccionado',
+      columns: [{ id: 'empty-message', label: 'Mensaje', token: 'empty-message', width: 100, align: 'left' }],
+      rows: [{ 'empty-message': 'Sin registros para el alcance seleccionado' }],
+    });
+  }
 
   const generatedAt = new Date().toLocaleString('es-NI');
   const periodText = periodLabel ? `Período: ${periodLabel}` : `Generado: ${generatedAt}`;
@@ -2417,11 +2447,11 @@ export const generateConfiguredHistoryPDF = async ({
   if (format !== 'roll-58') {
     const defaults = createSystemDefaultPdfDesign(targetKey).settings || {};
     const fetchedDesignSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object' ? configuredDesign.settings : {};
-    const renderSettings = {
+    const renderSettings = normalizePdfPaperSettings(targetKey, {
       paperSize: 'LETTER',
       orientation: 'portrait' as const,
       ...configuredHistoryPaper({ ...defaults, ...fetchedDesignSettings } as Record<string, any>, format),
-    };
+    });
     const sourceDefinition = configuredDesign?.layoutZones?.definition || createDefaultTemplateDefinition(targetKey, renderSettings);
     const mappedRows = rows.map(row => {
       const mapped: Record<string, unknown> = { description: columns[0] ? columns[0].value(row) : '', quantity: columns[1] ? columns[1].value(row) : '', unitPrice: columns[2] ? columns[2].value(row) : '', total: columns[3] ? columns[3].value(row) : '' };
@@ -3449,7 +3479,7 @@ export const generateHistoricalCashReportPDF = async ({
   });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-historical-report');
-  const doc = new jsPDF(pdfDesignPaper({ ...settings, orientation: 'landscape' }));
+  const doc = new jsPDF(pdfDesignPaper(settings));
   const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
 
@@ -3522,8 +3552,8 @@ export const generateHistoricalCashReportPDF = async ({
 };
 
 /**
- * Cierre gerencial en formato 16:9. Se genera en varias páginas con la misma
- * proporción para conservar legibilidad cuando la sesión tenga muchos datos.
+ * Cierre gerencial en Carta vertical. Se genera en varias páginas Carta para
+ * conservar legibilidad cuando la sesión tenga muchos datos.
  * Las secciones sin datos se muestran como No aplica, nunca como información
  * inventada.
  */
@@ -3543,9 +3573,9 @@ export const generateCashClosureReportPDF = async ({
   const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-historical-report', tenantName, tenantLogo, fileName: buildPdfFileName(['cierre_gerencial_de_caja', session.register?.code || 'sin_caja']), data: { document: { title: 'CIERRE GERENCIAL DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.closedAt || session.openedAt, status: session.status, notes: `Pagos registrados: ${payments.rows?.length || 0}` }, party: { name: session.openedBy?.name || '' }, rows: closureRows, items: closureRows, tableColumns: [{ id: 'reference', label: 'Referencia', token: 'reference', width: 20, align: 'left' }, { id: 'type', label: 'Tipo', token: 'type', width: 18, align: 'left' }, { id: 'description', label: 'Descripción', token: 'description', width: 34, align: 'left' }, { id: 'currency', label: 'Moneda', token: 'currency', width: 12, align: 'center' }, { id: 'amount', label: 'Monto', token: 'amount', width: 16, align: 'right' }], totals: { subtotal: invoices.totals?.subtotal || payments.summary?.total || '', tax: invoices.totals?.tax || '', total: invoices.totals?.total || payments.summary?.total || '' } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-historical-report');
-  const width = 338.666;
-  const height = 190.5;
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [width, height] });
+  const width = 216;
+  const height = 279;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [width, height] });
   const primary = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const dark: PdfRgb = [15, 55, 48];
   const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
@@ -3602,8 +3632,8 @@ export const generateCashClosureReportPDF = async ({
   sectionTitle('Resumen de caja', 15, 43);
   autoTable(doc, {
     startY: 48,
-    margin: { left: 15, right: 177 },
-    tableWidth: 146,
+    margin: { left: 15, right: 15 },
+    tableWidth: 186,
     head: [['Concepto', 'Córdobas', 'Dólares']],
     body: [
       ...currencyRows(cash.initial, 'Fondo inicial'),
@@ -3616,11 +3646,11 @@ export const generateCashClosureReportPDF = async ({
     theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
   });
 
-  sectionTitle('Facturación y pagos', 174, 43);
+  sectionTitle('Facturación y pagos', 15, 105);
   autoTable(doc, {
-    startY: 48,
-    margin: { left: 174, right: 15 },
-    tableWidth: 149,
+    startY: 110,
+    margin: { left: 15, right: 15 },
+    tableWidth: 186,
     head: [['Indicador', 'Valor']],
     body: [
       ['Facturas / ventas', String(invoices.count || 0)],
@@ -3634,7 +3664,7 @@ export const generateCashClosureReportPDF = async ({
     theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
   });
 
-  doc.addPage([width, height], 'landscape');
+  doc.addPage([width, height], 'portrait');
   drawChrome('DETALLE TRANSACCIONAL', `${session.register?.name || 'Caja'} · Facturas, estados, pagos y trazabilidad`);
   sectionTitle('Facturas de la sesión', 15, 34);
   const invoiceRows = (invoices.rows || []).map((invoice: any) => [
@@ -3667,43 +3697,45 @@ export const generateCashClosureReportPDF = async ({
     theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },
   });
 
-  doc.addPage([width, height], 'landscape');
+  doc.addPage([width, height], 'portrait');
   drawChrome('ARQUEO Y MOVIMIENTOS', `${session.register?.name || 'Caja'} · Denominaciones, entradas, salidas y conceptos no registrados`);
   sectionTitle('Denominaciones de apertura', 15, 34);
   const denominationRows = (items: any[]) => items.map((item) => [label(item.currency), money(item.value, item.currency), String(item.quantity || 0), money(item.subtotal, item.currency)]);
   autoTable(doc, {
     startY: 39,
-    margin: { left: 15, right: 177 },
-    tableWidth: 146,
+    margin: { left: 15, right: 15 },
+    tableWidth: 186,
     head: [['Moneda', 'Valor', 'Cantidad', 'Subtotal']],
     body: denominationRows(detail.denominations?.opening || []).length ? denominationRows(detail.denominations?.opening || []) : [['No aplica', 'C$ 0.00', '0', 'C$ 0.00']],
     theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
   });
-  sectionTitle('Denominaciones de cierre', 174, 34);
+  sectionTitle('Denominaciones de cierre', 15, 83);
   autoTable(doc, {
-    startY: 39,
-    margin: { left: 174, right: 15 },
-    tableWidth: 149,
+    startY: 88,
+    margin: { left: 15, right: 15 },
+    tableWidth: 186,
     head: [['Moneda', 'Valor', 'Cantidad', 'Subtotal']],
     body: denominationRows(detail.denominations?.closing || []).length ? denominationRows(detail.denominations?.closing || []) : [['No aplica', 'C$ 0.00', '0', 'C$ 0.00']],
     theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
   });
-  const movementStart = Math.max(Number((doc as any).lastAutoTable?.finalY || 70), 70) + 8;
+  const movementStart = Math.max(Number((doc as any).lastAutoTable?.finalY || 115), 115) + 8;
   sectionTitle('Entradas y salidas', 15, movementStart);
   const movementRows = (detail.movements || []).map((item: any) => [label(item.type), date(item.createdAt), String(item.description || 'Sin descripción').slice(0, 45), label(item.paymentMethod), money(item.amountNIO), money(item.amountUSD, 'USD')]);
   autoTable(doc, {
     startY: movementStart + 5,
-    margin: { left: 15, right: 177 },
-    tableWidth: 146,
+    margin: { left: 15, right: 15 },
+    tableWidth: 186,
     head: [['Tipo', 'Fecha', 'Descripción', 'Método', 'C$', 'USD']],
     body: movementRows.length ? movementRows : [['No aplica', 'No aplica', 'No hay movimientos manuales', 'No aplica', 'C$ 0.00', '$ 0.00']],
     theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },
   });
-  sectionTitle('Conceptos no registrados en la sesión', 174, movementStart);
+  const movementEnd = Number((doc as any).lastAutoTable?.finalY || movementStart + 45);
+  const unavailableStart = Math.min(movementEnd + 13, height - 42);
+  sectionTitle('Conceptos no registrados en la sesión', 15, unavailableStart - 5);
   autoTable(doc, {
-    startY: movementStart + 5,
-    margin: { left: 174, right: 15 },
-    tableWidth: 149,
+    startY: unavailableStart,
+    margin: { left: 15, right: 15 },
+    tableWidth: 186,
     head: [['Concepto', 'Resultado']],
     body: (detail.unavailable || []).map((item: any) => [item.label, item.value]),
     theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },

@@ -47,6 +47,8 @@ export interface ApiFilters {
   sortOrder?: 'asc' | 'desc';
   /** Bounded bulk mode used by reports; regular lists remain capped at 200. */
   report?: boolean;
+  /** Requiere el permiso export cuando se solicita una descarga masiva. */
+  export?: boolean | string;
   /** Includes actor names in inventory movement exports. */
   includeUsers?: boolean | string;
   /** Omite relaciones pesadas cuando el exportador solo necesita columnas resumen. */

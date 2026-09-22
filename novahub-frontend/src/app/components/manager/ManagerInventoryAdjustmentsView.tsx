@@ -15,6 +15,7 @@ import type { ManagerInventoryView } from './manager-inventory.types';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { managerStatusLabel } from '../../utils/managerLabels';
+import { ExportMenu } from '../ui/ExportMenu';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type WarehouseOption = { id: string; name: string; scopeType: string; clientTenantId: string | null; businessUnitId?: string | null; authorizedBranchIds?: string[] };
@@ -180,8 +181,7 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
           <h3 className="truncate text-2xl font-black uppercase italic tracking-tight sm:text-3xl">Ajustes</h3>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" className="rounded-xl" onClick={exportReport} disabled={exporting || query.isLoading}><FileDown className="mr-2 size-4" />{exporting ? 'Preparando…' : 'Exportar Excel'}</Button>
-            <Button type="button" variant="outline" className="rounded-xl" onClick={printReport}><Download className="mr-2 size-4" />Imprimir / PDF</Button>
+          <ExportMenu disabled={exporting || query.isLoading} onPdf={printReport} onExcel={() => void exportReport()} pdfDescription="Vista imprimible del consolidado" excelDescription="Todos los ajustes filtrados" />
         </div>
       </div>}
 

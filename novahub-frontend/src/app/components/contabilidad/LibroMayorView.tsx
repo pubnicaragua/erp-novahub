@@ -183,7 +183,7 @@ export function LibroMayorView() {
   const totalDebits = filteredEntries.reduce((s, e) => s + e.debit, 0);
   const totalCredits = filteredEntries.reduce((s, e) => s + e.credit, 0);
 
-  const canExport = canPerform('ACCOUNTING_LEDGER', 'export') || canPerform('ACCOUNTING_LEDGER', 'read');
+  const canExport = canPerform('ACCOUNTING_LEDGER', 'export');
 
   const selectedAccountName = useMemo(() => {
     if (!filterAccountId) return undefined;
@@ -192,13 +192,20 @@ export function LibroMayorView() {
   }, [filterAccountId, accounts]);
 
   const handleExportPDF = async () => {
-    if (orderedEntries.length === 0) {
-      toast.error('No hay movimientos en el libro mayor para exportar');
-      return;
-    }
+    if (!canExport) return;
     setExportingPdf(true);
     try {
-      const exportRows = orderedEntries.map((e) => ({
+      const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+      const exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      const orderedExportEntries = [...exportEntries].sort((left, right) => {
+        const leftCreatedAt = new Date(left.createdAt || left.date).getTime();
+        const rightCreatedAt = new Date(right.createdAt || right.date).getTime();
+        const createdDifference = leftCreatedAt - rightCreatedAt;
+        if (createdDifference !== 0) return sortOrder === 'asc' ? createdDifference : -createdDifference;
+        return sortOrder === 'asc' ? left.id.localeCompare(right.id) : right.id.localeCompare(left.id);
+      });
+      if (orderedExportEntries.length === 0) throw new Error('No hay movimientos en el libro mayor para exportar');
+      const exportRows = orderedExportEntries.map((e) => ({
         date: formatAccountingDate(e.date),
         accountCode: e.accountCode,
         accountName: e.accountName,
@@ -210,6 +217,8 @@ export function LibroMayorView() {
         balance: e.balance || 0,
       }));
 
+      const exportDebits = orderedExportEntries.reduce((sum, entry) => sum + Number(entry.debit || 0), 0);
+      const exportCredits = orderedExportEntries.reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
       await generateLedgerPDF({
         rows: exportRows,
         tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub',
@@ -218,12 +227,12 @@ export function LibroMayorView() {
         dateTo: filterDateTo,
         accountName: selectedAccountName,
         totals: {
-          debitos: formatCurrency(totalDebits),
-          creditos: formatCurrency(totalCredits),
-          saldo: formatCurrency(totalDebits - totalCredits),
+          debitos: formatCurrency(exportDebits),
+          creditos: formatCurrency(exportCredits),
+          saldo: formatCurrency(exportDebits - exportCredits),
         },
       });
-      toast.success(`PDF exportado con ${orderedEntries.length} movimiento(s)`);
+      toast.success(`PDF exportado con ${orderedExportEntries.length} movimiento(s)`);
     } catch (error: any) {
       toast.error(error?.message || 'Error al exportar a PDF');
     } finally {
@@ -232,13 +241,21 @@ export function LibroMayorView() {
   };
 
   const handleExportExcel = () => {
-    if (orderedEntries.length === 0) {
-      toast.error('No hay movimientos en el libro mayor para exportar');
-      return;
-    }
+    if (!canExport) return;
     setExportingExcel(true);
+    void (async () => {
     try {
-      const rows = orderedEntries.map((e) => ({
+      const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+      const exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      const orderedExportEntries = [...exportEntries].sort((left, right) => {
+        const leftCreatedAt = new Date(left.createdAt || left.date).getTime();
+        const rightCreatedAt = new Date(right.createdAt || right.date).getTime();
+        const createdDifference = leftCreatedAt - rightCreatedAt;
+        if (createdDifference !== 0) return sortOrder === 'asc' ? createdDifference : -createdDifference;
+        return sortOrder === 'asc' ? left.id.localeCompare(right.id) : right.id.localeCompare(left.id);
+      });
+      if (orderedExportEntries.length === 0) throw new Error('No hay movimientos en el libro mayor para exportar');
+      const rows = orderedExportEntries.map((e) => ({
         Fecha: formatAccountingDate(e.date),
         Código: e.accountCode,
         Cuenta: e.accountName,
@@ -270,21 +287,22 @@ export function LibroMayorView() {
         ['Cuenta filtrada', selectedAccountName || 'Todas las cuentas'],
         ['Desde', filterDateFrom || 'Inicio'],
         ['Hasta', filterDateTo || 'Actual'],
-        ['Total movimientos', orderedEntries.length],
-        ['Total débitos', totalDebits],
-        ['Total créditos', totalCredits],
-        ['Saldo neto', totalDebits - totalCredits],
+        ['Total movimientos', orderedExportEntries.length],
+        ['Total débitos', orderedExportEntries.reduce((sum, entry) => sum + Number(entry.debit || 0), 0)],
+        ['Total créditos', orderedExportEntries.reduce((sum, entry) => sum + Number(entry.credit || 0), 0)],
+        ['Saldo neto', orderedExportEntries.reduce((sum, entry) => sum + Number(entry.debit || 0) - Number(entry.credit || 0), 0)],
       ]);
       summarySheet['!cols'] = [{ wch: 20 }, { wch: 30 }];
       XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');
 
       XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['libro_mayor'], 'xlsx', filterDateFrom, filterDateTo));
-      toast.success(`Excel exportado con ${orderedEntries.length} movimiento(s)`);
+      toast.success(`Excel exportado con ${orderedExportEntries.length} movimiento(s)`);
     } catch (error: any) {
       toast.error(error?.message || 'Error al exportar a Excel');
     } finally {
       setExportingExcel(false);
     }
+    })();
   };
 
   function clearFilters() {
