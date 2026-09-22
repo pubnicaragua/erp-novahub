@@ -147,7 +147,18 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
-                {['eventos', 'reuniones'].includes(activeTab) && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
+                {['eventos', 'reuniones'].includes(activeTab) && (
+                  <EventosView
+                    data={
+                      activeTab === 'reuniones'
+                        ? data.eventos.filter((e: any) => e.type === 'MEETING' || (!e.type && Boolean(e.meetingUrl || e.meetingPlatform)))
+                        : data.eventos.filter((e: any) => e.type === 'EVENT' || (!e.type && !e.meetingUrl && !e.meetingPlatform))
+                    }
+                    mode={activeTab as 'eventos' | 'reuniones'}
+                    loading={loading}
+                    onRefresh={fetchData}
+                  />
+                )}
                 {activeTab === 'calendario' && (
                   <ActividadesCalendarioView
                     eventos={data.eventos}
@@ -157,6 +168,10 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                     onNewEventClick={() => {
                       setInternalActiveTab('eventos');
                       onSubModuleChange?.('eventos');
+                    }}
+                    onNewMeetingClick={() => {
+                      setInternalActiveTab('reuniones');
+                      onSubModuleChange?.('reuniones');
                     }}
                   />
                 )}

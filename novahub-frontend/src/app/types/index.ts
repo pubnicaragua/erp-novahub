@@ -1626,6 +1626,7 @@ export interface Task {
 export interface Event {
   id: string;
   title: string;
+  type?: 'EVENT' | 'MEETING' | string;
   description?: string;
   startDate: string;
   endDate: string;

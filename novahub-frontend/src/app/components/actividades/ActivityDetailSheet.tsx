@@ -13,7 +13,7 @@ import { SubtasksManager } from './SubtasksManager';
 import { TimeTracker } from './TimeTracker';
 import { detectMeetingUrl } from '../../utils/meetingLink';
 
-export type ActivityDetailKind = 'task' | 'event' | 'reminder' | 'log';
+export type ActivityDetailKind = 'task' | 'event' | 'meeting' | 'reminder' | 'log';
 
 interface ActivityDetailSheetProps {
   kind: ActivityDetailKind;
@@ -35,6 +35,7 @@ interface ActivityDetailSheetProps {
 const labels: Record<ActivityDetailKind, { title: string; singular: string; accent: string }> = {
   task: { title: 'Detalle de la tarea', singular: 'Tarea', accent: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
   event: { title: 'Detalle del evento', singular: 'Evento', accent: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  meeting: { title: 'Detalle de la reunión', singular: 'Reunión', accent: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
   reminder: { title: 'Detalle del recordatorio', singular: 'Recordatorio', accent: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
   log: { title: 'Detalle de bitácora', singular: 'Registro', accent: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
 };
@@ -42,6 +43,7 @@ const labels: Record<ActivityDetailKind, { title: string; singular: string; acce
 const auditEntityByKind: Record<ActivityDetailKind, string> = {
   task: 'TASK',
   event: 'EVENT',
+  meeting: 'EVENT',
   reminder: 'REMINDER',
   log: 'ACTIVITY_LOG',
 };
@@ -113,7 +115,7 @@ function StatusBadge({ value, kind }: { value: any; kind: ActivityDetailKind }) 
           ? 'border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400'
           : normalized === 'IN_PROGRESS' || normalized === 'UPDATE'
             ? 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400'
-      : kind === 'event' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-primary/20 bg-primary/10 text-primary';
+      : (kind === 'event' || kind === 'meeting') ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-primary/20 bg-primary/10 text-primary';
   return <Badge variant="outline" className={cn('border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest', tone)}>{formatLabel(value)}</Badge>;
 }
 
@@ -542,7 +544,7 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
   const config = labels[kind];
   const title = item?.title || (kind === 'log' ? formatLabel(item?.entity) : item?.entity) || config.singular;
   const displayStatus = kind === 'task' ? getTaskDisplayStatus(item) : item?.status;
-  const description = kind === 'event' ? (item?.location || 'Registro de actividad') : kind === 'log' ? (item?.action ? formatLabel(item.action) : 'Auditoría del sistema') : (displayStatus ? formatLabel(displayStatus) : 'Registro de actividad');
+  const description = (kind === 'event' || kind === 'meeting') ? (item?.location || (kind === 'meeting' ? 'Reunión' : 'Registro de actividad')) : kind === 'log' ? (item?.action ? formatLabel(item.action) : 'Auditoría del sistema') : (displayStatus ? formatLabel(displayStatus) : 'Registro de actividad');
 
   return (
     <>
@@ -556,7 +558,7 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
           {(extraActions || onDelete) && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}{onDelete && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => setDeleteOpen(true)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}</div>}
         </SheetHeader>
-        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} />}{item && kind === 'event' && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
+        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>

@@ -31,6 +31,7 @@ interface EventosViewProps {
   data: Event[];
   loading: boolean;
   onRefresh: () => void;
+  mode?: 'eventos' | 'reuniones';
 }
 
 const parseGuestEmails = (value: string) => [...new Set(value.split(',').map(item => item.trim().toLowerCase()).filter(Boolean))];
@@ -65,7 +66,8 @@ const buildInvitationText = (event: { title: string; startDate: string; endDate:
   `Invitados: ${event.guests.join(', ')}`,
 ].filter(Boolean).join('\n');
 
-export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefresh }) => {
+export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefresh, mode = 'eventos' }) => {
+  const isMeetingMode = mode === 'reuniones';
   const [searchTerm, setSearchTerm] = useState('');
   const { currency, displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
   const { canPerform } = useAuth();
@@ -511,10 +513,12 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         return;
       }
       const detectedLink = detectMeetingUrl(newEvent.location) || detectMeetingUrl(newEvent.description);
+      const activityType = isMeetingMode ? 'MEETING' : 'EVENT';
       const created = await eventsService.create({
         title: newEvent.title.trim(),
         description: newEvent.description,
         location: newEvent.location,
+        type: activityType,
         startDate,
         endDate,
         cost: newEvent.cost === '' ? 0 : Number(newEvent.cost),
@@ -564,7 +568,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         });
         if (income?.id) await eventsService.update(createdId, { incomeId: income.id });
       }
-      toast.success('Evento creado; completa el evento para contabilizar el costo');
+      toast.success(isMeetingMode ? 'Reunión creada exitosamente' : 'Evento creado; completa el evento para contabilizar el costo');
       if (allGuestEmails.length > 0) {
         setInvitation({
           guests: allGuestEmails,
@@ -611,7 +615,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
     ];
 
   const kpis = [
-    { title: 'Total Eventos', value: data.length, icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: isMeetingMode ? 'Total Reuniones' : 'Total Eventos', value: data.length, icon: isMeetingMode ? Video : CalendarDays, color: isMeetingMode ? 'text-violet-500' : 'text-blue-500', bg: isMeetingMode ? 'bg-violet-500/10' : 'bg-blue-500/10' },
     ...moneyKpis,
   ];
 
@@ -632,12 +636,37 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0"><h2 className="break-words text-xl font-black uppercase tracking-tight">Eventos</h2></div>
+          <div className="min-w-0"><h2 className="break-words text-xl font-black uppercase tracking-tight">{isMeetingMode ? 'Reuniones' : 'Eventos'}</h2></div>
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
-            <InventoryViewTutorial label="Qué son los Eventos" targetPrefix="eventos-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Eventos', description: 'Los eventos representan reuniones, conferencias, ferias o cualquier actividad programada. Puedes registrar costos e ingresos asociados para análisis financiero.' }, data: { title: 'Crear evento', description: 'Haz clic en "Nuevo Evento". Define título, ubicación, fechas de inicio/fin, y opcionalmente costos e ingresos.' }, actions: { title: 'Seguimiento', description: 'Edita en la tabla, revisa los KPIs de balance y exporta los datos.' } }} />
+            <InventoryViewTutorial
+              label={isMeetingMode ? 'Qué son las Reuniones' : 'Qué son los Eventos'}
+              targetPrefix={isMeetingMode ? 'reuniones-tutorial' : 'eventos-tutorial'}
+              compact
+              stepKeys={['title', 'data', 'actions']}
+              copy={{
+                title: {
+                  title: isMeetingMode ? 'Reuniones' : 'Eventos',
+                  description: isMeetingMode
+                    ? 'Las reuniones permiten coordinar citas de trabajo, llamadas con clientes y sesiones virtuales (Meet, Teams, Zoom) o presenciales.'
+                    : 'Los eventos representan ferias, conferencias, talleres o cualquier actividad programada con control de costos e ingresos.',
+                },
+                data: {
+                  title: isMeetingMode ? 'Crear reunión' : 'Crear evento',
+                  description: isMeetingMode
+                    ? 'Haz clic en "Nueva Reunión". Define título, fechas, enlace de videollamada o sala, e invitados.'
+                    : 'Haz clic en "Nuevo Evento". Define título, ubicación, fechas de inicio/fin, y opcionalmente costos e ingresos.',
+                },
+                actions: {
+                  title: 'Seguimiento',
+                  description: isMeetingMode
+                    ? 'Accede al enlace virtual directo, comparte por WhatsApp o descarga la invitación en formato .ics.'
+                    : 'Edita en la tabla, revisa los KPIs de balance y exporta los datos.',
+                },
+              }}
+            />
             <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerformEventAction('create') && (
-              <Button data-toolbar-role="primary" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> Nuevo Evento</Button>
+              <Button data-toolbar-role="primary" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> {isMeetingMode ? 'Nueva Reunión' : 'Nuevo Evento'}</Button>
             )}
           </div>
         </div>
@@ -647,12 +676,12 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           onRowUpdate={canPerformEventAction('edit') ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedEvent(row)}
           isLoading={loading} 
-          onRowDelete={canPerformEventAction('delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined}
+          onRowDelete={canPerformEventAction('delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success(isMeetingMode ? 'Reunión eliminada' : 'Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } } : undefined}
           actions={(row: Event) => {
             const isCompleted = completedEventIds.has(String(row.id)) || String(row.status || '').toUpperCase() === 'COMPLETED';
             return (
               <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                <Button type="button" variant="ghost" size="icon" title="Ver detalle del evento" aria-label="Ver detalle del evento" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedEvent(row)}><Eye className="size-4" /></Button>
+                <Button type="button" variant="ghost" size="icon" title={isMeetingMode ? 'Ver detalle de la reunión' : 'Ver detalle del evento'} aria-label={isMeetingMode ? 'Ver detalle de la reunión' : 'Ver detalle del evento'} className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedEvent(row)}><Eye className="size-4" /></Button>
                 
                 {/* Download .ics */}
                 <Button type="button" variant="ghost" size="icon" title="Descargar .ics" aria-label="Descargar .ics" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => handleDownloadIcs(row)}><Download className="size-4" /></Button>
@@ -699,7 +728,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
       </Card>
 
       <ActivityDetailSheet
-        kind="event"
+        kind={isMeetingMode ? 'meeting' : 'event'}
         item={selectedEvent}
         accounts={accountOptions}
         linkedExpense={eventExpenseQuery.data}
@@ -757,7 +786,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
                     }}
                   >
                     <CheckCircle2 className="mr-2 size-4" />
-                    Completar evento
+                    {isMeetingMode ? 'Completar reunión' : 'Completar evento'}
                   </Button>
                 )}
             </div>
@@ -766,11 +795,11 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         onDelete={canPerformEventAction('delete') && selectedEvent ? async () => {
           try {
             await eventsService.delete(String(selectedEvent.id));
-            toast.success('Evento eliminado');
+            toast.success(isMeetingMode ? 'Reunión eliminada' : 'Evento eliminado');
             onRefresh();
             setSelectedEvent(null);
           } catch (e: any) {
-            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento');
+            toast.error(e?.response?.data?.message || e?.message || (isMeetingMode ? 'Error al eliminar reunión' : 'Error al eliminar evento'));
           }
         } : undefined}
         onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}
@@ -778,12 +807,23 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto !max-w-2xl rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl">
-          <DialogHeader className="border-b border-border/50 bg-gradient-to-br from-emerald-500/10 via-background to-background px-6 py-5 sm:px-8">
-            <div className="flex items-start gap-3 pr-6"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600"><CalendarDays className="size-5" /></div><div><DialogTitle className="font-black tracking-tight sm:text-lg">Crear evento</DialogTitle><p className="mt-1 text-xs text-muted-foreground">Organiza fechas, invitados y el resumen financiero en un solo lugar.</p></div></div>
+          <DialogHeader className={cn("border-b border-border/50 bg-gradient-to-br via-background to-background px-6 py-5 sm:px-8", isMeetingMode ? "from-violet-500/10" : "from-emerald-500/10")}>
+            <div className="flex items-start gap-3 pr-6">
+              <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-2xl", isMeetingMode ? "bg-violet-500/10 text-violet-600" : "bg-emerald-500/10 text-emerald-600")}>
+                {isMeetingMode ? <Video className="size-5" /> : <CalendarDays className="size-5" />}
+              </div>
+              <div>
+                <DialogTitle className="font-black tracking-tight sm:text-lg">{isMeetingMode ? 'Crear reunión' : 'Crear evento'}</DialogTitle>
+                <p className="mt-1 text-xs text-muted-foreground">{isMeetingMode ? 'Organiza fecha, participantes y enlace de videollamada para tu reunión.' : 'Organiza fechas, invitados y el resumen financiero en un solo lugar.'}</p>
+              </div>
+            </div>
           </DialogHeader>
           <div className="grid gap-5 px-6 py-6 sm:px-8">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Título del evento</Label><Input autoFocus value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder="Ej. Reunión con clientes" className="h-11 rounded-xl bg-background" /></div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label className="text-xs font-bold">{isMeetingMode ? 'Título de la reunión' : 'Título del evento'}</Label>
+                <Input autoFocus value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder={isMeetingMode ? "Ej. Reunión de seguimiento con clientes" : "Ej. Presentación corporativa"} className="h-11 rounded-xl bg-background" />
+              </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Inicio</Label>
                 <DateTimePickerField
@@ -817,8 +857,8 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
                   placeholder="Fecha y hora de finalización"
                 />
               </div>
-              <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Ubicación</Label><Input value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder="Sala, dirección o enlace virtual" className="h-11 rounded-xl bg-background" /></div>
-              <div className="space-y-2 sm:col-span-2"><Label>Descripción / notas</Label><textarea value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="min-h-24 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20" placeholder="Objetivo, agenda y notas del evento" /></div>
+              <div className="space-y-2 sm:col-span-2"><Label className="text-xs font-bold">Ubicación</Label><Input value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder={isMeetingMode ? "Enlace de Meet/Teams/Zoom o sala de reuniones" : "Sala, dirección o enlace virtual"} className="h-11 rounded-xl bg-background" /></div>
+              <div className="space-y-2 sm:col-span-2"><Label>Descripción / notas</Label><textarea value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="min-h-24 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20" placeholder={isMeetingMode ? "Objetivo, agenda y temas de la reunión" : "Objetivo, agenda y notas del evento"} /></div>
               {/* Sección de Gestión de Invitados */}
               <div className="space-y-3 sm:col-span-2 rounded-2xl border border-border/60 bg-muted/15 p-4">
                 <div className="flex items-center justify-between">
@@ -1118,7 +1158,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
             </div>
             <p className="text-xs text-muted-foreground">Al completar el evento, el costo se marcará como pagado en efectivo para generar su asiento; el ingreso usa la cuenta seleccionada. Ambos movimientos quedan vinculados al evento.</p>
           </div>
-          <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8"><Button variant="outline" className="rounded-xl" onClick={() => setIsAddOpen(false)}>Cancelar</Button><Button className="rounded-xl px-5" onClick={handleAdd}>Crear evento</Button></DialogFooter>
+          <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8"><Button variant="outline" className="rounded-xl" onClick={() => setIsAddOpen(false)}>Cancelar</Button><Button className="rounded-xl px-5" onClick={handleAdd}>{isMeetingMode ? 'Crear reunión' : 'Crear evento'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1128,7 +1168,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
             <DialogTitle className="flex items-center gap-2 font-black tracking-tight"><Mail className="size-5 text-primary" /> Invitación lista</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 px-6 py-6 sm:px-8">
-            <p className="text-sm text-muted-foreground">El evento quedó guardado. Copia este texto para enviarlo a los invitados:</p>
+            <p className="text-sm text-muted-foreground">{isMeetingMode ? 'La reunión quedó guardada. Copia este texto para enviarlo a los participantes:' : 'El evento quedó guardado. Copia este texto para enviarlo a los invitados:'}</p>
             <textarea readOnly value={invitation?.text || ''} className="min-h-40 w-full resize-y rounded-2xl border border-input bg-muted/20 p-3 text-sm outline-none" />
             <p className="text-[10px] font-semibold text-muted-foreground">Destinatarios: {invitation?.guests.join(', ')}</p>
           </div>
