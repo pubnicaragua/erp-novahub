@@ -10,7 +10,7 @@ export function PublicRsvpPage() {
   const [error, setError] = useState<string | null>(null);
   const [showQrModal, setShowQrModal] = useState(false);
 
-  // Extraer token de la URL /rsvp/:token o /public/rsvp/:token
+  // Extraer token de la URL /rsvp/:token (trabajador interno) o /public/rsvp/:token (invitado externo)
   const pathname = window.location.pathname;
   const token = pathname.split('/').filter(Boolean).pop() || '';
 

@@ -25,6 +25,7 @@ import { Combobox } from '../ui/Combobox';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { DateTimePickerField } from '../ui/DateTimePickerField';
+import { detectMeetingUrl } from '../../utils/meetingLink';
 
 interface EventosViewProps {
   data: Event[];
@@ -203,8 +204,10 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   const handleScheduleMeeting = async (event: Event, platform: 'GOOGLE_MEET' | 'TEAMS' | 'ZOOM') => {
     try {
       setMeetingLoadingId(String(event.id));
-      const updated = await eventsService.scheduleMeeting(String(event.id), platform);
-      toast.success(`Videollamada agendada con ${platform}`);
+      const detected = detectMeetingUrl(event.location) || detectMeetingUrl(event.meetingUrl) || detectMeetingUrl(event.description);
+      const requestedPlatform = detected?.platform || platform;
+      const updated = await eventsService.scheduleMeeting(String(event.id), requestedPlatform);
+      toast.success(`Videollamada agendada con ${updated.meetingPlatform || requestedPlatform}`);
       if (selectedEvent?.id === event.id) {
         setSelectedEvent(updated);
       }
@@ -507,6 +510,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         toast.error('La fecha de fin debe ser posterior a la fecha de inicio');
         return;
       }
+      const detectedLink = detectMeetingUrl(newEvent.location) || detectMeetingUrl(newEvent.description);
       const created = await eventsService.create({
         title: newEvent.title.trim(),
         description: newEvent.description,
@@ -526,6 +530,8 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           role: g.role,
         })),
         status: 'PENDING',
+        meetingUrl: detectedLink?.url || undefined,
+        meetingPlatform: detectedLink?.platform || undefined,
       });
       const createdId = (created as any)?.id;
       if (createdId && Number(newEvent.cost) > 0 && selectedExpenseAccountIsActive) {
@@ -1142,46 +1148,64 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 px-6 py-6 sm:px-8 text-center flex flex-col items-center">
-            {qrModalEvent && (
-              <>
-                <div className="rounded-2xl border border-border/60 bg-white p-4 shadow-md inline-block">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-                      qrModalEvent.meetingUrl ||
-                      `${window.location.origin}/activities/events/${qrModalEvent.id}`
-                    )}`}
-                    alt="Código QR del Evento"
-                    className="size-48 object-contain"
-                  />
-                </div>
-                <div className="text-left w-full space-y-1">
-                  <h4 className="font-bold text-sm text-foreground">{qrModalEvent.title}</h4>
-                  <p className="text-xs text-muted-foreground">
-                    {qrModalEvent.meetingUrl
-                      ? `Enlace a videollamada (${qrModalEvent.meetingPlatform || 'Online'})`
-                      : 'Enlace al evento en NovaHub ERP'}
-                  </p>
-                  <p className="text-[11px] font-mono text-muted-foreground truncate bg-muted/30 p-2 rounded-lg">
-                    {qrModalEvent.meetingUrl || `${window.location.origin}/activities/events/${qrModalEvent.id}`}
-                  </p>
-                </div>
-              </>
-            )}
+            {qrModalEvent && (() => {
+              const detected = detectMeetingUrl(qrModalEvent.meetingUrl) || detectMeetingUrl(qrModalEvent.location) || detectMeetingUrl(qrModalEvent.description);
+              const effectiveUrl = qrModalEvent.meetingUrl || detected?.url || `${window.location.origin}/activities/events/${qrModalEvent.id}`;
+              const effectivePlatform = qrModalEvent.meetingPlatform || detected?.platform;
+
+              return (
+                <>
+                  <div className="rounded-2xl border border-border/60 bg-white p-4 shadow-md inline-block">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(effectiveUrl)}`}
+                      alt="Código QR del Evento"
+                      className="size-48 object-contain"
+                    />
+                  </div>
+                  <div className="text-left w-full space-y-1">
+                    <h4 className="font-bold text-sm text-foreground">{qrModalEvent.title}</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {effectivePlatform
+                        ? `Enlace a videollamada (${effectivePlatform})`
+                        : 'Enlace al evento en NovaHub ERP'}
+                    </p>
+                    <p className="text-[11px] font-mono text-muted-foreground truncate bg-muted/30 p-2 rounded-lg">
+                      {effectiveUrl}
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
           </div>
-          <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8">
+          <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8 flex flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setQrModalEvent(null)}>
               Cerrar
             </Button>
             <Button
+              variant="outline"
               onClick={async () => {
                 if (!qrModalEvent) return;
-                const link = qrModalEvent.meetingUrl || `${window.location.origin}/activities/events/${qrModalEvent.id}`;
-                await navigator.clipboard.writeText(link);
+                const detected = detectMeetingUrl(qrModalEvent.meetingUrl) || detectMeetingUrl(qrModalEvent.location) || detectMeetingUrl(qrModalEvent.description);
+                const effectiveUrl = qrModalEvent.meetingUrl || detected?.url || `${window.location.origin}/activities/events/${qrModalEvent.id}`;
+                await navigator.clipboard.writeText(effectiveUrl);
                 toast.success('Enlace copiado al portapapeles');
               }}
             >
               <Copy className="mr-1.5 size-4" /> Copiar Enlace
             </Button>
+            {qrModalEvent && (() => {
+              const detected = detectMeetingUrl(qrModalEvent.meetingUrl) || detectMeetingUrl(qrModalEvent.location) || detectMeetingUrl(qrModalEvent.description);
+              const effectiveUrl = qrModalEvent.meetingUrl || detected?.url;
+              if (!effectiveUrl) return null;
+              return (
+                <Button
+                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  onClick={() => window.open(effectiveUrl, '_blank')}
+                >
+                  <ExternalLink className="mr-1.5 size-4" /> Unirse a reunión
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>

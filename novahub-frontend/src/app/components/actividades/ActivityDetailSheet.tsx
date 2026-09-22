@@ -11,6 +11,7 @@ import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { SubtasksManager } from './SubtasksManager';
 import { TimeTracker } from './TimeTracker';
+import { detectMeetingUrl } from '../../utils/meetingLink';
 
 export type ActivityDetailKind = 'task' | 'event' | 'reminder' | 'log';
 
@@ -285,9 +286,9 @@ function EventGuestsList({ item }: { item: any }) {
           {guests.map((guest: any) => {
             const isInternal = guest.guestType === 'INTERNAL';
             const name = isInternal
-              ? (guest.internalUser?.name || guest.internalUser?.email || 'Usuario interno')
+              ? (guest.internalUser?.name || guest.externalName || guest.internalUser?.email || guest.externalEmail || 'Usuario interno')
               : (guest.externalName || guest.externalEmail || 'Invitado externo');
-            const email = isInternal ? guest.internalUser?.email : guest.externalEmail;
+            const email = isInternal ? (guest.internalUser?.email || guest.externalEmail) : guest.externalEmail;
             const phone = guest.externalPhone || guest.internalUser?.employee?.phone || (guest.internalUser as any)?.phone || '';
             const rsvp = guest.rsvpStatus || 'PENDING';
             const roleLabel = guest.role === 'HOST' ? 'Anfitrión' : guest.role === 'SPEAKER' ? 'Conferencista' : guest.role === 'STAFF' ? 'Staff' : 'Invitado';
@@ -443,17 +444,27 @@ function EventDetails({ item, accounts = [], linkedExpense, linkedIncome, linked
         <DetailItem label="Invitados" value={guestCount} icon={Users} />
       </div>
 
-      {item.meetingUrl && (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4">
-          <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-wider text-primary">Videollamada ({item.meetingPlatform || 'Online'})</p>
-            <p className="mt-0.5 truncate text-xs font-mono text-muted-foreground">{item.meetingUrl}</p>
+      {(() => {
+        const detected = detectMeetingUrl(item.meetingUrl) || detectMeetingUrl(item.location) || detectMeetingUrl(item.description);
+        const meetingUrl = item.meetingUrl || detected?.url;
+        const platform = item.meetingPlatform || detected?.platform || 'Online';
+
+        if (!meetingUrl) return null;
+
+        return (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                VIDEOLLAMADA ({platform})
+              </p>
+              <p className="mt-0.5 truncate text-xs font-mono text-muted-foreground">{meetingUrl}</p>
+            </div>
+            <a href={meetingUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+              Unirse
+            </a>
           </div>
-          <a href={item.meetingUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-90">
-            Unirse
-          </a>
-        </div>
-      )}
+        );
+      })()}
 
       <DetailSection title="Ficha del evento" icon={Info}><div className="grid gap-3 sm:grid-cols-2"><DetailItem label="Tipo" value={formatLabel(item.type || 'EVENT')} icon={CalendarDays} /><DetailItem label="Duración" value={duration ? `${Math.floor(duration / 60)} h ${duration % 60 ? `${duration % 60} min` : ''}` : 'No especificada'} icon={Clock3} /><DetailItem label="Creado" value={formatDate(item.createdAt)} icon={CalendarClock} /><DetailItem label="Moneda" value={item.currency || 'USD'} icon={DollarSign} /></div></DetailSection>
       <DetailSection title="Descripción y notas" icon={FileText}><p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Este evento no tiene notas adicionales.'}</p></DetailSection>
