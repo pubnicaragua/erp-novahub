@@ -47,7 +47,9 @@ import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { getAvailableSalesStock, getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
+import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase } from '../../utils/paymentSettlement';
@@ -59,6 +61,8 @@ interface FacturasViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   products?: Product[];
+  productsLoading?: boolean;
+  productsError?: boolean;
   series?: any[];
   warehouses?: any[];
   employees?: any[];
@@ -110,7 +114,7 @@ type InvoicePaymentLine = {
 
 type InvoiceSaveAction = 'SAVE' | 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
 
-export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasViewProps) {
+export function FacturasView({ data, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasViewProps) {
   const {
     exchangeRate: globalRate,
     displayCurrency,
@@ -149,6 +153,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   const getCatalogItemType = (product: any) => String(product?.itemType || product?.type || 'PRODUCT').toUpperCase();
@@ -177,23 +182,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const productLineLayoutClass = showVariantColumn
     ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
     : showPriceListColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
-  const getProductStockForWarehouse = (product: any, warehouseId?: string | null, variantId?: string | null) => {
-    if (!product) return 0;
-    const normalizedWarehouseId = String(warehouseId || '').trim();
-    const normalizedVariantId = String(variantId || '').trim();
-    const stockLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
-    const variantLevels = normalizedVariantId
-      ? stockLevels.filter((level: any) => String(level?.variantId || '').trim() === normalizedVariantId)
-      : stockLevels;
-    if (!normalizedWarehouseId) {
-      if (normalizedVariantId) return variantLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || level?.stock || 0), 0);
-      return Number(product.stock || 0);
-    }
-    if (variantLevels.length === 0) return 0;
-    return variantLevels
-      .filter((level: any) => String(level?.warehouseId || '') === normalizedWarehouseId)
-      .reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
-  };
   const getDefaultWarehouseId = () => {
     const activeWarehouses = warehouses.filter((warehouse: any) => warehouse?.isActive !== false);
     // La API devuelve la bodega más reciente primero. Preferimos una bodega
@@ -204,7 +192,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       || '';
   };
   const getItemWarehouseId = (item: any) => item?.warehouseId || localDoc?.warehouseId || getDefaultWarehouseId();
-  const getItemStock = (item: any, product?: any) => getProductStockForWarehouse(product || findProductForItem(item), getItemWarehouseId(item), item?.variantId);
+  const getItemStock = (item: any, product?: any) => getAvailableSalesStock(product || findProductForItem(item), getItemWarehouseId(item), item?.variantId);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const [isCreating, setIsCreating] = useState(false);
@@ -1757,8 +1745,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                  {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => {
-                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: itemType === 'SERVICE' ? undefined : localDoc?.warehouseId || getDefaultWarehouseId(), taxRate: itemType === 'SERVICE' ? 0 : 0, priceListId: itemType === 'SERVICE' ? null : localDoc?.priceListId || undefined, serialNumbers: [] }];
-                   setLocalDoc({ ...localDoc, items: newItems });
+                    const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                    const newItems = [...(localDoc.items || []), { id: itemId, itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: itemType === 'SERVICE' ? undefined : localDoc?.warehouseId || getDefaultWarehouseId(), taxRate: itemType === 'SERVICE' ? 0 : 0, priceListId: itemType === 'SERVICE' ? null : localDoc?.priceListId || undefined, serialNumbers: [] }];
+                    setLocalDoc({ ...localDoc, items: newItems });
+                    setSalesProductPickerItemId(itemId);
                  }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
                  <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => updateExtraCharges([...normalizeExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                    <Plus className="size-3 mr-2" /> Agregar coste extra
@@ -1788,13 +1778,23 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
                     <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
-                        <Combobox
-                          options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}${p.brand ? ` · ${p.brand}` : ''}`, value: p.id, description: p.commercialNote ? `Nota: ${p.commercialNote}` : p.brand ? `Marca: ${p.brand}` : undefined }))}
+                        <SalesProductPicker
+                          otherLocationsPermissionModule="SALES_INVOICES"
+                          products={getItemCatalog(item) as SalesCatalogItem[]}
                           value={item.productId || ''}
-                          onChange={(val) => {
+                          disabled={isInvoiceLocked || productsLoading}
+                          itemType={resolveItemType(item).toUpperCase() === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
+                          warehouseId={getItemWarehouseId(item)}
+                          variantId={item.variantId}
+                          catalogLoading={productsLoading}
+                          catalogError={productsError}
+                          open={salesProductPickerItemId === String(item.id || idx)}
+                          onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
+                          onChange={(val, pickedVariant) => {
                         const newItems = [...(localDoc.items || [])];
                         const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => String(p.id) === String(val));
                         const selectedItemType = selectedProd ? getCatalogItemType(selectedProd) : resolveItemType(item);
+                        const selectedVariant = selectedItemType === 'SERVICE' ? null : pickedVariant || getSingleSalesVariant(selectedProd);
                         const effectivePriceListId = newItems[idx].priceListId || localDoc.priceListId || getCustomerPriceListId(localDoc.customerId);
                         if (selectedItemType !== 'SERVICE' && val && hasSalesProductPriceListConflict(newItems, val, effectivePriceListId, idx, localDoc.priceListId || getCustomerPriceListId(localDoc.customerId))) {
                           toast.error('Este producto ya está agregado con la misma lista de precios.');
@@ -1803,10 +1803,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         newItems[idx] = {
                           ...newItems[idx],
                           productId: val,
-                          variantId: null,
-                          variantSku: null,
-                          variantName: null,
-                          variantAttributes: null,
+                          variantId: selectedVariant?.id || null,
+                          variantSku: selectedVariant?.sku || null,
+                          variantName: selectedVariant?.name || null,
+                          variantAttributes: selectedVariant?.attributes || null,
                           productCode: selectedProd?.code || newItems[idx].productCode,
                           itemType: selectedItemType,
                           priceListId: selectedItemType === 'SERVICE'
@@ -1830,7 +1830,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         }
                           }}
                           placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
-                          disabled={isInvoiceLocked}
                         />
                         </div>
                       {resolveItemType(item) !== 'SERVICE' && <SalesVariantSelect
@@ -1839,6 +1838,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         showLabel={false}
                         placeholder="Seleccionar variante"
                         product={findProductForItem(item)}
+                        warehouseId={getItemWarehouseId(item)}
                         value={item.variantId}
                         disabled={isInvoiceLocked}
                         onChange={(variantId, variant) => {
@@ -1908,15 +1908,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                             );
                           }
                           const warehouseId = getItemWarehouseId(item);
-                          const stock = getProductStockForWarehouse(p, warehouseId);
                           return (
                             <>
-                              <Badge variant="outline" className={cn(
-                                "text-[9px] font-black border-none px-1.5 py-0 h-4 bg-muted/20",
-                                stock <= 0 ? "text-rose-500 bg-rose-500/10" : "text-emerald-500 bg-emerald-500/10"
-                              )}>
-                                STOCK EN BODEGA: {stock}
-                              </Badge>
                               <SalesWarehouseStockHint
                                 product={p}
                                 warehouses={warehouses}
@@ -2007,12 +2000,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     </div>
                   )}
                   <div className={cn("min-w-0 xl:col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
-                    <Input type="number" min="0" max={resolveItemType(item) === 'SERVICE' ? 1000000 : Math.max(0, getItemStock(item))} value={Number(item.quantity) || ''} placeholder="0"
+                    <Input type="number" min="0" max={resolveItemType(item) === 'SERVICE' || getItemStock(item) === null ? 1000000 : Math.max(0, getItemStock(item) ?? 0)} value={Number(item.quantity) || ''} placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);
                         const p = findProductForItem(item);
                         const availableStock = getItemStock(item, p);
-                        if (p && resolveItemType(item) !== 'SERVICE' && newQty > availableStock) {
+                        if (p && resolveItemType(item) !== 'SERVICE' && availableStock !== null && newQty > availableStock) {
                           toast.warning(`Stock insuficiente en la bodega seleccionada. Disponible: ${availableStock}`, { id: `stock-warn-${idx}` });
                           newQty = availableStock;
                         }
@@ -2675,7 +2668,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           })()}
           <DialogFooter className="gap-2 sm:justify-between">
             <Button type="button" variant="outline" onClick={() => setPaymentVoucher(null)}>Cerrar</Button>
-            {paymentVoucher && <PdfDownloadButton onDownload={(format) => { void handleDownloadPaymentVoucher(paymentVoucher.payment, paymentVoucher.invoice, format, paymentVoucher.remaining); }} />}
+            {paymentVoucher && <PdfDownloadButton onDownload={(format) => { void handleDownloadPaymentVoucher(paymentVoucher.payment, paymentVoucher.invoice, format, paymentVoucher.remaining); }} includePageSizes includeRoll />}
           </DialogFooter>
         </DialogContent>
       </Dialog>

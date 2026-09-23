@@ -432,7 +432,7 @@ function DashboardLayout() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="fixed inset-0 flex h-dvh w-full min-w-0 overflow-hidden bg-background">
       <Sidebar
         activeModule={currentModule}
         activeSubModule={activeSubModule}
@@ -442,7 +442,7 @@ function DashboardLayout() {
         onClose={() => setSidebarOpen(false)}
         onOverview={handleOverview}
       />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar
           onMenuClick={() => setSidebarOpen(true)}
           onNavigate={handleNavigate}
@@ -451,7 +451,7 @@ function DashboardLayout() {
         />
         <main
           ref={mainRef}
-          className={`scrollbar-overlay module-${currentModule} min-w-0 flex-1 overflow-x-hidden overflow-y-auto`}
+          className={`scrollbar-overlay module-${currentModule} min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto`}
           style={{ overflowAnchor: 'none' }}
         >
           <Suspense fallback={<PageLoader />}>

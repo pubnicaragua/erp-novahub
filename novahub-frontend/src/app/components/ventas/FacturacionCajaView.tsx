@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  AlertCircle, Coins, Settings2, Store, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp
+  AlertCircle, Coins, Settings2, Store, MapPin, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -64,6 +64,8 @@ import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { playNotificationSound } from '../../utils/notificationSound';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { SalesOtherLocationsDialog } from './SalesOtherLocationsDialog';
+import { getAvailableSalesStock, getSalesStockOptionLabel } from '../../utils/sales-stock';
 import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentLinesDocumentAmount, getPaymentTotalBaseForSettlement, roundPaymentAmount } from '../../utils/paymentSettlement';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
@@ -129,6 +131,7 @@ interface InvoiceSummary {
 
 type CatalogViewMode = 'list' | 'catalog';
 type CatalogItemFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
+type CatalogAvailabilityFilter = 'ALL' | 'AVAILABLE' | 'EMPTY';
 
 const CATALOG_VIEW_STORAGE_KEY = 'novahub-pos-catalog-view';
 const POS_SHOW_AVAILABILITY_KEY = 'novahub-pos-show-availability';
@@ -436,6 +439,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const { user, canPerform } = useAuth();
   const loggedInSellerId = getLoggedInSellerEmployeeId(user);
   const canCreatePosInvoice = canPerform('RETAIL_POS', 'create');
+  const canViewPosOtherLocations = canPerform('RETAIL_POS', 'viewOtherLocations');
   const canPayPos = canCreatePosInvoice;
   const canApprovePosQueue = canPerform('RETAIL_POS', 'approve');
   const canClaimPosQueue = canPerform('RETAIL_POS', 'edit');
@@ -477,6 +481,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const [productSearch, setProductSearch] = useState('');
   const skipInitialProductSearchRef = useRef(false);
   const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
+  const [catalogAvailabilityFilter, setCatalogAvailabilityFilter] = useState<CatalogAvailabilityFilter>('ALL');
+  const [catalogBrandFilter, setCatalogBrandFilter] = useState('all');
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartSessionRevision, setCartSessionRevision] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
@@ -907,6 +914,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const [availabilityVariantId, setAvailabilityVariantId] = useState<string | null>(null);
   const [availabilityQuantity, setAvailabilityQuantity] = useState(1);
   const [availabilityRows, setAvailabilityRows] = useState<BranchProductAvailability[]>([]);
+  const [otherLocationsProduct, setOtherLocationsProduct] = useState<PosProduct | null>(null);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [holdSubmitting, setHoldSubmitting] = useState(false);
   const holdSubmittingRef = useRef(false);
@@ -1300,11 +1308,34 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   }, [productSearch, selectedRegisterId, selectedWarehouseId]);
 
   const filteredProducts = useMemo(
-    () => catalogItemFilter === 'ALL'
-      ? products
-      : products.filter((product) => String(product.itemType || 'PRODUCT').toUpperCase() === catalogItemFilter),
-    [products, catalogItemFilter],
+    () => products.filter((product) => {
+      if (catalogItemFilter !== 'ALL' && String(product.itemType || 'PRODUCT').toUpperCase() !== catalogItemFilter) return false;
+      if (catalogBrandFilter !== 'all' && String(product.brand || '').toLowerCase() !== catalogBrandFilter.toLowerCase()) return false;
+      const categoryId = String(product.categoryId || product.category?.id || product.category?.name || '');
+      if (catalogCategoryFilter !== 'all' && categoryId !== catalogCategoryFilter) return false;
+      if (catalogAvailabilityFilter !== 'ALL') {
+        if (product.itemType === 'SERVICE' || !product.trackInventory) return false;
+        const stock = getAvailableSalesStock(product, selectedWarehouseId);
+        if (stock === null) return false;
+        if (catalogAvailabilityFilter === 'AVAILABLE' && stock <= 0) return false;
+        if (catalogAvailabilityFilter === 'EMPTY' && stock > 0) return false;
+      }
+      return true;
+    }),
+    [products, catalogItemFilter, catalogAvailabilityFilter, catalogBrandFilter, catalogCategoryFilter, selectedWarehouseId],
   );
+
+  const catalogBrands = useMemo(() => [...new Set(products.map((product) => String(product.brand || '').trim()).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, 'es')), [products]);
+  const catalogCategories = useMemo(() => {
+    const values = new Map<string, string>();
+    products.forEach((product) => {
+      const name = String(product.category?.name || '').trim();
+      const id = String(product.categoryId || product.category?.id || name).trim();
+      if (name && id) values.set(id, name);
+    });
+    return [...values.entries()].sort((left, right) => left[1].localeCompare(right[1], 'es'));
+  }, [products]);
 
   const getGlobalCartQuantity = (productId: string, variantId?: string, warehouseId?: string) => {
     let total = 0;
@@ -1321,6 +1352,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   };
 
   const openAvailabilityFor = async (product: PosProduct, quantity: number, variantId?: string | null) => {
+    if (!canViewPosOtherLocations) return;
     const normalizedVariantId = String(variantId || '').trim() || null;
     setAvailabilityProduct(product);
     setAvailabilityVariantId(normalizedVariantId);
@@ -1344,18 +1376,41 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       : `Stock insuficiente para ${product.name}. Solo hay ${product.currentStock} unidades disponibles en esta sucursal.`;
   };
 
+  const notifyInsufficientStock = (message: string, product: PosProduct, quantity: number, variantId?: string) => {
+    if (!canViewPosOtherLocations) {
+      toast.error(message);
+      return;
+    }
+    toast.error(message, {
+      action: {
+        label: 'Ver otras sucursales',
+        onClick: () => void openAvailabilityFor(product, quantity, variantId),
+      },
+    });
+  };
+
   const handleAddOrCheck = (product: PosProduct) => {
     if (product.itemType === 'SERVICE') {
       addItem(product);
       return;
     }
-    if (product.isVariable && product.variants && product.variants.length > 0) {
+    const activeVariants = product.variants || [];
+    if ((product.isVariable || product.hasVariants) && activeVariants.length === 0) {
+      toast.error(`El producto ${product.name} no tiene variantes activas para vender.`);
+      return;
+    }
+    if (activeVariants.length > 1) {
       setVariantPickerProduct(product);
       setVariantPickerOpen(true);
       return;
     }
+    if (activeVariants.length === 1) {
+      handleVariantSelected(product, activeVariants[0]);
+      return;
+    }
     if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined && product.currentStock <= 0) {
-      void openAvailabilityFor(product, 1);
+      if (canViewPosOtherLocations) void openAvailabilityFor(product, 1);
+      else toast.error(stockBlockedMessage(product, 0));
       return;
     }
     addItem(product);
@@ -1385,12 +1440,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
 
     if (product.trackInventory && (variant.currentStock == null || requestedQty + globalQty > variant.currentStock)) {
       const available = Math.max(0, Number(variant.currentStock || 0) - globalQty);
-      toast.error(`Stock insuficiente para ${variantDescription}. Disponible en esta bodega: ${available}`, {
-        action: {
-          label: 'Ver otras sucursales',
-          onClick: () => void openAvailabilityFor(product, requestedQty, variant.id),
-        },
-      });
+      notifyInsufficientStock(`Stock insuficiente para ${variantDescription}. Disponible en esta bodega: ${available}`, product, requestedQty, variant.id);
       return;
     }
 
@@ -1448,12 +1498,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     }
 
     if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined && requestedQty + globalQty > product.currentStock) {
-      toast.error(stockBlockedMessage(product, globalQty), {
-        action: {
-          label: 'Ver otras sucursales',
-          onClick: () => void openAvailabilityFor(product, requestedQty),
-        },
-      });
+      notifyInsufficientStock(stockBlockedMessage(product, globalQty), product, requestedQty);
       return;
     }
 
@@ -1505,12 +1550,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         const message = variant
           ? `Stock insuficiente para ${product.name} - ${variant.attributes?.map((attribute) => attribute.value).join(' / ') || variant.name}. Disponible en esta bodega: ${Math.max(0, availableStock - globalQty)}`
           : stockBlockedMessage(product, globalQty);
-        toast.error(message, {
-          action: {
-            label: 'Ver otras sucursales',
-            onClick: () => void openAvailabilityFor(product, quantity, variantId),
-          },
-        });
+        notifyInsufficientStock(message, product, quantity, variantId);
         finalQty = Math.max(1, availableStock - globalQty);
       }
     }
@@ -2319,7 +2359,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                   </div>
                   <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
-                      <label
+                      {canViewPosOtherLocations && <label
                         title="Muestra en cada producto un botón para consultar su disponibilidad en otras sucursales"
                         className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground select-none"
                       >
@@ -2330,7 +2370,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                           className="size-3.5 accent-primary"
                         />
                         Disponibilidad
-                      </label>
+                      </label>}
                       <div className="inline-flex h-8 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
                         <button
                           type="button"
@@ -2386,6 +2426,30 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                     </button>
                   ))}
                 </div>
+                <div className="mb-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Select value={catalogBrandFilter} onValueChange={setCatalogBrandFilter}>
+                    <SelectTrigger aria-label="Filtrar por marca"><SelectValue placeholder="Todas las marcas" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las marcas</SelectItem>
+                      {catalogBrands.map((brand) => <SelectItem key={brand} value={brand}>{brand}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={catalogCategoryFilter} onValueChange={setCatalogCategoryFilter}>
+                    <SelectTrigger aria-label="Filtrar por categoría"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las categorías</SelectItem>
+                      {catalogCategories.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={catalogAvailabilityFilter} onValueChange={(value) => setCatalogAvailabilityFilter(value as CatalogAvailabilityFilter)}>
+                    <SelectTrigger aria-label="Filtrar por existencia"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todo</SelectItem>
+                      <SelectItem value="AVAILABLE">Con existencias</SelectItem>
+                      <SelectItem value="EMPTY">Sin existencias</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {catalogView === 'list' ? (
                   <div className="overflow-y-auto overflow-x-auto rounded-xl border border-border/50 max-h-80 sm:max-h-96">
                     {/* Vista lista para móvil */}
@@ -2402,8 +2466,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                                 </Badge>
                               ) : (
                                 prod.trackInventory && (
-                                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
-                                    {prod.currentStock ?? 0} unid.
+                                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock == null || !selectedWarehouseId ? "text-muted-foreground border-border" : prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                    {getSalesStockOptionLabel(prod, selectedWarehouseId)}
                                   </Badge>
                                 )
                               )}
@@ -2426,7 +2490,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                             {prod.description && <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{prod.description}</p>}
                           </div>
                           <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1">
-                            {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                            {canViewPosOtherLocations && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                              <Button size="sm" variant="ghost"
+                                onClick={() => setOtherLocationsProduct(prod)}
+                                disabled={isRegisterDisabled}
+                                aria-label={`Ver existencias de ${prod.name} en otras ubicaciones`}
+                                className="h-7 text-[10px] font-bold text-primary rounded-lg px-2">
+                                <MapPin className="mr-1 size-3" /> Otras ubicaciones
+                              </Button>
+                            )}
+                            {canViewPosOtherLocations && showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
                               <Button size="sm" variant="outline"
                                 onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
                                 disabled={isRegisterDisabled}
@@ -2436,9 +2509,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                               </Button>
                             )}
                             <Button size="sm" variant="default" onClick={() => handleAddOrCheck(prod)}
-                              disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
+                              disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : (!canViewPosOtherLocations && prod.trackInventory && prod.currentStock != null && prod.currentStock <= 0))}
                               className="h-7 text-[10px] font-bold rounded-lg px-2.5">
-                              <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar')}
+                              <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? (canViewPosOtherLocations ? 'Ver otras sucursales' : 'Sin existencias') : 'Agregar')}
                             </Button>
                           </div>
                         </div>
@@ -2483,8 +2556,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                                   </Badge>
                                 ) : (
                                   prod.trackInventory && (
-                                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
-                                      {prod.currentStock ?? 0} unid.
+                                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock == null || !selectedWarehouseId ? "text-muted-foreground border-border" : prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                      {getSalesStockOptionLabel(prod, selectedWarehouseId)}
                                     </Badge>
                                   )
                                 )}
@@ -2505,7 +2578,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                             </td>
                             <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
                               <div className="flex flex-wrap items-center justify-center gap-1">
-                                {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                {canViewPosOtherLocations && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                  <Button size="sm" variant="ghost"
+                                    onClick={() => setOtherLocationsProduct(prod)}
+                                    disabled={isRegisterDisabled}
+                                    aria-label={`Ver existencias de ${prod.name} en otras ubicaciones`}
+                                    className="h-7 whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary disabled:opacity-50">
+                                    <MapPin className="mr-1 size-3" /> Otras ubicaciones
+                                  </Button>
+                                )}
+                                {canViewPosOtherLocations && showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
                                   <Button size="sm" variant="outline"
                                     onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
                                     disabled={isRegisterDisabled}
@@ -2515,9 +2597,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                                   </Button>
                                 )}
                                 <Button size="sm" variant="ghost" onClick={() => handleAddOrCheck(prod)}
-                                  disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
+                                  disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : (!canViewPosOtherLocations && prod.trackInventory && prod.currentStock != null && prod.currentStock <= 0))}
                                   className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
-                                  <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar')}
+                                  <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? (canViewPosOtherLocations ? 'Ver otras sucursales' : 'Sin existencias') : 'Agregar')}
                                 </Button>
                               </div>
                             </td>
@@ -2554,14 +2636,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                                       </Badge>
                                     ) : (
                                       prod.trackInventory && (
-                                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
-                                          {prod.currentStock ?? 0} unid.
+                                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock == null || !selectedWarehouseId ? "text-muted-foreground border-border" : prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                          {getSalesStockOptionLabel(prod, selectedWarehouseId)}
                                         </Badge>
                                       )
                                     )}
                                   </div>
                                   <div className="flex shrink-0 items-center gap-1">
-                                    {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                    {canViewPosOtherLocations && showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
                                       <Button size="icon" variant="ghost"
                                         onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
                                         disabled={isRegisterDisabled}
@@ -2592,13 +2674,23 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                               <div className="mt-auto space-y-2">
                                 <Button
                                   onClick={() => handleAddOrCheck(prod)}
-                                  disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
+                                  disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : (!canViewPosOtherLocations && prod.trackInventory && prod.currentStock != null && prod.currentStock <= 0))}
                                   className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
                                 >
                                   <ShoppingCart className="mr-2 size-3.5" />
-                                  {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disponible' : 'Agregar a factura') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar a factura')}
+                                  {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disponible' : 'Agregar a factura') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? (canViewPosOtherLocations ? 'Ver otras sucursales' : 'Sin existencias') : 'Agregar a factura')}
                                 </Button>
-                                {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                {canViewPosOtherLocations && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => setOtherLocationsProduct(prod)}
+                                    disabled={isRegisterDisabled}
+                                    className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
+                                  >
+                                    <MapPin className="mr-2 size-3" /> Ver en otras ubicaciones
+                                  </Button>
+                                )}
+                                {canViewPosOtherLocations && showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
                                   <Button
                                     variant="outline"
                                     onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
@@ -3459,6 +3551,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         onSubmit={(selection) => void handleHoldReservation(selection)}
         canCreateHold={canCreatePosHold}
         canPayNow={canPayPos}
+      />
+      <SalesOtherLocationsDialog
+        product={otherLocationsProduct}
+        warehouseId={selectedWarehouseId}
+        viewModule="RETAIL_POS"
+        open={Boolean(otherLocationsProduct)}
+        onOpenChange={(open) => { if (!open) setOtherLocationsProduct(null); }}
       />
       <AdministrarCajasModal
         open={manageCajasOpen}

@@ -25,6 +25,7 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '../ui
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { Card } from '../ui/card';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import { Label } from '../ui/label';
@@ -49,6 +50,7 @@ import { generateSupplierHistoryPDF } from '../../utils/pdfGenerator';
 import { fetchSupplierHistoryItems, type SupplierHistoryItem } from '../../utils/supplierHistory';
 import { formatCurrencyAmount } from '../../utils/currency';
 import { toast } from '@/app/services/toast';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 
 interface SupplierDetailDrawerProps {
@@ -266,7 +268,7 @@ export function SupplierDetailDrawer({
       .finally(() => setHistoryExportLoading(false));
   };
 
-  const confirmHistoryExport = async () => {
+  const confirmHistoryExport = async (format: PdfDownloadFormat = 'configured') => {
     if (!supplier || exportingHistory || historyExportLoading) return;
     if (!selectedHistoryItems.length) {
       toast.info('Este proveedor todavía no tiene transacciones para descargar.');
@@ -292,6 +294,7 @@ export function SupplierDetailDrawer({
         // En las celdas solo debe aparecer el símbolo (C$ o $), no el código
         // repetido al final del importe.
         formatAmount: (amount: number, currency?: string) => formatCurrencyAmount(amount, currency),
+        format,
         outputCurrency: historyExportCurrency,
       });
       toast.success('Historial del proveedor descargado', { id: exportToastId });
@@ -482,10 +485,7 @@ export function SupplierDetailDrawer({
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setHistoryExportDialogOpen(false)} disabled={exportingHistory}>Cancelar</Button>
-          <Button type="button" onClick={() => void confirmHistoryExport()} disabled={historyExportLoading || !selectedHistoryItems.length || exportingHistory} className="gap-2">
-            {exportingHistory && <Loader2 className="size-4 animate-spin" />}
-            {exportingHistory ? 'Generando…' : `Exportar ${selectedHistoryItems.length} registros`}
-          </Button>
+          <PdfDownloadButton label={exportingHistory ? 'Generando…' : `Exportar ${selectedHistoryItems.length} registros`} includePageSizes includeRoll={false} disabled={historyExportLoading || !selectedHistoryItems.length || exportingHistory} onDownload={(format) => void confirmHistoryExport(format)} />
         </DialogFooter>
       </DialogContent>
     </Dialog>

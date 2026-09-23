@@ -1,0 +1,6 @@
+- generic [active] [ref=f13e1]:
+  - generic [ref=f13e2]: Probando la captura…
+  - generic [ref=f13e3]:
+    - heading "Gráfica de prueba con color(srgb)" [level=1] [ref=f13e4]
+    - img [ref=f13e5]:
+      - generic [ref=f13e7]: Etiqueta legible

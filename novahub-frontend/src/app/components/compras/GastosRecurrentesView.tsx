@@ -104,6 +104,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
       await generatePurchaseListPDF({
         title: 'Gastos recurrentes',
         rows: exportRows,
+        subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`].join(' · '),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -119,6 +120,24 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
       toast.success('Reporte PDF descargado', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const allRows = await fetchAllPaginatedRows<RecurringExpense>((page, pageSize) => recurringExpensesService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, report: true, export: true, light: true }));
+      const exportRows = allRows.filter((expense) => {
+        const status = String(expense.status || '').toUpperCase();
+        if (statusFilter !== 'ALL' && status !== statusFilter) return false;
+        return (expense.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+      });
+      createReportWorkbook({
+        fileName: 'gastos_recurrentes.xlsx',
+        sheets: [{ name: 'Registros', rows: exportRows.map(row => ({ Descripcion: row.description || '—', Monto: Number(row.amount || 0), Moneda: row.currency || displayCurrency, Frecuencia: freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—', Inicio: row.startDate || '—', Estado: row.status || '—' })) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter },
+      });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el Excel de gastos recurrentes');
     }
   };
 
@@ -427,7 +446,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos Recurrentes</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-expenses" />
-            {canPerform('PURCHASES_EXPENSES_REC', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => createReportWorkbook({ fileName: 'gastos_recurrentes.xlsx', sheets: [{ name: 'Registros', rows: filtered.map(row => ({ Descripcion: row.description || '—', Monto: Number(row.amount || 0), Frecuencia: freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—', Inicio: row.startDate || '—', Estado: row.status || '—' })) }] })} />}
+            {canPerform('PURCHASES_EXPENSES_REC', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES_REC', 'create') && (

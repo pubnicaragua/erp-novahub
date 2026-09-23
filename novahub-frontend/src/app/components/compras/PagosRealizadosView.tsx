@@ -394,6 +394,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       await generatePurchaseListPDF({
         title: 'Pagos realizados',
         rows: exportRows,
+        subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : '', exportFilter !== 'all' ? `Método: ${exportFilter}` : 'Método: Todos'].filter(Boolean).join(' · '),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -412,6 +413,28 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       toast.success('Reporte PDF descargado', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const allRows = await fetchAllPaginatedRows<PaymentMade>((page, pageSize) => paymentsService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, branchId: selectedBranchId || undefined, report: true, export: true, light: true }));
+      const allGroupedPayments = groupMadePayments(allRows, baseCurrency, globalRate, toBaseAmount);
+      const exportFiltered = allGroupedPayments.filter((payment) => {
+        if (!normalizedSearchTerm) return true;
+        const linkedBill = bills.find((bill) => bill.id === payment.supplierInvoiceId);
+        const haystack = [payment.reference, payment.number, payment.supplier?.name, payment.supplier?.code, payment.notes, payment.displayReference, payment.date ? formatDateEs(payment.date) : '', payment.amount, Number(payment.amount || 0).toLocaleString(), getMethodLabel(payment.method), linkedBill?.number, linkedBill?.status]
+          .filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(normalizedSearchTerm);
+      });
+      const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      createReportWorkbook({
+        fileName: 'pagos_realizados.xlsx',
+        sheets: [{ name: 'Pagos', rows: exportRows.map(row => ({ Referencia: row.displayReference || paymentReferenceLabel(row), Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Comprometido: Number(expectedPaymentAmount(row) || 0), Pagado: Number(paidPaymentAmount(row) || 0), Moneda: linkedInvoiceForPayment(row)?.currency || row.currency || '—', Metodo: getMethodLabel(row.method) })) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Sucursal: selectedBranchId || 'Todas', Método: 'Todos' },
+      });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el Excel de pagos realizados');
     }
   };
 
@@ -654,7 +677,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="payments" context="form" />
-             {!isNew && canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton label="Exportar" onDownload={(format) => void handleDownloadPaymentPdf(localDoc as PaymentMade, format)} />}
+             {!isNew && canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll onDownload={(format) => void handleDownloadPaymentPdf(localDoc as PaymentMade, format)} />}
              {!isNew && canPerform('PURCHASES_PAYMENTS', 'delete') && (
                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
@@ -923,6 +946,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             <PurchaseViewTutorial view="payments" />
             {canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton
               label="Exportar"
+              includePageSizes
               includeRoll={false}
               scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }}
               filterSelector={{
@@ -935,7 +959,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                 ],
               }}
               onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
-              onExcel={() => createReportWorkbook({ fileName: 'pagos_realizados.xlsx', sheets: [{ name: 'Pagos', rows: filteredData.map(row => ({ Referencia: row.displayReference || paymentReferenceLabel(row), Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Monto: Number(paidPaymentAmount(row) || 0), Moneda: row.currency || '—', Metodo: getMethodLabel(row.method) })) }] })}
+              onExcel={() => void handleExportExcel()}
             />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos a proveedores" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

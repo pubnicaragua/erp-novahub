@@ -34,7 +34,9 @@ import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPa
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
+import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { normalizeSalesExtraCharges, getSalesExtraChargesPayload, getSalesExtraChargesAmount, getLegacySalesExtraCostFields, type SalesExtraChargeLine } from '../../utils/salesCharges';
 
@@ -44,6 +46,8 @@ interface FacturasRecurrentesViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   products?: Product[];
+  productsLoading?: boolean;
+  productsError?: boolean;
   warehouses?: any[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
@@ -100,7 +104,7 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
   return next.toISOString();
 };
 
-export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasRecurrentesViewProps) {
+export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, displayMode, baseCurrency, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -112,6 +116,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
   const [detailRecurring, setDetailRecurring] = useState<RecurringInvoice | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
@@ -158,12 +163,13 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     ? showPriceListColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
     : showPriceListColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
 
-  const handleCatalogItemChange = (idx: number, value: string) => {
+  const handleCatalogItemChange = (idx: number, value: string, pickedVariant?: NonNullable<SalesCatalogItem['variants']>[number]) => {
     if (!localDoc) return;
     const newItems = [...(localDoc.items || [])] as any[];
     const itemType = resolveItemType(newItems[idx]);
     const catalog = itemType === 'SERVICE' ? serviceCatalog : productCatalog;
     const selectedProduct = catalog.find((product) => product.id === value);
+    const selectedVariant = itemType === 'SERVICE' ? null : pickedVariant || getSingleSalesVariant(selectedProduct);
     const effectivePriceListId = newItems[idx].priceListId || localDoc.priceListId || null;
     if (itemType !== 'SERVICE' && hasSalesProductPriceListConflict(newItems, value, effectivePriceListId, idx, localDoc.priceListId || null)) {
       toast.error('Este producto ya está agregado con la misma lista de precios.');
@@ -175,10 +181,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       ...newItems[idx],
       itemType,
       productId: value,
-      variantId: null,
-      variantSku: null,
-      variantName: null,
-      variantAttributes: null,
+      variantId: selectedVariant?.id || null,
+      variantSku: selectedVariant?.sku || null,
+      variantName: selectedVariant?.name || null,
+      variantAttributes: selectedVariant?.attributes || null,
       serviceName: itemType === 'SERVICE' ? (selectedProduct?.name || newItems[idx].serviceName || '') : '',
       description: selectedProduct?.name || newItems[idx].description || '',
       commercialNoteSnapshot: selectedProduct?.commercialNote || null,
@@ -723,8 +729,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex flex-wrap gap-2">
               {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
-                const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', serviceName: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0 }];
+                const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                const newItems = [...(localDoc.items || []), { id: itemId, itemType, productId: '', serviceName: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0 }];
                 setLocalDoc({ ...localDoc, items: newItems });
+                setSalesProductPickerItemId(itemId);
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border border-primary/20"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
                 <Button type="button" variant="outline" size="sm" onClick={() => updateRecurringExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Coste extra</Button>
                 <Button type="button" variant="outline" size="sm" disabled={Number(localDoc?.deliveryAmount || 0) > 0 || Boolean(String(localDoc?.deliveryDescription || '').trim())} onClick={() => updateRecurringDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Delivery</Button>
@@ -745,14 +753,19 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                   <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
                     <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
-                        <Combobox
-                          options={getItemCatalog(item).map((product: any) => ({
-                            label: `${String(product.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${product.code || ''} - ${product.name}`,
-                            value: product.id,
-                            description: product.commercialNote ? `Nota: ${product.commercialNote}` : undefined,
-                          }))}
+                        <SalesProductPicker
+                          otherLocationsPermissionModule="SALES_RECURRING"
+                          products={getItemCatalog(item) as SalesCatalogItem[]}
                           value={item.productId || ''}
-                          onChange={(value) => handleCatalogItemChange(idx, value)}
+                          disabled={productsLoading}
+                          itemType={itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
+                          warehouseId={localDoc?.warehouseId}
+                          variantId={item.variantId}
+                          catalogLoading={productsLoading}
+                          catalogError={productsError}
+                          open={salesProductPickerItemId === String(item.id || idx)}
+                          onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
+                          onChange={(value, variant) => handleCatalogItemChange(idx, value, variant)}
                           placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                         />
                       </div>
@@ -762,6 +775,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                         showLabel={false}
                         placeholder="Seleccionar variante"
                         product={product}
+                        warehouseId={localDoc?.warehouseId}
                         value={item.variantId}
                         onChange={(variantId, variant) => setLocalDoc({
                           ...localDoc,

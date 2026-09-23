@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, CreditCard, Receipt, ShoppingCart, 
-  Download, History, TrendingUp, AlertCircle, Calendar,
+  History, TrendingUp, AlertCircle, Calendar,
   RefreshCw, CornerUpLeft, StickyNote, Mail, Phone, MapPin, Truck, Wallet, Box
 } from 'lucide-react';
 import { 
@@ -9,6 +9,7 @@ import {
 } from '../ui/dialog';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
 import { 
@@ -22,6 +23,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import type { Supplier } from '../../types';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generateSupplierHistoryPDF } from '../../utils/pdfGenerator';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 
@@ -94,7 +96,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
     }
   };
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (format: PdfDownloadFormat) => {
     if (!supplier) return;
     try {
       await generateSupplierHistoryPDF({
@@ -113,6 +115,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount,
+        format,
       });
       toast.success('Estado de cuenta exportado');
     } catch (error) {
@@ -144,13 +147,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                 </div>
               </div>
             </div>
-            <Button 
-              onClick={handleExportPDF}
-              className="rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[11px] tracking-widest px-6 h-12 shadow-xl shadow-primary/20 border border-primary/20"
-              disabled={loading}
-            >
-              <Download className="size-4 mr-2" /> Exportar PDF
-            </Button>
+            <PdfDownloadButton onDownload={(format) => void handleExportPDF(format)} includePageSizes label="Exportar PDF" className="h-12 rounded-2xl px-6 text-[11px] font-black uppercase tracking-widest shadow-xl shadow-primary/20" disabled={loading} />
           </div>
         </DialogHeader>
 

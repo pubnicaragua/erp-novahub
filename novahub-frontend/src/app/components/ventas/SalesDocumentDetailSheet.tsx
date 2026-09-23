@@ -191,7 +191,7 @@ export function SalesDocumentDetailSheet({
                   <MessageCircle className="size-4 shrink-0" /> WhatsApp
                 </Button>}
                 {extraActions}
-                {onDownloadPdf && <PdfDownloadButton onDownload={onDownloadPdf} />}
+                {onDownloadPdf && <PdfDownloadButton onDownload={onDownloadPdf} includePageSizes includeRoll />}
               </section>
 
               <section className="rounded-2xl border border-border/50 p-4">

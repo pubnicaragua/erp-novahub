@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>QA PDF</title><style>body{margin:0;padding:18px;background:#e2e8f0;font:14px Arial;color:#334155}#status{padding:12px;background:white;border-radius:8px;margin-bottom:12px}canvas{display:block;max-width:100%;height:auto;margin:0 auto 18px;background:white;box-shadow:0 2px 12px #64748b55}h2{max-width:900px;margin:18px auto 8px;font-size:16px}</style></head><body><div id="status">Preparando PDFs de QA…</div><main id="preview"></main>
+<script type="module">
+import * as pdfjs from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { createDefaultTemplateDefinition, createPdfTemplateSampleData, createSystemDefaultPdfDesign, sanitizeTemplateDefinition } from '/src/app/services/pdf-template-definition.ts';
+import { renderPdfTemplateToPdf } from '/src/app/utils/pdf-template-renderer.ts';
+import { generateConfiguredReportSectionsPDF } from '/src/app/utils/pdfGenerator.ts';
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+const status = document.querySelector('#status');
+const host = document.querySelector('#preview');
+const pdfNodeAudit=[];
+const originalAppendChild=HTMLElement.prototype.appendChild;
+HTMLElement.prototype.appendChild=function(node){const result=originalAppendChild.call(this,node);if(node?.dataset?.pdfNodeId)pdfNodeAudit.push({id:node.dataset.pdfNodeId,text:node.innerText||node.textContent||'',top:node.style?.top,left:node.style?.left});if(node?.id?.startsWith('pdf-template-page-')){const generated=node.querySelector('[data-pdf-node-id="document-generated"]');if(generated)window.__pageAudit=(window.__pageAudit||[]).concat({page:node.id,text:generated.innerText||'',rect:generated.getBoundingClientRect().toJSON(),color:getComputedStyle(generated).color,display:getComputedStyle(generated).display,opacity:getComputedStyle(generated).opacity})}return result};
+async function renderPdf(title, targetKey, data, maxPages=4) {
+  const auditStart=pdfNodeAudit.length;
+  const design = createSystemDefaultPdfDesign(targetKey);
+  const settings = design.settings;
+  const definition = sanitizeTemplateDefinition(createDefaultTemplateDefinition(targetKey, settings), targetKey, settings);
+  let output;
+  if(title.includes('Reporte')) {
+    const configuredDoc=await generateConfiguredReportSectionsPDF({targetKey,title:String(data.document.title),tenantName:'Sucursal Metrocentro',sections:data.reportSections.map(section=>({id:section.id,title:section.title,headers:section.columns.map(column=>column.label),rows:section.rows.map(row=>section.columns.map(column=>row[column.token])),widths:section.columns.map(column=>column.width)})),kpis:data.reportKpis,charts:[],fileName:'qa-report.pdf',periodLabel:'septiembre 2026',branchName:'Tienda de QA',designOverride:design,save:false});
+    output={blob:configuredDoc.output('blob')};
+  } else output = await renderPdfTemplateToPdf({ definition, settings, targetKey, data, save:false });
+  const pdf = await pdfjs.getDocument({ data:new Uint8Array(await output.blob.arrayBuffer()) }).promise;
+  const pageTexts=[];
+  for(let index=1;index<=pdf.numPages;index++) {
+    const page=await pdf.getPage(index); const text=await page.getTextContent();
+    pageTexts.push(text.items.map(item=>item.str||'').join(' '));
+  }
+  const resultKey=title.includes('Dashboard')?'dashboard':title.includes('Casos')?'edge':title.includes('una página')?'single':'report';
+  status.dataset[resultKey]=`pages=${pdf.numPages};rendererPagesAreRaster=${pageTexts.every(text=>!text)}`;
+  if(title.includes('paginado'))status.title=JSON.stringify(pdfNodeAudit.slice(auditStart).filter(node=>node.id==='document-generated'));
+  const pages = Math.min(pdf.numPages, maxPages);
+  const heading = document.createElement('h2'); heading.textContent = `${title} — ${pdf.numPages} páginas (muestra ${pages})`; host.appendChild(heading);
+  for (let index=1; index<=pages; index++) {
+    const page = await pdf.getPage(index); const viewport = page.getViewport({scale:1.35});
+    const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise; host.appendChild(canvas);
+  }
+}
+try {
+ const dashboard=createPdfTemplateSampleData('dashboard.tenant-overview');
+ dashboard.company={name:'Sucursal Metrocentro',logo:undefined,slogan:'Comercio y servicios'};
+ dashboard.document={...dashboard.document, meta:'Período: 01/09/2026 – 22/09/2026', generated:'Generado: 22/09/2026, 10:00 a. m.'};
+ dashboard.dashboardCharts=dashboard.dashboardCharts.map((chart,index)=>index===0?{...chart,labels:['01-sep','06-sep','11-sep','16-sep','22-sep'],values:[0,21000,0,38000,19000],series:[{label:'Ventas pagadas',values:[0,21000,0,38000,19000],color:'#35ad85'},{label:'Gastos registrados',values:[0,0,0,0,0],color:'#f2a227'}],unitLabel:'C$'}:index===1?{...chart,labels:['Órdenes abiertas con seguimiento comercial','Productos agotados y próximos a reorden','Inventario sin movimiento reciente','Solicitudes por revisar','Otras alertas del inventario','Artículos sin existencias'],values:[15,239,1641,32,51,10]}:chart);
+ await renderPdf('Dashboard de gestión','dashboard.tenant-overview',dashboard,3);
+ const edge={...dashboard,reportSections:[],rows:[],items:[],dashboardCharts:[
+  {id:'dashboard.trend',title:'Tendencia con un solo día',type:'area',labels:['22-sep'],values:[3500],valueFormat:'currency',unitLabel:'C$',series:[{label:'Venta pagada',values:[3500],color:'#35ad85'}]},
+  {id:'dashboard.attention',title:'Inventario sin datos',type:'donut',labels:[],values:[],valueFormat:'count',unitLabel:'registros'},
+  {id:'dashboard.products-sales',title:'Artículo con nombre largo de catálogo',type:'bar',labels:['Router empresarial con fuente redundante'],values:[18],valueFormat:'count',unitLabel:'unidades'}
+ ]};
+ await renderPdf('Casos sin datos y de un punto','dashboard.tenant-overview',edge,2);
+ const report=createPdfTemplateSampleData('reportes.sales');
+ report.document={...report.document,meta:'Período: septiembre 2026 · Estado: pagadas',generated:'Generado: 22/09/2026, 10:00 a. m.',generatedInMetaFallback:true};
+ const columns=[{id:'date',label:'Fecha de registro',token:'date',width:13,align:'left'},{id:'number',label:'Número de factura',token:'number',width:14,align:'left'},{id:'client',label:'Cliente y razón social',token:'client',width:23,align:'left'},{id:'seller',label:'Vendedor responsable',token:'seller',width:16,align:'left'},{id:'status',label:'Estado de pago',token:'status',width:12,align:'center'},{id:'quantity',label:'Unidades',token:'quantity',width:8,align:'right'},{id:'total',label:'Venta neta (C$)',token:'total',width:14,align:'right'}];
+ const rows=Array.from({length:55},(_,i)=>({date:`${String(i%28+1).padStart(2,'0')}/09/2026`,number:`FAC-${String(1245+i).padStart(6,'0')}`,client:`Comercial La Colonia ${i+1} - Distribución de productos y suministros`,seller:`Ejecutivo de ventas ${i%5+1}`,status:i%4?'Pagada':'Pendiente',quantity:i+2,total:(14500+i*321.75).toFixed(2)}));
+ report.reportSections=[{id:'sales-wide-sample',title:'Facturas pagadas por período',columns,rows}]; report.rows=rows; report.items=rows; report.tableColumns=columns;
+ await renderPdf('Reporte de ventas paginado','reportes.sales',report,2);
+ const singlePage={...report,reportSections:report.reportSections.map(section=>({...section,rows:section.rows.slice(0,1)})),rows:rows.slice(0,1),items:rows.slice(0,1)};
+ await renderPdf('Reporte de una página','reportes.sales',singlePage,1);
+ status.textContent=`QA PDF renderizado: dashboard ${status.dataset.dashboard} | extremos ${status.dataset.edge} | tabla ${status.dataset.report} | una página ${status.dataset.single}`;
+} catch(error) { status.textContent=`ERROR QA PDF: ${error?.stack||error}`; }
+</script></body></html>

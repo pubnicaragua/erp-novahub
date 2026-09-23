@@ -37,12 +37,14 @@ import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAcc
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
-import { SalesWarehouseSelect, getDefaultSalesWarehouseId, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
+import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { normalizeCurrency, summarizeAmountsByCurrency } from '../../utils/currency';
 import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
+import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase } from '../../utils/paymentSettlement';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
@@ -53,6 +55,8 @@ interface NotasCreditoViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   products?: Product[];
+  productsLoading?: boolean;
+  productsError?: boolean;
   warehouses?: any[];
   salesAlert?: unknown;
   pagination?: SalesPaginationControls;
@@ -109,7 +113,7 @@ const toWholeQuantity = (value: string | number) => {
   return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
 };
 
-export function NotasCreditoView({ data, loading, onRefresh, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
+export function NotasCreditoView({ data, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, convertBetweenCurrencies } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -121,6 +125,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
   const [detailCredit, setDetailCredit] = useState<CreditNote | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [paymentCredit, setPaymentCredit] = useState<CreditNote | null>(null);
@@ -272,7 +277,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     || products.find((product) => product.code && (product.code === item?.code || product.code === item?.productCode))
     || products.find((product) => String(product.name || '').trim().toLowerCase() === String(item?.description || '').trim().toLowerCase());
   const resolveItemType = (item: any) => item.itemType || (findProductForItem(item)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
-  const getItemCatalog = (item: any) => {
+  const getItemCatalog = (item: any): any[] => {
     const catalog = resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog;
     if (!item?.productId || catalog.some((product) => product.id === item.productId)) return catalog;
     const linkedProduct = products.find((product) => product.id === item.productId);
@@ -651,8 +656,10 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
       showCreditLimitRequired();
       return;
     }
-    const items = [...(localDoc.items || []), { id: `${Date.now()}-${itemType}`, itemType, productId: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0, priceListId: itemType === 'SERVICE' ? null : (localDoc?.priceListId || null), priceMissing: false }];
+    const itemId = `${Date.now()}-${itemType}-${Math.random().toString(36).slice(2, 8)}`;
+    const items = [...(localDoc.items || []), { id: itemId, itemType, productId: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0, priceListId: itemType === 'SERVICE' ? null : (localDoc?.priceListId || null), priceMissing: false }];
     setLocalDoc({ ...localDoc, ...recalculateItems(items) });
+    setSalesProductPickerItemId(itemId);
   };
 
   const updateItem = (index: number, patch: Record<string, unknown>) => {
@@ -785,21 +792,31 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                     <div data-item-role="product-area" className="min-w-0 xl:col-span-5">
                       <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                         <div data-item-role="product-picker" className="sales-line-product-picker min-w-0">
-                          <Combobox
-                            options={catalog.map((entry) => ({ label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${entry.code || ''} - ${entry.name}`, value: entry.id, description: entry.commercialNote ? `Nota: ${entry.commercialNote}` : undefined }))}
+                          <SalesProductPicker
+                            otherLocationsPermissionModule="SALES_CREDIT_NOTES"
+                            products={catalog as SalesCatalogItem[]}
                             value={item.productId || ''}
-                            onChange={(value) => {
+                            disabled={!localDoc.customerId || productsLoading}
+                            itemType={itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
+                            warehouseId={localDoc?.warehouseId}
+                            variantId={item.variantId}
+                            catalogLoading={productsLoading}
+                            catalogError={productsError}
+                            open={salesProductPickerItemId === String(item.id || index)}
+                            onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || index) : null)}
+                            onChange={(value, pickedVariant) => {
                               const selectedProduct = catalog.find((entry) => entry.id === value);
+                              const selectedVariant = itemType === 'SERVICE' ? null : pickedVariant || getSingleSalesVariant(selectedProduct);
                               const baseSalePrice = Number(selectedProduct?.salePrice ?? selectedProduct?.price ?? 0);
                               const unitPrice = localDoc?.currency === 'USD'
                                 ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1)
                                 : baseSalePrice;
                               updateItem(index, {
                                 productId: value,
-                                variantId: null,
-                                variantSku: null,
-                                variantName: null,
-                                variantAttributes: null,
+                                variantId: selectedVariant?.id || null,
+                                variantSku: selectedVariant?.sku || null,
+                                variantName: selectedVariant?.name || null,
+                                variantAttributes: selectedVariant?.attributes || null,
                                 description: selectedProduct?.name || '',
                                 commercialNoteSnapshot: selectedProduct?.commercialNote || null,
                                 priceListId: itemType === 'SERVICE' ? null : (localDoc?.priceListId || getCustomerPriceListId(localDoc?.customerId)),
@@ -816,6 +833,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                           showLabel={false}
                           placeholder="Seleccionar variante"
                           product={product}
+                          warehouseId={localDoc?.warehouseId}
                           value={item.variantId}
                           onChange={(variantId, variant) => updateItem(index, {
                             variantId,
@@ -858,9 +876,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                       </div>
                       {item.productId && product && (
                         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 px-1">
-                          <Badge variant="outline" className={cn('border-none px-1.5 py-0 text-[9px] font-black', itemType === 'SERVICE' ? 'bg-emerald-500/10 text-emerald-500' : getProductStockForSalesWarehouse(product, localDoc?.warehouseId, item.variantId) <= 0 ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500')}>
-                            {itemType === 'SERVICE' ? 'DISPONIBLE' : `STOCK: ${getProductStockForSalesWarehouse(product, localDoc?.warehouseId, item.variantId)}`}
-                          </Badge>
+                          {itemType === 'SERVICE' && <Badge variant="outline" className="border-none bg-emerald-500/10 px-1.5 py-0 text-[9px] font-black text-emerald-500">DISPONIBLE</Badge>}
                           {itemType !== 'SERVICE' && (
                             <SalesWarehouseStockHint
                               product={product}

@@ -227,6 +227,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       await generatePurchaseListPDF({
         title: 'Gastos',
         rows: exportRows,
+        subtitle: [`Período: ${appliedRange?.from || 'Inicio abierto'} – ${appliedRange?.to || 'hoy'}`, `Búsqueda: ${searchTerm || 'Todas'}`, `Filtro: ${activeKpiFilter.type === 'none' ? 'Todos' : activeKpiFilter.type}`].join(' · '),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -244,6 +245,35 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       toast.success('Reporte PDF descargado', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const allRows = await fetchAllPaginatedRows<Expense>((page, pageSize) => expensesService.getAll({
+        page, pageSize, report: true, export: true, light: true,
+        search: searchTerm.trim() || undefined,
+        dateFrom: appliedRange?.from,
+        dateTo: appliedRange?.to,
+      }));
+      const search = searchTerm.toLowerCase();
+      const exportFiltered = allRows.filter((expense) => {
+        const matchesSearch = (expense.description || '').toLowerCase().includes(search)
+          || (expense.category || '').toLowerCase().includes(search);
+        if (!matchesSearch) return false;
+        if (activeKpiFilter.type === 'draft') return String(expense.status || '').toUpperCase() === 'DRAFT';
+        if (activeKpiFilter.type === 'pending') return String(expense.status || '').toUpperCase() === 'PENDING';
+        if (activeKpiFilter.type === 'category') return String(expense.category || '').toUpperCase() === activeKpiFilter.category;
+        return true;
+      });
+      const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      createReportWorkbook({
+        fileName: 'gastos.xlsx',
+        sheets: [{ name: 'Gastos', rows: exportRows.map(row => ({ Fecha: row.date || '—', Categoria: row.category || '—', Descripcion: row.description || '—', Monto: Number(row.amount || 0), Moneda: row.currency || '—', Estado: row.status || '—' })) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Desde: appliedRange?.from || '—', Hasta: appliedRange?.to || '—', Filtro: activeKpiFilter.type === 'none' ? 'Todos' : activeKpiFilter.type === 'category' ? activeKpiFilter.category : activeKpiFilter.type },
+      });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el Excel de gastos');
     }
   };
 
@@ -676,7 +706,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 </Button>
               </div>
             )}
-            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" onDownload={(format) => void handleDownloadExpensePdf(localDoc as Expense, format)} />}
+            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll onDownload={(format) => void handleDownloadExpensePdf(localDoc as Expense, format)} />}
           </div>
         </div>
 
@@ -944,7 +974,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2></div>
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" />
-            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => createReportWorkbook({ fileName: 'gastos.xlsx', sheets: [{ name: 'Gastos', rows: filteredData.map(row => ({ Fecha: row.date || '—', Categoria: row.category || '—', Descripcion: row.description || '—', Monto: Number(row.amount || 0), Moneda: row.currency || '—', Estado: row.status || '—' })) }] })} />}
+            {canPerform('PURCHASES_EXPENSES', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">

@@ -14,6 +14,7 @@ import { isTaxExempt } from '../../utils/taxUtils';
 import type { SupplierInvoice, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from '@/app/services/toast';
@@ -21,7 +22,8 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
+import { generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { getPurchaseInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
@@ -424,6 +426,51 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     setLocalDoc(prev => ({ ...prev!, items, ...totals }));
   };
 
+  const handleDownloadSupplierInvoicePdf = async (format: PdfDownloadFormat) => {
+    if (!localDoc) return;
+    const exportToastId = toast.loading('Generando PDF de la factura de proveedor…');
+    try {
+      const currency = String(localDoc.currency || displayCurrency || 'NIO');
+      const rate = Number(localDoc.exchangeRate || globalRate || 1);
+      const items = Array.isArray(localDoc.items) ? localDoc.items : Array.isArray(localDoc.lines) ? localDoc.lines : [];
+      const totals = calculateTotals(items);
+      const money = (value: unknown) => formatConvertedAmount(Number(value || 0), currency as any, rate);
+      await generatePurchaseRecordPDF({
+        format,
+        targetKey: 'compras.supplier-invoice',
+        tenantName: user?.tenantName || 'Nova Hub',
+        tenantLogo: user?.sessionBranding?.logo || null,
+        document: {
+          title: 'Factura de proveedor',
+          number: String(localDoc.number || localDoc.id || 'N/A'),
+          date: localDoc.date ? new Date(localDoc.date).toLocaleDateString('es-NI') : undefined,
+          status: localDoc.status,
+          supplier: localDoc.supplier?.name || localDoc.supplierName || '',
+          supplierData: localDoc.supplier || undefined,
+          fields: [
+            { label: 'Moneda', value: currency },
+            ...(localDoc.dueDate ? [{ label: 'Vencimiento', value: new Date(localDoc.dueDate).toLocaleDateString('es-NI') }] : []),
+          ],
+          lines: items.map((item: any) => ({
+            description: item.description || item.product?.name || 'Producto',
+            quantity: Number(item.quantity || 0),
+            unitPrice: money(item.unitPrice ?? item.price),
+            total: money(item.total ?? Number(item.quantity || 0) * Number(item.unitPrice ?? item.price ?? 0)),
+          })),
+          totals: [
+            { label: 'Subtotal', value: money(localDoc.subtotal ?? totals.subtotal) },
+            { label: 'Impuestos', value: money(localDoc.taxAmount ?? totals.taxAmount) },
+          ],
+          total: money(localDoc.total ?? totals.total),
+          notes: localDoc.notes || '',
+        },
+      });
+      toast.success('PDF de la factura de proveedor descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el PDF de la factura de proveedor', { id: exportToastId });
+    }
+  };
+
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
@@ -453,21 +500,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="invoices" context="form" />
-             {!isNew && canPerform('PURCHASES_RECEIPTS', 'export') && (
-               <Button
-                 variant="outline"
-                 className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
-                 onClick={() => generateSupplierInvoicePDF({
-                   invoice: localDoc,
-                   tenantName: user?.tenantName || 'Nova Hub',
-                   tenantLogo: user?.sessionBranding?.logo || null,
-                   formatAmount: (amount: number, currency?: string, rate?: number) =>
-                     formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
-                 })}
-               >
-                 <Download className="size-3 mr-2" /> Descargar
-               </Button>
-             )}
+             {!isNew && canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Descargar" includePageSizes includeRoll size="sm" className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest" onDownload={(format) => void handleDownloadSupplierInvoicePdf(format)} />}
                 {!isNew && canPerform('PURCHASES_RECEIPTS', 'delete') && (
                   <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                     onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>

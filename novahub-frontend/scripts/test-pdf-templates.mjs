@@ -18,6 +18,10 @@ try {
   const generator = await server.ssrLoadModule('/src/app/utils/pdfGenerator.ts');
   const targets = catalog.PDF_TEMPLATE_TARGETS;
 
+  assert.equal(definitions.formatPdfPageNumber('page-of', '', 2.8, 7.9), 'Página 2 de 7', 'La numeración normal debe usar enteros.');
+  assert.equal(definitions.formatPdfPageNumber('number-only', '', 3.2, 8), '3', 'La numeración simple debe usar enteros.');
+  assert.equal(definitions.formatPdfPageNumber('custom', 'Página {page}.0 de {pages},00', 4.6, 12.4), 'Página 4 de 12', 'La numeración personalizada y su previsualización deben eliminar decimales de página.');
+
   const normalizedCompany = definitions.normalizePdfCompanySettings({
     slogan: 'Soluciones simples para crecer',
     fiscalInfo: 'RUC / Identificación fiscal',
@@ -87,8 +91,42 @@ try {
   const dashboardDefinition = definitions.createDefaultTemplateDefinition('dashboard.tenant-overview', definitions.createSystemDefaultPdfDesign('dashboard.tenant-overview').settings);
   const dashboardCharts = dashboardDefinition.nodes.filter(node => node.type === 'chart');
   assert.ok(dashboard.reportKpis.length >= 4);
+  assert.ok(!String(dashboard.document.meta || '').includes('Sucursal:'), 'Los metadatos de muestra no deben inyectar sucursal.');
   assert.deepEqual(new Set(dashboardCharts.map(node => node.chartType)), new Set(['area', 'bar', 'donut']));
   assert.ok(dashboardCharts.every(node => dashboard.dashboardCharts.some(chart => chart.id === node.token)));
+  assert.equal(dashboardCharts.find(node => node.id === 'chart-trend')?.height, 42, 'La tendencia debe tener altura suficiente en la página de resumen.');
+  assert.ok(dashboardCharts.every(node => node.firstPageOnly !== true), 'Las gráficas del dashboard se colocan mediante páginas de resumen y detalle.');
+  const generatedHeader = dashboardDefinition.nodes.find(node => node.id === 'document-generated');
+  assert.equal(generatedHeader?.token, 'document.generated');
+  assert.equal(generatedHeader?.firstPageOnly, true, 'La fecha de generación aparece solo en la primera página.');
+  const reportDefinition = definitions.createDefaultTemplateDefinition('reportes.sales', definitions.createSystemDefaultPdfDesign('reportes.sales').settings);
+  const reportMeta = reportDefinition.nodes.find(node => node.id === 'report-meta');
+  assert.ok(reportMeta, 'Los reportes deben reservar una línea compacta para período, filtros y generación.');
+  assert.equal(reportMeta.width, 84, 'El período y la generación deben compartir el renglón completo del encabezado.');
+  const sanitizedReportDefinition = definitions.sanitizeTemplateDefinition(reportDefinition, 'reportes.sales', definitions.createSystemDefaultPdfDesign('reportes.sales').settings);
+  const sanitizedGeneratedNodes = sanitizedReportDefinition.nodes.filter(node => node.enabled !== false && node.type === 'field' && node.token === 'document.generated');
+  assert.equal(sanitizedGeneratedNodes.length, 0, 'El diseño predeterminado usa un solo metadato para evitar duplicar la generación.');
+  const firstPageMetadata = renderer.normalizeReportDocumentMetadata({
+    meta: 'Período: septiembre · Sucursal: filtro seleccionado · Generado: 22/09/2026 10:00',
+    generated: 'Generado: 22/09/2026 10:00',
+  }, 1);
+  assert.equal(firstPageMetadata.meta, 'Período: septiembre · Sucursal: filtro seleccionado', 'Debe conservar filtros explícitos, eliminando la duplicación de generado en los metadatos.');
+  assert.equal(firstPageMetadata.generated, 'Generado: 22/09/2026 10:00', 'La fecha generada debe quedar disponible en la primera página.');
+  const continuationMetadata = renderer.normalizeReportDocumentMetadata({
+    period: 'Período: septiembre',
+    meta: 'Período: septiembre · Generado: 22/09/2026 10:00',
+    generated: 'Generado: 22/09/2026 10:00',
+  }, 2);
+  assert.equal(continuationMetadata.meta, '', 'Las páginas siguientes no deben repetir período, filtros ni fecha de generación.');
+  assert.equal(continuationMetadata.period, '', 'El período independiente tampoco debe repetirse en las páginas siguientes.');
+  assert.equal(continuationMetadata.generated, '', 'El token de generación debe quedar vacío en páginas siguientes.');
+  const fallbackMetadata = renderer.normalizeReportDocumentMetadata({
+    meta: 'Período: septiembre · Generado: 22/09/2026 10:00',
+    generated: 'Generado: 22/09/2026 10:00',
+    generatedInMetaFallback: true,
+  }, 1);
+  assert.equal(fallbackMetadata.meta, 'Período: septiembre · Generado: 22/09/2026 10:00', 'Diseños sin campo propio de generación deben mostrarla una sola vez en el metadato.');
+  assert.equal(renderer.normalizeReportDocumentMetadata(fallbackMetadata, 2).meta, '', 'El metadato de respaldo tampoco repite período ni generación al continuar.');
   const sanitizedDashboard = definitions.sanitizeTemplateDefinition(dashboardDefinition, 'dashboard.tenant-overview', definitions.createSystemDefaultPdfDesign('dashboard.tenant-overview').settings);
   const sanitizedCharts = sanitizedDashboard.nodes.filter(node => node.type === 'chart');
   assert.deepEqual(new Set(sanitizedCharts.map(node => node.chartType)), new Set(['area', 'bar', 'donut']), 'La normalización debe conservar el tipo de cada gráfica.');

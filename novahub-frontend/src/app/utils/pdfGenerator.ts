@@ -9,8 +9,8 @@ import { buildDateFilteredPdfFileName, buildPdfFileName, buildSalesPdfFileName }
 import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { getPurchasePriorityOption } from './purchasePriority';
-import { renderPdfTemplateToPdf } from './pdf-template-renderer';
-import { createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
+import { renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-template-renderer';
+import { createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 
@@ -140,45 +140,49 @@ export function drawReportTable({ doc, title, headers, rows, color, marginX, con
   const pageHeight = doc.internal.pageSize.getHeight();
   const bottomMargin = 15;
   const startPage = () => { doc.addPage(); return 20; };
+  const horizontalInset = Math.min(8, contentWidth * 0.025);
+  const tableX = marginX + horizontalInset;
+  const tableWidth = contentWidth - horizontalInset * 2;
   const rawWidths = headers.map((_, index) => Number(columnWidths?.[index]) || 1);
   const widthTotal = rawWidths.reduce((sum, width) => sum + width, 0);
-  const widths = rawWidths.map(width => (width / widthTotal) * contentWidth);
-  const cellPadding = 4;
-  const bodyFontSize = 7.5;
+  const widths = rawWidths.map(width => (width / widthTotal) * tableWidth);
+  const cellPadding = 3;
+  const bodyFontSize = 7;
   const headerFontSize = 7.5;
-  const titleLines = reportPdfLines(doc, title, contentWidth, 12, 2);
+  const titleLines = reportPdfLines(doc, title, tableWidth, 10, 2);
   const headerLines = headers.map((header, index) => reportPdfLines(doc, header, widths[index] - cellPadding, headerFontSize, 2));
   const headerLineHeight = 3.2;
-  const headerHeight = Math.max(8, Math.max(...headerLines.map(lines => lines.length)) * headerLineHeight + 3.5);
-  const estimatedRowsHeight = rows.reduce((total, row) => {
-    const lineCount = Math.max(...headers.map((_, index) => reportPdfLines(doc, row[index], widths[index] - cellPadding, bodyFontSize, 3).length));
-    return total + Math.max(7, lineCount * 3.2 + 3);
-  }, 0);
-  if (currentY + titleLines.length * 4.5 + 7 + headerHeight + Math.min(estimatedRowsHeight, pageHeight - bottomMargin) > pageHeight - bottomMargin) currentY = startPage();
-
-  doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
-  doc.text(titleLines, marginX, currentY, { lineHeightFactor: 1.05 });
-  currentY += titleLines.length * 4.5 + 3;
-  const headerColor = color;
-  doc.setFillColor(headerColor[0] ?? 16, headerColor[1] ?? 185, headerColor[2] ?? 129);
-  doc.roundedRect(marginX, currentY, contentWidth, headerHeight, 1, 1, 'F');
-  doc.setFontSize(headerFontSize); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+  const headerHeight = Math.max(7, Math.max(...headerLines.map(lines => lines.length)) * headerLineHeight + 3);
+  const titleHeight = titleLines.length * 4.2 + 4;
+  const drawTableHeading = (y: number, continued = false) => {
+    const heading = continued ? reportPdfLines(doc, `${title} (continuación)`, tableWidth, 10, 2) : titleLines;
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
+    doc.text(heading, tableX, y, { lineHeightFactor: 1.05 });
+    let nextY = y + heading.length * 4.2 + 4;
+    const headerColor = color;
+    doc.setFillColor(headerColor[0] ?? 16, headerColor[1] ?? 185, headerColor[2] ?? 129);
+    doc.roundedRect(tableX, nextY, tableWidth, headerHeight, 1, 1, 'F');
+    doc.setFontSize(headerFontSize); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+    let headerX = marginX;
+    headers.forEach((_, index) => {
+      doc.text(headerLines[index], headerX + 1.5, nextY + 3, { lineHeightFactor: 1.05 });
+      headerX += widths[index];
+    });
+    return nextY + headerHeight + 2;
+  };
+  if (currentY + titleHeight + headerHeight + 9 > pageHeight - bottomMargin) currentY = startPage();
+  currentY = drawTableHeading(currentY);
   let x = marginX;
-  headers.forEach((_, index) => {
-    doc.text(headerLines[index], x + 2, currentY + 3.2, { lineHeightFactor: 1.05 });
-    x += widths[index];
-  });
-  currentY += headerHeight + 2;
 
   rows.forEach((row, rowIndex) => {
     const lines = headers.map((_, index) => reportPdfLines(doc, row[index], widths[index] - cellPadding, bodyFontSize, 3));
     const rowHeight = Math.max(7, Math.max(...lines.map(value => value.length)) * 3.2 + 3);
-    if (currentY + rowHeight > pageHeight - bottomMargin) currentY = startPage();
-    if (rowIndex % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, rowHeight, 'F'); }
+    if (currentY + rowHeight > pageHeight - bottomMargin) currentY = drawTableHeading(startPage(), true);
+    if (rowIndex % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(tableX, currentY - 1, tableWidth, rowHeight, 'F'); }
     doc.setFontSize(bodyFontSize); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
     x = marginX;
     lines.forEach((cellLines, index) => {
-      doc.text(cellLines, x + 2, currentY + 3.4, { lineHeightFactor: 1.05 });
+      doc.text(cellLines, x + 1.5, currentY + 3.2, { lineHeightFactor: 1.05 });
       x += widths[index];
     });
     currentY += rowHeight;
@@ -439,7 +443,9 @@ function fitPdfImage(doc: jsPDF, image: string, maxWidth: number, maxHeight: num
 }
 
 function paperSettingForDownload(format: Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>) {
-  void format;
+  if (format === 'A4') return 'A4';
+  if (format === 'legal') return 'LEGAL';
+  if (format === 'oficio') return 'OFICIO';
   return 'LETTER';
 }
 
@@ -449,7 +455,7 @@ function withPdfDownloadFormat(design: any, format: PdfDownloadFormat) {
     ...(design || {}),
     settings: {
       ...((design && design.settings) || {}),
-      paperSize: paperSettingForDownload(format as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>),
+      paperSize: format === 'roll-58' ? 'ROLL-58' : format === 'roll-80' ? 'ROLL-80' : paperSettingForDownload(format),
       orientation: 'portrait',
     },
   };
@@ -525,9 +531,12 @@ function getSalesPdfAdditionalCharges(transaction: any): Array<{ label: string; 
 }
 
 async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo, documentType, format = 'configured', save }: { savedDesign: any; estimate: any; tenantName: string; formatAmount: (amount: number, currency: string, rate: number) => string; tenantLogo?: string; documentType: string; format?: PdfDownloadFormat; save: boolean }): Promise<{ doc: jsPDF; blob: Blob }> {
-  void format;
   const targetKey = getPdfTemplateTarget(documentType).key;
-  const design = normalizePdfPaperSettings(targetKey, savedDesign.settings || {});
+  const savedSettings = savedDesign.settings || {};
+  const outputSettings = format === 'configured'
+    ? savedSettings
+    : { ...savedSettings, paperSize: paperSettingForDownload(format as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>), orientation: 'portrait' };
+  const design = normalizePdfPaperSettings(targetKey, outputSettings);
   const fields = Array.isArray(savedDesign.layoutZones?.fields) ? savedDesign.layoutZones.fields : [];
   const field = (id: string, fallback: any) => fields.find((item: any) => item.id === id) || { id, x: fallback.x, y: fallback.y, width: fallback.width, height: fallback.height, enabled: true };
   const titleMap: Record<string, string> = { estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'NOTA DE CRÉDITO', 'credit-note': 'CRÉDITO' };
@@ -594,7 +603,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     ${zone('terms', escapeHtml(values.terms).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
     ${zone('notes', escapeHtml(values.notes).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
     ${zone('footer', escapeHtml(values.footer), `font-size:.68em;opacity:.7;border-top:1px solid ${line};padding-top:4px;`)}
-    ${design.showPageNumber !== false ? `<div style="position:absolute;right:8%;bottom:3%;font-size:.65em;opacity:.6;">${escapeHtml(design.pageNumberFormat === 'number-only' ? '1' : design.pageNumberFormat === 'custom' ? String(design.pageNumberCustom || 'Página {page} de {pages}').replace('{page}', '1').replace('{pages}', '1') : 'Página 1 de 1')}</div>` : ''}
+    ${design.showPageNumber !== false ? `<div style="position:absolute;right:8%;bottom:3%;font-size:.65em;opacity:.6;">${escapeHtml(formatPdfPageNumber(design.pageNumberFormat, design.pageNumberCustom, 1, 1))}</div>` : ''}
     ${design.showQr ? '<div style="position:absolute;right:8%;bottom:7%;width:36px;height:36px;border:1px solid #94a3b8;"></div>' : ''}${design.showBarcode ? '<div style="position:absolute;right:18%;bottom:7%;width:80px;height:36px;border:1px solid #94a3b8;"></div>' : ''}
   </div>`;
   // Una plantilla HTML no debe hacer que html2canvas clone toda la pantalla
@@ -665,6 +674,13 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   // no lo hacen, el branding de sesión representa la sucursal activa y debe
   // ganar al fallback genérico de NovaHub.
   const resolvedTenantLogo = tenantLogo || rememberedPdfSessionLogo() || await getNovaHubLogoPng();
+  if (downloadFormat === 'roll-58' || downloadFormat === 'roll-80') {
+    const settings = savedDesign?.settings || {};
+    if (documentType === 'payment') {
+      return generateSalesPaymentVoucherPDF({ document: estimate, tenantName, formatAmount: formatAmount as any, tenantLogo: resolvedTenantLogo, format: downloadFormat, settings, save });
+    }
+    return generateSalesTicketPDF({ document: estimate, tenantName, formatAmount: formatAmount as any, tenantLogo: resolvedTenantLogo, documentType, format: downloadFormat, settings, save });
+  }
   if (savedDesign?.layoutZones?.definition) {
     const design = savedDesign.settings || {};
     const targetKey = getPdfTemplateTarget(documentType).key;
@@ -704,7 +720,10 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   // que la vista previa. El PDF original queda como referencia, no como fondo
   // para evitar duplicar textos y datos dinámicos.
   const design: any = savedDesign?.settings || {};
-  const { format, orientation } = pdfDesignPaper(design);
+  const outputDesign = downloadFormat === 'configured'
+    ? design
+    : { ...design, paperSize: paperSettingForDownload(downloadFormat), orientation: design.orientation || 'portrait' };
+  const { format, orientation } = pdfDesignPaper(outputDesign);
   const doc = new jsPDF({ orientation, unit: 'mm', format });
   
   // 1. Configuraciones iniciales y estilos base
@@ -1003,7 +1022,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   if (design.footerText) doc.text(String(design.footerText), margin, pageHeight - 16);
   doc.text(`Documento generado por ${tenantName}`, margin, pageHeight - 10);
   if (design.showPageNumber !== false) {
-    const pageText = design.pageNumberFormat === 'number-only' ? '1' : design.pageNumberFormat === 'custom' ? String(design.pageNumberCustom || 'Página {page} de {pages}').replace('{page}', '1').replace('{pages}', '1') : 'Página 1 de 1';
+    const pageText = formatPdfPageNumber(design.pageNumberFormat, design.pageNumberCustom, 1, 1);
     doc.text(pageText, rightEdge, pageHeight - 10, { align: 'right' });
   }
 
@@ -1909,7 +1928,7 @@ const configuredHistoryPaper = (settings: Record<string, any>, format: PdfDownlo
   if (format === 'configured') return settings;
   return {
     ...settings,
-    paperSize: format === 'roll-80' ? 'ROLL-80' : format === 'A4' ? 'A4' : format === 'legal' ? 'LEGAL' : format === 'oficio' ? 'OFICIO' : 'LETTER',
+    paperSize: format === 'roll-80' ? 'ROLL-80' : format === 'roll-58' ? 'ROLL-58' : format === 'A4' ? 'A4' : format === 'legal' ? 'LEGAL' : format === 'oficio' ? 'OFICIO' : 'LETTER',
     orientation: 'portrait',
   };
 };
@@ -1943,9 +1962,11 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   }));
   const mappedRows = rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])));
   const design = await getPdfDesign(targetKey);
+  const generatedAt = new Date().toLocaleString('es-NI');
+  const reportMeta = [subtitle || '', `Generado: ${generatedAt}`].filter(Boolean).join(' · ');
   const semanticData: PdfTemplateData = {
     company: { name: settings.companyName || tenantName, logo: tenantLogo },
-    document: { title, meta: [subtitle, new Date().toLocaleDateString('es-NI')].filter(Boolean).join(' · ') },
+    document: { title, generated: `Generado: ${generatedAt}`, meta: subtitle || '' },
     items: mappedRows,
     rows: mappedRows,
     tableColumns: templateColumns,
@@ -2015,13 +2036,13 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   const metaX = identityX;
   const metaWidth = Math.max(40, contentWidth - (identityX - margin) - 8);
   if (meta) doc.text(doc.splitTextToSize(meta, metaWidth).slice(0, 2), metaX, headerY + 27, { lineHeightFactor: 1.05 });
-  if (subtitle) {
+  if (reportMeta) {
     doc.setTextColor(...text);
-    doc.setFontSize(8);
-    doc.text(doc.splitTextToSize(subtitle, contentWidth), margin, headerY + headerHeight + 7);
+    doc.setFontSize(7.5);
+    doc.text(doc.splitTextToSize(reportMeta, contentWidth).slice(0, 2), margin, headerY + headerHeight + 6, { lineHeightFactor: 1.05 });
   }
 
-  const startY = headerY + headerHeight + (subtitle ? 14 : 8);
+  const startY = headerY + headerHeight + (reportMeta ? 13 : 8);
   const columnHeader = (column: { header?: string; label?: string }) => String(column.header || column.label || '—');
   const widths = columns.map(column => Number(column.width) > 0 ? Number(column.width) : 100 / Math.max(columns.length, 1));
   const widthTotal = widths.reduce((sum, width) => sum + width, 0) || 100;
@@ -2085,14 +2106,14 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
     doc.text(doc.splitTextToSize(footerText, Math.max(40, contentWidth - 42)), margin, pageHeight - 15, { lineHeightFactor: 1.05 });
-    if (settings.showPageNumber !== false) doc.text(`Página ${page} de ${pageCount}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+    if (settings.showPageNumber !== false) doc.text(formatPdfPageNumber(settings.pageNumberFormat, settings.pageNumberCustom, page, pageCount), pageWidth - margin, pageHeight - 10, { align: 'right' });
   }
   const blob = doc.output('blob');
   if (save) doc.save(/\.pdf$/i.test(String(fileName)) ? String(fileName) : buildPdfFileName([fileName], 'configured'));
   return { doc, blob };
 }
 
-async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format = 'configured', fileName, designOverride, save = true }: { targetKey: string; data: PdfTemplateData; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; fileName: string; designOverride?: any; save?: boolean }) {
+async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format = 'configured', fileName, designOverride, save = true, onProgress }: { targetKey: string; data: PdfTemplateData; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; fileName: string; designOverride?: any; save?: boolean; onProgress?: (progress: PdfTemplateRenderProgress) => void }) {
   if (format === 'roll-58' || format === 'roll-80') return null;
   const design = designOverride || await getPdfDesign(targetKey);
   const baseSettings = { ...(createSystemDefaultPdfDesign(targetKey).settings || {}), ...(design?.settings && typeof design.settings === 'object' ? design.settings : {}) } as Record<string, any>;
@@ -2102,8 +2123,44 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
   const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
   const resolvedLogo = configuredLogo || tenantLogo || (typeof data.company?.logo === 'string' ? data.company.logo : undefined);
   const sourceCompany = data.company || {};
+  const sourceDocument = data.document || {};
+  const target = getPdfTemplateTarget(targetKey);
+  const isReportOutput = target.structure === 'report' || target.structure === 'dashboard' || target.module === 'reportes';
+  const isBranchReportOutput = isReportOutput && !['manager', 'platform', 'portal'].includes(target.module);
+  const generatedAt = new Date().toLocaleString('es-NI');
+  const inputMetaParts = [sourceDocument.period, sourceDocument.meta]
+    .flatMap(value => String(value || '').split('·'))
+    .map(value => value.trim())
+    .filter(Boolean);
+  const existingGenerated = inputMetaParts.find(value => /^generado\s*:/i.test(value));
+  const generatedText = String(sourceDocument.generated || existingGenerated || `Generado: ${generatedAt}`).trim();
+  const reportGenerated = /^generado\s*:/i.test(generatedText) ? generatedText : `Generado: ${generatedText}`;
+  const reportMetaParts = [...new Set(inputMetaParts.filter(value => !/^generado\s*:/i.test(value)))];
+  const normalizedDefinition = sanitizeTemplateDefinition(sourceDefinition, targetKey, renderSettings);
+  const hasGeneratedField = normalizedDefinition.nodes.some(item => item.enabled !== false && item.type === 'field' && item.token === 'document.generated');
+  const hasMetaField = normalizedDefinition.nodes.some(item => item.enabled !== false && item.type === 'field' && item.token === 'document.meta');
+  // En reportes de sucursal, el renglón de período/filtros es el soporte
+  // visible y repetible del encabezado. Llevar Generado allí evita que diseños
+  // antiguos con un campo independiente y difícil de leer lo pierdan; el
+  // renderer lo retira de ese renglón después de la primera página.
+  const generatedInMetaFallback = isBranchReportOutput && target.structure !== 'dashboard' && hasMetaField;
+  const reportDefinition = generatedInMetaFallback
+    ? { ...normalizedDefinition, nodes: normalizedDefinition.nodes.filter(item => !(item.type === 'field' && item.token === 'document.generated')) }
+    : normalizedDefinition;
+  const definitionWithGeneratedFallback = isBranchReportOutput && !hasGeneratedField && !hasMetaField
+    ? (() => {
+      const generatedNode = createDefaultTemplateDefinition(targetKey, renderSettings).nodes.find(item => item.type === 'field' && item.token === 'document.generated');
+      return generatedNode ? { ...reportDefinition, nodes: [...reportDefinition.nodes, { ...generatedNode, id: 'document-generated-fallback', firstPageOnly: true }] } : reportDefinition;
+    })()
+    : reportDefinition;
   const enrichedData: PdfTemplateData = {
     ...data,
+    ...(isReportOutput ? { document: {
+      ...sourceDocument,
+      generated: reportGenerated,
+      meta: [...reportMetaParts, ...(generatedInMetaFallback && !reportMetaParts.includes(reportGenerated) ? [reportGenerated] : [])].join(' · '),
+      generatedInMetaFallback,
+    } } : {}),
     logo: resolvedLogo,
     company: {
       ...sourceCompany,
@@ -2117,7 +2174,7 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
       logo: resolvedLogo,
     },
   };
-  return renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(sourceDefinition, targetKey, renderSettings), settings: renderSettings, targetKey, data: enrichedData, fileName, save });
+  return renderPdfTemplateToPdf({ definition: definitionWithGeneratedFallback, settings: renderSettings, targetKey, data: enrichedData, fileName, save, onProgress });
 }
 
 export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, tableSummary, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; tableSummary?: { label: string; value: unknown; columnIndex?: number }; fileName: string; designOverride?: any }) {
@@ -2127,9 +2184,10 @@ export async function generateConfiguredReportTemplate({ targetKey, title, tenan
     ? rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])))
     : [Object.fromEntries(columns.map((column, index) => [`column-${index}`, index === 0 ? 'Sin registros para el alcance seleccionado' : '']))];
   const target = getPdfTemplateTarget(targetKey);
+  const generatedAt = new Date().toLocaleString('es-NI');
   const data: PdfTemplateData = {
     company: { name: tenantName, logo: tenantLogo },
-    document: { title },
+    document: { title, generated: `Generado: ${generatedAt}`, meta: '' },
     items: mappedRows,
     rows: mappedRows,
     tableColumns: mappedColumns,
@@ -2167,7 +2225,7 @@ const reportTemplateColumnAlign = (header: string): 'left' | 'center' | 'right' 
  * El contenido sigue llegando como secciones separadas para no convertir el
  * reporte en un listado plano ni perder las variantes de los gráficos.
  */
-export async function generateConfiguredReportSectionsPDF({ targetKey, title, tenantName, tenantLogo, sections, kpis, charts, dashboardPreferences, fileName, periodLabel, designOverride, save = true }: {
+export async function generateConfiguredReportSectionsPDF({ targetKey, title, tenantName, tenantLogo, sections, kpis, charts, dashboardPreferences, fileName, periodLabel, branchName, designOverride, save = true, onProgress }: {
   targetKey: string;
   title: string;
   tenantName: string;
@@ -2178,8 +2236,10 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   dashboardPreferences?: { indicators?: string[]; blocks?: string[] };
   fileName: string;
   periodLabel?: string;
+  branchName?: string;
   designOverride?: any;
   save?: boolean;
+  onProgress?: (progress: PdfTemplateRenderProgress) => void;
 }) {
   const design = designOverride || await getPdfDesign(targetKey);
   const reportSections: PdfTemplateReportSection[] = sections.filter(section => section && section.title && section.headers.length > 0).map((section, sectionIndex) => {
@@ -2203,7 +2263,8 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   }
 
   const generatedAt = new Date().toLocaleString('es-NI');
-  const periodText = periodLabel ? `Período: ${periodLabel}` : `Generado: ${generatedAt}`;
+  void branchName;
+  const periodText = periodLabel ? `Período: ${periodLabel}` : '';
   const firstSection = reportSections[0];
   const firstRowSet = reportSections.flatMap(section => section.rows);
   const rendered = await renderConfiguredDefinition({
@@ -2213,9 +2274,10 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     fileName,
     designOverride: design,
     save,
+    onProgress,
     data: {
       company: { name: tenantName, logo: tenantLogo },
-      document: { title, period: periodLabel ? `Período: ${periodLabel}` : undefined, generated: `Generado: ${generatedAt}`, meta: periodText },
+      document: { title, period: periodText || undefined, generated: `Generado: ${generatedAt}`, meta: periodText },
       reportSections,
       reportKpis: (kpis || []).map(kpi => ({ label: String(kpi.label ?? ''), value: String(kpi.value ?? ''), detail: String(kpi.detail ?? '') })),
       dashboardCharts: charts || [],
@@ -2671,11 +2733,7 @@ export const generateConfiguredHistoryPDF = async ({
     doc.setTextColor(148, 163, 184);
     doc.text(doc.splitTextToSize(footerText, Math.max(40, pageWidth - margin * 2 - 42)), margin, pageHeight - 15);
     if (settings.showPageNumber !== false) {
-      const pageText = settings.pageNumberFormat === 'number-only'
-        ? String(page)
-        : settings.pageNumberFormat === 'custom'
-          ? String(settings.pageNumberCustom || 'Página {page} de {pages}').replace('{page}', String(page)).replace('{pages}', String(pageCount))
-          : `Página ${page} de ${pageCount}`;
+      const pageText = formatPdfPageNumber(settings.pageNumberFormat, settings.pageNumberCustom, page, pageCount);
       doc.text(pageText, rightEdge, pageHeight - 10, { align: 'right' });
     }
   }

@@ -1,0 +1,50 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]: Preparando capturas de muestra…
+  - main
+  - generic [ref=e3]:
+    - heading "Evolución del período" [level=2] [ref=e4]
+    - img [ref=e6]:
+      - generic [ref=e14]: Ventas pagadas
+      - generic [ref=e20]: Gastos registrados
+      - generic [ref=e21]: 01-sep
+      - generic [ref=e22]: 11-sep
+      - generic [ref=e23]: 22-sep
+  - generic [ref=e24]:
+    - heading "Atención requerida" [level=2] [ref=e25]
+    - img [ref=e27]:
+      - generic [ref=e31]: "19"
+      - generic [ref=e33]: Órdenes abiertas
+      - generic [ref=e34]: "7"
+      - generic [ref=e36]: Agotados
+      - generic [ref=e37]: "3"
+      - generic [ref=e39]: Stock bajo
+      - generic [ref=e40]: "5"
+      - generic [ref=e42]: Reordenar
+      - generic [ref=e43]: "4"
+  - generic [ref=e44]:
+    - heading "Productos más vendidos" [level=2] [ref=e45]
+    - img [ref=e47]:
+      - generic [ref=e48]: Papel carta Premium
+      - generic [ref=e50]: "48"
+      - generic [ref=e51]: Tóner TN-450
+      - generic [ref=e53]: "32"
+      - generic [ref=e54]: Carpeta ejecutiva
+      - generic [ref=e56]: "21"
+  - generic [ref=e57]:
+    - heading "Utilidad de referencia" [level=2] [ref=e58]
+    - img [ref=e60]:
+      - generic [ref=e61]: Tóner TN-450
+      - generic [ref=e63]: "6200"
+      - generic [ref=e64]: Resma Premium
+      - generic [ref=e66]: "4850"
+      - generic [ref=e67]: Carpeta ejecutiva
+      - generic [ref=e69]: "3120"
+  - generic [ref=e70]:
+    - heading "Ventas por caja" [level=2] [ref=e71]
+    - img [ref=e73]:
+      - generic [ref=e74]: Caja 1
+      - generic [ref=e76]: "18400"
+      - generic [ref=e77]: Caja 2
+      - generic [ref=e79]: "12100"
+      - generic [ref=e80]: Caja 3
+      - generic [ref=e82]: "8350"

@@ -7,6 +7,7 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'send', label: 'Enviar', description: 'Permite iniciar envíos manuales o pruebas desde la vista.' },
   { key: 'import', label: 'Importar', description: 'Permite cargar registros desde archivos o cargas masivas.' },
   { key: 'export', label: 'Exportar', description: 'Permite descargar o exportar información de la vista.' },
+  { key: 'viewOtherLocations', label: 'Consultar otras ubicaciones', description: 'Permite consultar existencias del producto en sucursales y almacenes activos del mismo grupo y rubro.' },
   { key: 'manage', label: 'Administrar caja', description: 'Permite mostrar y usar el botón para crear, editar y configurar cajas registradoras.' },
 ] as const;
 
@@ -111,15 +112,15 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   CONFIGURATION: ['read', 'edit'],
 
   SALES_CLIENTS: ['read', 'create', 'edit', 'delete', 'import', 'export'],
-  SALES_QUOTES: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
-  SALES_ORDERS: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
-  SALES_INVOICES: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
-  SALES_RECURRING: ['read', 'create', 'edit', 'delete', 'export'],
+  SALES_QUOTES: ['read', 'create', 'edit', 'delete', 'approve', 'export', 'viewOtherLocations'],
+  SALES_ORDERS: ['read', 'create', 'edit', 'delete', 'approve', 'export', 'viewOtherLocations'],
+  SALES_INVOICES: ['read', 'create', 'edit', 'delete', 'approve', 'export', 'viewOtherLocations'],
+  SALES_RECURRING: ['read', 'create', 'edit', 'delete', 'export', 'viewOtherLocations'],
   SALES_PAYMENTS: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
   SALES_RETURNS: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
-  SALES_CREDIT_NOTES: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
+  SALES_CREDIT_NOTES: ['read', 'create', 'edit', 'delete', 'approve', 'export', 'viewOtherLocations'],
   SALES_PRICE_LISTS: ['read', 'create', 'edit', 'import', 'export'],
-  RETAIL_POS: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
+  RETAIL_POS: ['read', 'create', 'edit', 'delete', 'approve', 'export', 'viewOtherLocations'],
   RETAIL_CASH_CONTROL: ['read', 'create', 'edit', 'delete', 'approve', 'export', 'manage'],
 
   // IDs separados para las pestañas del POS de restaurante.

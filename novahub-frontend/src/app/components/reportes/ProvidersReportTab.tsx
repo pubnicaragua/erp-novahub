@@ -316,8 +316,8 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           const base64Logo = await getBase64Image(logoUrl);
           if (base64Logo) {
             const logoId = wb.addImage({ base64: base64Logo, extension: 'png' });
-            ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 100, height: 100 } });
-            currentRow = 6;
+            ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 56, height: 40 } });
+            currentRow = 3;
           }
         }
 
@@ -386,7 +386,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           if (!el) return null;
           try {
             const canvas = await html2canvas(el, {
-              scale: 1,
+              scale: 2,
               imageTimeout: 1200,
               backgroundColor: '#ffffff',
               ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el),

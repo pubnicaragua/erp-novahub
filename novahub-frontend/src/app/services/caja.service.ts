@@ -145,6 +145,7 @@ export interface PosProductVariant {
     attributeName: string;
     value: string;
   }>;
+  isActive?: boolean;
   currentStock?: number | null;
 }
 
@@ -163,12 +164,16 @@ export interface PosProduct {
   brandId?: string | null;
   brandCustomerId?: string | null;
   brandCustomerName?: string | null;
+  categoryId?: string | null;
+  category?: { id: string; name: string } | null;
   trackInventory: boolean;
   isActive?: boolean;
   costPrice?: number;
   currentStock?: number | null;
   warehouseStock?: Array<{ warehouseId: string; warehouseName: string; currentStock: number; variantId?: string | null }>;
+  warehouseCatalog?: Array<{ id: string; name: string; isActive?: boolean }>;
   isVariable?: boolean;
+  hasVariants?: boolean;
   variants?: PosProductVariant[];
 }
 
