@@ -678,10 +678,22 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   />
                 ) : (
                 <Tabs value={productScope} onValueChange={(value) => setProductScope(value as 'branch' | 'linkedWarehouses')} className="w-full">
-                  <div className="mb-5 w-full overflow-x-auto custom-scrollbar">
-                    <TabsList className="flex h-auto w-max gap-1.5 rounded-2xl border border-border/40 bg-muted/20 p-1.5">
-                      <TabsTrigger value="branch" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Package className="size-4" />Productos de la sucursal</TabsTrigger>
-                      <TabsTrigger value="linkedWarehouses" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Warehouse className="size-4" />Productos de los Almacenes</TabsTrigger>
+                  <div className="mb-5 w-full max-w-full">
+                    <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl border border-border/40 bg-muted/20 p-1 sm:p-1.5">
+                      <TabsTrigger
+                        value="branch"
+                        className="flex h-auto min-h-[38px] items-center justify-center gap-1.5 rounded-xl px-2 py-2 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest leading-tight data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-w-0"
+                      >
+                        <Package className="size-3.5 sm:size-4 shrink-0" />
+                        <span className="truncate sm:whitespace-normal">Productos de la sucursal</span>
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="linkedWarehouses"
+                        className="flex h-auto min-h-[38px] items-center justify-center gap-1.5 rounded-xl px-2 py-2 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest leading-tight data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-w-0"
+                      >
+                        <Warehouse className="size-3.5 sm:size-4 shrink-0" />
+                        <span className="truncate sm:whitespace-normal">Productos de los Almacenes</span>
+                      </TabsTrigger>
                     </TabsList>
                   </div>
                   <TabsContent value="branch" className="m-0">

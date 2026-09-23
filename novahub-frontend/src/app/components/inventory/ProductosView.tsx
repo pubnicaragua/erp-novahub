@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag, FileText } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag, FileText, Columns, Clock, AlertCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -53,7 +53,7 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { resolveInventoryValuation } from '../../utils/inventory-valuation';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '../ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
@@ -154,16 +154,116 @@ const PRODUCT_TABLE_WIDTHS = {
   unit: '112px',
   min: '80px',
   max: '80px',
-  // Las bodegas suelen incluir el nombre de la sucursal y necesitan espacio
-  // para leerse completas dentro de la tabla. El texto de las etiquetas
-  // también puede envolver cuando el nombre supera este ancho.
   warehouse: '180px',
   stock: '96px',
   price: '112px',
   cost: '112px',
   status: '112px',
+  priceUpdatedAt: '140px',
+  priceStatus: '150px',
   actions: '128px',
 } as const;
+
+const PRODUCT_TABLE_WIDTH_NUMBERS: Record<string, number> = {
+  selector: 40,
+  code: 112,
+  name: 224,
+  brand: 144,
+  brandCustomer: 176,
+  note: 180,
+  category: 144,
+  unit: 112,
+  min: 80,
+  max: 80,
+  warehouse: 180,
+  stock: 96,
+  price: 112,
+  cost: 112,
+  status: 112,
+  priceUpdatedAt: 140,
+  priceStatus: 150,
+  actions: 128,
+};
+
+const COLUMN_DEFINITIONS = [
+  { key: 'code', label: 'Código / SKU' },
+  { key: 'name', label: 'Nombre / Imagen' },
+  { key: 'brand', label: 'Marca', productOnly: true },
+  { key: 'brandCustomer', label: 'Cliente', productOnly: true },
+  { key: 'note', label: 'Nota comercial' },
+  { key: 'category', label: 'Categoría' },
+  { key: 'unit', label: 'U. Medida', productOnly: true },
+  { key: 'min', label: 'Mínimo', productOnly: true },
+  { key: 'max', label: 'Máximo', productOnly: true },
+  { key: 'warehouse', label: 'Bodegas / Estado' },
+  { key: 'stock', label: 'Stock', productOnly: true },
+  { key: 'price', label: 'Precio Venta' },
+  { key: 'cost', label: 'Precio Costo', costOnly: true },
+  { key: 'priceUpdatedAt', label: 'Última Act. Precio' },
+  { key: 'priceStatus', label: 'Estado del Precio' },
+] as const;
+
+const DEFAULT_VISIBLE_COLUMNS: Record<string, boolean> = {
+  code: true,
+  name: true,
+  brand: true,
+  brandCustomer: true,
+  note: true,
+  category: true,
+  unit: true,
+  min: true,
+  max: true,
+  warehouse: true,
+  stock: true,
+  price: true,
+  cost: true,
+  priceUpdatedAt: true,
+  priceStatus: true,
+};
+
+const getPriceStatusInfo = (product: any) => {
+  const rawDate = product.priceUpdatedAt || product.updatedAt || product.createdAt;
+  if (!rawDate) {
+    return {
+      label: 'Desactualizado',
+      status: 'stale',
+      days: 999,
+      dateStr: 'Sin registro',
+      badgeClass: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
+    };
+  }
+
+  const priceDate = new Date(rawDate);
+  const diffTime = Math.max(0, Date.now() - priceDate.getTime());
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const dateFormatted = new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(priceDate);
+
+  if (diffDays <= 4) {
+    return {
+      label: 'Actualizado',
+      status: 'updated',
+      days: diffDays,
+      dateStr: dateFormatted,
+      badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+    };
+  } else if (diffDays <= 7) {
+    return {
+      label: 'Por actualizar',
+      status: 'due_soon',
+      days: diffDays,
+      dateStr: dateFormatted,
+      badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+    };
+  } else {
+    return {
+      label: 'Desactualizado',
+      status: 'stale',
+      days: diffDays,
+      dateStr: dateFormatted,
+      badgeClass: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
+    };
+  }
+};
 
 // Servicios no necesitan el ancho de las columnas operativas de productos;
 // su tabla solo conserva código, descripción, categoría, disponibilidad,
@@ -969,16 +1069,45 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('inventory-products-layout', 'table', 24 * 365);
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
+
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('novahub_product_visible_columns');
+      return saved ? { ...DEFAULT_VISIBLE_COLUMNS, ...JSON.parse(saved) } : DEFAULT_VISIBLE_COLUMNS;
+    } catch {
+      return DEFAULT_VISIBLE_COLUMNS;
+    }
+  });
+
+  const toggleColumnVisibility = useCallback((key: string) => {
+    setVisibleColumns((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem('novahub_product_visible_columns', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
   const catalogTableScrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const tableScroller = catalogTableScrollRef.current;
     if (tableScroller) tableScroller.scrollLeft = 0;
   }, [isSidebarCollapsed, isServiceView]);
-  // El ancho debe ser finito para que el contenedor w-max no entre en un
-  // cálculo circular con width: 100% y produzca un scrollbar casi inútil.
-  const catalogTableWidth = isServiceView
-    ? canViewInventoryCost ? SERVICE_TABLE_MIN_WIDTH.withCost : SERVICE_TABLE_MIN_WIDTH.withoutCost
-    : canViewInventoryCost ? 1920 : 1808;
+  const catalogTableWidth = useMemo(() => {
+    if (isServiceView) {
+      return canViewInventoryCost ? SERVICE_TABLE_MIN_WIDTH.withCost : SERVICE_TABLE_MIN_WIDTH.withoutCost;
+    }
+    let sum = PRODUCT_TABLE_WIDTH_NUMBERS.selector + PRODUCT_TABLE_WIDTH_NUMBERS.actions;
+    COLUMN_DEFINITIONS.forEach((col: any) => {
+      if (col.productOnly && isServiceView) return;
+      if (col.costOnly && !canViewInventoryCost) return;
+      if (visibleColumns[col.key] !== false) {
+        sum += PRODUCT_TABLE_WIDTH_NUMBERS[col.key] || 120;
+      }
+    });
+    return sum;
+  }, [isServiceView, canViewInventoryCost, visibleColumns]);
   const [configuredPriceLists, setConfiguredPriceLists] = useState<PriceList[]>([]);
   useEffect(() => {
     const controller = new AbortController();
@@ -1104,6 +1233,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setStockFilter((controlledStockStatusFilter || 'all') as any);
     }
   }, [controlledStockStatusFilter]);
+
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [initialImportIntroOpen, setInitialImportIntroOpen] = useState(false);
@@ -2501,7 +2631,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             }
           </button>
         </TableCell>
-        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}>
+        {visibleColumns.code !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}>
           <div className="flex flex-col gap-1 w-full min-w-[90px]">
             <Input
               ref={product.isNew ? newRowRef : undefined}
@@ -2515,8 +2645,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <span className="text-[9px] text-destructive font-bold uppercase tracking-wider leading-tight">{skuErrors.get(product.id)}</span>
             )}
           </div>
-        </TableCell>
-        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}>
+        </TableCell>}
+        {visibleColumns.name !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}>
           <div className="flex min-w-0 w-full items-start gap-2">
             <ProductImagePicker
               size="sm"
@@ -2555,18 +2685,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </Button>}
             </div>
           </div>
-        </TableCell>
-        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}>
+        </TableCell>}
+        {!isServiceView && visibleColumns.brand !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}>
           <span className="block max-w-[144px] truncate text-xs text-muted-foreground" title={(product as any).brand || undefined}>
             {(product as any).brand || '—'}
           </span>
         </TableCell>}
-        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.brandCustomer, minWidth: PRODUCT_TABLE_WIDTHS.brandCustomer }}>
+        {!isServiceView && visibleColumns.brandCustomer !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.brandCustomer, minWidth: PRODUCT_TABLE_WIDTHS.brandCustomer }}>
           <span className="block max-w-[176px] truncate text-xs text-muted-foreground" title={(product as any).brandCustomerName || (product as any).brandCustomer?.name || undefined}>
             {(product as any).brandCustomerName || (product as any).brandCustomer?.name || 'Sin asignar'}
           </span>
         </TableCell>}
-        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>
+        {visibleColumns.note !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>
           <Input
             value={product.commercialNote || ''}
             onChange={(e) => handleUpdateField(product.id, 'commercialNote', e.target.value)}
@@ -2577,8 +2707,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             disabled={isSaving}
           />
           <span className="mt-1 block text-right text-[9px] text-muted-foreground">{Array.from(String(product.commercialNote || '')).length}/100</span>
-        </TableCell>
-        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}>
+        </TableCell>}
+        {visibleColumns.category !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}>
           <div className="space-y-1.5 min-w-0">
             <Select 
               value={product.categoryId} 
@@ -2608,8 +2738,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </Button>
             </div>
           </div>
-        </TableCell>
-        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>
+        </TableCell>}
+        {!isServiceView && visibleColumns.unit !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>
           <Select 
             value={product.unit || 'unidad'} 
             onValueChange={(v) => handleUpdateField(product.id, 'unit', v)}
@@ -2632,7 +2762,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </SelectContent>
           </Select>
         </TableCell>}
-        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>
+        {!isServiceView && visibleColumns.min !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>
           <Input
             type="number"
             min={0}
@@ -2643,7 +2773,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             disabled={isSaving}
           />
         </TableCell>}
-        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>
+        {!isServiceView && visibleColumns.max !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>
           <Input
             type="number"
             min={0}
@@ -2655,7 +2785,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             disabled={isSaving}
           />
         </TableCell>}
-        {isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.status, minWidth: PRODUCT_TABLE_WIDTHS.status }}>
+        {visibleColumns.warehouse !== false && (isServiceView ? <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.status, minWidth: PRODUCT_TABLE_WIDTHS.status }}>
           <Select
             value={product.isActive === false ? 'false' : 'true'}
             onValueChange={(v) => handleUpdateField(product.id, 'isActive', v === 'true')}
@@ -2669,8 +2799,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <SelectItem value="false">No disponible</SelectItem>
             </SelectContent>
           </Select>
-        </TableCell>}
-        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>
+        </TableCell> : <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>
           {(() => {
             const allocations = (product.initialAllocations || []).slice(0, 1);
             return (
@@ -2696,8 +2825,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </div>
             );
           })()}
-        </TableCell>}
-        {!isServiceView && <TableCell className="align-top pt-3 text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}>
+        </TableCell>)}
+        {!isServiceView && visibleColumns.stock !== false && <TableCell className="align-top pt-3 text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}>
           {(() => {
             const allocations = (product.initialAllocations || []).slice(0, 1);
             const totalAllocated = allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
@@ -2726,7 +2855,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             );
           })()}
         </TableCell>}
-        {isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>
+        {isServiceView && visibleColumns.price !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>
           <div className="space-y-1">
             <div className="flex gap-1">
               <Select value={product.priceCurrency || baseCurrency} onValueChange={(value) => handlePriceCurrencyChange(product.id, value)} disabled={isSaving}>
@@ -2747,7 +2876,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <span className="block text-[9px] text-muted-foreground">Tasa: {formatExchangeRate(product.priceCurrency === baseCurrency ? 1 : exchangeRate)}</span>
           </div>
         </TableCell>}
-        {isServiceView && canViewInventoryCost && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>
+        {isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>
           <Input
             type="number"
             min={0}
@@ -2759,7 +2888,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             disabled={isSaving}
           />
         </TableCell>}
-        {!isServiceView && canViewInventoryCost && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>
+        {!isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>
           <Input
             type="number"
             min={0}
@@ -2771,6 +2900,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             disabled={isSaving}
           />
         </TableCell>}
+        {visibleColumns.priceUpdatedAt !== false && <TableCell className="align-top pt-3 text-xs text-muted-foreground" style={{ width: PRODUCT_TABLE_WIDTHS.priceUpdatedAt, minWidth: PRODUCT_TABLE_WIDTHS.priceUpdatedAt }}>—</TableCell>}
+        {visibleColumns.priceStatus !== false && <TableCell className="align-top pt-3 text-xs text-muted-foreground" style={{ width: PRODUCT_TABLE_WIDTHS.priceStatus, minWidth: PRODUCT_TABLE_WIDTHS.priceStatus }}>—</TableCell>}
         <TableCell className="text-right align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.actions, minWidth: PRODUCT_TABLE_WIDTHS.actions }}>
           <div className="flex items-center justify-end gap-1">
             <Button 
@@ -3900,6 +4031,97 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               ariaLabel={`Elegir distribución de ${isServiceView ? 'servicios' : 'productos'}`}
               dataTour="inventory-products-layout"
             />
+            {effectiveLayoutMode === 'table' && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-w-0 flex-1 gap-2 rounded-xl font-bold sm:flex-none"
+                    title="Personalizar visibilidad de columnas de la tabla"
+                  >
+                    <Columns className="size-4 text-primary" />
+                    Columnas
+                    <ChevronDown className="size-3.5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 space-y-1">
+                  <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/50">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                      Columnas Visibles
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        className="text-[10px] font-bold text-primary hover:underline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const allTrue: Record<string, boolean> = {};
+                          COLUMN_DEFINITIONS.forEach((col: any) => { allTrue[col.key] = true; });
+                          setVisibleColumns(allTrue);
+                        }}
+                      >
+                        Mostrar todas
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">•</span>
+                      <button
+                        type="button"
+                        className="text-[10px] font-bold text-muted-foreground hover:text-foreground hover:underline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const basicKeys = new Set(['code', 'name', 'brand', 'stock', 'price', 'priceStatus']);
+                          const minimal: Record<string, boolean> = {};
+                          COLUMN_DEFINITIONS.forEach((col: any) => { minimal[col.key] = basicKeys.has(col.key); });
+                          setVisibleColumns(minimal);
+                        }}
+                      >
+                        Solo básicas
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto py-1 space-y-0.5">
+                    {COLUMN_DEFINITIONS.filter((col: any) => {
+                      if (col.productOnly && isServiceView) return false;
+                      if (col.costOnly && !canViewInventoryCost) return false;
+                      return true;
+                    }).map((col: any) => {
+                      const isChecked = visibleColumns[col.key] !== false;
+                      return (
+                        <DropdownMenuItem
+                          key={col.key}
+                          onSelect={(e) => e.preventDefault()}
+                          onClick={() => toggleColumnVisibility(col.key)}
+                          className="flex items-center gap-2.5 text-xs font-semibold rounded-xl cursor-pointer px-2 py-1.5 hover:bg-accent"
+                        >
+                          <Checkbox
+                            checked={isChecked}
+                            onCheckedChange={() => toggleColumnVisibility(col.key)}
+                            className="size-4 rounded border-primary/40 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                          />
+                          <span className="flex-1 select-none">{col.label}</span>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </div>
+
+                  <DropdownMenuSeparator className="my-1" />
+                  <DropdownMenuItem
+                    className="text-xs font-bold text-primary justify-center rounded-xl cursor-pointer py-1.5"
+                    onSelect={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+                      try {
+                        localStorage.removeItem('novahub_product_visible_columns');
+                      } catch {}
+                    }}
+                  >
+                    Restablecer por defecto
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -4346,9 +4568,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           className="table-fixed"
           data-catalog-table={isServiceView ? 'service' : 'product'}
           data-catalog-cost={canViewInventoryCost ? 'visible' : 'hidden'}
-          style={isServiceView
-            ? { width: '100%', minWidth: `${catalogTableWidth}px`, maxWidth: 'none' }
-            : { width: `${catalogTableWidth}px`, minWidth: `${catalogTableWidth}px`, maxWidth: 'none' }}
+          style={{ width: `${catalogTableWidth}px`, minWidth: '100%', maxWidth: 'none' }}
         >
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -4369,20 +4589,22 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                   }
                 </button>
               </TableHead>
-               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Código' : 'Código/Sku'}<ColumnFilterMenu label={isServiceView ? 'Código' : 'Código/Sku'} sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}><span className="inline-flex items-center gap-1">Marca<ColumnFilterMenu label="Marca" options={brandOptions} selected={colFilters.state.brand?.values || []} onSelect={(values) => colFilters.setValues('brand', values)} sort={colFilters.state.brand?.sort || null} onSort={(sort) => colFilters.setSort('brand', sort)} /></span></TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.brandCustomer, minWidth: PRODUCT_TABLE_WIDTHS.brandCustomer }}>Cliente</TableHead>}
-              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>Nota comercial</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}><span className="inline-flex items-center gap-1">Categoría<ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} /></span></TableHead>
-               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>Min</TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>Max</TableHead>}
-               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: isServiceView ? PRODUCT_TABLE_WIDTHS.status : PRODUCT_TABLE_WIDTHS.warehouse, minWidth: isServiceView ? PRODUCT_TABLE_WIDTHS.status : PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Bodegas'}</TableHead>
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}><span className="inline-flex items-center gap-1">Stock<ColumnFilterMenu label="Stock" sort={colFilters.state.stock?.sort || null} onSort={(sort) => colFilters.setSort('stock', sort)} /></span></TableHead>}
-               {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>Precio</TableHead>}
-               {isServiceView && canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Costo servicio</TableHead>}
-               {!isServiceView && canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Precio Costo</TableHead>}
+               {visibleColumns.code !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Código' : 'Código/Sku'}<ColumnFilterMenu label={isServiceView ? 'Código' : 'Código/Sku'} sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>}
+              {visibleColumns.name !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>}
+              {!isServiceView && visibleColumns.brand !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.brand, minWidth: PRODUCT_TABLE_WIDTHS.brand }}><span className="inline-flex items-center gap-1">Marca<ColumnFilterMenu label="Marca" options={brandOptions} selected={colFilters.state.brand?.values || []} onSelect={(values) => colFilters.setValues('brand', values)} sort={colFilters.state.brand?.sort || null} onSort={(sort) => colFilters.setSort('brand', sort)} /></span></TableHead>}
+              {!isServiceView && visibleColumns.brandCustomer !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.brandCustomer, minWidth: PRODUCT_TABLE_WIDTHS.brandCustomer }}>Cliente</TableHead>}
+              {visibleColumns.note !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>Nota comercial</TableHead>}
+              {visibleColumns.category !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}><span className="inline-flex items-center gap-1">Categoría<ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} /></span></TableHead>}
+              {!isServiceView && visibleColumns.unit !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
+              {!isServiceView && visibleColumns.min !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>Min</TableHead>}
+              {!isServiceView && visibleColumns.max !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>Max</TableHead>}
+              {visibleColumns.warehouse !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: isServiceView ? PRODUCT_TABLE_WIDTHS.status : PRODUCT_TABLE_WIDTHS.warehouse, minWidth: isServiceView ? PRODUCT_TABLE_WIDTHS.status : PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Bodegas'}</TableHead>}
+              {!isServiceView && visibleColumns.stock !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}><span className="inline-flex items-center gap-1">Stock<ColumnFilterMenu label="Stock" sort={colFilters.state.stock?.sort || null} onSort={(sort) => colFilters.setSort('stock', sort)} /></span></TableHead>}
+              {isServiceView && visibleColumns.price !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>Precio</TableHead>}
+              {isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Costo servicio</TableHead>}
+              {!isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Precio Costo</TableHead>}
+              {visibleColumns.priceUpdatedAt !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.priceUpdatedAt, minWidth: PRODUCT_TABLE_WIDTHS.priceUpdatedAt }}>Última Act. Precio</TableHead>}
+              {visibleColumns.priceStatus !== false && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.priceStatus, minWidth: PRODUCT_TABLE_WIDTHS.priceStatus }}>Estado del Precio</TableHead>}
               <TableHead data-actions-column="compact" className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.actions, minWidth: PRODUCT_TABLE_WIDTHS.actions }}>Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -4395,7 +4617,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             {/* Existing products */}
             {filteredData.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                 <TableCell colSpan={isServiceView ? (canViewInventoryCost ? 9 : 8) : canViewInventoryCost ? 14 : 13} className="text-center py-12 text-muted-foreground">
+                 <TableCell colSpan={99} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">{products.length > 0 ? 'No hay coincidencias' : `No hay ${isServiceView ? 'servicios' : 'productos'} registrados`}</p>
                   <p className="text-sm">
@@ -4427,6 +4649,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 
                 const status = getStockStatus(product);
                 const warehouseNames = warehouseNamesForProduct(product);
+                const priceInfo = getPriceStatusInfo(product);
                  return (
                    <TableRow 
                       key={product.id} 
@@ -4444,8 +4667,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                          }
                        </button>
                      </TableCell>
-                     <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
-                    <TableCell>
+                     {visibleColumns.code !== false && <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>}
+                    {visibleColumns.name !== false && <TableCell>
                       <div className="flex w-full min-w-0 items-center gap-2.5 overflow-hidden">
                         {product.imageUrl ? (
                           <button
@@ -4492,8 +4715,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                           </div>
                         </div>
                       </div>
-                    </TableCell>
-                    {!isServiceView && <TableCell>
+                    </TableCell>}
+                    {!isServiceView && visibleColumns.brand !== false && <TableCell>
                       <div className="min-w-0">
                         <span className="block max-w-[144px] truncate text-xs text-muted-foreground" title={product.brand || product.details?.brand || undefined}>
                           {product.brand || product.details?.brand || '—'}
@@ -4501,7 +4724,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                         <span className="mt-0.5 block max-w-[144px] truncate text-[10px] text-muted-foreground">{product.brandCustomerName || 'Sin asignar'}</span>
                       </div>
                     </TableCell>}
-                    {!isServiceView && <TableCell>
+                    {!isServiceView && visibleColumns.brandCustomer !== false && <TableCell>
                       {(() => {
                         const customerName = String((product as any).brandCustomerName || (product as any).brandCustomer?.name || '').trim();
                         return <span className={`block max-w-[176px] truncate text-xs ${customerName ? 'text-foreground' : 'text-muted-foreground'}`} title={customerName || undefined}>
@@ -4509,26 +4732,26 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                         </span>;
                       })()}
                     </TableCell>}
-                    <TableCell className="max-w-[180px]">
+                    {visibleColumns.note !== false && <TableCell className="max-w-[180px]">
                       <span className="block max-w-[180px] truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}>
                         {product.commercialNote || '—'}
                       </span>
-                    </TableCell>
-                    <TableCell>
+                    </TableCell>}
+                    {visibleColumns.category !== false && <TableCell>
                       <span className="text-xs text-muted-foreground">{product.category?.name || '-'}</span>
-                    </TableCell>
-                    {!isServiceView && <TableCell>
+                    </TableCell>}
+                    {!isServiceView && visibleColumns.unit !== false && <TableCell>
                       <span className="text-xs text-muted-foreground capitalize">{product.unit || 'unidad'}</span>
                     </TableCell>}
-                    {!isServiceView && <TableCell>
+                    {!isServiceView && visibleColumns.min !== false && <TableCell>
                       <span className="text-xs text-muted-foreground text-right block">{Number(product.minStock || 0)}</span>
                     </TableCell>}
-                    {!isServiceView && <TableCell>
+                    {!isServiceView && visibleColumns.max !== false && <TableCell>
                       <span className="text-xs text-muted-foreground text-right block">
                         {getProductMaxStock(product) > 0 ? getProductMaxStock(product) : '-'}
                       </span>
                     </TableCell>}
-                     <TableCell>
+                    {visibleColumns.warehouse !== false && <TableCell>
                       {isServiceView ? (
                         <Badge variant="outline" className={product.isActive !== false ? 'bg-success/10 text-success border-success/20' : 'bg-destructive/10 text-destructive border-destructive/20'}>
                           {product.isActive !== false ? 'Disponible' : 'No disponible'}
@@ -4544,14 +4767,25 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             : <span className="text-[10px] text-muted-foreground">-</span>}
                         </div>
                       )}
-                    </TableCell>
-                    {!isServiceView && <TableCell className={`text-right font-medium tabular-nums ${getStockAlertColor(product)}`}>
+                    </TableCell>}
+                    {!isServiceView && visibleColumns.stock !== false && <TableCell className={`text-right font-medium tabular-nums ${getStockAlertColor(product)}`}>
                       {getProductStock(product)}
                     </TableCell>}
-                     {isServiceView && <TableCell className="text-right"><CurrencyValuationAmount {...getServicePricePresentation(product)} className="font-medium" /></TableCell>}
-                     {isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={baseCurrency} sourceExchangeRate={1} className="font-medium" /></TableCell>}
-                      {!isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={getProductInventoryValuation(product).costPrice} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
-                     <TableCell data-actions-column="compact" className="text-right">
+                    {isServiceView && visibleColumns.price !== false && <TableCell className="text-right"><CurrencyValuationAmount {...getServicePricePresentation(product)} className="font-medium" /></TableCell>}
+                    {isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={baseCurrency} sourceExchangeRate={1} className="font-medium" /></TableCell>}
+                    {!isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={getProductInventoryValuation(product).costPrice} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
+                    {visibleColumns.priceUpdatedAt !== false && <TableCell className="text-xs text-muted-foreground">{priceInfo.dateStr}</TableCell>}
+                    {visibleColumns.priceStatus !== false && <TableCell>
+                      <Badge variant="outline" className={`text-[10px] font-bold ${priceInfo.badgeClass}`}>
+                        {priceInfo.label}
+                        {priceInfo.days < 999 && (
+                          <span className="ml-1 text-[9px] opacity-80">
+                            ({priceInfo.days === 0 ? 'hoy' : `hace ${priceInfo.days}d`})
+                          </span>
+                        )}
+                      </Badge>
+                    </TableCell>}
+                    <TableCell data-actions-column="compact" className="text-right">
                          <div data-action-group="true" className="flex min-w-max items-center justify-end gap-1">
                          {canPerform(catalogPermissionModule, 'edit') && (
                              <Button 

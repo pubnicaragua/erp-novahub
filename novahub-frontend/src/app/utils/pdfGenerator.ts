@@ -13,6 +13,7 @@ import { renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-te
 import { createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
+import { normalizeEstimateImages } from '../types';
 
 type PdfRgb = [number, number, number];
 
@@ -442,6 +443,283 @@ function fitPdfImage(doc: jsPDF, image: string, maxWidth: number, maxHeight: num
   return { width, height };
 }
 
+function truncatePdfText(doc: jsPDF, text: string, maxWidth: number): string {
+  if (!text || doc.getTextWidth(text) <= maxWidth) return text || '';
+  let truncated = text;
+  while (truncated.length > 3 && doc.getTextWidth(`${truncated}...`) > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return `${truncated}...`;
+}
+
+async function appendAttachedImagesToPdf({
+  doc,
+  images,
+  primaryColor = [15, 118, 110],
+  textColor = [30, 41, 59],
+  fontName = 'helvetica',
+  tenantName,
+  documentTitle = 'Cotización',
+  documentNumber = '',
+}: {
+  doc: jsPDF;
+  images: unknown;
+  primaryColor?: PdfRgb;
+  textColor?: PdfRgb;
+  fontName?: string;
+  tenantName?: string;
+  documentTitle?: string;
+  documentNumber?: string;
+}) {
+  const normalized = normalizeEstimateImages(images);
+  if (normalized.items.length === 0) return;
+
+  const validImages = normalized.items.filter((img) => img && typeof img.url === 'string' && img.url.trim());
+  if (validImages.length === 0) return;
+
+  // Precargar las imágenes válidas en Base64
+  const loadedImages: Array<{
+    id: string;
+    url: string;
+    name: string;
+    title?: string;
+    description?: string;
+    caption?: string;
+    showFileName?: boolean;
+    base64Data: string;
+  }> = [];
+
+  for (const item of validImages) {
+    try {
+      const base64Data = item.url.startsWith('data:') ? item.url : await getBase64Image(item.url);
+      if (base64Data) {
+        loadedImages.push({
+          ...item,
+          title: item.title || item.caption || '',
+          description: item.description || (item.title && item.title !== item.caption ? item.caption : '') || '',
+          base64Data,
+        });
+      }
+    } catch {
+      // Ignorar imágenes inaccesibles
+    }
+  }
+
+  if (loadedImages.length === 0) return;
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const startY = margin + 14;
+  const footerSafeY = pageHeight - 15;
+  const availableHeight = footerSafeY - startY;
+
+  const columns = normalized.columns;
+  const size = normalized.size;
+  const showFileName = normalized.showFileName;
+
+  // Parámetros de paginación y dimensiones de tarjeta según distribución y tamaño
+  let maxPerPage = 4;
+  let cardWidth = contentWidth;
+  let defaultCardHeight = 112;
+  const colGap = 8;
+  const rowGap = 7;
+
+  if (columns === 1) {
+    cardWidth = contentWidth;
+    if (size === 'large') {
+      maxPerPage = 1;
+      defaultCardHeight = Math.min(185, availableHeight - 4);
+    } else if (size === 'small') {
+      maxPerPage = 2;
+      defaultCardHeight = 96;
+    } else {
+      // medium
+      maxPerPage = 2;
+      defaultCardHeight = 116;
+    }
+  } else {
+    // columns === 2
+    cardWidth = (contentWidth - colGap) / 2;
+    if (size === 'large') {
+      maxPerPage = 2;
+      defaultCardHeight = 130;
+    } else if (size === 'small') {
+      maxPerPage = 4;
+      defaultCardHeight = 92;
+    } else {
+      // medium
+      maxPerPage = 4;
+      defaultCardHeight = 110;
+    }
+  }
+
+  const totalPages = Math.ceil(loadedImages.length / maxPerPage);
+
+  for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
+    const pageItems = loadedImages.slice(pageIndex * maxPerPage, (pageIndex + 1) * maxPerPage);
+    if (pageItems.length === 0) continue;
+
+    doc.addPage();
+
+    // Encabezado institucional del anexo
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(margin, margin, contentWidth, 1.2, 'F');
+
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text('ANEXO: ESPECIFICACIONES VISUALES Y RENDERS', margin, margin + 7);
+
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    const pageIndicator = totalPages > 1 ? ` · Pág. ${pageIndex + 1} de ${totalPages}` : '';
+    const countIndicator = `${loadedImages.length} ${loadedImages.length === 1 ? 'imagen adjunta' : 'imágenes adjuntas'}`;
+    const headerInfo = [
+      documentTitle,
+      documentNumber ? `Nº ${documentNumber}` : '',
+      countIndicator,
+    ].filter(Boolean).join(' · ') + pageIndicator;
+    doc.text(headerInfo, pageWidth - margin, margin + 7, { align: 'right' });
+
+    // Línea separadora superior
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(margin, margin + 10, pageWidth - margin, margin + 10);
+
+    // Si solo hay 1 fila en la página para 2 columnas en tamaño mediano, darle altura cómoda
+    let currentCardHeight = defaultCardHeight;
+    if (columns === 2 && size === 'medium' && pageItems.length <= 2) {
+      currentCardHeight = 120;
+    }
+
+    for (let i = 0; i < pageItems.length; i += 1) {
+      const item = pageItems[i];
+      const globalIndex = pageIndex * maxPerPage + i;
+      let cardX = margin;
+      let cardY = startY;
+
+      if (columns === 1) {
+        cardX = margin;
+        cardY = startY + i * (currentCardHeight + rowGap);
+      } else {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        cardX = margin + col * (cardWidth + colGap);
+        cardY = startY + row * (currentCardHeight + rowGap);
+      }
+
+      // Contenedor / Card estilo tabla
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.setDrawColor(203, 213, 225); // slate-300
+      doc.setLineWidth(0.3);
+      doc.roundedRect(cardX, cardY, cardWidth, currentCardHeight, 2.5, 2.5, 'FD');
+
+      const pad = 4.5;
+      const innerW = cardWidth - pad * 2;
+
+      // Encabezado del contenedor: Título en badge
+      const displayTitle = item.title?.trim() || item.caption?.trim() || `IMAGEN ${globalIndex + 1}`;
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(6.8);
+      const titleTextWidth = doc.getTextWidth(displayTitle);
+      const maxBadgeW = showFileName ? innerW - 35 : innerW - 10;
+      const badgeW = Math.min(maxBadgeW, Math.max(22, titleTextWidth + 6));
+      const badgeH = 4.6;
+
+      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.roundedRect(cardX + pad, cardY + pad, badgeW, badgeH, 1, 1, 'F');
+      doc.setTextColor(255, 255, 255);
+      const clippedTitle = truncatePdfText(doc, displayTitle, badgeW - 3);
+      doc.text(clippedTitle, cardX + pad + badgeW / 2, cardY + pad + 3.2, { align: 'center' });
+
+      // Nombre del archivo en cabecera si está habilitado
+      if (showFileName && item.name?.trim()) {
+        doc.setFont(fontName, 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(100, 116, 139);
+        const maxNameW = innerW - badgeW - 3;
+        const truncatedName = truncatePdfText(doc, item.name.trim(), maxNameW);
+        doc.text(truncatedName, cardX + cardWidth - pad, cardY + pad + 3.2, { align: 'right' });
+      }
+
+      // Preparar descripción para calcular altura requerida sin dejar espacios vacíos
+      const descText = item.description?.trim() || '';
+      const maxDescLines = columns === 1 ? 4 : 3;
+      const descLines = descText ? doc.splitTextToSize(descText, innerW).slice(0, maxDescLines) : [];
+      const descHeight = descLines.length > 0 ? descLines.length * (columns === 1 ? 3.6 : 3.2) + 1 : 5;
+      const textBlockHeight = Math.max(8, descHeight);
+
+      // Marco interior para la imagen (se adapta a la altura del texto para evitar huecos gigantes)
+      const frameX = cardX + pad;
+      const frameY = cardY + pad + badgeH + 2.5;
+      const frameH = Math.max(40, currentCardHeight - (pad * 2 + badgeH + 4.5 + textBlockHeight));
+
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.2);
+      doc.roundedRect(frameX, frameY, innerW, frameH, 1.5, 1.5, 'FD');
+
+      // Escalar imagen preservando aspect ratio sin distorsión
+      const imgPadding = 2;
+      const maxImgW = innerW - imgPadding * 2;
+      const maxImgH = frameH - imgPadding * 2;
+      const fitted = fitPdfImage(doc, item.base64Data, maxImgW, maxImgH);
+
+      const imgX = frameX + (innerW - fitted.width) / 2;
+      const imgY = frameY + (frameH - fitted.height) / 2;
+
+      try {
+        doc.addImage(item.base64Data, 'PNG', imgX, imgY, fitted.width, fitted.height, undefined, 'FAST');
+      } catch {
+        doc.setFont(fontName, 'italic');
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
+        doc.text('No fue posible renderizar la imagen', frameX + innerW / 2, frameY + frameH / 2, { align: 'center' });
+      }
+
+      // Separador sutil antes de los textos
+      const sepY = frameY + frameH + 2;
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.2);
+      doc.line(cardX + pad, sepY, cardX + cardWidth - pad, sepY);
+
+      // Renderizado de la Descripción debajo de la imagen
+      let cursorY = sepY + 3.4;
+      if (descLines.length > 0) {
+        doc.setFont(fontName, 'normal');
+        doc.setFontSize(columns === 1 ? 7.6 : 6.8);
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.text(descLines, cardX + pad, cursorY);
+      } else {
+        doc.setFont(fontName, 'italic');
+        doc.setFontSize(6.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text('Especificación visual adjunta', cardX + pad, cursorY);
+      }
+    }
+
+    // Pie de página institucional del anexo
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+
+    if (tenantName) {
+      doc.setFont(fontName, 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(148, 163, 184);
+      doc.text(`Documento generado por ${tenantName}`, margin, pageHeight - 7);
+    }
+
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text('NovaHub ERP · Especificaciones visuales', pageWidth - margin, pageHeight - 7, { align: 'right' });
+  }
+}
+
 function paperSettingForDownload(format: Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>) {
   if (format === 'A4') return 'A4';
   if (format === 'legal') return 'LEGAL';
@@ -666,9 +944,10 @@ interface PDFGeneratorParams {
   save?: boolean;
   designOverride?: any;
   format?: PdfDownloadFormat;
+  withImages?: boolean;
 }
 
-export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true, designOverride, format: downloadFormat = 'configured' }: PDFGeneratorParams): Promise<{ doc: jsPDF | null; blob: Blob }> => {
+export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true, designOverride, format: downloadFormat = 'configured', withImages = true }: PDFGeneratorParams): Promise<{ doc: jsPDF | null; blob: Blob }> => {
   const savedDesign = designOverride || await getPdfDesign(documentType);
   // Las vistas antiguas todavía pueden pasar el logo del tema global. Cuando
   // no lo hacen, el branding de sesión representa la sucursal activa y debe
@@ -708,10 +987,29 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       },
     };
     const settings = { ...design, paperSize: downloadFormat === 'configured' ? design.paperSize : paperSettingForDownload(downloadFormat as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>), orientation: design.orientation || 'portrait' };
-    if (downloadFormat !== 'roll-58' && downloadFormat !== 'roll-80') {
-      const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(savedDesign.layoutZones.definition, targetKey, settings), settings, targetKey, data, fileName: buildSalesPdfFileName(documentType, estimate.number, downloadFormat), save });
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(savedDesign.layoutZones.definition, targetKey, settings), settings, targetKey, data, fileName: buildSalesPdfFileName(documentType, estimate.number, downloadFormat), save: false });
+    const normalizedEstimateImages = normalizeEstimateImages(estimate?.images);
+    if (withImages !== false && normalizedEstimateImages.items.length > 0 && rendered.doc) {
+        await appendAttachedImagesToPdf({
+          doc: rendered.doc,
+          images: estimate.images,
+          primaryColor: pdfHexToRgb(design.primaryColor, [15, 118, 110]),
+          textColor: pdfHexToRgb(design.textColor, [30, 41, 59]),
+          fontName: 'helvetica',
+          tenantName,
+          documentTitle: ({ estimate: 'Cotización', order: 'Orden de Venta', invoice: 'Factura' } as Record<string, string>)[documentType] || 'Cotización',
+          documentNumber: estimate.number || '',
+        });
+        const updatedBlob = rendered.doc.output('blob');
+        if (save) {
+          savePdfBlob(updatedBlob, buildSalesPdfFileName(documentType, estimate.number, downloadFormat));
+        }
+        return { doc: rendered.doc, blob: updatedBlob };
+      }
+      if (save) {
+        savePdfBlob(rendered.blob, buildSalesPdfFileName(documentType, estimate.number, downloadFormat));
+      }
       return rendered;
-    }
   }
   if (!isVirtualSystemDefaultDesign(savedDesign) && (savedDesign?.engine === 'HTML_TEMPLATE' || savedDesign?.sourceType === 'UPLOADED_PDF')) {
     return generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo: resolvedTenantLogo, documentType, format: downloadFormat, save });
@@ -1024,6 +1322,20 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   if (design.showPageNumber !== false) {
     const pageText = formatPdfPageNumber(design.pageNumberFormat, design.pageNumberCustom, 1, 1);
     doc.text(pageText, rightEdge, pageHeight - 10, { align: 'right' });
+  }
+
+  const fallbackNormalizedImages = normalizeEstimateImages(estimate?.images);
+  if (withImages !== false && fallbackNormalizedImages.items.length > 0) {
+    await appendAttachedImagesToPdf({
+      doc,
+      images: estimate.images,
+      primaryColor,
+      textColor,
+      fontName,
+      tenantName,
+      documentTitle: ({ estimate: 'Cotización', order: 'Orden de Venta', invoice: 'Factura' } as Record<string, string>)[documentType] || 'Cotización',
+      documentNumber: estimate.number || '',
+    });
   }
 
   const blob = doc.output('blob');
@@ -1763,6 +2075,7 @@ export async function previewSalesTransactionPDF({
   tenantLogo,
   documentType = 'estimate',
   format = 'configured',
+  withImages = true,
 }: {
   document: any;
   tenantName: string;
@@ -1770,6 +2083,7 @@ export async function previewSalesTransactionPDF({
   tenantLogo?: string;
   documentType?: SalesTransactionDocumentType;
   format?: PdfDownloadFormat;
+  withImages?: boolean;
 }) {
   const title = SALES_TRANSACTION_TITLES[documentType];
   const previewWindow = window.open('', '_blank', 'width=1000,height=850');
@@ -1788,6 +2102,7 @@ export async function previewSalesTransactionPDF({
       documentType,
       format,
       save: false,
+      withImages,
     });
     const fileName = buildSalesPdfFileName(documentType, transaction?.number, format);
     // El PDF ya fue generado en el navegador. Subirlo otra vez al backend
@@ -1817,6 +2132,7 @@ export async function generateSalesTransactionPDF({
   format = 'configured',
   save = true,
   designOverride,
+  withImages = true,
 }: {
   document: any;
   tenantName: string;
@@ -1826,6 +2142,7 @@ export async function generateSalesTransactionPDF({
   format?: PdfDownloadFormat;
   save?: boolean;
   designOverride?: any;
+  withImages?: boolean;
 }) {
   const target = getPdfTemplateTarget(documentType).key;
   const design = designOverride || await getPdfDesign(target);
@@ -1886,6 +2203,7 @@ export async function generateSalesTransactionPDF({
     save,
     format,
     designOverride: withPdfDownloadFormat(design, format),
+    withImages,
   });
 }
 

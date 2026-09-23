@@ -9,6 +9,7 @@ import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import type { SalesOtherLocationsViewModule } from '../../services/inventario.service';
 import { SalesOtherLocationsDialog } from './SalesOtherLocationsDialog';
+import { formatCurrencyAmount } from '../../utils/currency';
 import {
   formatSalesStock,
   getAvailableSalesStock,
@@ -242,6 +243,22 @@ export function SalesProductPicker({
     closeAndReset(false);
   };
 
+  const renderPrice = (product: SalesCatalogItem) => {
+    const rawPrice = product.salePrice ?? product.price;
+    if (rawPrice === undefined || rawPrice === null) return null;
+    const numericPrice = Number(rawPrice);
+    if (!Number.isFinite(numericPrice)) return null;
+    const currency = (product as any).priceCurrency || 'NIO';
+    return (
+      <Badge
+        variant="outline"
+          className="shrink-0 font-semibold border-green-500/30 text-green-700 dark:text-green-300 bg-green-50/50 dark:bg-green-950/30"
+      >
+        Precio: {formatCurrencyAmount(numericPrice, currency)}
+      </Badge>
+    );
+  };
+
   const renderAvailability = (product: SalesCatalogItem, scopedVariantId?: string | null) => {
     if (getItemType(product) === 'SERVICE') return null;
     if (!tracksSalesInventory(product)) return <Badge variant="outline" className="shrink-0">No controla inventario</Badge>;
@@ -302,6 +319,7 @@ export function SalesProductPicker({
             </div>
           </div>
           <div className={cn('flex min-w-0 flex-wrap items-center gap-2', view === 'list' && 'ml-auto justify-end')}>
+            {renderPrice(product)}
             {renderAvailability(product, scopedVariantId)}
             {hasVariantsButNoneActive && <Badge variant="outline" className="border-amber-500/30 text-amber-700 dark:text-amber-300">Sin variantes activas</Badge>}
             {view === 'list' && stock !== null && tracksSalesInventory(product) && <span className="sr-only">{formatSalesStock(stock)} disponibles</span>}
