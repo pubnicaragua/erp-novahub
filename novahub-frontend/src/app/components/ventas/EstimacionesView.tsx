@@ -41,7 +41,9 @@ import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtr
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
+import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 
@@ -52,6 +54,8 @@ interface EstimacionesViewProps {
   onConvertedToOrder?: (orderId: string) => void;
   customers?: Customer[];
   products?: Product[];
+  productsLoading?: boolean;
+  productsError?: boolean;
   warehouses?: any[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
@@ -89,7 +93,7 @@ const isLocalEstimate = (id: string | number | undefined | null) => String(id ||
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
 
-export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
+export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
@@ -102,6 +106,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Estimate | null>(null);
+  const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
   const [detailEstimate, setDetailEstimate] = useState<Estimate | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
@@ -871,8 +876,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                 {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
+                  const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                  const newItems = [...(localDoc.items || []), { id: itemId, itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   commitLocalDoc({ ...localDoc, items: newItems } as Estimate);
+                  setSalesProductPickerItemId(itemId);
                 }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
                 <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                   <Plus className="size-3 mr-2" /> Agregar coste extra
@@ -910,26 +917,33 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 <div key={item.id || idx} data-item-layout="standard" data-pricing-mode={pricingMode} className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div data-item-role="product-area" className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
                       <div className={cn('sales-line-product-fields sales-quote-line-product-fields', quoteLineProductLayoutClass)}>
-                        <div data-item-role="product-picker" className="sales-line-product-picker min-w-0"><Combobox
-                      options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({
-                        label: p.name,
-                        value: p.id,
-                        description: `Código: ${p.code}${p.commercialNote ? ` · Nota: ${p.commercialNote}` : ''}`,
-                      }))}
+                        <div data-item-role="product-picker" className="sales-line-product-picker min-w-0"><SalesProductPicker
+                      otherLocationsPermissionModule="SALES_QUOTES"
+                      products={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog) as SalesCatalogItem[]}
                       value={item.productId || ''}
-                      onChange={(val) => {
+                      disabled={!localDoc?.customerId || productsLoading}
+                      itemType={resolveItemType(item) === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
+                      warehouseId={localDoc?.warehouseId}
+                      allowOutOfStockSelection
+                      variantId={item.variantId}
+                      catalogLoading={productsLoading}
+                      catalogError={productsError}
+                      open={salesProductPickerItemId === String(item.id || idx)}
+                      onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
+                      onChange={(val, pickedVariant) => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
+                        const selectedVariant = resolveItemType(item) === 'SERVICE' ? null : pickedVariant || getSingleSalesVariant(selectedProd);
                         const effectivePriceListId = (item as any).priceListId || (localDoc as any).priceListId || null;
                         if (val && hasSalesProductPriceListConflict(newItems, val, effectivePriceListId, idx, (localDoc as any).priceListId || null)) {
                           toast.error('Este producto ya está agregado con la misma lista de precios.');
                           return;
                         }
                         newItems[idx].productId = val;
-                        newItems[idx].variantId = null;
-                        newItems[idx].variantSku = null;
-                        newItems[idx].variantName = null;
-                        newItems[idx].variantAttributes = null;
+                        newItems[idx].variantId = selectedVariant?.id || null;
+                        newItems[idx].variantSku = selectedVariant?.sku || null;
+                        newItems[idx].variantName = selectedVariant?.name || null;
+                        newItems[idx].variantAttributes = selectedVariant?.attributes || null;
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
                           newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
@@ -959,19 +973,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         } as any);
                       }}
                       placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
-                      disabled={!localDoc?.customerId}
-                      ariaLabel={itemType === 'SERVICE' ? 'Seleccionar servicio' : 'Seleccionar producto'}
-                     />
+                      />
                      {itemProduct && (
                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1">
                          <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">Código {itemProduct.code}</span>
-                         {itemType === 'SERVICE' ? (
-                           <Badge variant="outline" className="h-4 border-none bg-muted/20 px-1.5 text-[9px] font-black text-muted-foreground">Servicio</Badge>
-                         ) : (
-                           <Badge variant="outline" className="h-4 border-none bg-muted/30 px-1.5 text-[9px] font-black text-muted-foreground">
-                             {activeVariantCount > 1 ? 'Producto con variantes' : 'Producto simple · sin variantes'}
-                           </Badge>
-                         )}
                        </div>
                      )}
                      </div>
@@ -980,8 +985,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                            className="sales-line-variant sales-quote-line-variant-column"
                            labelLayout="stacked"
                            showLabel={false}
-                           placeholder="Seleccionar variante"
-                           product={itemProduct}
+                         placeholder="Seleccionar variante"
+                         allowOutOfStockSelection
+                         product={itemProduct}
+                         warehouseId={localDoc?.warehouseId}
                            value={item.variantId}
                            onChange={(variantId, variant) => {
                              const nextItems = [...(localDoc.items || [])] as any[];

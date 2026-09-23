@@ -314,8 +314,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           const base64Logo = await getBase64Image(logoUrl);
           if (base64Logo) {
             const logoId = wb.addImage({ base64: base64Logo, extension: 'png' });
-            ws.addImage(logoId, { tl: { col: 1.5, row: 0 }, ext: { width: 100, height: 100 } });
-            currentRow = 6;
+            ws.addImage(logoId, { tl: { col: 1.5, row: 0 }, ext: { width: 56, height: 40 } });
+            currentRow = 3;
           }
         }
 
@@ -363,7 +363,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const captureCanvas = async (elementId: string) => {
           const el = document.getElementById(elementId); if (!el) return null;
           try {
-            const canvas = await html2canvas(el, { scale: 1, imageTimeout: 1200, backgroundColor: '#ffffff', ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el), onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, `#${primaryHex}`, false); prepareExcelCanvasClone([elementId], clonedDoc); } });
+            const canvas = await html2canvas(el, { scale: 2, imageTimeout: 1200, backgroundColor: '#ffffff', ignoreElements: (element) => shouldIgnoreExcelCanvasElement(element, el), onclone: (clonedDoc) => { sanitizeHtml2CanvasOklch([elementId], clonedDoc, `#${primaryHex}`, false); prepareExcelCanvasClone([elementId], clonedDoc); } });
             const { width, height } = fitExcelImageDimensions(canvas.width, canvas.height);
             return { base64: canvas.toDataURL('image/png'), width, height };
           } catch (e: any) { console.warn(e); return null; }

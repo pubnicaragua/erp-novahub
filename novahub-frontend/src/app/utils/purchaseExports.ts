@@ -171,7 +171,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
   const settings = overrideSettings || await getPdfDesignSettings(targetKey);
   const configuredLogo = getPdfTemplateLogo(settings, tenantLogo, targetKey);
   const resolvedLogo = configuredLogo || (typeof document.supplierData?.logo === 'string' ? document.supplierData.logo : undefined);
-  if (format !== 'roll-58') {
+  if (!isRoll(format)) {
     const paperSettings = withPaperFormat(settings, format);
     const renderSettings = { paperSize: 'LETTER', orientation: 'portrait' as const, ...paperSettings };
     const fieldData = Object.fromEntries((document.fields || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
@@ -251,7 +251,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
   return doc;
 }
 
-export async function generatePurchaseListPDF({ title, rows, columns, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.list', summary, summaryPlacement = 'box' }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; summary?: { label: string; value: unknown; columnIndex?: number }; summaryPlacement?: 'box' | 'footer' }) {
+export async function generatePurchaseListPDF({ title, rows, columns, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.list', summary, summaryPlacement = 'box', subtitle }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; summary?: { label: string; value: unknown; columnIndex?: number }; summaryPlacement?: 'box' | 'footer'; subtitle?: string }) {
   if (isRoll(format)) throw new Error('Los reportes generales solo están disponibles en tamaños de página PDF.');
   // La plantilla se resuelve por la salida real. Si esa salida aún no tiene
   // diseño propio, se usa la plantilla global de listados como respaldo para
@@ -279,6 +279,7 @@ export async function generatePurchaseListPDF({ title, rows, columns, tenantName
     tenantName,
     tenantLogo: resolvedLogo,
     settings: paperSettings,
+    subtitle,
     columns,
     rows,
     totals: summary && summaryPlacement !== 'footer' ? { total: valueText(summary.value) } : undefined,

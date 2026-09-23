@@ -931,7 +931,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   <span>Moneda: {currencyLabels[String(detailPayment.currency || baseCurrency).toUpperCase()] || 'No especificada'}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {canPerform('SALES_PAYMENTS', 'export') && <PdfDownloadButton onDownload={(format) => { void handleExportPDF(detailPayment, format); }} />}
+                  {canPerform('SALES_PAYMENTS', 'export') && <PdfDownloadButton onDownload={(format) => { void handleExportPDF(detailPayment, format); }} includePageSizes includeRoll />}
                 </div>
               </div>
 

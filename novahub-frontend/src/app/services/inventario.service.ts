@@ -27,6 +27,24 @@ export interface SimilarProductGroup {
   matches: SimilarProductMatch[];
 }
 
+export interface SalesProductOtherLocation {
+  branchName: string;
+  warehouseName: string;
+  sourceType: 'BODEGA_SUCURSAL' | 'ALMACEN_RUBRO' | 'ALMACEN_GRUPO';
+  isCurrentBranch?: boolean;
+  available: number;
+  baseAvailable?: number;
+  variantStocks: Array<{ sku: string; name: string; available: number }>;
+}
+
+export type SalesOtherLocationsViewModule =
+  | 'SALES_QUOTES'
+  | 'SALES_ORDERS'
+  | 'SALES_INVOICES'
+  | 'SALES_RECURRING'
+  | 'SALES_CREDIT_NOTES'
+  | 'RETAIL_POS';
+
 export type SimilarityResolutionAction = 'USE_EXISTING' | 'CREATE_NEW';
 
 export interface SimilarityResolution {
@@ -44,7 +62,34 @@ export const inventoryService = {
     const products = await api.get<PaginatedResponse<Product>>('/inventory/products', { params: filters as any, signal });
     return resolveStorageReferences(products);
   },
-  getProductLookup: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/products/lookup', { params: filters as any, signal }),
+  getProductLookup: async (filters?: ApiFilters, signal?: AbortSignal) => {
+    const products = await api.get<PaginatedResponse<any>>('/inventory/products/lookup', { params: filters as any, signal });
+    return resolveStorageReferences(products);
+  },
+  getAllProductLookupPages: async (filters?: ApiFilters, signal?: AbortSignal) => {
+    const pageSize = 200;
+    const firstPage = await inventoryService.getProductLookup({ ...filters, page: 1, pageSize }, signal);
+    const pageCount = Math.max(1, Number(firstPage.meta?.totalPages) || 1);
+    if (pageCount === 1) return firstPage;
+    const remainingPages: typeof firstPage[] = [];
+    const batchSize = 4;
+    for (let firstPageInBatch = 2; firstPageInBatch <= pageCount; firstPageInBatch += batchSize) {
+      const batchPageCount = Math.min(batchSize, pageCount - firstPageInBatch + 1);
+      const batch = await Promise.all(Array.from({ length: batchPageCount }, (_, index) =>
+        inventoryService.getProductLookup({ ...filters, page: firstPageInBatch + index, pageSize }, signal),
+      ));
+      remainingPages.push(...batch);
+    }
+    return {
+      ...firstPage,
+      data: [...firstPage.data, ...remainingPages.flatMap((page) => page.data)],
+    };
+  },
+  getSalesProductOtherLocations: (productId: string, warehouseId: string | null | undefined, viewModule: SalesOtherLocationsViewModule, signal?: AbortSignal) =>
+    api.get<{ productId: string; locations: SalesProductOtherLocation[] }>(
+      `/inventory/products/${encodeURIComponent(productId)}/other-locations`,
+      { params: { ...(warehouseId ? { warehouseId } : {}), viewModule }, signal },
+    ),
   getProduct: async (id: string, signal?: AbortSignal) => {
     const product = await api.get<Product>(`/inventory/products/${id}`, { signal });
     return resolveStorageReferences(product);

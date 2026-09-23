@@ -42,7 +42,9 @@ import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtr
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
+import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getSalesOrderOriginBadge } from '../../utils/document-origin-badges';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
@@ -65,6 +67,8 @@ interface OrdenesVentaViewProps {
   onClearTargetOrderId?: () => void;
   customers?: Customer[];
   products?: Product[];
+  productsLoading?: boolean;
+  productsError?: boolean;
   warehouses?: any[];
   employees?: Employee[];
   pagination?: SalesPaginationControls;
@@ -111,7 +115,7 @@ const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] 
   return issues;
 };
 
-export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
+export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
@@ -128,6 +132,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
+  const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
   const [detailOrder, setDetailOrder] = useState<SalesOrder | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
@@ -146,23 +151,21 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       || (itemCode ? products.find((product) => String(product.code || '').trim().toLowerCase() === itemCode) : undefined)
       || (itemName ? products.find((product) => String(product.name || '').trim().toLowerCase() === itemName) : undefined);
   };
-  const getLineProductOptions = (item: any) => {
+  const getLineProductCatalog = (item: any): SalesCatalogItem[] => {
     const itemType = resolveItemType(item);
-    const catalog = itemType === 'SERVICE' ? serviceCatalog : productCatalog;
-    const options = catalog.map((product) => ({
-      label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${product.code} - ${product.name}`,
-      value: product.id,
-      description: product.commercialNote ? `Nota: ${product.commercialNote}` : undefined,
-    }));
-    const hasSelectedOption = Boolean(item.productId) && options.some((option) => option.value === item.productId);
-    if (item.productId && !hasSelectedOption && String(item.description || '').trim()) {
-      options.unshift({
-        label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${item.description}`,
-        value: item.productId,
-        description: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
+    const catalog: SalesCatalogItem[] = [...(itemType === 'SERVICE' ? serviceCatalog : productCatalog)];
+    if (item.productId && !catalog.some((product) => String(product.id) === String(item.productId))) {
+      const linkedProduct = findProductForItem(item);
+      catalog.unshift(linkedProduct || {
+        id: item.productId,
+        code: item.productCode || item.code || '',
+        name: item.description || 'Artículo vinculado',
+        itemType,
+        trackInventory: false,
+        variants: [],
       });
     }
-    return options;
+    return catalog;
   };
   const showVariantColumn = (localDoc?.items || []).some((item: any) => {
     const product = findProductForItem(item);
@@ -269,7 +272,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         const availableStock = product && product.itemType !== 'SERVICE'
           ? getProductStockForSalesWarehouse(product, orderForConversion.warehouseId, item.variantId)
           : undefined;
-        if (availableStock !== undefined && availableStock < Number(item.quantity)) {
+        if (availableStock !== null && availableStock !== undefined && availableStock < Number(item.quantity)) {
           toast.error(`Stock insuficiente para ${item.description} en la bodega seleccionada`);
           return;
         }
@@ -1067,8 +1070,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                 {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} data-testid={itemType === 'PRODUCT' ? 'sales-order-add-product' : 'sales-order-add-service'} type="button" variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
+                  const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                  const newItems = [...(localDoc.items || []), { id: itemId, itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
+                  setSalesProductPickerItemId(itemId);
                 }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
                 <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                   <Plus className="size-3 mr-2" /> Agregar coste extra
@@ -1098,22 +1103,32 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   <div data-item-role="product-area" className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
                     <div className={cn('sales-line-product-fields sales-quote-line-product-fields', productLineLayoutClass)}>
                       <div data-item-role="product-picker" data-testid={`sales-order-product-${idx}`} className="sales-line-product-picker min-w-0">
-                        <Combobox 
-                          options={getLineProductOptions(item)}
+                        <SalesProductPicker
+                          otherLocationsPermissionModule="SALES_ORDERS"
+                          products={getLineProductCatalog(item) as SalesCatalogItem[]}
                           value={item.productId || ''}
-                          onChange={(val) => {
+                          disabled={!localDoc?.customerId || productsLoading}
+                          itemType={String(resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
+                          warehouseId={item.warehouseId || localDoc?.warehouseId}
+                          variantId={item.variantId}
+                          catalogLoading={productsLoading}
+                          catalogError={productsError}
+                          open={salesProductPickerItemId === String(item.id || idx)}
+                          onOpenChange={(open) => setSalesProductPickerItemId(open ? String(item.id || idx) : null)}
+                          onChange={(val, pickedVariant) => {
                             const newItems = [...(localDoc.items || [])] as any[];
-                            const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
+                            const selectedProd = getLineProductCatalog(item).find(p => p.id === val);
+                            const selectedVariant = resolveItemType(item) === 'SERVICE' ? null : pickedVariant || getSingleSalesVariant(selectedProd);
                             const effectivePriceListId = newItems[idx].priceListId || localDoc.priceListId || null;
                             if (val && hasSalesProductPriceListConflict(newItems, val, effectivePriceListId, idx, localDoc.priceListId || null)) {
                               toast.error('Este producto ya está agregado con la misma lista de precios.');
                               return;
                             }
                             newItems[idx].productId = val;
-                            newItems[idx].variantId = null;
-                            newItems[idx].variantSku = null;
-                            newItems[idx].variantName = null;
-                            newItems[idx].variantAttributes = null;
+                            newItems[idx].variantId = selectedVariant?.id || null;
+                            newItems[idx].variantSku = selectedVariant?.sku || null;
+                            newItems[idx].variantName = selectedVariant?.name || null;
+                            newItems[idx].variantAttributes = selectedVariant?.attributes || null;
                             if (selectedProd) {
                               newItems[idx].description = selectedProd.name;
                               newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
@@ -1135,7 +1150,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                           }}
                           placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
-                          disabled={!localDoc?.customerId}
                         />
                       </div>
                       {String(resolveItemType(item)).toUpperCase() !== 'SERVICE' && (
@@ -1145,6 +1159,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           showLabel={false}
                           placeholder="Seleccionar variante"
                           product={products.find((product) => product.id === item.productId)}
+                          warehouseId={item.warehouseId || localDoc?.warehouseId}
                           value={item.variantId}
                           onChange={(variantId, variant) => setLocalDoc({
                             ...localDoc,
@@ -1216,19 +1231,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                               </>
                             );
                           }
-                          const stock = getProductStockForSalesWarehouse(p, localDoc?.warehouseId, item.variantId);
                           return (
                             <>
-                              <Badge variant="outline" className={cn(
-                                "text-[9px] font-black border-none px-1.5 py-0 h-4 bg-muted/20",
-                                stock <= 0 ? "text-rose-500 bg-rose-500/10" : "text-emerald-500 bg-emerald-500/10"
-                              )}>
-                                STOCK: {stock}
-                              </Badge>
                               <SalesWarehouseStockHint
                                 product={p}
                                 warehouses={warehouses}
-                                warehouseId={localDoc?.warehouseId}
+                                warehouseId={item.warehouseId || localDoc?.warehouseId}
                                 variantId={item.variantId}
                                 className="basis-full"
                               />
@@ -1280,16 +1288,16 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     <Input data-testid={`sales-order-quantity-${idx}`}
                       type="number" 
                       min="0"
-                       max={resolveItemType(item) === 'SERVICE' ? 1000000 : (products.find(x => x.id === item.productId) ? getProductStockForSalesWarehouse(products.find(x => x.id === item.productId), localDoc?.warehouseId, item.variantId) : 1000000)}
+                       max={resolveItemType(item) === 'SERVICE' ? 1000000 : (products.find(x => x.id === item.productId) ? getProductStockForSalesWarehouse(products.find(x => x.id === item.productId), item.warehouseId || localDoc?.warehouseId, item.variantId) ?? 1000000 : 1000000)}
                       value={Number(item.quantity) || ''} 
                       placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);
                         const p = products.find(x => x.id === item.productId);
                         const availableStock = p && resolveItemType(item) !== 'SERVICE'
-                          ? getProductStockForSalesWarehouse(p, localDoc?.warehouseId, item.variantId)
+                          ? getProductStockForSalesWarehouse(p, item.warehouseId || localDoc?.warehouseId, item.variantId)
                           : undefined;
-                        if (availableStock !== undefined && newQty > availableStock) {
+                        if (availableStock !== null && availableStock !== undefined && newQty > availableStock) {
                           toast.warning(`Stock insuficiente en la bodega seleccionada. Disponible: ${availableStock}`, { id: `stock-warn-${idx}` });
                           newQty = availableStock;
                         }

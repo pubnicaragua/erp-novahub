@@ -45,6 +45,20 @@ export interface PdfTemplateChart {
   values?: number[];
   series?: Array<{ label: string; values: number[]; color?: string }>;
   colors?: string[];
+  valueFormat?: 'currency' | 'count' | 'percent';
+  unitLabel?: string;
+  imageDataUrl?: string;
+  imageAspectRatio?: number;
+}
+
+export function formatPdfPageNumber(format: unknown, customTemplate: unknown, page: number, pageCount: number) {
+  const currentPage = Math.max(1, Math.floor(Number(page) || 1));
+  const totalPages = Math.max(currentPage, Math.floor(Number(pageCount) || 1));
+  if (format === 'number-only') return String(currentPage);
+  if (format !== 'custom') return `Página ${currentPage} de ${totalPages}`;
+  const template = String(customTemplate || 'Página {page} de {pages}')
+    .replace(/\{(page|pages)\}([.,]0+)(?!\d)/gi, '{$1}');
+  return template.replace(/\{page\}/gi, String(currentPage)).replace(/\{pages\}/gi, String(totalPages));
 }
 
 export interface PdfTemplateNode {
@@ -391,7 +405,7 @@ export function createPdfTemplateSampleData(targetKey: string): PdfTemplateData 
     ];
     return {
       ...base,
-      document: { ...base.document, title: 'RESUMEN DE GESTIÓN', number: 'DASH-0001', period: 'Período: 01/09/2026 al 09/09/2026', meta: 'Sucursal: Tienda 1 · Generado: 09/09/2026', notes: 'Indicadores y bloques seleccionados en el dashboard.' },
+      document: { ...base.document, title: 'RESUMEN DE GESTIÓN', number: 'DASH-0001', period: 'Período: 01/09/2026 al 09/09/2026', meta: '', generated: 'Generado: 09/09/2026', notes: 'Indicadores y bloques seleccionados en el dashboard.' },
       reportKpis: [
         { label: 'VENTAS PAGADAS', value: 'C$ 42,850.00', detail: 'En el período' },
         { label: 'GASTOS REGISTRADOS', value: 'C$ 12,400.00', detail: 'En el período' },
@@ -878,6 +892,7 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
   const isHistoricalCashReport = target.key === 'ventas.cash-historical-report';
   const isDashboard = target.structure === 'dashboard';
   const isPortalSummary = target.key === 'portal.customer-summary';
+  const isReportOutput = target.structure === 'report' || target.module === 'reportes';
   const reportKpiCount = isDashboard ? 4 : isPortalSummary ? 4 : target.module === 'reportes'
     ? ['reportes.hr', 'reportes.finance', 'reportes.sales'].includes(target.key) ? 5 : 4
     : 0;
@@ -1005,13 +1020,13 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
     ? [
       node({ type: 'field', label: 'Empresa', token: 'company.name', x: 24, y: 6, width: 36, height: 9, fontSize: 7, color: headerTextColor, bold: true, borderStyle: 'none', padding: 0.25 }, 'company-name'),
       node({ type: 'field', label: 'Título', token: 'document.title', x: 61, y: 6, width: 34, height: 9, fontSize: 7, color: titleColor, bold: true, align: 'right', borderStyle: 'none', padding: 0.25 }, 'document-title'),
-      node({ type: 'field', label: 'Datos de la sucursal', token: 'company.summary', x: 8, y: 17, width: 84, height: 5, fontSize: 5.5, lineHeight: 1.1, color: text, align: 'center', borderStyle: 'none', padding: 0.2 }, 'company-summary'),
-      node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 23, width: 84, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+      node({ type: 'field', label: 'Datos de la sucursal', token: 'company.summary', x: 8, y: 14, width: 84, height: 4, fontSize: 5.5, lineHeight: 1.1, color: text, align: 'center', borderStyle: 'none', padding: 0.2 }, 'company-summary'),
+      node({ type: 'field', label: 'Período y filtros', token: 'document.meta', x: 8, y: 23, width: 55, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'left', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
     ]
-    : target.module === 'reportes' || isPortalSummary
+    : isReportOutput || isPortalSummary
       ? [
-        ...headerFields.filter(item => ['company-name', 'company-summary', 'document-title'].includes(item.id)),
-        node({ type: 'field', label: 'Metadatos del reporte', token: 'document.meta', x: 8, y: 24, width: 84, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'center', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
+        ...headerFields.filter(item => ['company-name', 'company-summary', 'document-title'].includes(item.id)).map(item => item.id === 'company-summary' && headerLayout === 'split' ? { ...item, y: 13, height: 5 } : item),
+        node({ type: 'field', label: 'Período, filtros y generación', token: 'document.meta', x: 8, y: 24, width: 84, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'left', borderStyle: 'none', padding: 0.2 }, 'report-meta'),
       ]
       : headerFields;
   const historicalHeaderFields: PdfTemplateNode[] = [
@@ -1019,8 +1034,8 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
     node({ type: 'field', label: 'Período', token: 'document.period', x: 8, y: 24, width: 48, height: 4, fontSize: 8, color: text }, 'document-date'),
   ];
   const nodes: PdfTemplateNode[] = [...headerNodes, logoNode, ...(isHistoricalCashReport ? historicalHeaderFields : reportHeaderFields),
-    ...(isHistoricalCashReport ? [node({ type: 'field', label: 'Generado', token: 'document.generated', x: 58, y: 24, width: 34, height: 4, fontSize: 7, color: text, align: 'right', borderStyle: 'none', padding: 0.2 }, 'document-generated')] : []),
-    ...(isHistoricalCashReport || isDashboard ? [] : [node({ type: 'field', label: 'Fecha', token: 'document.date', x: 8, y: headerLayout === 'compact' ? 20 : 24, width: 35, height: 4, fontSize: 8, color: text }, 'document-date')]),
+    ...((isHistoricalCashReport || isDashboard) ? [node({ type: 'field', label: 'Generado', token: 'document.generated', x: 64, y: isDashboard ? 23 : 24, width: 28, height: 4.5, fontSize: 6.5, color: '#64748b', align: 'right', borderStyle: 'none', padding: 0.2, firstPageOnly: true }, 'document-generated')] : []),
+    ...(isHistoricalCashReport || isDashboard || isReportOutput ? [] : [node({ type: 'field', label: 'Fecha', token: 'document.date', x: 8, y: headerLayout === 'compact' ? 20 : 24, width: 35, height: 4, fontSize: 8, color: text }, 'document-date')]),
     node({ type: 'section', label: partySectionLabel, x: 5, y: 31, width: 90, height: 19, backgroundColor: '#f8fafc', borderColor: line, borderRadius: 3, color: text, borderStyle: 'none' }, 'party-section'),
     node({ type: 'field', label: partyLabel, token: partyToken, x: 8, y: 34, width: 50, height: 5.5, fontSize: 10, color: text, bold: true, borderStyle: 'none' }, 'party-name'),
     node({ type: 'field', label: party.labels.taxId, token: `${party.tokenPrefix}.taxId`, x: 62, y: 34, width: 30, height: 5.5, fontSize: 8, color: text, align: 'right', borderStyle: 'none' }, 'party-tax-id'),
@@ -1084,11 +1099,11 @@ export function createDefaultTemplateDefinition(targetKey: string, requestedSett
   }
 
   if (isDashboard) {
-    nodes.push(node({ type: 'chart', label: 'Evolución del período', token: 'dashboard.trend', chartType: 'area', x: 5, y: 46, width: 90, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-trend'));
-    nodes.push(node({ type: 'chart', label: 'Atención requerida', token: 'dashboard.attention', chartType: 'donut', x: 5, y: 61, width: 28, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-attention'));
-    nodes.push(node({ type: 'chart', label: 'Productos más vendidos', token: 'dashboard.products-sales', chartType: 'bar', x: 35, y: 61, width: 28, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-sales'));
-    nodes.push(node({ type: 'chart', label: 'Utilidad de referencia', token: 'dashboard.products-margin', chartType: 'bar', x: 65, y: 61, width: 30, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-margin'));
-    nodes.push(node({ type: 'chart', label: 'Ventas por caja', token: 'dashboard.registers', chartType: 'bar', x: 5, y: 76, width: 90, height: 14, firstPageOnly: true, borderColor: line, backgroundColor: '#ffffff' }, 'chart-registers'));
+    nodes.push(node({ type: 'chart', label: 'Evolución del período', token: 'dashboard.trend', chartType: 'area', x: 5, y: 46, width: 90, height: 42, borderColor: line, backgroundColor: '#ffffff' }, 'chart-trend'));
+    nodes.push(node({ type: 'chart', label: 'Atención requerida', token: 'dashboard.attention', chartType: 'donut', x: 5, y: 61, width: 28, height: 14, borderColor: line, backgroundColor: '#ffffff' }, 'chart-attention'));
+    nodes.push(node({ type: 'chart', label: 'Productos más vendidos', token: 'dashboard.products-sales', chartType: 'bar', x: 35, y: 61, width: 28, height: 14, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-sales'));
+    nodes.push(node({ type: 'chart', label: 'Utilidad de referencia', token: 'dashboard.products-margin', chartType: 'bar', x: 65, y: 61, width: 30, height: 14, borderColor: line, backgroundColor: '#ffffff' }, 'chart-products-margin'));
+    nodes.push(node({ type: 'chart', label: 'Ventas por caja', token: 'dashboard.registers', chartType: 'bar', x: 5, y: 76, width: 90, height: 14, borderColor: line, backgroundColor: '#ffffff' }, 'chart-registers'));
   }
 
   if ((family === 'transaction' || family === 'receipt' || family === 'cash') && !isHistoricalCashReport) {

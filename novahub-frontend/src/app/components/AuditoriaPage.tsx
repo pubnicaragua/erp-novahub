@@ -249,7 +249,7 @@ export function AuditoriaPage() {
         descripcion: functionalDescription(row),
       }));
       if (format === 'xlsx') {
-        createReportWorkbook({ fileName: `novahub-auditoria-${new Date().toISOString().slice(0, 10)}.xlsx`, sheets: [{ name: 'Auditoría', rows }], filters: { ...filters, alcance: platformScope ? 'Plataforma' : 'Sucursal' } });
+        createReportWorkbook({ fileName: `novahub-auditoria-${new Date().toISOString().slice(0, 10)}.xlsx`, sheets: [{ name: 'Auditoría', rows }], filters: { ...filters, alcance: platformScope ? 'Plataforma' : 'Sucursal' }, singleSheet: !platformScope });
       } else {
         const pdfSettings = await getPdfDesignSettings('auditoria.logs');
         await generateFastGlobalReportPDF({

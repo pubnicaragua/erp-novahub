@@ -194,6 +194,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       await generatePurchaseListPDF({
         title: 'Solicitudes de compra',
         rows: exportRows,
+        subtitle: [`Búsqueda: ${search || 'Todas'}`, `Estado: ${statusFilter}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : '', exportFilter === 'approved' ? 'Solo aprobadas' : ''].filter(Boolean).join(' · '),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -557,6 +558,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         <div className="flex flex-wrap items-center justify-end gap-3">
         <PdfDownloadButton
           label="Exportar"
+          includePageSizes
           includeRoll={false}
           scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }}
           filterSelector={{

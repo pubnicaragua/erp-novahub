@@ -31,6 +31,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -58,6 +59,7 @@ import { toast } from '@/app/services/toast';
 import { BLOCKS, changeLabel, chartRows, dashboardRange, DEFAULT_PREFERENCES, INDICATORS, normalizePreferences, type DashboardBlock, type DashboardPeriod, type DashboardPreferences, type IndicatorDefinition } from './dashboard/executive-model';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import { capturePdfChartSnapshot, yieldToBrowser } from '../utils/pdf-template-renderer';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import './dashboard/executive-dashboard.css';
 
@@ -329,8 +331,11 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   };
 
   const exportDashboard = async () => {
+    if (isExporting) return;
     setIsExporting(true);
+    const exportToastId = toast.loading('Preparando el PDF del resumen…');
     try {
+      await yieldToBrowser();
       const selectedKpis = preferences.indicators.map((id) => {
         const definition = INDICATORS.find((item) => item.id === id);
         const value = indicatorValue(id, kpis, performance, data);
@@ -341,20 +346,20 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       ];
       const charts: PdfTemplateChart[] = [];
       if (preferences.blocks.includes('trend')) {
-        charts.push({ id: 'dashboard.trend', title: 'Ventas y gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), series: [{ label: 'Ventas', values: trend.map(item => safeNumber(item.revenue)), color: CHART_COLORS[0] }, { label: 'Gastos', values: trend.map(item => safeNumber(item.expenses)), color: '#f59e0b' }] });
+        charts.push({ id: 'dashboard.trend', title: 'Ventas y gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, series: [{ label: 'Ventas', values: trend.map(item => safeNumber(item.revenue)), color: CHART_COLORS[0] }, { label: 'Gastos', values: trend.map(item => safeNumber(item.expenses)), color: '#f59e0b' }] });
       }
       if (preferences.blocks.includes('attention')) {
         const attentionRows: Array<Array<string | number>> = [['Órdenes abiertas', safeNumber(kpis.pendingOrders), 'Seguimiento comercial y despacho']];
         if (canViewInventory) {
           attentionRows.push(['Productos con alertas', alertCount, 'Agotados, bajo mínimo o por reordenar']);
           attentionRows.push(['Productos sin ventas', safeNumber(kpis.noSaleProductsCount ?? performance.noSaleProducts?.length), 'Con existencias disponibles']);
-          charts.push({ id: 'dashboard.attention', title: 'Estado del inventario', type: 'donut', labels: inventoryChart.length ? inventoryChart.map(item => item.name) : ['Sin alertas'], values: inventoryChart.length ? inventoryChart.map(item => safeNumber(item.value)) : [0], colors: inventoryChart.length ? inventoryChart.map(item => item.fill) : [CHART_COLORS[0]] });
+          charts.push({ id: 'dashboard.attention', title: 'Estado del inventario', type: 'donut', labels: inventoryChart.length ? inventoryChart.map(item => item.name) : ['Sin alertas'], values: inventoryChart.length ? inventoryChart.map(item => safeNumber(item.value)) : [0], valueFormat: 'count', unitLabel: 'registros', colors: inventoryChart.length ? inventoryChart.map(item => item.fill) : [CHART_COLORS[0]] });
         }
         sections.push({ id: 'dashboard-attention', title: 'Atención requerida', headers: ['Prioridad', 'Cantidad', 'Detalle'], rows: attentionRows, widths: [28, 14, 58] });
       }
       if (preferences.blocks.includes('products') && canViewInventory) {
-        charts.push({ id: 'dashboard.products-sales', title: 'Productos más vendidos', type: 'bar', labels: productSalesChart.map((item: { name: string; value: number }) => item.name), values: productSalesChart.map((item: { name: string; value: number }) => safeNumber(item.value)), colors: CHART_COLORS });
-        charts.push({ id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: productMarginChart.map((item: { name: string; value: number }) => item.name), values: productMarginChart.map((item: { name: string; value: number }) => safeNumber(item.value)), colors: CHART_COLORS });
+        charts.push({ id: 'dashboard.products-sales', title: 'Productos más vendidos', type: 'bar', labels: productSalesChart.map((item: { name: string; value: number }) => item.name), values: productSalesChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: 'count', unitLabel: 'unidades', colors: CHART_COLORS });
+        charts.push({ id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: productMarginChart.map((item: { name: string; value: number }) => item.name), values: productMarginChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, colors: CHART_COLORS });
         const productsById = new Map<string, any>();
         [...(performance.topSelling || []), ...(performance.topMargin || [])].forEach((item: any) => {
           const key = getProductId(item) || getProductName(item);
@@ -368,29 +373,45 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         sections.push({ id: 'dashboard-products', title: 'Desempeño de productos', headers: ['Producto', 'Unidades', 'Venta pagada', 'Utilidad de referencia'], rows: productRows, widths: [42, 14, 22, 22] });
       }
       if (preferences.blocks.includes('registers')) {
-        charts.push({ id: 'dashboard.registers', title: 'Ventas por caja', type: 'bar', labels: registerChart.map((item: { name: string; value: number }) => item.name), values: registerChart.map((item: { name: string; value: number }) => safeNumber(item.value)), colors: [CHART_COLORS[4], CHART_COLORS[1], CHART_COLORS[2]] });
+        charts.push({ id: 'dashboard.registers', title: 'Ventas por caja', type: 'bar', labels: registerChart.map((item: { name: string; value: number }) => item.name), values: registerChart.map((item: { name: string; value: number }) => safeNumber(item.value)), valueFormat: 'currency', unitLabel: data?.baseCurrency || baseCurrency, colors: [CHART_COLORS[4], CHART_COLORS[1], CHART_COLORS[2]] });
         sections.push({ id: 'dashboard-registers', title: 'Ventas por caja', headers: ['Caja', 'Operaciones', 'Ventas pagadas'], rows: registers.slice(0, 8).map((item: any) => [item.registerName || item.registerCode || 'Caja', safeNumber(item.count), money(safeNumber(item.total))]), widths: [44, 20, 36] });
       }
       if (preferences.blocks.includes('transactions')) {
         sections.push({ id: 'dashboard-transactions', title: 'Actividad reciente', headers: ['Documento', 'Fecha', 'Origen', 'Cliente', 'Monto', 'Estado'], rows: transactions.slice(0, 12).map((item: any, index: number) => [item.number || `Factura ${index + 1}`, item.date ? new Date(item.date).toLocaleDateString('es-NI') : '—', item.register?.name || item.origin || 'Factura de venta', item.customer || 'Cliente general', money(safeNumber(item.sourceTotal ?? item.total)), formatTransactionStatus(item.status)]), widths: [16, 13, 19, 22, 15, 15] });
       }
+      const chartPanels = new Map(Array.from(document.querySelectorAll<HTMLElement>('[data-pdf-chart-id]')).map(panel => [panel.dataset.pdfChartId || '', panel]));
+      const exportCharts: PdfTemplateChart[] = [];
+      for (let index = 0; index < charts.length; index += 1) {
+        const chart = charts[index];
+        const panel = chartPanels.get(chart.id);
+        if (!panel) throw new Error(`No se encontró la gráfica visible «${chart.title}» para exportarla.`);
+        toast.loading(`Preparando gráfica ${index + 1} de ${charts.length}: ${chart.title}…`, { id: exportToastId });
+        await yieldToBrowser();
+        exportCharts.push({ ...chart, ...await capturePdfChartSnapshot(panel) });
+      }
       const fileName = buildDatedDownloadFileName(['resumen_gestion'], 'pdf');
+      toast.loading('Organizando las páginas del PDF…', { id: exportToastId });
+      await yieldToBrowser();
       const configured = await generateConfiguredReportSectionsPDF({
         targetKey: 'dashboard.tenant-overview',
         title: 'Resumen de gestión',
-        tenantName: user?.tenantName || user?.clientTenant?.name || 'Mi Empresa',
-        tenantLogo: user?.clientTenant?.logo || '',
+        tenantName: user?.sessionBranding?.kind === 'branch' ? (user.sessionBranding.name || user.tenantName || 'Mi Empresa') : (user?.tenantName || user?.clientTenant?.name || 'Mi Empresa'),
+        tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || '',
+        branchName: user?.sessionBranding?.kind === 'branch' ? user.sessionBranding.name : undefined,
         periodLabel: rangeLabel,
         kpis: selectedKpis,
-        charts,
+        charts: exportCharts,
         dashboardPreferences: { indicators: [...preferences.indicators], blocks: [...preferences.blocks] },
         sections,
         fileName,
+        onProgress: ({ page, totalPages }) => {
+          toast.loading(`Generando PDF · página ${page} de ${totalPages}…`, { id: exportToastId });
+        },
       });
       if (!configured) throw new Error('No se pudo preparar el reporte del dashboard.');
-      toast.success('Resumen exportado en PDF');
+      toast.success('Resumen exportado en PDF', { id: exportToastId });
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo exportar el resumen');
+      toast.error(error?.message || 'No se pudo exportar el resumen', { id: exportToastId });
     } finally {
       setIsExporting(false);
     }
@@ -403,7 +424,16 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         const value = indicatorValue(id, kpis, performance, data);
         return { Indicador: definition?.label || id, Valor: typeof value === 'number' ? value : String(value), Detalle: definition?.description || '' };
       });
-      const productRows = [...(performance.topSelling || []), ...(performance.topMargin || [])].map((item: any) => ({ Producto: getProductName(item), Unidades: safeNumber(item.totalQty), Venta: safeNumber(item.totalRevenue), Utilidad: safeNumber(item.profit) }));
+      const productsById = new Map<string, any>();
+      [...(performance.topSelling || []), ...(performance.topMargin || [])].forEach((item: any) => {
+        const key = getProductId(item) || getProductName(item);
+        const current = productsById.get(key) || { Producto: getProductName(item), Unidades: 0, Venta: 0, Utilidad: 0 };
+        current.Unidades = Math.max(current.Unidades, safeNumber(item.totalQty));
+        current.Venta = Math.max(current.Venta, safeNumber(item.totalRevenue));
+        current.Utilidad = Math.max(current.Utilidad, safeNumber(item.profit));
+        productsById.set(key, current);
+      });
+      const productRows = [...productsById.values()];
       createReportWorkbook({
         fileName: buildDatedDownloadFileName(['resumen_gestion'], 'xlsx'),
         sheets: [
@@ -492,9 +522,9 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
             <SelectContent>{Object.entries(PERIOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
           </Select>
           {canPerform('DASHBOARD', 'export') && <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="outline" className="executive-toolbar-button" disabled={isExporting || currentQuery.isFetching}><FileDown className="size-4" /> {isExporting ? 'Exportando…' : 'Exportar'} <ChevronRight className="size-3.5 rotate-90" /></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button variant="outline" className="executive-toolbar-button" disabled={isExporting || currentQuery.isFetching} aria-busy={isExporting}><FileDown className="size-4" /> {isExporting ? 'Generando PDF…' : 'Exportar'} <ChevronRight className="size-3.5 rotate-90" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="rounded-xl">
-              <DropdownMenuItem className="gap-2 text-xs" onClick={() => void exportDashboard()}><FileDown className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" disabled={isExporting} onClick={() => void exportDashboard()}><FileDown className="size-3.5 text-rose-600" /> Exportar PDF</DropdownMenuItem>
               <DropdownMenuItem className="gap-2 text-xs" onClick={exportDashboardExcel}><FileSpreadsheet className="size-3.5 text-emerald-600" /> Exportar Excel</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>}
@@ -593,27 +623,27 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         </section>}
 
         <div className="executive-chart-wall" aria-label="Gráficas ejecutivas">
-          {preferences.blocks.includes('trend') && <section className="executive-panel executive-chart-card executive-chart-card-trend">
+          {preferences.blocks.includes('trend') && <section className="executive-panel executive-chart-card executive-chart-card-trend" data-pdf-chart-id="dashboard.trend">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Tendencia</span><h2>Ventas y gastos</h2></div><span className="executive-panel-caption">{(range?.days || 0) > 62 ? 'Por mes' : 'Por día'}</span></div>
             <div className="executive-chart executive-chart-wall-trend"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} /><stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => compactAxis(value)} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} /><Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} /><Area type="monotone" dataKey="expenses" name="expenses" stroke="#f59e0b" fill="url(#executiveExpenses)" strokeWidth={2} /></AreaChart></ResponsiveContainer></div><div className="executive-legend"><span><i className="legend-dot revenue" /> Ventas</span><span><i className="legend-dot expenses" /> Gastos</span></div>
           </section>}
 
-          {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-sales">
+          {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-sales" data-pdf-chart-id="dashboard.products-sales">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Volumen</span><h2>Ventas por producto</h2></div><BarChart3 className="executive-chart-heading-icon" /></div>
-            <div className="executive-mini-chart">{productSalesChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productSalesChart} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={140} interval={0} axisLine={false} tickLine={false} tick={<CategoryTick />} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value).toLocaleString('es-NI')} uds.`, 'Unidades']} /><Bar dataKey="value" fill="var(--primary)" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas</div>}</div>
+            <div className="executive-mini-chart">{productSalesChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productSalesChart} layout="vertical" margin={{ top: 4, right: 48, left: 0, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={140} interval={0} axisLine={false} tickLine={false} tick={<CategoryTick />} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value).toLocaleString('es-NI')} uds.`, 'Unidades']} /><Bar dataKey="value" fill="var(--primary)" radius={[0, 6, 6, 0]} barSize={16}><LabelList dataKey="value" position="right" formatter={(value: number) => `${safeNumber(value).toLocaleString('es-NI')} uds.`} fill="var(--foreground)" fontSize={10} fontWeight={600} /></Bar></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas</div>}</div>
           </section>}
 
-          {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-margin">
+          {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-margin" data-pdf-chart-id="dashboard.products-margin">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Rentabilidad</span><h2>Utilidad por producto</h2></div><WalletCards className="executive-chart-heading-icon" /></div>
-            <div className="executive-mini-chart">{productMarginChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productMarginChart} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={140} interval={0} axisLine={false} tickLine={false} tick={<CategoryTick />} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Utilidad']} /><Bar dataKey="value" fill="#2563eb" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin datos de utilidad</div>}</div>
+            <div className="executive-mini-chart">{productMarginChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={productMarginChart} layout="vertical" margin={{ top: 4, right: 58, left: 0, bottom: 4 }}><CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={140} interval={0} axisLine={false} tickLine={false} tick={<CategoryTick />} /><Tooltip cursor={{ fill: 'var(--muted)', opacity: .3 }} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Utilidad']} /><Bar dataKey="value" fill="#2563eb" radius={[0, 6, 6, 0]} barSize={16}><LabelList dataKey="value" position="right" formatter={(value: number) => compactAxis(safeNumber(value))} fill="var(--foreground)" fontSize={10} fontWeight={600} /></Bar></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin datos de utilidad</div>}</div>
           </section>}
 
-          {preferences.blocks.includes('registers') && <section className="executive-panel executive-chart-card executive-chart-card-registers">
+          {preferences.blocks.includes('registers') && <section className="executive-panel executive-chart-card executive-chart-card-registers" data-pdf-chart-id="dashboard.registers">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Puntos de venta</span><h2>Ventas por caja</h2></div><Store className="executive-chart-heading-icon" /></div>
-            <div className="executive-mini-chart">{registerChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={registerChart} margin={{ top: 8, right: 8, left: -18, bottom: 2 }}><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} /><YAxis hide /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Ventas']} /><Bar dataKey="value" fill="#7767d9" radius={[6, 6, 0, 0]} barSize={28} /></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas por caja</div>}</div>
+            <div className="executive-mini-chart">{registerChart.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={registerChart} margin={{ top: 24, right: 8, left: -18, bottom: 2 }}><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} /><YAxis hide /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [money(value), 'Ventas']} /><Bar dataKey="value" fill="#7767d9" radius={[6, 6, 0, 0]} barSize={28}><LabelList dataKey="value" position="top" formatter={(value: number) => compactAxis(safeNumber(value))} fill="var(--foreground)" fontSize={10} fontWeight={600} /></Bar></BarChart></ResponsiveContainer> : <div className="executive-no-data">Sin ventas por caja</div>}</div>
           </section>}
 
-          {preferences.blocks.includes('attention') && <section className="executive-panel executive-chart-card executive-chart-card-inventory">
+          {preferences.blocks.includes('attention') && <section className="executive-panel executive-chart-card executive-chart-card-inventory" data-pdf-chart-id="dashboard.attention">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Existencias</span><h2>Estado del inventario</h2></div><Package className="executive-chart-heading-icon" /></div>
             <div className="executive-donut-wrap">{inventoryChart.length ? <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={inventoryChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={53} outerRadius={79} paddingAngle={4} stroke="none">{inventoryChart.map((entry: any) => <Cell key={entry.name} fill={entry.fill} />)}</Pie><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number) => [`${safeNumber(value)} productos`, 'Cantidad']} /></PieChart></ResponsiveContainer> : <div className="executive-no-data">Inventario sin alertas</div>}</div>
             <div className="executive-chart-legend">{inventoryChart.map((entry: any) => <span key={entry.name}><i style={{ background: entry.fill }} />{entry.name}<strong>{entry.value}</strong></span>)}</div>

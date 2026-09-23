@@ -122,7 +122,7 @@ export type PermissionAction =
   | 'import' | 'export' | 'approve' | 'reject' | 'authorize' | 'reopen'
   | 'close' | 'confirm' | 'process' | 'pay' | 'apply' | 'reconcile'
   | 'reverse' | 'duplicate' | 'convert' | 'assign' | 'download'
-  | 'generate' | 'send' | 'print' | 'manage' | 'viewCost';
+  | 'generate' | 'send' | 'print' | 'manage' | 'viewCost' | 'viewOtherLocations';
 
 // La matriz de roles expone CRUD, importación/exportación y una acción de
 // flujo. Las acciones operativas legacy se resuelven contra "Aprobar" cuando
@@ -533,6 +533,7 @@ const createUserObject = (apiPayload: any): User => {
         canImport: !!serverMatch.import,
         canExport: !!serverMatch.export,
         canViewCost: serverMatch.viewCost === true || serverMatch.canViewCost === true,
+        viewOtherLocations: serverMatch.viewOtherLocations === true || serverMatch.canViewOtherLocations === true,
         ...mapPriceListScope(serverMatch),
         approve: Object.prototype.hasOwnProperty.call(serverMatch, 'approve') ? !!serverMatch.approve : undefined,
         ...mapSpecialPermissionFlags(serverMatch),
@@ -574,6 +575,7 @@ const createUserObject = (apiPayload: any): User => {
         canImport: !!sp.import,
         canExport: !!sp.export,
         canViewCost: sp.viewCost === true || sp.canViewCost === true,
+        viewOtherLocations: sp.viewOtherLocations === true || sp.canViewOtherLocations === true,
         ...mapPriceListScope(sp),
         approve: Object.prototype.hasOwnProperty.call(sp, 'approve') ? !!sp.approve : undefined,
         ...mapSpecialPermissionFlags(sp),
@@ -1085,6 +1087,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const legacyActionAllowed = (permission as any)[`can${action.charAt(0).toUpperCase()}${action.slice(1)}`] === true;
     switch (action) {
       case 'viewCost': return permission.canViewCost === true || legacyActionAllowed;
+      case 'viewOtherLocations': return permission.viewOtherLocations === true || legacyActionAllowed;
       case 'view': return permission.canView;
       case 'create': return permission.canCreate;
       case 'edit': return permission.canEdit;

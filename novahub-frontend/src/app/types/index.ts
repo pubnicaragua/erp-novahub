@@ -1239,6 +1239,7 @@ export interface Product {
   maxStock?: number | null;
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
+  trackInventory?: boolean;
   isActive?: boolean;
   status: EntityStatus;
   isVariable?: boolean;
@@ -1264,6 +1265,7 @@ export interface Product {
     warehouse?: { id: string; name: string };
     variantId?: string | null;
     quantity: number;
+    reserved?: number;
     minStock?: number;
     maxStock?: number;
   }>;

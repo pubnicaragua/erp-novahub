@@ -416,6 +416,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       await generatePurchaseListPDF({
         title: 'Créditos del proveedor',
         rows: colFilters.applyTo(exportFiltered, filterGetters),
+        subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : ''].filter(Boolean).join(' · '),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -431,6 +432,28 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       toast.success('Reporte PDF descargado', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const allRows = await fetchAllPaginatedRows<SupplierCredit>((page, pageSize) => vendorCreditsService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, branchId: selectedBranchId || undefined, report: true, export: true, light: true }));
+      const exportFiltered = allRows.filter((credit) => {
+        const status = String(credit.status || '').toLowerCase();
+        if (statusFilter === 'ISSUED' && status !== 'issued') return false;
+        if (statusFilter === 'APPLIED' && !['applied', 'partial', 'paid'].includes(status)) return false;
+        if (!searchTerm) return true;
+        return (credit.number || '').toLowerCase().includes(searchTerm.toLowerCase())
+          || (credit.supplier?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      });
+      const exportRows = colFilters.applyTo(exportFiltered, filterGetters);
+      createReportWorkbook({
+        fileName: 'creditos_proveedor.xlsx',
+        sheets: [{ name: 'Créditos', rows: exportRows.map(row => ({ Numero: row.number || row.id?.slice(0, 8) || '—', Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Total: Number(row.total || 0), Moneda: resolveSourceCurrency(row.currency), Estado: row.status || '—' })) }],
+        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter, Sucursal: selectedBranchId || 'Todas' },
+      });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el Excel de créditos');
     }
   };
 
@@ -1178,7 +1201,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos del proveedor</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
-            {canPerform('PURCHASES_RETURNS', 'export') && <PdfDownloadButton label="Exportar" includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => createReportWorkbook({ fileName: 'creditos_proveedor.xlsx', sheets: [{ name: 'Créditos', rows: filteredData.map(row => ({ Numero: row.number || row.id?.slice(0, 8) || '—', Proveedor: row.supplier?.name || 'Sin proveedor', Fecha: row.date || '—', Total: Number(row.total || 0), Estado: row.status || '—' })) }] })} />}
+            {canPerform('PURCHASES_RETURNS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos del proveedor" />
             <div className="max-w-md rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-[10px] font-semibold text-muted-foreground">
               Los créditos se crean desde una recepción recibida, con sus artículos y cantidades verificadas.

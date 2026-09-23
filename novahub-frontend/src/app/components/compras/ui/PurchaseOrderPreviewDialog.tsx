@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { Ban, CalendarDays, CheckCircle2, FileDown, History, Info, UserRound } from 'lucide-react';
+import { Ban, CalendarDays, CheckCircle2, History, Info, UserRound } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../../ui/sheet';
 import { cn } from '../../ui/utils';
+import { PdfDownloadButton } from '../../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../../utils/pdfDownloadFormats';
 import { api } from '../../../services/api';
 import type { PurchaseOrder, Supplier } from '../../../types';
 import { getPurchaseOrderStatusOption, normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES } from '../../../utils/purchaseOrderStatus';
@@ -63,7 +65,7 @@ interface PurchaseOrderPreviewDialogProps {
   onClose: () => void;
   onApprove: (id: string) => void;
   onCancel: (id: string) => void;
-  onDownloadPdf?: () => void;
+  onDownloadPdf?: (format: PdfDownloadFormat) => void;
 }
 
 export function PurchaseOrderPreviewDialog({
@@ -247,9 +249,7 @@ export function PurchaseOrderPreviewDialog({
             <SheetFooter className="min-w-0 border-t border-border/50 bg-background px-5 py-4 sm:px-6" data-tour="purchase-order-detail-actions">
               <div className="flex w-full flex-wrap justify-end gap-2">
                 {onDownloadPdf && (
-                  <Button variant="outline" className="gap-2 rounded-xl text-xs font-black uppercase tracking-wider" onClick={onDownloadPdf}>
-                    <FileDown className="size-4" /> Descargar PDF
-                  </Button>
+                  <PdfDownloadButton label="Descargar PDF" includePageSizes includeRoll onDownload={onDownloadPdf} />
                 )}
                 {canCancel && !isRejected && (
                   <Button variant="outline" className="gap-2 rounded-xl border-destructive/40 text-xs font-black uppercase tracking-wider text-destructive hover:bg-destructive/10" onClick={() => order.id && onCancel(order.id)}>

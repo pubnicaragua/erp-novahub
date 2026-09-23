@@ -2099,6 +2099,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       await generatePurchaseListPDF({
         title: 'Órdenes de compra',
         rows: exportRows,
+        subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`, selectedBranchId ? `Sucursal: ${selectedBranchId}` : '', exportFilter === 'approved' ? 'Solo aprobadas' : ''].filter(Boolean).join(' · '),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -2776,17 +2777,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                   <Eye className="size-3 mr-2" /> Vista previa
                 </Button>
              )}
-             {!isNew && (
-               <>
-                 <Button
-                   variant="outline"
-                   className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
-                   onClick={() => void handleDownloadOrderPdf(localDoc)}
-                 >
-                   <Download className="size-3 mr-2" /> Descargar PDF
-                 </Button>
-               </>
-             )}
+             {!isNew && <PdfDownloadButton label="Descargar PDF" includePageSizes includeRoll onDownload={(format) => void handleDownloadOrderPdf(localDoc, format)} />}
             {isNew && canPerform('PURCHASES_ORDERS', 'create') && (
               <>
                 <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
@@ -3399,6 +3390,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             {canPerform('PURCHASES_ORDERS', 'export') && <PdfDownloadButton
               label="Exportar"
+              includePageSizes
               includeRoll={false}
               scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }}
               filterSelector={{

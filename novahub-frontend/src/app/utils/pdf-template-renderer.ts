@@ -2,7 +2,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
-import { createDefaultTemplateDefinition, ensureDashboardChartNodes, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, resolveTemplateToken, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
+import { createDefaultTemplateDefinition, ensureDashboardChartNodes, formatPdfPageNumber, normalizePdfCompanySettings, normalizePdfPaperSettings, PDF_DEFAULT_FONT_SCALE, resolveTemplateToken, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateDefinition, type PdfTemplateNode, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { getBase64Image, safeHtml2CanvasColor } from './export-utils';
 import { pdfStatusLabel } from './pdfStatus';
 
@@ -18,6 +18,9 @@ export interface PdfTemplateRenderSettings {
   fontSize?: number;
   tableLayout?: string;
   footerText?: string;
+  showPageNumber?: boolean;
+  pageNumberFormat?: 'page-of' | 'number-only' | 'custom';
+  pageNumberCustom?: string;
   watermark?: string;
   watermarkOpacity?: number;
 }
@@ -29,6 +32,32 @@ export interface PdfTemplateRenderOptions {
   data?: PdfTemplateData;
   fileName?: string;
   save?: boolean;
+  onProgress?: (progress: PdfTemplateRenderProgress) => void;
+}
+
+export interface PdfTemplateRenderProgress {
+  page: number;
+  totalPages: number;
+}
+
+/** Give React and the browser a paint opportunity between expensive canvas jobs. */
+export function yieldToBrowser() {
+  return new Promise<void>(resolve => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      setTimeout(resolve, 0);
+      return;
+    }
+    let settled = false;
+    let fallbackTimer = 0;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(fallbackTimer);
+      resolve();
+    };
+    fallbackTimer = window.setTimeout(finish, 100);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(finish));
+  });
 }
 
 function pageDimensions(paperSize: string) {
@@ -46,6 +75,112 @@ function escapeValue(value: unknown) {
 
 function asRows(data: PdfTemplateData) {
   return data.items || data.rows || data.history || [];
+}
+
+function generatedMetadataParts(value: unknown) {
+  return String(value || '').split('·').map(part => part.trim()).filter(part => part && !/^generado\s*:/i.test(part));
+}
+
+export function normalizeReportDocumentMetadata(document: Record<string, unknown>, pageNumber: number) {
+  const generated = String(document.generated || '').trim();
+  const generationInMeta = String(document.meta || '').split('·').map(part => part.trim()).find(part => /^generado\s*:/i.test(part)) || '';
+  const generatedInMetaFallback = document.generatedInMetaFallback === true;
+  const metaParts = pageNumber === 1 ? generatedMetadataParts(document.meta) : [];
+  if (pageNumber === 1 && generatedInMetaFallback) metaParts.push(generated || generationInMeta);
+  return {
+    ...document,
+    period: pageNumber === 1 ? document.period : '',
+    generated: pageNumber === 1 ? generated || generationInMeta : '',
+    meta: [...new Set(metaParts.filter(Boolean))].join(' · '),
+  };
+}
+
+export async function capturePdfChartSnapshot(element: HTMLElement, scale = 2.5) {
+  if (typeof document === 'undefined') throw new Error('La captura de gráficas requiere un navegador.');
+  await document.fonts?.ready;
+  await yieldToBrowser();
+  const snapshotId = `pdf-chart-${Math.random().toString(36).slice(2)}`;
+  element.dataset.pdfChartSnapshot = snapshotId;
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = await html2canvas(element, {
+      scale: Math.max(1, Math.min(3, scale)),
+      backgroundColor: null,
+      useCORS: true,
+      logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      onclone: clonedDocument => {
+        const clonedRoot = clonedDocument.querySelector<HTMLElement>(`[data-pdf-chart-snapshot="${snapshotId}"]`);
+        if (!clonedRoot) return;
+        const sourceNodes = [element, ...Array.from(element.querySelectorAll<HTMLElement | SVGElement>('*'))];
+        const clonedNodes = [clonedRoot, ...Array.from(clonedRoot.querySelectorAll<HTMLElement | SVGElement>('*'))];
+        const colorContext = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+        const normalizedColorCache = new Map<string, string>();
+        const normalizeColor = (value: string, fallback: string) => {
+          if (!colorContext || !value || value === 'none' || value.startsWith('url(')) return value || fallback;
+          const cacheKey = `${value}\u0000${fallback}`;
+          const cachedColor = normalizedColorCache.get(cacheKey);
+          if (cachedColor) return cachedColor;
+          const rememberColor = (color: string) => {
+            normalizedColorCache.set(cacheKey, color);
+            return color;
+          };
+          try {
+            if (window.CSS?.supports && !window.CSS.supports('color', value)) return rememberColor(fallback);
+            colorContext.fillStyle = 'rgb(1, 2, 3)';
+            const sentinel = colorContext.fillStyle;
+            colorContext.fillStyle = value;
+            if (colorContext.fillStyle === sentinel && value !== sentinel) return rememberColor(fallback);
+            colorContext.clearRect(0, 0, 1, 1);
+            colorContext.fillRect(0, 0, 1, 1);
+            const [red, green, blue, alpha] = colorContext.getImageData(0, 0, 1, 1).data;
+            if (!alpha) return rememberColor('rgba(0, 0, 0, 0)');
+            if (alpha === 255) return rememberColor(`rgb(${red}, ${green}, ${blue})`);
+            return rememberColor(`rgba(${red}, ${green}, ${blue}, ${Number((alpha / 255).toFixed(3))})`);
+          } catch {
+            return rememberColor(fallback);
+          }
+        };
+        const unsupportedColorSyntax = /(?:var\(|oklch|oklab|color-mix|color\(|lch\(|lab\(|currentcolor)/i;
+        sourceNodes.forEach((sourceNode, index) => {
+          const cloneNode = clonedNodes[index] as HTMLElement | SVGElement | undefined;
+          if (!cloneNode) return;
+          const computed = window.getComputedStyle(sourceNode);
+          const cloneStyle = (cloneNode as HTMLElement).style;
+          if (computed.color) cloneStyle.setProperty('color', normalizeColor(computed.color, '#334155'), 'important');
+          if (computed.backgroundColor && computed.backgroundColor !== 'transparent') cloneStyle.setProperty('background-color', normalizeColor(computed.backgroundColor, '#ffffff'), 'important');
+          ['border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color'].forEach(property => {
+            const color = computed.getPropertyValue(property);
+            if (color) cloneStyle.setProperty(property, normalizeColor(color, '#e2e8f0'), 'important');
+          });
+          ['outline-color', 'text-decoration-color', 'column-rule-color', '-webkit-text-stroke-color', '-webkit-text-fill-color', 'caret-color'].forEach(property => {
+            const color = computed.getPropertyValue(property);
+            if (unsupportedColorSyntax.test(color)) cloneStyle.setProperty(property, normalizeColor(color, '#334155'), 'important');
+          });
+          if (unsupportedColorSyntax.test(computed.backgroundImage)) cloneStyle.setProperty('background-image', 'none', 'important');
+          if (unsupportedColorSyntax.test(computed.boxShadow)) cloneStyle.setProperty('box-shadow', 'none', 'important');
+          if (unsupportedColorSyntax.test(computed.textShadow)) cloneStyle.setProperty('text-shadow', 'none', 'important');
+          if (unsupportedColorSyntax.test(computed.filter)) cloneStyle.setProperty('filter', 'none', 'important');
+          if (!(sourceNode instanceof SVGElement)) return;
+          const svgStyle = window.getComputedStyle(sourceNode);
+          const fill = sourceNode.getAttribute('fill');
+          const stroke = sourceNode.getAttribute('stroke');
+          const stopColor = sourceNode.getAttribute('stop-color');
+          if (fill && !fill.startsWith('url(')) cloneNode.setAttribute('fill', normalizeColor(unsupportedColorSyntax.test(fill) ? svgStyle.fill : fill, '#334155'));
+          if (stroke && !stroke.startsWith('url(')) cloneNode.setAttribute('stroke', normalizeColor(unsupportedColorSyntax.test(stroke) ? svgStyle.stroke : stroke, '#94a3b8'));
+          if (stopColor) cloneNode.setAttribute('stop-color', normalizeColor(unsupportedColorSyntax.test(stopColor) ? svgStyle.getPropertyValue('stop-color') : stopColor, '#10b981'));
+        });
+      },
+    });
+  } finally {
+    delete element.dataset.pdfChartSnapshot;
+  }
+  const imageAspectRatio = canvas.width / Math.max(1, canvas.height);
+  const imageDataUrl = canvas.toDataURL('image/png');
+  canvas.width = 0;
+  canvas.height = 0;
+  return { imageDataUrl, imageAspectRatio };
 }
 
 /**
@@ -212,12 +347,16 @@ function normalizeData(data: PdfTemplateData | undefined, settings: PdfTemplateR
     email: configuredSettings.email || sourceCompany.email,
     website: configuredSettings.website || sourceCompany.website,
   };
-  const document: Record<string, unknown> = { title: target.label.toUpperCase(), notes: '', terms: '', ...(source.document || {}) };
+  const sourceDocument: Record<string, unknown> = { title: target.label.toUpperCase(), notes: '', terms: '', ...(source.document || {}) };
+  const isBranchReportOutput = (target.structure === 'report' || target.structure === 'dashboard' || target.module === 'reportes')
+    && !['manager', 'platform', 'portal'].includes(target.module);
+  const document = isBranchReportOutput ? normalizeReportDocumentMetadata(sourceDocument, pageNumber) : sourceDocument;
+  const formattedPageNumber = formatPdfPageNumber(settings.pageNumberFormat, settings.pageNumberCustom, pageNumber, pageCount);
   return {
     ...source,
     company,
-    document: { ...document, status: document.status ? pdfStatusLabel(document.status) : '', notes: document.notes || (source.defaultNotes as string) || '', page: pageNumber, pages: pageCount },
-    page: { number: pageNumber, pages: pageCount },
+    document: { ...document, status: document.status ? pdfStatusLabel(document.status) : '', notes: document.notes || (source.defaultNotes as string) || '', page: formattedPageNumber, pages: pageCount },
+    page: { number: formattedPageNumber, index: pageNumber, pages: pageCount },
     ...(target.key === 'inventario.product-labels' && firstRow && typeof firstRow === 'object' ? { product: { ...firstRow, ...((source.product || {}) as Record<string, unknown>) } } : {}),
   };
 }
@@ -606,7 +745,7 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
 function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings) {
   const element = document.createElement('div');
   setBaseNodeStyle(element, node, settings);
-  const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.number || 1);
+  const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.index || (data.page as Record<string, unknown> | undefined)?.number || 1);
   if (pageNumber > 1) {
     if (Number.isFinite(Number(node.subsequentY))) element.style.top = `${Number(node.subsequentY)}%`;
     if (Number.isFinite(Number(node.subsequentHeight))) element.style.height = `${Number(node.subsequentHeight)}%`;
@@ -626,7 +765,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
 
   const sections = Array.isArray(data.reportSections) ? data.reportSections : [];
   const content = document.createElement('div');
-  Object.assign(content.style, { width: '100%', height: 'auto', minHeight: '0', overflow: 'visible', padding: '5px 7px', boxSizing: 'border-box' });
+  Object.assign(content.style, { width: '100%', height: 'auto', minHeight: '0', overflow: 'visible', padding: '6px 8px', boxSizing: 'border-box' });
   const tableLayout = settings.tableLayout || 'standard';
   const primaryColor = safeHtml2CanvasColor(settings.primaryColor, '#10b981');
   const textColor = safeHtml2CanvasColor(settings.textColor, '#334155');
@@ -643,11 +782,11 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
     Object.assign(sectionElement.style, { width: '100%', marginBottom: sectionIndex === sections.length - 1 ? '0' : compact ? '6px' : '9px', overflow: 'visible' });
     const title = document.createElement('div');
     title.textContent = section.title;
-    Object.assign(title.style, { display: 'block', boxSizing: 'border-box', height: 'auto', minHeight: pdfPointsToCss(compact ? 9 : 11), color: textColor, fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(compact ? 9 : 11), fontWeight: '700', lineHeight: '1.25', padding: '2px 0 1px', marginBottom: compact ? '3px' : '5px', whiteSpace: 'normal', overflow: 'visible', overflowWrap: 'anywhere' });
+    Object.assign(title.style, { display: 'block', boxSizing: 'border-box', width: '96%', height: 'auto', minHeight: pdfPointsToCss(10), margin: '0 auto 15px', color: textColor, fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(10), fontWeight: '700', lineHeight: '1.25', padding: '2px 0 1px', whiteSpace: 'normal', overflow: 'visible', overflowWrap: 'anywhere' });
     sectionElement.appendChild(title);
 
     const table = document.createElement('table');
-    Object.assign(table.style, { width: '100%', height: 'auto', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(compact ? 7 : 7.5), lineHeight: compact ? '1.25' : '1.3' });
+    Object.assign(table.style, { width: '96%', height: 'auto', margin: '0 auto', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(compact ? 7 : 7.5), lineHeight: compact ? '1.25' : '1.3' });
     table.setAttribute('data-responsive-cards', 'false');
     const head = table.createTHead().insertRow();
     Object.assign(head.style, { backgroundColor: safeHtml2CanvasColor(sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(sectionStyle.headerTextColor || headerColor, headerColor), height: 'auto', lineHeight: compact ? '1.15' : '1.2' });
@@ -655,7 +794,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
       const cell = head.insertCell();
       cell.textContent = column.label;
       const configuredColumn = node.columns?.[columnIndex];
-      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, minWidth: '0', maxWidth: '100%', boxSizing: 'border-box', textAlign: column.align || 'left', verticalAlign: 'middle', padding: compact ? '5px 6px' : '7px 8px', backgroundColor: safeHtml2CanvasColor(column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || configuredColumn?.backgroundColor || sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || configuredColumn?.color || sectionStyle.headerTextColor || headerColor, headerColor), fontWeight: '700', fontSize: pdfPointsToCss(compact ? 6.8 : 7.5), lineHeight: compact ? '1.2' : '1.25', textTransform: 'uppercase', borderBottom: `2px solid ${sectionStyle.headerColor || primaryColor}`, whiteSpace: 'normal', overflow: 'visible', overflowWrap: 'anywhere', wordBreak: 'break-word' });
+      Object.assign(cell.style, { width: `${column.width || 100 / Math.max(1, section.columns.length)}%`, minWidth: '0', maxWidth: '100%', boxSizing: 'border-box', textAlign: column.align || 'left', verticalAlign: 'middle', padding: compact ? '3px 4px' : '4px 5px', backgroundColor: safeHtml2CanvasColor(column.backgroundColor || sectionStyle.columnColors?.[String(columnIndex)] || configuredColumn?.backgroundColor || sectionStyle.headerColor || headerBackground, headerBackground), color: safeHtml2CanvasColor(column.color || sectionStyle.columnTextColors?.[String(columnIndex)] || configuredColumn?.color || sectionStyle.headerTextColor || headerColor, headerColor), fontWeight: '700', fontSize: pdfPointsToCss(compact ? 6.8 : 7.5), lineHeight: compact ? '1.2' : '1.25', textTransform: 'uppercase', borderBottom: `2px solid ${sectionStyle.headerColor || primaryColor}`, whiteSpace: 'normal', overflow: 'visible', overflowWrap: 'anywhere', wordBreak: 'break-word' });
     });
   const body = table.createTBody();
     body.style.height = 'auto';
@@ -667,7 +806,7 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
         const cell = tr.insertCell();
         const rawValue = row[column.token] ?? row[column.id];
         cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue ?? '—');
-        Object.assign(cell.style, { padding: compact ? '5px 6px' : '7px 8px', height: 'auto', maxHeight: 'none', minWidth: '0', maxWidth: '100%', color: textColor, borderTop: `1px solid ${lineColor}`, textAlign: column.align || 'left', verticalAlign: 'middle', whiteSpace: 'pre-wrap', overflow: 'visible', overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: compact ? '1.25' : '1.35', backgroundColor: sectionStyle.rowColor || node.tableRowColor ? safeHtml2CanvasColor(sectionStyle.rowColor || node.tableRowColor, '#ffffff') : rowIndex % 2 === 1 && ['standard', 'striped', 'accent'].includes(tableLayout) ? safeHtml2CanvasColor(sectionStyle.stripeColor || rowBackground, '#f8fafc') : 'transparent' });
+        Object.assign(cell.style, { padding: compact ? '3px 4px' : '4px 5px', height: 'auto', maxHeight: 'none', minWidth: '0', maxWidth: '100%', color: textColor, borderTop: `1px solid ${lineColor}`, textAlign: column.align || 'left', verticalAlign: 'middle', whiteSpace: 'pre-wrap', overflow: 'visible', overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: compact ? '1.25' : '1.35', backgroundColor: sectionStyle.rowColor || node.tableRowColor ? safeHtml2CanvasColor(sectionStyle.rowColor || node.tableRowColor, '#ffffff') : rowIndex % 2 === 1 && ['standard', 'striped', 'accent'].includes(tableLayout) ? safeHtml2CanvasColor(sectionStyle.stripeColor || rowBackground, '#f8fafc') : 'transparent' });
       });
     });
     sectionElement.appendChild(table);
@@ -774,84 +913,156 @@ function createBarcodeNode(node: PdfTemplateNode, data: PdfTemplateData, setting
 function createChartNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings) {
   const element = document.createElement('div');
   setBaseNodeStyle(element, node, settings);
-  Object.assign(element.style, { display: 'flex', flexDirection: 'column', alignItems: 'stretch', padding: '4px 6px', gap: '2px', overflow: 'hidden', borderWidth: '1px', boxSizing: 'border-box' });
+  Object.assign(element.style, { display: 'flex', flexDirection: 'column', alignItems: 'stretch', padding: '4px 6px', gap: '3px', overflow: 'hidden', borderWidth: '1px', boxSizing: 'border-box' });
   const chart = data.dashboardCharts?.find(item => item.id === node.token);
   if (!chart) return element;
+  if (chart.imageDataUrl) {
+    Object.assign(element.style, { display: 'block', padding: '0', gap: '0', border: '0', backgroundColor: 'transparent' });
+    const image = document.createElement('img');
+    image.src = chart.imageDataUrl;
+    image.alt = chart.title;
+    Object.assign(image.style, { display: 'block', width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', objectPosition: 'center' });
+    element.appendChild(image);
+    return element;
+  }
+  const chartType = node.chartType || chart.type;
   const title = document.createElement('div');
   title.textContent = chart.title || node.label;
-  Object.assign(title.style, { flex: '0 0 auto', height: pdfPointsToCss(8), fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(7.5), fontWeight: '700', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155'), lineHeight: '1', whiteSpace: 'nowrap', overflow: 'visible', textOverflow: 'ellipsis', position: 'relative', zIndex: '1' });
+  Object.assign(title.style, { flex: '0 0 auto', minHeight: pdfPointsToCss(8), maxHeight: pdfPointsToCss(20), fontFamily: browserFontFamily(node.fontFamily || settings.fontFamily), fontSize: pdfPointsToCss(8), fontWeight: '700', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155'), lineHeight: '1.15', whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', overflowWrap: 'anywhere', position: 'relative', zIndex: '1' });
   element.appendChild(title);
-  const svg = svgElement('svg', { viewBox: '0 0 320 92', preserveAspectRatio: 'none', width: '100%', height: '100%' });
-  // El SVG no debe ocupar de nuevo toda la altura del contenedor: al hacerlo
-  // se monta sobre el título de la gráfica y recorta su primera línea en los
-  // PDFs del dashboard. El flex restante se reparte después del título.
+  const viewBox = chartType === 'area' ? '0 0 420 230' : '0 0 360 220';
+  const svg = svgElement('svg', { viewBox, preserveAspectRatio: 'xMidYMid meet', width: '100%', height: '100%' });
+  // Mantiene la proporción del dibujo: los círculos permanecen circulares y
+  // las etiquetas no se estiran al encajar en tarjetas de distinto tamaño.
   svg.style.flex = '1 1 auto';
   svg.style.minHeight = '0';
-  svg.style.height = 'auto';
+  svg.style.width = '100%';
+  svg.style.height = '100%';
   const labels = chart.labels || [];
   const values = chart.values || chart.series?.[0]?.values || [];
   const palette = chart.colors?.length ? chart.colors : ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#ef4444'];
   const textColor = safeHtml2CanvasColor(node.color || settings.textColor, '#334155');
   const lineColor = safeHtml2CanvasColor(settings.lineColor, '#e2e8f0');
   const safeValues = values.map(value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0);
+  const formatChartValue = (value: number, compact = false) => {
+    const maximumFractionDigits = chart.valueFormat === 'currency' ? 2 : chart.valueFormat === 'percent' ? 1 : 0;
+    const formatted = new Intl.NumberFormat('es-NI', {
+      maximumFractionDigits: compact ? 1 : maximumFractionDigits,
+      minimumFractionDigits: compact ? 0 : chart.valueFormat === 'currency' ? 2 : 0,
+      ...(compact ? { notation: 'compact' as const } : {}),
+    }).format(value);
+    return chart.unitLabel && !compact ? `${formatted} ${chart.unitLabel}` : formatted;
+  };
+  const allChartValues = [...safeValues, ...(chart.series || []).flatMap(series => series.values.map(value => Math.max(0, Number(value) || 0)))];
+  const hasChartData = allChartValues.some(value => value > 0);
   const maxValue = Math.max(1, ...safeValues, ...(chart.series || []).flatMap(series => series.values.map(value => Math.max(0, Number(value) || 0))));
-  if (!labels.length || (!safeValues.length && !chart.series?.some(series => series.values.length))) {
-    const empty = svgElement('text', { x: 160, y: 53, fill: '#64748b', 'font-size': 11, 'text-anchor': 'middle' });
+  if (!labels.length || !hasChartData) {
+    const empty = svgElement('text', { x: chartType === 'area' ? 210 : 180, y: 112, fill: '#64748b', 'font-size': 13, 'text-anchor': 'middle' });
     empty.textContent = 'Sin datos para este período';
     svg.appendChild(empty);
-  } else if ((node.chartType || chart.type) === 'donut') {
+  } else if (chartType === 'donut') {
     const total = safeValues.reduce((sum, value) => sum + value, 0) || 1;
-    const radius = 31;
+    const displayValues = safeValues.length > 5
+      ? [...safeValues.slice(0, 4), safeValues.slice(4).reduce((sum, value) => sum + value, 0)]
+      : safeValues;
+    const displayLabels = safeValues.length > 5 ? [...labels.slice(0, 4), 'Otros'] : labels.slice(0, 5);
+    const radius = 54;
     const circumference = 2 * Math.PI * radius;
     let offset = 0;
-    safeValues.forEach((value, index) => {
+    displayValues.forEach((value, index) => {
       const length = circumference * value / total;
-      svg.appendChild(svgElement('circle', { cx: 48, cy: 47, r: radius, fill: 'none', stroke: palette[index % palette.length], 'stroke-width': 15, 'stroke-dasharray': `${length} ${circumference - length}`, 'stroke-dashoffset': -offset, transform: 'rotate(-90 48 47)' }));
+      svg.appendChild(svgElement('circle', { cx: 82, cy: 110, r: radius, fill: 'none', stroke: palette[index % palette.length], 'stroke-width': 22, 'stroke-dasharray': `${length} ${circumference - length}`, 'stroke-dashoffset': -offset, transform: 'rotate(-90 82 110)' }));
       offset += length;
     });
-    const center = svgElement('text', { x: 48, y: 51, fill: textColor, 'font-size': 10, 'font-weight': '700', 'text-anchor': 'middle' });
-    center.textContent = String(safeValues.reduce((sum, value) => sum + value, 0));
+    const center = svgElement('text', { x: 82, y: 115, fill: textColor, 'font-size': 13, 'font-weight': '700', 'text-anchor': 'middle' });
+    center.textContent = formatChartValue(total, true);
     svg.appendChild(center);
-    labels.slice(0, 5).forEach((label, index) => {
-      const y = 18 + index * 15;
-      svg.appendChild(svgElement('rect', { x: 100, y: y - 7, width: 6, height: 6, rx: 1, fill: palette[index % palette.length] }));
-      const itemLabel = svgElement('text', { x: 110, y, fill: textColor, 'font-size': 9 });
-      itemLabel.textContent = `${String(label).slice(0, 23)}  ${safeValues[index] ?? 0}`;
+    if (chart.unitLabel) {
+      const unit = svgElement('text', { x: 158, y: 15, fill: textColor, 'font-size': 8, 'font-weight': '700' });
+      unit.textContent = chart.unitLabel;
+      svg.appendChild(unit);
+    }
+    displayLabels.forEach((label, index) => {
+      const y = 34 + index * 36;
+      svg.appendChild(svgElement('rect', { x: 158, y: y - 8, width: 9, height: 9, rx: 2, fill: palette[index % palette.length] }));
+      const itemLabel = svgElement('text', { x: 174, y, fill: textColor, 'font-size': 8.5 });
+      itemLabel.textContent = String(label).length > 30 ? `${String(label).slice(0, 29)}…` : String(label);
       svg.appendChild(itemLabel);
+      const itemValue = svgElement('text', { x: 352, y, fill: textColor, 'font-size': 10, 'text-anchor': 'end', 'font-weight': '700' });
+      itemValue.textContent = formatChartValue(displayValues[index] ?? 0, true);
+      svg.appendChild(itemValue);
     });
-  } else if ((node.chartType || chart.type) === 'bar') {
+  } else if (chartType === 'bar') {
     const chartValues = safeValues.slice(0, 5);
     const chartLabels = labels.slice(0, chartValues.length);
-    const rowHeight = Math.min(17, 72 / Math.max(1, chartValues.length));
+    const rowHeight = Math.min(38, 188 / Math.max(1, chartValues.length));
+    if (chart.unitLabel) {
+      const unit = svgElement('text', { x: 4, y: 10, fill: textColor, 'font-size': 8, 'font-weight': '700' });
+      unit.textContent = chart.unitLabel;
+      svg.appendChild(unit);
+    }
     chartValues.forEach((value, index) => {
-      const y = 10 + index * rowHeight;
-      const label = svgElement('text', { x: 1, y: y + 8, fill: textColor, 'font-size': 8 });
-      label.textContent = String(chartLabels[index] || '').slice(0, 13);
+      const y = 14 + index * rowHeight;
+      const label = svgElement('text', { x: 3, y: y + 13, fill: textColor, 'font-size': 9 });
+      const fullLabel = String(chartLabels[index] || '');
+      label.textContent = fullLabel.length > 21 ? `${fullLabel.slice(0, 20)}…` : fullLabel;
       svg.appendChild(label);
-      svg.appendChild(svgElement('rect', { x: 105, y: y + 1, width: Math.max(1, (value / maxValue) * 180), height: Math.max(5, rowHeight - 4), rx: 2, fill: palette[index % palette.length], opacity: 0.85 }));
-      const valueLabel = svgElement('text', { x: 312, y: y + 8, fill: textColor, 'font-size': 8, 'text-anchor': 'end' });
-      valueLabel.textContent = value.toLocaleString('es-NI', { maximumFractionDigits: 1 });
+      svg.appendChild(svgElement('rect', { x: 146, y: y + 3, width: Math.max(2, (value / maxValue) * 145), height: Math.max(8, rowHeight - 8), rx: 3, fill: palette[index % palette.length], opacity: 0.88 }));
+      const valueLabel = svgElement('text', { x: 356, y: y + 13, fill: textColor, 'font-size': 9, 'text-anchor': 'end', 'font-weight': '700' });
+      valueLabel.textContent = formatChartValue(value, true);
       svg.appendChild(valueLabel);
     });
   } else {
     const series = chart.series?.length ? chart.series : [{ label: chart.title, values: safeValues, color: palette[0] }];
     const allValues = series.flatMap(item => item.values.map(value => Math.max(0, Number(value) || 0)));
     const chartMax = Math.max(1, ...allValues);
-    svg.appendChild(svgElement('line', { x1: 8, y1: 70, x2: 312, y2: 70, stroke: lineColor, 'stroke-width': 1 }));
+    const plotTop = chart.unitLabel ? 52 : 43;
+    const plotBottom = 178;
+    const plotLeft = 64;
+    const plotRight = 410;
+    if (chart.unitLabel) {
+      const unit = svgElement('text', { x: plotLeft, y: 36, fill: textColor, 'font-size': 9, 'font-weight': '700' });
+      unit.textContent = chart.unitLabel;
+      svg.appendChild(unit);
+    }
+    series.slice(0, 3).forEach((item, seriesIndex) => {
+      const legendStep = series.length > 2 ? 112 : 166;
+      const legendX = 72 + seriesIndex * legendStep;
+      const color = item.color || palette[seriesIndex % palette.length];
+      svg.appendChild(svgElement('line', { x1: legendX, y1: 16, x2: legendX + 13, y2: 16, stroke: color, 'stroke-width': 3.5 }));
+      const legend = svgElement('text', { x: legendX + 18, y: 19, fill: textColor, 'font-size': 8.5 });
+      const legendLabel = String(item.label || '');
+      const maxLegendLength = series.length > 2 ? 12 : 19;
+      legend.textContent = legendLabel.length > maxLegendLength ? `${legendLabel.slice(0, maxLegendLength - 1)}…` : legendLabel;
+      svg.appendChild(legend);
+    });
+    [0, 0.5, 1].forEach(fraction => {
+      const y = plotBottom - fraction * (plotBottom - plotTop);
+      svg.appendChild(svgElement('line', { x1: plotLeft, y1: y, x2: plotRight, y2: y, stroke: lineColor, 'stroke-width': 0.7 }));
+      const axis = svgElement('text', { x: 57, y: y + 3, fill: textColor, 'font-size': 8, 'text-anchor': 'end' });
+      axis.textContent = formatChartValue(chartMax * fraction, true);
+      svg.appendChild(axis);
+    });
     series.slice(0, 3).forEach((item, seriesIndex) => {
       const color = item.color || palette[seriesIndex % palette.length];
-      const points = item.values.slice(0, labels.length).map((value, index, source) => ({ x: 12 + index * (292 / Math.max(source.length - 1, 1)), y: 62 - (Math.max(0, Number(value) || 0) / chartMax) * 48 }));
+      const points = item.values.slice(0, labels.length).map((value, index, source) => ({ x: source.length === 1 ? (plotLeft + plotRight) / 2 : plotLeft + index * ((plotRight - plotLeft) / (source.length - 1)), y: plotBottom - (Math.max(0, Number(value) || 0) / chartMax) * (plotBottom - plotTop) }));
       if (!points.length) return;
       const linePath = points.map((point, index) => `${index ? 'L' : 'M'}${point.x},${point.y}`).join(' ');
-      const areaPath = `${linePath} L${points[points.length - 1].x},70 L${points[0].x},70 Z`;
+      const areaPath = `${linePath} L${points[points.length - 1].x},${plotBottom} L${points[0].x},${plotBottom} Z`;
       svg.appendChild(svgElement('path', { d: areaPath, fill: color, opacity: 0.12 }));
       svg.appendChild(svgElement('path', { d: linePath, fill: 'none', stroke: color, 'stroke-width': 2.5 }));
       points.forEach(point => svg.appendChild(svgElement('circle', { cx: point.x, cy: point.y, r: 2.5, fill: color })));
+      if (points.length === 1) {
+        const callout = svgElement('text', { x: points[0].x, y: points[0].y - 9, fill: textColor, 'font-size': 9, 'font-weight': '700', 'text-anchor': 'middle' });
+        callout.textContent = formatChartValue(Number(item.values[0]) || 0, true);
+        svg.appendChild(callout);
+      }
     });
     [0, Math.floor((labels.length - 1) / 2), labels.length - 1].filter((index, at, array) => index >= 0 && array.indexOf(index) === at).forEach((index, position) => {
-      const x = position === 0 ? 12 : position === 1 ? 160 : 308;
-      const label = svgElement('text', { x, y: 88, fill: textColor, 'font-size': 8, 'text-anchor': position === 0 ? 'start' : position === 2 ? 'end' : 'middle' });
-      label.textContent = String(labels[index] || '').slice(0, 14);
+      const x = position === 0 ? plotLeft : position === 1 ? (plotLeft + plotRight) / 2 : plotRight;
+      const label = svgElement('text', { x, y: 211, fill: textColor, 'font-size': 9, 'text-anchor': position === 0 ? 'start' : position === 2 ? 'end' : 'middle' });
+      const timeLabel = String(labels[index] || '');
+      label.textContent = timeLabel.length > 18 ? `${timeLabel.slice(0, 17)}…` : timeLabel;
       svg.appendChild(label);
     });
   }
@@ -891,18 +1102,94 @@ function createNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfT
   return createTextNode(node, data, settings);
 }
 
+function isDashboardTrendNode(node: PdfTemplateNode) {
+  return /(?:^|\.)trend$/i.test(String(node.token || ''));
+}
+
+function hasDefaultDashboardChartLayout(definition: PdfTemplateDefinition) {
+  const charts = definition.nodes.filter(node => node.type === 'chart');
+  if (!charts.length) return false;
+  const defaults: Record<string, { x: number; y: number; width: number; height: number }[]> = {
+    'chart-trend': [{ x: 5, y: 46, width: 90, height: 14 }, { x: 5, y: 46, width: 90, height: 42 }],
+    'chart-attention': [{ x: 5, y: 61, width: 28, height: 14 }],
+    'chart-products-sales': [{ x: 35, y: 61, width: 28, height: 14 }],
+    'chart-products-margin': [{ x: 65, y: 61, width: 30, height: 14 }],
+    'chart-registers': [{ x: 5, y: 76, width: 90, height: 14 }],
+  };
+  return charts.every(chart => (defaults[chart.id] || []).some(position =>
+    Math.abs(Number(chart.x) - position.x) < 0.01
+    && Math.abs(Number(chart.y) - position.y) < 0.01
+    && Math.abs(Number(chart.width) - position.width) < 0.01
+    && Math.abs(Number(chart.height) - position.height) < 0.01));
+}
+
+function dashboardChartNodeForPage(
+  node: PdfTemplateNode,
+  pageMode: string,
+  detailNodes: PdfTemplateNode[],
+  defaultLayout: boolean,
+  pageWidth: number,
+  pageHeight: number,
+  chartAspectRatios: Map<string, number>,
+): PdfTemplateNode {
+  if (!defaultLayout) return node;
+  const heightForImageRatio = (width: number, aspectRatio = chartAspectRatios.get(String(node.token || ''))) => aspectRatio && aspectRatio > 0
+    ? width * (pageWidth / pageHeight) / aspectRatio
+    : undefined;
+  if (pageMode === 'overview' && isDashboardTrendNode(node)) {
+    return { ...node, x: 5, y: 46, width: 90, height: heightForImageRatio(90) || 42, firstPageOnly: false };
+  }
+  if (pageMode !== 'detail' || isDashboardTrendNode(node)) return node;
+  const index = detailNodes.findIndex(item => item.id === node.id);
+  if (index < 0) return node;
+  const columns = detailNodes.length === 1 ? 1 : 2;
+  const rows = Math.ceil(detailNodes.length / columns);
+  const row = Math.floor(index / columns);
+  const column = index % columns;
+  const gapX = columns === 1 ? 0 : 4;
+  const width = (90 - gapX) / columns;
+  const top = 31;
+  const bottom = 90;
+  const gapY = 3;
+  const availableHeight = bottom - top - gapY * (rows - 1);
+  const fallbackRowHeight = availableHeight / rows;
+  const requestedRowHeights = Array.from({ length: rows }, (_, row) => Math.max(
+    ...detailNodes.slice(row * columns, (row + 1) * columns).map(detailNode => heightForImageRatio(width, chartAspectRatios.get(String(detailNode.token || ''))) || fallbackRowHeight),
+  ));
+  const requestedHeight = requestedRowHeights.reduce((sum, height) => sum + height, 0);
+  const rowScale = requestedHeight > availableHeight ? availableHeight / requestedHeight : 1;
+  const rowHeights = requestedRowHeights.map(height => height * rowScale);
+  const y = top + rowHeights.slice(0, row).reduce((sum, height) => sum + height + gapY, 0);
+  return {
+    ...node,
+    x: columns === 1 ? 5 : 5 + column * (width + gapX),
+    y,
+    width,
+    height: rowHeights[row] || fallbackRowHeight,
+    firstPageOnly: false,
+  };
+}
+
 function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRenderSettings, data: PdfTemplateData, width: number, height: number) {
   const page = document.createElement('div');
   Object.assign(page.style, { position: 'relative', width: `${width}mm`, height: `${height}mm`, overflow: 'hidden', background: safeHtml2CanvasColor(settings.backgroundColor || definition.page.background, '#ffffff'), color: safeHtml2CanvasColor(settings.textColor, '#334155'), boxSizing: 'border-box' });
-  const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.number || 1);
-  const pageCount = Number((data.page as Record<string, unknown> | undefined)?.pages || 1);
+  const pageMetadata = data.page as Record<string, unknown> | undefined;
+  const pageNumber = Number(pageMetadata?.index || pageMetadata?.number || 1);
+  const pageCount = Number(pageMetadata?.pages || 1);
+  const dashboardPageMode = String((data as Record<string, unknown>).dashboardChartsPage || '');
+  const defaultDashboardLayout = hasDefaultDashboardChartLayout(definition);
+  const chartAspectRatios = new Map((data.dashboardCharts || []).map(chart => [chart.id, Number(chart.imageAspectRatio) || 0]));
+  const activeChartIds = new Set((data.dashboardCharts || []).map(chart => chart.id));
+  const detailChartNodes = definition.nodes.filter(node => node.type === 'chart' && !isDashboardTrendNode(node) && activeChartIds.has(String(node.token || '')));
   const hasRepeatableReportHeader = pageNumber > 1 && definition.nodes.some(item => item.enabled !== false && item.type !== 'report-sections' && !item.firstPageOnly && Number(item.y || 0) < 30);
   const hasParty = definition.nodes.some(node => partyField(node) && hasRenderablePartyValue(node, data));
   definition.nodes
     .filter(node => node.enabled !== false && (node.page || 1) === 1)
     .filter(node => !(data.dashboardCover === true && node.type === 'report-sections'))
     .filter(node => node.type !== 'chart' || Boolean(data.dashboardCharts?.some(chart => chart.id === node.token)))
-    .filter(node => !node.firstPageOnly || Number((data.page as Record<string, unknown> | undefined)?.number || 1) === 1)
+    .filter(node => node.type !== 'chart' || !dashboardPageMode || (dashboardPageMode === 'overview' ? isDashboardTrendNode(node) : dashboardPageMode === 'detail' ? !isDashboardTrendNode(node) : false))
+    .filter(node => node.type === 'chart' && dashboardPageMode === 'detail' ? true : !node.firstPageOnly || pageNumber === 1)
+    .filter(node => settings.showPageNumber !== false || node.token !== 'page.number')
     // En un reporte individual los totales y las notas pertenecen a la última
     // página. Dejarlos en cada página hace que ocupen el espacio de la tabla
     // aunque todavía existan filas pendientes por imprimir.
@@ -911,12 +1198,15 @@ function renderPage(definition: PdfTemplateDefinition, settings: PdfTemplateRend
     .filter(node => node.id !== 'party-section' || hasParty)
     .filter(node => !partyField(node) || hasRenderablePartyValue(node, data))
     .forEach(node => {
-      const continuationNode = node.type === 'report-sections' && pageNumber > 1 && !hasRepeatableReportHeader
-        ? { ...node, subsequentY: 8, subsequentHeight: 86 }
+      const positionedNode = node.type === 'chart' && dashboardPageMode
+        ? dashboardChartNodeForPage(node, dashboardPageMode, detailChartNodes, defaultDashboardLayout, width, height, chartAspectRatios)
         : node;
+      const continuationNode = positionedNode.type === 'report-sections' && pageNumber > 1 && !hasRepeatableReportHeader
+        ? { ...positionedNode, subsequentY: 8, subsequentHeight: 86 }
+        : positionedNode;
       const renderedNode = createNode(continuationNode, data, settings);
-      renderedNode.dataset.pdfNodeId = node.id;
-      renderedNode.dataset.pdfNodeType = node.type;
+      renderedNode.dataset.pdfNodeId = positionedNode.id;
+      renderedNode.dataset.pdfNodeType = positionedNode.type;
       page.appendChild(renderedNode);
     });
   if (settings.watermark?.trim()) { const watermark = document.createElement('div'); Object.assign(watermark.style, { position: 'absolute', inset: '38% 0 auto', textAlign: 'center', transform: 'rotate(-28deg)', color: safeHtml2CanvasColor(settings.primaryColor, '#10b981'), opacity: String((settings.watermarkOpacity || 12) / 100), fontSize: '42px', fontWeight: '800' }); watermark.textContent = settings.watermark; page.appendChild(watermark); }
@@ -1033,7 +1323,7 @@ function reflowPartySection(page: HTMLElement, definition: PdfTemplateDefinition
   }
 }
 
-export async function renderPdfTemplateToPdf({ definition, settings: requestedSettings, targetKey, data, fileName, save = true }: PdfTemplateRenderOptions) {
+export async function renderPdfTemplateToPdf({ definition, settings: requestedSettings, targetKey, data, fileName, save = true, onProgress }: PdfTemplateRenderOptions) {
   if (typeof document === 'undefined') throw new Error('La plantilla PDF requiere un navegador.');
   const settings = normalizePdfPaperSettings(targetKey, requestedSettings as unknown as Record<string, unknown>) as PdfTemplateRenderSettings & Record<string, unknown>;
   // Las vistas reciben el branding por distintas capas (ThemeContext,
@@ -1107,7 +1397,10 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
   const dashboardTarget = getPdfTemplateTarget(targetKey).structure === 'dashboard';
   if (dashboardTarget) {
     const dashboardHasCover = Boolean(renderData.dashboardCharts?.length || renderData.reportKpis?.length);
-    if (dashboardHasCover) renderJobs.push({ definition: baseDefinition, data: { ...renderData, reportSections: [], dashboardCover: true } });
+    const chartNodes = baseDefinition.nodes.filter(node => node.enabled !== false && node.type === 'chart' && renderData.dashboardCharts?.some(chart => chart.id === node.token));
+    const hasSupportingCharts = chartNodes.some(node => !isDashboardTrendNode(node));
+    if (dashboardHasCover) renderJobs.push({ definition: baseDefinition, data: { ...renderData, reportSections: [], dashboardCover: true, dashboardChartsPage: 'overview', renderScale: 2.5 } });
+    if (hasSupportingCharts) renderJobs.push({ definition: baseDefinition, data: { ...renderData, reportSections: [], dashboardCover: true, dashboardChartsPage: 'detail', renderScale: 2.5 } });
     sectionGroups.filter((group): group is PdfTemplateReportSection[] => Boolean(group?.length)).forEach(sectionGroup => {
       const firstSection = sectionGroup[0];
       renderJobs.push({
@@ -1115,6 +1408,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
         data: {
           ...renderData,
           dashboardCover: false,
+          dashboardChartsPage: 'none',
           reportSections: sectionGroup,
           items: firstSection?.rows || [],
           rows: firstSection?.rows || [],
@@ -1122,7 +1416,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
         },
       });
     });
-    if (!renderJobs.length) renderJobs.push({ definition: baseDefinition, data: { ...renderData, dashboardCover: true, reportSections: [] } });
+    if (!renderJobs.length) renderJobs.push({ definition: baseDefinition, data: { ...renderData, dashboardCover: true, dashboardChartsPage: 'overview', reportSections: [] } });
   }
 
   if (!dashboardTarget) sectionGroups.forEach((sectionGroup, groupIndex) => {
@@ -1190,6 +1484,8 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
   Object.assign(wrapper.style, { width: `${width}mm`, height: `${height}mm`, overflow: 'visible', background: '#fff' });
   try {
     for (let index = 0; index < renderJobs.length; index += 1) {
+      onProgress?.({ page: index + 1, totalPages: renderJobs.length });
+      await yieldToBrowser();
       const job = renderJobs[index];
       const pageData = normalizeData(job.data, settings, targetKey, index + 1, renderJobs.length);
       const page = renderPage(job.definition, settings, pageData, width, height);
@@ -1199,9 +1495,8 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
       reflowPartySection(page, job.definition);
       reflowIndividualPage(page, job.definition);
       const requestedRenderScale = Number((job.data as Record<string, unknown>).renderScale);
-      const maxScale = isRepeatedLabel ? 4 : 1.5;
-      const defaultScale = isRepeatedLabel ? 3.5 : 1.5;
-      const renderScale = Math.max(0.9, Math.min(maxScale, requestedRenderScale || defaultScale));
+      const pageHasCharts = Boolean(page.querySelector('[data-pdf-node-type="chart"]'));
+      const renderScale = Math.max(0.9, Math.min(2.5, requestedRenderScale || (pageHasCharts ? 2.5 : 1.5)));
       const canvas = await html2canvas(page, {
         scale: renderScale,
         backgroundColor: safeHtml2CanvasColor(job.definition.page.background, '#ffffff'),
@@ -1211,7 +1506,12 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
         foreignObjectRendering: false,
       });
       if (index > 0) pdf.addPage([width, height], settings.orientation === 'landscape' ? 'l' : 'p');
-      pdf.addImage(canvas, 'PNG', 0, 0, width, height, undefined, 'FAST');
+      try {
+        pdf.addImage(canvas, 'PNG', 0, 0, width, height, undefined, 'FAST');
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
       page.remove();
     }
     const blob = pdf.output('blob');

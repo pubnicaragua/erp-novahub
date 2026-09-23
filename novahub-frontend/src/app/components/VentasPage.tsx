@@ -293,10 +293,14 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     placeholderData: keepPreviousData,
   });
   const productsQuery = useQuery({
-    queryKey: ['sales', 'products-catalog', tenantKey, 1, 200],
-    queryFn: ({ signal }) => inventoryService.getProductLookup({ page: 1, pageSize: 200, purpose: 'SALES' }, signal),
+    queryKey: ['sales', 'products-catalog', tenantKey, selectedBranchId, 'PRODUCT', 'all-pages'],
+    queryFn: ({ signal }) => inventoryService.getAllProductLookupPages({ pageSize: 200, purpose: 'SALES', type: 'PRODUCT' }, signal),
     enabled: canViewSalesSection(activeSection) && needsProducts,
-    placeholderData: keepPreviousData,
+  });
+  const servicesQuery = useQuery({
+    queryKey: ['sales', 'products-catalog', tenantKey, selectedBranchId, 'SERVICE', 'all-pages'],
+    queryFn: ({ signal }) => inventoryService.getAllProductLookupPages({ pageSize: 200, purpose: 'SALES', type: 'SERVICE' }, signal),
+    enabled: canViewSalesSection(activeSection) && needsProducts,
   });
   const seriesQuery = useQuery({
     queryKey: ['sales', 'series', tenantKey],
@@ -362,7 +366,11 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     pagos: toArray(paymentsQuery.data) as PaymentReceived[],
     devoluciones: toArray(returnsQuery.data) as SalesReturn[],
     notasCredito: toArray(creditNotesQuery.data) as CreditNote[],
-    productos: toArray(productsQuery.data) as Product[],
+    productos: [...toArray(productsQuery.data), ...toArray(servicesQuery.data)].map((product: any) => ({
+      ...product,
+      warehouseCatalog: (productsQuery.data as any)?.warehouseCatalog || (servicesQuery.data as any)?.warehouseCatalog || product.warehouseCatalog,
+      itemType: product.itemType || product.type || 'PRODUCT',
+    })) as Product[],
     series: toArray(seriesQuery.data),
     warehouses: toArray(warehousesQuery.data),
     employees: salesEmployees,
@@ -455,7 +463,9 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               : activeSection === 'devoluciones-venta' ? returnsQuery
                 : activeSection === 'notas-credito' ? creditNotesQuery
                   : undefined;
-  const loading = Boolean(activeQuery?.isPending || (needsCatalogs && customersCatalogQuery.isPending) || (needsProducts && productsQuery.isPending) || (needsCredits && creditNotesQuery.isPending));
+  const productCatalogLoading = productsQuery.isPending || servicesQuery.isPending;
+  const productCatalogError = productsQuery.isError || servicesQuery.isError;
+  const loading = Boolean(activeQuery?.isPending || (needsCatalogs && customersCatalogQuery.isPending) || (needsProducts && productCatalogLoading) || (needsCredits && creditNotesQuery.isPending));
 
   const makePagination = (section: string, query: any): SalesPaginationControls => {
     const state = pageFor(section);
@@ -552,10 +562,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <ClientesView data={filteredData.clientes} loading={loading} error={customersListQuery.error} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'estimaciones' && (
-                <EstimacionesView data={filteredData.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} warehouses={data.warehouses} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />
+                <EstimacionesView data={filteredData.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'ordenes-venta' && (
-                <OrdenesVentaView data={filteredData.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={filteredData.clientes} products={data.productos} warehouses={data.warehouses} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} dateFrom={ordersDates.dateFrom} dateTo={ordersDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('ordenes-venta', from, to)} statusFilter={ordersStatusFilter} onStatusFilterChange={(value) => { setOrdersStatusFilter(value); updatePage('ordenes-venta', 1); }} salesAlert={salesAlert || undefined} />
+                <OrdenesVentaView data={filteredData.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} dateFrom={ordersDates.dateFrom} dateTo={ordersDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('ordenes-venta', from, to)} statusFilter={ordersStatusFilter} onStatusFilterChange={(value) => { setOrdersStatusFilter(value); updatePage('ordenes-venta', 1); }} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'facturas' && (
                 <FacturasView 
@@ -564,6 +574,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   onRefresh={fetchData} 
                   customers={filteredData.clientes} 
                   products={data.productos} 
+                  productsLoading={productCatalogLoading}
+                  productsError={productCatalogError}
                   series={data.series}
                   warehouses={data.warehouses}
                   employees={data.employees}
@@ -580,7 +592,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 />
               )}
               {activeSection === 'facturas-recurrentes' && (
-                <FacturasRecurrentesView data={filteredData.recurrentes} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} warehouses={data.warehouses} pagination={pagination.recurrentes} onSearchChange={(value) => updateSearch('facturas-recurrentes', value)} dateFrom={recurringDates.dateFrom} dateTo={recurringDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('facturas-recurrentes', from, to)} salesAlert={salesAlert || undefined} />
+                <FacturasRecurrentesView data={filteredData.recurrentes} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.recurrentes} onSearchChange={(value) => updateSearch('facturas-recurrentes', value)} dateFrom={recurringDates.dateFrom} dateTo={recurringDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('facturas-recurrentes', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'pagos-recibidos' && (
                 <PagosRecibidosView data={filteredData.pagos} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} credits={filteredData.notasCredito} pagination={pagination.pagos} onSearchChange={(value) => updateSearch('pagos-recibidos', value)} dateFrom={paymentsDates.dateFrom} dateTo={paymentsDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('pagos-recibidos', from, to)} salesAlert={salesAlert || undefined} />
@@ -589,7 +601,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <DevolucionesView data={filteredData.devoluciones} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} products={data.productos} warehouses={data.warehouses} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} dateFrom={returnsDates.dateFrom} dateTo={returnsDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('devoluciones-venta', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'notas-credito' && (
-                <NotasCreditoView data={filteredData.notasCredito} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} warehouses={data.warehouses} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} salesAlert={salesAlert || undefined} />
+                <NotasCreditoView data={filteredData.notasCredito} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'listas-precios' && (
                 <PriceListsView products={data.productos} onRefresh={fetchData} isSidebarCollapsed={isSidebarCollapsed} />

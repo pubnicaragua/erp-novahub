@@ -999,7 +999,7 @@ function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName, ten
           <p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{estimate.number}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <PdfDownloadButton onDownload={handleDownloadPdf} size="sm" className="h-8 px-2 text-[10px]" />
+          <PdfDownloadButton onDownload={handleDownloadPdf} includePageSizes includeRoll size="sm" className="h-8 px-2 text-[10px]" />
           <Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}>
             <X className="size-4" />
           </Button>
@@ -1081,7 +1081,7 @@ function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, 
     <Card className="min-w-0 rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-4">
         <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-sm font-black uppercase tracking-tight">Detalle de {transaction.kind.toLowerCase()}</h3><Badge variant="outline" className={`border-none text-[9px] font-black ${getSalesStatusColor(transaction.status)}`}>{getTransactionStatus(transaction.status)}</Badge></div><p className="mt-1 break-words font-mono text-xs font-bold text-muted-foreground">{transaction.number || 'Sin número'}</p></div>
-        <div className="flex shrink-0 items-center gap-1">{documentType && <PdfDownloadButton onDownload={handleDownloadPdf} size="sm" className="h-8 px-2 text-[10px]" />}<Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}><X className="size-4" /></Button></div>
+        <div className="flex shrink-0 items-center gap-1">{documentType && <PdfDownloadButton onDownload={handleDownloadPdf} includePageSizes includeRoll size="sm" className="h-8 px-2 text-[10px]" />}<Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}><X className="size-4" /></Button></div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <InfoField label="Fecha" value={transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'} icon={Calendar} />
@@ -1130,7 +1130,7 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName, tenan
           <p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{invoice.number}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <PdfDownloadButton onDownload={handleDownloadPdf} size="sm" className="h-8 px-2 text-[10px]" />
+          <PdfDownloadButton onDownload={handleDownloadPdf} includePageSizes includeRoll size="sm" className="h-8 px-2 text-[10px]" />
           <Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}>
             <X className="size-4" />
           </Button>

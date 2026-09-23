@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react';
-import { Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Package } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import type { PosProduct, PosProductVariant } from '../../services/caja.service';
-import { extractVariantAttributes, findVariantByAttributes } from '../../types/variants';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { formatSalesStock, getAvailableSalesStock, getSalesStockOptionLabel, getSalesWarehouseStockBreakdown } from '../../utils/sales-stock';
 
 type WarehouseOption = { id: string; name: string };
 
@@ -19,38 +19,30 @@ interface VariantPickerModalProps {
 }
 
 export function VariantPickerModal({ open, onOpenChange, product, onSelect, warehouseId, warehouses = [] }: VariantPickerModalProps) {
-  const variants = useMemo(() => product?.variants || [], [product?.variants]);
-  const attributes = useMemo(() => extractVariantAttributes(variants), [variants]);
-  const [selected, setSelected] = useState<Record<string, string>>({});
+  const variants = (product?.variants || []).filter((variant) => variant.isActive !== false);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [product?.id, product?.imageUrl]);
 
-  const matchedVariant = useMemo(
-    () => findVariantByAttributes(variants, selected),
-    [variants, selected]
-  );
+  const matchedVariant = variants.find((variant) => variant.id === selectedVariantId);
+  const matchedVariantStock = product?.trackInventory && matchedVariant
+    ? getAvailableSalesStock(product, warehouseId, matchedVariant.id)
+    : null;
   const matchedVariantHasStock = !product?.trackInventory
-    || Boolean(warehouseId && matchedVariant && Number(matchedVariant.currentStock ?? 0) > 0);
+    || Boolean(warehouseId && matchedVariant && matchedVariantStock !== null && matchedVariantStock > 0);
   const selectedWarehouseName = warehouses.find((warehouse) => warehouse.id === warehouseId)?.name;
-
-  const toggleValue = (attribute: string, value: string) => {
-    setSelected((prev) => {
-      const next = { ...prev };
-      if (next[attribute] === value) delete next[attribute];
-      else next[attribute] = value;
-      return next;
-    });
-  };
 
   const handleConfirm = () => {
     if (matchedVariant) {
       onSelect(matchedVariant as PosProductVariant);
       onOpenChange(false);
-      setSelected({});
+      setSelectedVariantId(null);
     }
   };
 
   const handleClose = () => {
     onOpenChange(false);
-    setSelected({});
+    setSelectedVariantId(null);
   };
 
   if (!product) return null;
@@ -60,35 +52,55 @@ export function VariantPickerModal({ open, onOpenChange, product, onSelect, ware
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg">{product.name}</DialogTitle>
-          <DialogDescription>Selecciona las opciones del producto</DialogDescription>
+          <DialogDescription>Selecciona una variante y revisa su disponibilidad antes de agregarla.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {attributes.map(({ attribute, values }) => (
-            <div key={attribute}>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">{attribute}</p>
-              <div className="flex flex-wrap gap-2">
-                {values.map((value) => {
-                  const isSelected = selected[attribute] === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => toggleValue(attribute, value)}
-                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
-                        isSelected
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-background text-muted-foreground hover:border-primary/30'
-                      }`}
-                    >
-                      {isSelected && <Check className="size-3" />}
-                      {value}
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+            <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground">
+              {product.imageUrl && !imageFailed
+                ? <img src={product.imageUrl} alt="" className="size-full object-cover" onError={() => setImageFailed(true)} />
+                : <Package className="size-5" aria-hidden="true" />}
             </div>
-          ))}
+            <div className="min-w-0">
+              <p className="break-words text-sm font-semibold">{product.name}</p>
+              <p className="truncate font-mono text-[10px] text-muted-foreground">{product.code}</p>
+            </div>
+          </div>
+          <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-border/50 p-2">
+            {variants.map((variant) => {
+              const isSelected = variant.id === selectedVariantId;
+              const stock = product.trackInventory ? getAvailableSalesStock(product, warehouseId, variant.id) : null;
+              const isOutOfStock = Boolean(product.trackInventory && warehouseId && stock === 0);
+              const attributesLabel = variant.attributes?.map((attribute) => attribute.value).filter(Boolean).join(' / ');
+              const warehouseStockSummary = product.trackInventory
+                ? getSalesWarehouseStockBreakdown(product, variant.id).map((warehouse) =>
+                  `${warehouse.name}: ${warehouse.available === null ? 'no disponible' : formatSalesStock(warehouse.available)}`,
+                ).join(' · ')
+                : '';
+              return (
+                <button
+                  key={variant.id}
+                  type="button"
+                  disabled={isOutOfStock}
+                  onClick={() => setSelectedVariantId(variant.id)}
+                  aria-pressed={isSelected}
+                  className="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-background p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:border-border/70 disabled:hover:bg-background sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="break-words text-xs font-bold">{attributesLabel || variant.name || variant.sku}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">SKU {variant.sku || 'Sin SKU'}</span>
+                  </span>
+                  {product.trackInventory && (
+                    <Badge variant={!warehouseId || stock === null ? 'outline' : stock > 0 ? 'secondary' : 'destructive'} className="text-[10px]">
+                      {getSalesStockOptionLabel(product, warehouseId, variant.id)}
+                    </Badge>
+                  )}
+                  {warehouseStockSummary && <span className="basis-full break-words text-[10px] leading-4 text-muted-foreground">Stock por bodega: {warehouseStockSummary}</span>}
+                </button>
+              );
+            })}
+          </div>
 
           {matchedVariant && (
             <div className="rounded-xl border bg-muted/30 p-3 text-xs">
@@ -96,28 +108,17 @@ export function VariantPickerModal({ open, onOpenChange, product, onSelect, ware
                 <span className="text-muted-foreground">SKU:</span>
                 <span className="font-mono font-bold">{matchedVariant.sku}</span>
               </div>
-              {product.trackInventory && (
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-muted-foreground">
-                    {selectedWarehouseName ? `Stock en ${selectedWarehouseName}:` : 'Stock:'}
-                  </span>
-                  <Badge
-                    variant={!warehouseId ? 'outline' : matchedVariantHasStock ? 'secondary' : 'destructive'}
-                    className="text-[10px]"
-                  >
-                    {!warehouseId
-                      ? 'Selecciona bodega'
-                      : matchedVariantHasStock ? `${matchedVariant.currentStock} unidades` : 'Sin stock'}
-                  </Badge>
-                </div>
-              )}
+              {product.trackInventory && <div className="mt-1 font-semibold text-muted-foreground">
+                {selectedWarehouseName ? `Disponibilidad en ${selectedWarehouseName}: ` : 'Disponibilidad: '}
+                {getSalesStockOptionLabel(product, warehouseId, matchedVariant.id)}
+              </div>}
               {product.trackInventory && !warehouseId && (
                 <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
                   Selecciona una bodega de salida para consultar existencias.
                 </p>
               )}
               {product.trackInventory && (
-                <SalesWarehouseStockHint
+              <SalesWarehouseStockHint
                   product={product}
                   warehouseId={warehouseId}
                   warehouses={warehouses}

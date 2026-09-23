@@ -21,6 +21,7 @@ interface PdfDownloadButtonProps {
   disabled?: boolean;
   size?: 'default' | 'sm' | 'lg';
   includeRoll?: boolean;
+  includePageSizes?: boolean;
   label?: string;
   standardLabel?: string;
   standardDescription?: string;
@@ -43,10 +44,11 @@ interface PdfDownloadButtonProps {
 }
 
 /** Menú único para previsualizar una transacción sin ofrecer reportes de la tabla. */
-export function PdfDownloadButton({ onDownload, onExcel, className, disabled = false, size = 'sm', includeRoll = false, label = 'Descargar', standardLabel = 'PDF normal', standardDescription = 'Diseño asignado o global', showStandardOptions = true, firstOption, scopeSelector, filterSelector }: PdfDownloadButtonProps) {
+export function PdfDownloadButton({ onDownload, onExcel, className, disabled = false, size = 'sm', includeRoll = false, includePageSizes = false, label = 'Descargar', standardLabel = 'PDF normal', standardDescription = 'Diseño asignado o global', showStandardOptions = true, firstOption, scopeSelector, filterSelector }: PdfDownloadButtonProps) {
   const [scope, setScope] = useState<PdfExportScope>(scopeSelector?.defaultScope || 'page');
   const [filter, setFilter] = useState(filterSelector?.defaultValue || filterSelector?.options[0]?.value || '');
   const rollOptions = includeRoll ? PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'roll') : [];
+  const pageSizeOptions = includePageSizes ? PDF_DOWNLOAD_OPTIONS.filter((option) => option.group === 'standard') : [];
 
   return (
     <DropdownMenu>
@@ -108,10 +110,21 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
         {showStandardOptions && <DropdownMenuItem onClick={() => onDownload('configured', scopeSelector ? scope : undefined, filterSelector ? filter : undefined)} className="gap-2 rounded-xl py-2.5 [&_svg]:text-foreground/80 data-[highlighted]:[&_svg]:!text-primary-foreground">
           <Download className="size-4" />
           <span className="min-w-0 flex-1">
-            <span className="block font-bold">{standardLabel === 'PDF normal' ? 'Exportar PDF · Carta' : standardLabel}</span>
-            <span className="block text-[10px] text-popover-foreground/75">Carta vertical · {standardDescription}</span>
+            <span className="block font-bold">{includePageSizes && standardLabel === 'PDF normal' ? 'Exportar PDF · Diseño asignado' : standardLabel === 'PDF normal' ? 'Exportar PDF · Carta' : standardLabel}</span>
+            <span className="block text-[10px] text-popover-foreground/75">{includePageSizes ? 'Usa el papel y diseño configurados' : `Carta vertical · ${standardDescription}`}</span>
           </span>
         </DropdownMenuItem>}
+        {pageSizeOptions.length > 0 && <>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75">Tamaño de página</DropdownMenuLabel>
+          {pageSizeOptions.map((option) => (
+            <DropdownMenuItem key={option.value} onClick={() => onDownload(option.value, scopeSelector ? scope : undefined, filterSelector ? filter : undefined)} className="gap-2 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">
+              <Download className="size-3.5" />
+              <span className="min-w-0 flex-1 font-medium">{option.label}</span>
+              <span className="text-right text-[10px] leading-tight text-popover-foreground/75">{option.description}</span>
+            </DropdownMenuItem>
+          ))}
+        </>}
         {rollOptions.length > 0 && (
           <>
             <DropdownMenuSeparator />

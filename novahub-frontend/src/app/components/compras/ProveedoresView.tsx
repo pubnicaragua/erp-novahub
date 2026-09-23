@@ -31,6 +31,7 @@ import { getSupplierDebtAmount, getSupplierFavorAmount } from '../../utils/suppl
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; isSidebarCollapsed?: boolean; }
 
@@ -298,6 +299,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       await generatePurchaseListPDF({
         title: 'Proveedores',
         rows: exportRows,
+        subtitle: [`Búsqueda: ${searchTerm || 'Todas'}`, `Estado: ${statusFilter}`, exportFilter === 'active' ? 'Solo activos' : exportFilter === 'inactive' ? 'Solo inactivos' : ''].filter(Boolean).join(' · '),
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
@@ -318,12 +320,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     }
   };
 
-  const handleExportListExcel = async (scope: PdfExportScope = 'page', exportFilter = 'all') => {
+  const handleExportListExcel = async (exportFilter = 'all') => {
     const exportToastId = toast.loading('Preparando Excel de proveedores...');
     try {
-      const allRows = scope === 'all'
-        ? await fetchAllPaginatedRows<Supplier>((page, pageSize) => suppliersService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, report: true, light: true }))
-        : data;
+      const allRows = await fetchAllPaginatedRows<Supplier>((page, pageSize) => suppliersService.getAll({ page, pageSize, search: searchTerm.trim() || undefined, report: true, light: true }));
       const exportRows = colFilters.applyTo(
         [...allRows].filter((supplier) => {
           const isActive = (supplier as any).isActive !== false && String((supplier as any).status || '').toUpperCase() !== 'INACTIVE';
@@ -335,19 +335,36 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           return String(supplier.name || '').toLowerCase().includes(search) || String(supplier.email || '').toLowerCase().includes(search) || String(supplier.code || '').toLowerCase().includes(search) || String(supplier.phone || '').toLowerCase().includes(search);
         }).sort(compareSupplierNames),
         filterGetters,
-      ).map((supplier) => ({
-        Código: supplier.code || supplier.id?.slice(0, 8) || '—',
-        Proveedor: supplier.name || '—',
-        Contacto: supplier.contactName || '—',
-        Teléfono: supplier.phone || '—',
-        'Saldo pendiente': renderSupplierAmount(supplier.balanceOriginalCurrencyBreakdown, getSupplierDebtAmount(supplier)),
-        'Saldo a favor': renderSupplierAmount(supplier.balanceFavorOriginalCurrencyBreakdown, getSupplierFavorAmount(supplier)),
-        Estado: isSupplierInactive(supplier) ? 'Inactivo' : 'Activo',
-      }));
-      if (!exportRows.length) { toast.error('No hay proveedores para exportar con los filtros actuales.', { id: exportToastId }); return; }
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows), 'Proveedores');
-      XLSX.writeFile(workbook, buildDatedDownloadFileName(['reporte_proveedores'], 'xlsx'));
+      ).map((supplier) => {
+        const balanceByCurrency = (breakdown: Array<{ currency: string; amount: number }> | undefined, currency: SupportedCurrency, fallback: number) => {
+          const matches = (breakdown || []).filter(item => normalizeCurrency(item.currency, baseCurrency) === currency);
+          if (matches.length) return matches.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+          return !breakdown?.length && normalizeCurrency(baseCurrency, 'NIO') === currency ? fallback : 0;
+        };
+        const debt = getSupplierDebtAmount(supplier);
+        const favor = getSupplierFavorAmount(supplier);
+        return {
+          Código: supplier.code || supplier.id?.slice(0, 8) || '—',
+          Proveedor: supplier.name || '—',
+          Contacto: supplier.contactName || '—',
+          Correo: supplier.email || '—',
+          Teléfono: supplier.phone || '—',
+          ...(displayMode === 'ORIGINAL'
+            ? {
+              'Saldo pendiente NIO': balanceByCurrency(supplier.balanceOriginalCurrencyBreakdown, 'NIO', debt),
+              'Saldo pendiente USD': balanceByCurrency(supplier.balanceOriginalCurrencyBreakdown, 'USD', debt),
+              'Saldo a favor NIO': balanceByCurrency(supplier.balanceFavorOriginalCurrencyBreakdown, 'NIO', favor),
+              'Saldo a favor USD': balanceByCurrency(supplier.balanceFavorOriginalCurrencyBreakdown, 'USD', favor),
+            }
+            : { [`Saldo pendiente (${baseCurrency})`]: debt, [`Saldo a favor (${baseCurrency})`]: favor }),
+          Estado: isSupplierInactive(supplier) ? 'Inactivo' : 'Activo',
+        };
+      });
+      createReportWorkbook({
+        fileName: buildDatedDownloadFileName(['reporte_proveedores'], 'xlsx'),
+        sheets: [{ name: 'Proveedores', rows: exportRows }],
+        filters: { Búsqueda: searchTerm || 'Todas', Estado: statusFilter, Alcance: 'Todos los resultados filtrados', Subfiltro: exportFilter === 'all' ? 'Todos' : exportFilter },
+      });
       toast.success('Reporte Excel descargado', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo preparar el Excel', { id: exportToastId });
@@ -570,6 +587,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             <PurchaseViewTutorial view="suppliers" />
             {canPerform('PURCHASES_PROVIDERS', 'export') && <PdfDownloadButton
               label="Exportar"
+              includePageSizes
               includeRoll={false}
               scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }}
               filterSelector={{
@@ -582,7 +600,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 ],
               }}
               onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
-              onExcel={(scope, filter) => void handleExportListExcel(scope, filter)}
+              onExcel={(_scope, filter) => void handleExportListExcel(filter)}
             />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de proveedores" />
             <div className="relative">
