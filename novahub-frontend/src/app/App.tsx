@@ -19,6 +19,7 @@ import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { ActionClickGuard } from './components/ui/ActionClickGuard';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
+import { PublicRsvpPage } from './components/public/PublicRsvpPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
 import { PublicTrackingPage } from './components/public/PublicTrackingPage';
@@ -572,6 +573,7 @@ function AppContent() {
   }, []);
 
   if (location.pathname === '/public/tracking' || location.pathname.startsWith('/public/tracking/')) return <PublicTrackingPage />;
+  if (location.pathname.startsWith('/rsvp/') || location.pathname.startsWith('/public/rsvp/')) return <PublicRsvpPage />;
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
   if (location.pathname.startsWith('/restaurant/menu/')) {

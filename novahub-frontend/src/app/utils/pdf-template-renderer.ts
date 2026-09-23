@@ -586,11 +586,12 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
   const isProductLabelName = node.id === 'label-name';
   const isProductLabelPrice = node.id === 'label-price';
   const isProductLabelValue = node.id === 'label-price' || node.id === 'label-company' || node.id === 'label-date';
+  const isProductLabelText = isProductLabelName || isProductLabelValue;
   const content = isStatusField && rawContent ? `Estado: ${pdfStatusLabel(rawContent)}` : rawContent;
-  // El canvas deja que el contenido del encabezado respire dentro de su caja;
-  // el exportador debe conservar ese mismo comportamiento para no desplazar o
-  // recortar el nombre, título, número y datos de la sucursal.
-  if (isHeaderText) element.style.overflow = 'visible';
+  // El canvas deja que el contenido del encabezado y de etiquetas respire dentro de su caja;
+  // el exportador debe conservar ese mismo comportamiento para no recortar letras descendentes
+  // (como g, j, p, q, y) ni desplazar textos importantes.
+  if (isHeaderText || isProductLabelText) element.style.overflow = 'visible';
   if (isProductLabelPrice) {
     element.style.height = `${Math.max(5, Number(node.height) || 0)}%`;
     element.style.padding = '0';
@@ -635,8 +636,8 @@ function createTextNode(node: PdfTemplateNode, data: PdfTemplateData, settings: 
       justifyContent: isReportKpiLabel ? 'center' : 'flex-start', textAlign: isReportKpiLabel ? 'center' : node.align || 'left',
       whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'normal', overflow: 'visible',
       ...(isReportKpiLabel ? { lineHeight: '1.05', padding: '0 2px' } : {}),
-      ...(isProductLabelName ? { fontSize: pdfPointsToCss(fittedProductLabelFontSize, 5.5), lineHeight: '1.05', whiteSpace: 'normal', wordBreak: 'break-word' } : {}),
-      ...(isProductLabelValue ? { fontSize: pdfPointsToCss(fittedProductLabelFontSize, 2.5), lineHeight: '1.05', whiteSpace: 'nowrap', textOverflow: 'clip' } : {}),
+      ...(isProductLabelName ? { fontSize: pdfPointsToCss(fittedProductLabelFontSize, 5.5), lineHeight: '1.25', whiteSpace: 'normal', wordBreak: 'break-word' } : {}),
+      ...(isProductLabelValue ? { fontSize: pdfPointsToCss(fittedProductLabelFontSize, 2.5), lineHeight: '1.2', whiteSpace: 'nowrap', textOverflow: 'clip' } : {}),
     });
     if (node.type === 'section' && node.id === 'party-section') {
       Object.assign(text.style, { fontSize: pdfPointsToCss(7), fontWeight: '700', letterSpacing: '0.45px', textTransform: 'uppercase', color: safeHtml2CanvasColor(node.color || settings.textColor, '#334155') });
@@ -868,28 +869,29 @@ function createBarcodeNode(node: PdfTemplateNode, data: PdfTemplateData, setting
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',
   });
   const canvas = document.createElement('canvas');
   const value = tokenValue(node, data) || node.sample || '000000000000';
+  const barcodeMultiplier = isProductLabelBarcode ? 2.5 : 1;
   try {
     JsBarcode(canvas, value, {
       format: 'CODE128',
-      width: isProductLabelBarcode ? 1.8 : 1.5,
-      height: isProductLabelBarcode ? 30 : 34,
+      width: (isProductLabelBarcode ? 1.8 : 1.5) * barcodeMultiplier,
+      height: (isProductLabelBarcode ? 32 : 34) * barcodeMultiplier,
       displayValue: true,
-      fontSize: Math.max(8, Math.min(22, Math.round((Number(node.fontSize) || 8) * 1.2 * PDF_DEFAULT_FONT_SCALE))),
+      fontSize: Math.max(8, Math.min(22, Math.round((Number(node.fontSize) || 8) * 1.2 * PDF_DEFAULT_FONT_SCALE))) * barcodeMultiplier,
       margin: 0,
-      textMargin: isProductLabelBarcode ? 2 : 1,
+      textMargin: (isProductLabelBarcode ? 2 : 1) * barcodeMultiplier,
       background: 'transparent',
       lineColor: safeHtml2CanvasColor(node.color, '#111827'),
     });
     Object.assign(canvas.style, {
       display: 'block',
-      width: '100%',
-      height: 'auto',
       maxWidth: '100%',
       maxHeight: '100%',
+      width: 'auto',
+      height: 'auto',
       objectFit: 'contain',
     });
     element.appendChild(canvas);
@@ -1081,6 +1083,10 @@ function createNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfT
     const logo = typeof data.logo === 'string' ? data.logo : typeof data.company?.logo === 'string' ? data.company.logo : '';
     const fallback = createLogoFallback(data, settings);
     fallback.style.display = logo ? 'none' : 'flex';
+    if (node.id === 'label-logo' && !logo) {
+      fallback.style.display = 'none';
+      element.style.display = 'none';
+    }
     if (logo && /^(data:image\/|https?:\/\/|\/)/i.test(logo)) {
       const image = document.createElement('img');
       image.src = logo;

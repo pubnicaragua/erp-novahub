@@ -1,15 +1,17 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowUpRight, Building2, CalendarDays, ChevronRight, Eye, FileText, History, MessageCircle, UserRound } from 'lucide-react';
+import { ArrowUpRight, Building2, CalendarDays, ChevronRight, Eye, FileText, History, Image as ImageIcon, MessageCircle, UserRound } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
-import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import { PdfDownloadButton, type PdfDownloadExtraOptions } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getSalesStatusColor } from '../../utils/salesStatus';
 import { CurrencyRateDetails } from '../ui/CurrencyValuation';
 import { managerStatusLabel } from '../../utils/managerLabels';
+import { normalizeEstimateImages } from '../../types';
+import { EstimateImageGallery } from './EstimateImageGallery';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -51,6 +53,7 @@ export interface SalesDocumentPanelData {
   notes?: string;
   reason?: string;
   history?: any[];
+  images?: Array<{ id?: string; url: string; name?: string; caption?: string }>;
 }
 
 export function getSalesLineIdentifiers(item: any, products: any[] = []): { productCode: string | null; variantSku: string | null } {
@@ -71,7 +74,7 @@ interface SalesDocumentDetailSheetProps {
   onGoToBranch?: () => void;
   onWhatsApp?: () => void;
   hasWhatsApp?: boolean;
-  onDownloadPdf?: (format: PdfDownloadFormat) => void;
+  onDownloadPdf?: (format: PdfDownloadFormat, scope?: any, filter?: any, options?: PdfDownloadExtraOptions) => void;
   extraActions?: ReactNode;
 }
 
@@ -191,7 +194,15 @@ export function SalesDocumentDetailSheet({
                   <MessageCircle className="size-4 shrink-0" /> WhatsApp
                 </Button>}
                 {extraActions}
-                {onDownloadPdf && <PdfDownloadButton onDownload={onDownloadPdf} includePageSizes includeRoll />}
+                {onDownloadPdf && (
+                  <PdfDownloadButton
+                    onDownload={onDownloadPdf}
+                    includePageSizes
+                    includeRoll
+                    hasImages={Boolean(normalizeEstimateImages(document.images).items.length)}
+                    imagesCount={normalizeEstimateImages(document.images).items.length}
+                  />
+                )}
               </section>
 
               <section className="rounded-2xl border border-border/50 p-4">
@@ -203,6 +214,13 @@ export function SalesDocumentDetailSheet({
                   ))}
                 </div>
               </section>
+
+              {normalizeEstimateImages(document.images).items.length > 0 && (
+                <EstimateImageGallery
+                  images={document.images}
+                  readOnly
+                />
+              )}
 
               <section className="rounded-2xl border border-border/50 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">

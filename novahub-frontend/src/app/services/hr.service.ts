@@ -28,6 +28,17 @@ export const hrService = {
 
   // ===== EMPLOYEES =====
   getEmployees: (filters?: any, signal?: AbortSignal) => api.get('/hr/employees', withSignal(filters, signal)),
+  getEmployeeLookup: (search?: string, signal?: AbortSignal) => api.get<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+    phone?: string;
+    employeeNumber?: string;
+    department?: { id: string; name: string };
+    position?: { id: string; title: string };
+    user?: { id: string };
+  }>>('/hr/lookups/employees', withSignal(search ? { search } : undefined, signal)),
   getEmployee: (id: string, signal?: AbortSignal) => api.get(`/hr/employees/${id}`, withSignal(undefined, signal)),
   getEmployeeHistory: (id: string, signal?: AbortSignal) => api.get(`/hr/employees/${id}/history`, withSignal(undefined, signal)),
   createEmployee: (data: any) => api.post('/hr/employees', data),

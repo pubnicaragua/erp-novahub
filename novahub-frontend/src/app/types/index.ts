@@ -157,6 +157,74 @@ export interface Customer {
   updatedAt: string;
 }
 
+export type ImageGalleryColumns = 1 | 2;
+export type ImageGallerySize = 'small' | 'medium' | 'large';
+
+export interface EstimateImageGalleryConfig {
+  columns: ImageGalleryColumns;
+  size: ImageGallerySize;
+  showFileName?: boolean;
+}
+
+export interface EstimateImage {
+  id: string;
+  url: string;
+  name: string;
+  title?: string;
+  caption?: string;
+  description?: string;
+  showFileName?: boolean;
+  byteSize?: number;
+  createdAt?: string;
+}
+
+export interface EstimateImagesPayload {
+  items: EstimateImage[];
+  columns?: ImageGalleryColumns;
+  size?: ImageGallerySize;
+  showFileName?: boolean;
+}
+
+export function normalizeEstimateImages(rawImages: unknown): {
+  items: EstimateImage[];
+  columns: ImageGalleryColumns;
+  size: ImageGallerySize;
+  showFileName: boolean;
+} {
+  if (!rawImages) {
+    return { items: [], columns: 2, size: 'medium', showFileName: true };
+  }
+  if (Array.isArray(rawImages)) {
+    return {
+      items: rawImages.filter(Boolean).map((img) => ({
+        ...img,
+        title: img.title || img.caption || '',
+        description: img.description || (img.title && img.title !== img.caption ? img.caption : '') || '',
+        showFileName: img.showFileName !== false,
+      })),
+      columns: 2,
+      size: 'medium',
+      showFileName: true,
+    };
+  }
+  if (typeof rawImages === 'object' && rawImages !== null) {
+    const obj = rawImages as any;
+    const rawList = Array.isArray(obj.items) ? obj.items : [];
+    return {
+      items: rawList.filter(Boolean).map((img: any) => ({
+        ...img,
+        title: img.title || img.caption || '',
+        description: img.description || (img.title && img.title !== img.caption ? img.caption : '') || '',
+        showFileName: img.showFileName !== false,
+      })),
+      columns: obj.columns === 1 ? 1 : 2,
+      size: obj.size === 'small' || obj.size === 'large' ? obj.size : 'medium',
+      showFileName: obj.showFileName !== false,
+    };
+  }
+  return { items: [], columns: 2, size: 'medium', showFileName: true };
+}
+
 // ---- Estimates ----
 export interface Estimate {
   id: string;
@@ -190,6 +258,7 @@ export interface Estimate {
   customCustomerEmail?: string;
   customCustomerPhone?: string;
   items: EstimateItem[];
+  images?: EstimateImage[] | EstimateImagesPayload;
   createdAt: string;
   updatedAt: string;
 }
@@ -1630,6 +1699,7 @@ export interface Task {
 export interface Event {
   id: string;
   title: string;
+  type?: 'EVENT' | 'MEETING' | string;
   description?: string;
   startDate: string;
   endDate: string;
