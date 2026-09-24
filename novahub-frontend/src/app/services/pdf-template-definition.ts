@@ -113,6 +113,22 @@ export interface PdfTemplateNode {
   subsequentHeight?: number;
 }
 
+export function pdfTemplateImageShapeStyles(shape: PdfTemplateNode['shape'], borderRadius = 0) {
+  const selectedShape = shape || 'rectangle';
+  const borderRadiusByShape: Record<string, string> = {
+    pill: '999px',
+    circle: '50%',
+    blob: '42% 58% 62% 38% / 45% 35% 65% 55%',
+    arc: '50% 50% 0 0 / 60% 60% 0 0',
+    wave: '50% 50% 0 0 / 42% 42% 0 0',
+    'wave-bottom': '0 0 50% 50% / 0 0 42% 42%',
+  };
+  return {
+    borderRadius: borderRadiusByShape[selectedShape] || `${Math.max(0, Number(borderRadius) || 0)}px`,
+    clipPath: selectedShape === 'angled' ? 'polygon(0 0,100% 0,88% 100%,0 100%)' : 'none',
+  };
+}
+
 export interface PdfTemplateDefinition {
   version: 1;
   page: { paperSize: string; orientation: 'portrait' | 'landscape'; background: string };

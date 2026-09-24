@@ -17,7 +17,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Warehouse, Tag, ShieldAlert, Gauge, Layers, CalendarClock } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -950,33 +950,13 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;
 
-        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
-        const writeTable = (title: string, headers: string[], rows: any[][], accent: string) => {
-          ws.addRow([title, '', '', '', '', '', '']);
-          ws.mergeCells(`A${ws.rowCount}:G${ws.rowCount}`);
-          ws.getCell(`A${ws.rowCount}`).font = { bold: true, size: 14, color: { argb: accent } };
-          ws.getCell(`A${ws.rowCount}`).alignment = { horizontal: 'center' };
-          ws.addRow([]);
-          const headerRow = ws.addRow(headers);
-          headerRow.eachCell((cell) => {
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: accent } };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-          });
-          rows.forEach((row, idx) => {
-            const r = ws.addRow(row);
-            r.eachCell((cell) => {
-              cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-              if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-            });
-          });
-          ws.addRow([]); ws.addRow([]);
+        const writeTable = (title: string, headers: string[], rows: any[][]) => {
+          appendDashboardExcelTable(ws, title, headers, rows);
         };
 
-        writeTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name, fmtQty(p.qty), p.costPrice, p.value, `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]), 'FF10B981');
-        writeTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name, fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']), 'FF3B82F6');
-        writeTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [i.productName, i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), pdfStatusLabel(i.status, '-')]), 'FFF59E0B');
+        writeTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name, fmtQty(p.qty), p.costPrice, p.value, `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]));
+        writeTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name, fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']));
+        writeTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [i.productName, i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), pdfStatusLabel(i.status, '-')]));
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_inventario'], 'xlsx', dateRange));
         toast.success("Excel exportado exitosamente");

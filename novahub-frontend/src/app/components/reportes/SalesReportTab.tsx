@@ -16,7 +16,7 @@ import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, Pie
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
@@ -853,7 +853,6 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const logoUrl = getPdfTemplateLogo(pdfSettings, themeConfig.logo, 'reportes.sales');
         const primaryHex = (themeConfig.colors.primary || '#10b981').replace('#', '');
         const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
-        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
 
         const ws = wb.addWorksheet('Reporte de Ventas');
         ws.getColumn(1).width = 8; ws.getColumn(2).width = 35; ws.getColumn(3).width = 25; ws.getColumn(4).width = 25;
@@ -928,23 +927,16 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
 
         while (ws.rowCount < currentRow) ws.addRow([]); ws.addRow([]);
 
-        const renderTopTable = (title: string, data: any[], colorHex: string, isMargin: boolean) => {
-          const titleRow = ws.addRow([title, '', '', '']); ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
-          titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: colorHex } }; titleRow.getCell(1).alignment = { horizontal: 'center' }; ws.addRow([]);
-          const header = ws.addRow(['#', 'Nombre', 'Monto', '']);
-          header.eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colorHex } }; c.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder }; });
-          data.forEach((item, idx) => {
-            const val = isMargin ? Number(item.profit ?? item.margin ?? 0) : Number(item.ventas ?? item.value ?? 0);
-            const r = ws.addRow([idx + 1, item.name || 'Sin nombre', val, '']);
-            r.getCell(1).font = { bold: true }; r.getCell(1).alignment = { horizontal: 'center' };
-            r.getCell(3).numFmt = `"${currencySymbol}" #,##0.00`; r.getCell(3).font = { bold: true }; r.getCell(3).alignment = { horizontal: 'right' };
-            r.eachCell(c => { c.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder }; });
-          });
-          ws.addRow([]); ws.addRow([]);
+        const renderTopTable = (title: string, data: any[], isMargin: boolean) => {
+          appendDashboardExcelTable(ws, title, ['#', 'Nombre', 'Monto'], data.map((item, idx) => [
+            idx + 1,
+            item.name || 'Sin nombre',
+            isMargin ? Number(item.profit ?? item.margin ?? 0) : Number(item.ventas ?? item.value ?? 0),
+          ]));
         };
 
-        renderTopTable('Principales Clientes por Ventas Netas', topCustomers.list.slice(0, 5), 'FF3B82F6', false);
-        renderTopTable('Productos con Mayor Contribución', visibleProducts.slice(0, 5), 'FFA855F7', true);
+        renderTopTable('Principales Clientes por Ventas Netas', topCustomers.list.slice(0, 5), false);
+        renderTopTable('Productos con Mayor Contribución', visibleProducts.slice(0, 5), true);
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_ventas'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");

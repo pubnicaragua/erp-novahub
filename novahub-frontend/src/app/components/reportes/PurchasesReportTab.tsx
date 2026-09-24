@@ -19,7 +19,7 @@ import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTena
 import { cn } from '../ui/utils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
-import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { buildReportDateFilters } from '../../utils/report-date-filters';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
@@ -1221,33 +1221,13 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;
 
-        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
-        const renderTable = (title: string, header: string[], rows: (string | number)[][], color: string) => {
-          const titleRow = ws.addRow([title, '', '', '']);
-          ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
-          titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: color } };
-          titleRow.getCell(1).alignment = { horizontal: 'center' };
-          ws.addRow([]);
-          const head = ws.addRow(header);
-          head.eachCell((cell) => {
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-          });
-          rows.forEach((r, idx) => {
-            const row = ws.addRow(r);
-            row.eachCell((cell) => {
-              cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-              if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF7ED' } };
-            });
-          });
-          ws.addRow([]);
+        const renderTable = (title: string, header: string[], rows: (string | number)[][]) => {
+          appendDashboardExcelTable(ws, title, header, rows);
         };
 
-        renderTable('Top Proveedores', ['#', 'Proveedor', 'Detalle', 'Monto'], suppliersPerf.list.slice(0, 5).map((s, i) => [i + 1, s.name, `${s.facturas} facturas · ${s.pct.toFixed(1)}% participación`, Number(s.compras)]), 'FFF59E0B');
-        renderTable('Productos con Mayor Inversión', ['#', 'Producto', 'Detalle', 'Monto'], visibleProducts.filter(p => p.monto > 0).slice(0, 5).map((p, i) => [i + 1, p.name, `${p.qty} unidades · precio prom. ${fmtShort(p.priceAvg)}`, Number(p.monto)]), 'FF3B82F6');
-        renderTable('Retenciones Registradas', ['#', 'Proveedor', 'Detalle', 'Monto'], retenciones.list.slice(0, 5).map((r, i) => [i + 1, r.proveedor, `${r.factura} · ${r.tipo} · ${pdfStatusLabel(r.estado, '-')}`, Number(r.monto)]), 'FFF59E0B');
+        renderTable('Top Proveedores', ['#', 'Proveedor', 'Detalle', 'Monto'], suppliersPerf.list.slice(0, 5).map((s, i) => [i + 1, s.name, `${s.facturas} facturas · ${s.pct.toFixed(1)}% participación`, Number(s.compras)]));
+        renderTable('Productos con Mayor Inversión', ['#', 'Producto', 'Detalle', 'Monto'], visibleProducts.filter(p => p.monto > 0).slice(0, 5).map((p, i) => [i + 1, p.name, `${p.qty} unidades · precio prom. ${fmtShort(p.priceAvg)}`, Number(p.monto)]));
+        renderTable('Retenciones Registradas', ['#', 'Proveedor', 'Detalle', 'Monto'], retenciones.list.slice(0, 5).map((r, i) => [i + 1, r.proveedor, `${r.factura} · ${r.tipo} · ${pdfStatusLabel(r.estado, '-')}`, Number(r.monto)]));
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_compras'], 'xlsx', dateRange));
         toast.success('Excel exportado exitosamente');
