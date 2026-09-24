@@ -2525,37 +2525,74 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
   return renderPdfTemplateToPdf({ definition: definitionWithGeneratedFallback, settings: renderSettings, targetKey, data: enrichedData, fileName, save, onProgress });
 }
 
-export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, tableSummary, fileName, designOverride, format = 'configured' }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; tableSummary?: { label: string; value: unknown; columnIndex?: number }; fileName: string; designOverride?: any; format?: PdfDownloadFormat }) {
+export async function generateConfiguredReportTemplate({
+  targetKey,
+  title,
+  tenantName,
+  tenantLogo,
+  rows,
+  columns,
+  totals,
+  tableSummary,
+  fileName,
+  designOverride,
+  format = 'configured',
+}: {
+  targetKey: string;
+  title: string;
+  tenantName: string;
+  tenantLogo?: string | null;
+  rows: any[];
+  columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>;
+  totals?: Record<string, unknown>;
+  tableSummary?: { label: string; value: unknown; columnIndex?: number };
+  fileName: string;
+  designOverride?: any;
+  format?: PdfDownloadFormat;
+}) {
   const design = designOverride || await getPdfDesign(targetKey);
-  const sourceSettings = (design?.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
-  const settings = getGlobalReportSettings(sourceSettings, tenantName, tenantLogo, targetKey);
-  const rendered = await generateFastGlobalReportPDF({
-    targetKey,
-    title,
-    tenantName,
-    tenantLogo,
-    settings,
-    designOverride,
-    columns,
-    rows,
+  const mappedColumns = columns.map((column, index) => ({
+    id: `column-${index}`,
+    label: column.header,
+    token: `column-${index}`,
+    width: 100 / Math.max(columns.length, 1),
+    align: column.align || ('left' as const),
+  }));
+  const mappedRows = rows.length > 0
+    ? rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])))
+    : [Object.fromEntries(columns.map((column, index) => [`column-${index}`, index === 0 ? 'Sin registros para el alcance seleccionado' : '']))];
+  const target = getPdfTemplateTarget(targetKey);
+  const generatedAt = new Date().toLocaleString('es-NI');
+  const data: PdfTemplateData = {
+    company: { name: tenantName, logo: tenantLogo },
+    document: { title, generated: `Generado: ${generatedAt}`, meta: '' },
+    items: mappedRows,
+    rows: mappedRows,
+    tableColumns: mappedColumns,
+    tableSummary,
     totals,
     ...(target.module === 'reportes' ? { reportSections: [{ id: target.key, title, columns: mappedColumns, rows: mappedRows }] } : {}),
     ...(target.structure === 'dashboard' ? { reportKpis: rows.map(row => ({ label: String(row.label ?? ''), value: String(row.value ?? ''), detail: String(row.detail ?? '') })) } : {}),
   };
   const rendered = await renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format, fileName, designOverride: design });
   if (rendered?.doc) return rendered.doc;
-  return generateFastGlobalReportPDF({
+
+  const sourceSettings = (design?.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
+  const settings = withPaperFormat(getGlobalReportSettings(sourceSettings, tenantName, tenantLogo, targetKey), format);
+  const fastReport = await generateFastGlobalReportPDF({
     targetKey,
     title,
     tenantName,
     tenantLogo,
-    settings: configuredHistoryPaper(createSystemDefaultPdfDesign(targetKey).settings || {}, format),
+    settings,
+    designOverride: design,
     columns,
     rows,
     totals,
     tableSummary,
     fileName,
   });
+  return fastReport?.doc || null;
 }
 
 export interface ConfiguredReportSectionInput {
