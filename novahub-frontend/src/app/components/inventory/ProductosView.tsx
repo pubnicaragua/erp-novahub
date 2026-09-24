@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag, FileText, Columns, Clock, AlertCircle } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, SlidersHorizontal, Tag, FileText, Columns, Clock, AlertCircle, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -125,7 +125,7 @@ const ImportMoneyInput = ({ currencySymbol, className = '', ...props }: ImportMo
 const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por bodega. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-kpis"]', title: 'Indicadores y filtros rápidos', description: 'Cada tarjeta identifica si es un Filtro o un Indicador. En Productos, las tarjetas de existencias filtran la lista; en Servicios, los valores de referencia solo informan.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-filter-toggle"]', title: 'Filtros del catálogo', description: 'Los filtros permanecen ocultos para dejar la vista despejada. Pulsa este botón para desplegar la búsqueda, bodegas, estado, unidad, impuesto y stock; si hay filtros activos, verás el contador aquí.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-filters"]', title: 'Filtros del catálogo', description: 'Aquí dispones de la búsqueda por producto o SKU, marca, bodegas, estado, unidad, impuesto y stock para filtrar tu catálogo en todo momento.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Estas acciones permanecen disponibles en todo momento: crear productos, importar el catálogo, actualizar imágenes, solicitar una compra, imprimir etiquetas y abrir la ayuda de Inventario.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Imágenes e importación', description: 'El botón para importar productos permanece disponible en esta vista y puede utilizarse varias veces. La carga masiva de imágenes también puede utilizarse en cualquier momento y en ambos casos usa ZIP o RAR con archivos llamados como el SKU.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-table"]', title: 'Registros y edición', description: 'Consulta los productos, edita únicamente los campos permitidos y abre el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
@@ -1199,7 +1199,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [showAllWarehouseProducts, setShowAllWarehouseProducts] = useState(true);
   // Almacenes vinculados a alguna sucursal (todas las sucursales): se usa para
   // ocultar los productos de almacenes sin vínculo cuando el check está inactivo.
@@ -4224,27 +4223,25 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         })()}
       </div>
 
-      {/* ─── Acciones fijas + filtros desplegables ─── */}
-      <div className="mb-4 flex min-w-0 flex-col gap-3">
-      <div className={`inventory-products-composite-toolbar erp-composite-toolbar flex min-w-0 flex-col gap-3 min-[1800px]:flex-row min-[1800px]:items-start min-[1800px]:justify-between ${filtersOpen ? 'inventory-products-toolbar-open' : ''}`}>
-          <div className="inventory-products-filter-section min-w-0 flex-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              data-tour="inventory-products-filter-toggle"
-              aria-expanded={filtersOpen}
-              aria-controls="inventory-products-filter-panel"
-              className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
-              onClick={() => setFiltersOpen((open) => !open)}
-              title={filtersOpen ? 'Ocultar filtros del catálogo' : 'Mostrar filtros del catálogo'}
-            >
-              <SlidersHorizontal className="mr-2 size-4" /> {filtersOpen ? 'Ocultar filtros' : 'Filtros'}
-              {activeProductFilterCount > 0 && <Badge variant="secondary" className="ml-1 text-[10px]">{activeProductFilterCount}</Badge>}
-            </Button>
-            {filtersOpen && (
-              <div id="inventory-products-filter-panel" className="mt-3 max-w-full rounded-2xl border border-border/50 bg-muted/10 p-3" data-tour="inventory-products-filters">
-                <div className="erp-toolbar-filter-group flex min-w-0 flex-wrap items-center gap-2" data-toolbar-role="filters">
+      {/* ─── Contenedor de Filtros (Fijo, estilo Balance de Comprobación) ─── */}
+      <div className="mb-4 space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5" data-tour="inventory-products-filters">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+            <span className="flex items-center gap-2 rounded-lg border border-border/30 bg-background/50 px-3 py-1.5 text-foreground">
+              <Filter className="size-3.5 text-primary" /> Filtros
+            </span>
+            <span className="hidden text-[10px] font-medium normal-case tracking-normal text-muted-foreground/70 sm:inline">
+              Filtra y personaliza el catálogo de {isServiceView ? 'servicios' : 'productos'}
+            </span>
+          </div>
+          {activeProductFilterCount > 0 && (
+            <Badge variant="secondary" className="text-[10px]">
+              {activeProductFilterCount} filtro{activeProductFilterCount > 1 ? 's' : ''} activo{activeProductFilterCount > 1 ? 's' : ''}
+            </Badge>
+          )}
+        </div>
+
+        <div className="erp-toolbar-filter-group flex min-w-0 flex-wrap items-center gap-2" data-toolbar-role="filters">
           <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
@@ -4298,6 +4295,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </SelectContent>
             </Select>
           )}
+
           {isServiceView && (
             <Select value={availabilityFilter} onValueChange={(value) => setAvailabilityFilter(value as typeof availabilityFilter)}>
               <SelectTrigger className="erp-filter-select h-10 min-w-[9.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar servicios por disponibilidad"><SelectValue /></SelectTrigger>
@@ -4308,6 +4306,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </SelectContent>
             </Select>
           )}
+
           {!isServiceView && (
             <Select value={effectiveUnitFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalUnitFilter(v); onUnitChange?.(v); }}>
               <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por unidad"><SelectValue /></SelectTrigger>
@@ -4317,6 +4316,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </SelectContent>
             </Select>
           )}
+
           {!isServiceView && (
             <Select value={effectiveTaxRateFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalTaxRateFilter(v); onTaxRateChange?.(v); }}>
               <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por impuesto"><SelectValue /></SelectTrigger>
@@ -4326,6 +4326,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </SelectContent>
             </Select>
           )}
+
           {!isServiceView && (
             <Select value={effectiveStockStatusFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalStockStatusFilter(v); setStockFilter((v || 'all') as any); onStockStatusChange?.(v); }}>
               <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por stock"><SelectValue /></SelectTrigger>
@@ -4339,7 +4340,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
 
           {!selectedBranchId && !isServiceView && (
-                    <label className="flex h-10 shrink-0 cursor-pointer select-none items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-3" title="Mostrar todos los productos incluyendo los de bodegas sin sucursal">
+            <label className="flex h-10 shrink-0 cursor-pointer select-none items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-3" title="Mostrar todos los productos incluyendo los de bodegas sin sucursal">
               <Checkbox checked={showAllWarehouseProducts} onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)} className="size-4" />
               <span className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-muted-foreground">Todas las bodegas</span>
             </label>
@@ -4352,43 +4353,40 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <X className="mr-2 size-4" /> Limpiar
             </Button>
           )}
-                </div>
-              </div>
-            )}
-          </div>
+        </div>
+      </div>
 
-          <div className="erp-toolbar-primary-group flex w-full max-w-full shrink-0 flex-wrap items-center justify-start gap-2 min-[1800px]:w-auto min-[1800px]:justify-end" data-tour="inventory-products-actions">
-          {canPerform(catalogPermissionModule, 'create') && (
-            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 md:order-last" onClick={() => onCreateProduct ? onCreateProduct() : setCreateModalOpen(true)}>
-              <Plus className="mr-2 size-4" /> Nuevo
-            </Button>
-          )}
-          <Button type="button" size="icon" variant="ghost" data-toolbar-role="help" data-tutorial-trigger="true" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="size-4" />
+      {/* ─── Acciones secundarias y primarias ─── */}
+      <div className="mb-4 flex flex-wrap items-center justify-start gap-2" data-tour="inventory-products-actions">
+        {canPerform(catalogPermissionModule, 'import') && (
+          <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title={`Importar ${isServiceView ? 'servicios' : 'el catálogo inicial'} desde una plantilla`}>
+            <Upload className="mr-2 size-4" /> Importar {isServiceView ? 'servicios' : 'productos'}
           </Button>
-          {canPerform(catalogPermissionModule, 'import') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title={`Importar ${isServiceView ? 'servicios' : 'el catálogo inicial'} desde una plantilla`}>
-              <Upload className="mr-2 size-4" /> Importar {isServiceView ? 'servicios' : 'productos'}
-            </Button>
-          )}
-          {!isServiceView && canPerform(catalogPermissionModule, 'edit') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
-              <ImageIcon className="mr-2 size-4" /> Imágenes
-            </Button>
-          )}
-          {!isServiceView && selectedIds.size === 0 && canCreatePurchaseRequest && (
-            <Button type="button" size="sm" variant="outline" aria-label="Solicitar compra" title="Crear una solicitud de compra desde inventario" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={openLowStockSolicitud}>
-              <PackageSearch className="mr-2 size-4" />Solicitar compra
-            </Button>
-          )}
-          {!isServiceView && canPerform(catalogPermissionModule, 'export') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
-              <Barcode className="mr-2 size-4" /> Etiquetas
-            </Button>
-          )}
-        </div>
-          </div>
-        </div>
+        )}
+        {!isServiceView && canPerform(catalogPermissionModule, 'edit') && (
+          <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
+            <ImageIcon className="mr-2 size-4" /> Imágenes
+          </Button>
+        )}
+        {!isServiceView && selectedIds.size === 0 && canCreatePurchaseRequest && (
+          <Button type="button" size="sm" variant="outline" aria-label="Solicitar compra" title="Crear una solicitud de compra desde inventario" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={openLowStockSolicitud}>
+            <PackageSearch className="mr-2 size-4" />Solicitar compra
+          </Button>
+        )}
+        {!isServiceView && canPerform(catalogPermissionModule, 'export') && (
+          <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
+            <Barcode className="mr-2 size-4" /> Etiquetas
+          </Button>
+        )}
+        {canPerform(catalogPermissionModule, 'create') && (
+          <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90" onClick={() => onCreateProduct ? onCreateProduct() : setCreateModalOpen(true)}>
+            <Plus className="mr-2 size-4" /> Nuevo
+          </Button>
+        )}
+        <Button type="button" size="icon" variant="ghost" data-tutorial-trigger="true" aria-label={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} title={`Cómo usar la vista de ${isServiceView ? 'servicios' : 'productos'}`} className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)}>
+          <CircleHelp className="size-4" />
+        </Button>
+      </div>
 
       {!isServiceView && selectedCatalogProducts.length > 0 && (
         <section className="mb-4 min-w-0 rounded-2xl border border-primary/25 bg-primary/[0.04] p-3" aria-labelledby="inventory-selected-products-title">

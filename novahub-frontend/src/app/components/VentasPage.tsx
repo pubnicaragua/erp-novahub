@@ -4,7 +4,7 @@ import { cn } from './ui/utils';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
   RotateCcw, CreditCard, FileOutput, FileMinus,
-  ShoppingCart, BarChart3, Vault, Calculator, Coins, Tags, PackageCheck
+  Calculator, Coins, Tags
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -62,7 +62,7 @@ const SALES_SECTIONS = [
   { id: 'facturacion-caja', label: 'Facturación por Caja', icon: Calculator, description: 'POS y facturación directa', requiredModules: ['SALES'] },
   { id: 'control-caja', label: 'Control de Caja', icon: Coins, description: 'Apertura, arqueo y dashboard', requiredModules: ['SALES'] },
 ];
-const VISIBLE_SALES_SECTIONS = SALES_SECTIONS.filter((section) => !section.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(section.id));
+const VISIBLE_SALES_SECTIONS = SALES_SECTIONS.filter((section: any) => !section.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(section.id));
 
 interface VentasPageProps {
   activeSubModule?: string;

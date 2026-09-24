@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowUpRight, Building2, CalendarDays, ChevronRight, Eye, FileText, History, Image as ImageIcon, MessageCircle, UserRound } from 'lucide-react';
+import { ArrowUpRight, Building2, CalendarDays, ChevronRight, Eye, FileText, History, MessageCircle, UserRound } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -220,6 +220,20 @@ export function SalesDocumentDetailSheet({
                   images={document.images}
                   readOnly
                 />
+              )}
+
+              {normalizeEstimateImages(document.images).customFields?.length > 0 && (
+                <section className="rounded-2xl border border-border/50 p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Campos adicionales</p>
+                  <div className="grid gap-2 text-sm sm:grid-cols-2">
+                    {normalizeEstimateImages(document.images).customFields.map((field, idx) => (
+                      <div key={idx} className="rounded-lg border border-border/40 bg-muted/10 p-2.5">
+                        <p className="text-[10px] font-bold uppercase text-primary">{field.title}</p>
+                        <p className="mt-0.5 text-xs text-foreground font-medium">{field.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               )}
 
               <section className="rounded-2xl border border-border/50 p-4">

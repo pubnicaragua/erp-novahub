@@ -10,10 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
-import { toast } from '@/app/services/toast';
 import { priceListsService, type PriceListItem } from '../../services/price-lists.service';
-import type { ProductVariant } from '../../types/variants';
-import { buildVariantDescription } from '../../types/variants';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
@@ -288,7 +285,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         product.code,
         product.name,
         product.category?.name,
-        ...(product.variants || []).map((variant) => variant.sku),
+        ...(product.variants || []).map((variant: any) => variant.sku),
       ];
       return searchableValues.some((value) => normalize(value).includes(query));
     });
@@ -753,7 +750,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       rows={importRows}
       fileName={importFile}
       lists={importLists}
-      currency={importCurrency}
+      currency={importCurrency as 'USD' | 'NIO'}
       rate={importRate}
       baseCurrency={baseCurrency}
       isSidebarCollapsed={isSidebarCollapsed}

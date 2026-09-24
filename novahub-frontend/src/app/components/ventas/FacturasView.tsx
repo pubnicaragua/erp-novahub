@@ -332,7 +332,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const getCustomerPhone = (invoice: Invoice | null = localDoc): string | null => {
     if (!invoice) return null;
-    return resolveCustomerPhone(invoice.customerId, invoice.customer, customers);
+    return resolveCustomerPhone(invoice.customerId, invoice.customer, customers, invoice.customCustomerPhone);
   };
 
   const handleWhatsApp = async (invoiceOverride?: Invoice) => {
@@ -2190,7 +2190,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           actions={(row) => (
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 pr-1 xl:min-w-max xl:flex-nowrap">
               <WhatsAppActionButton
-                phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
+                phone={resolveCustomerPhone(row.customerId, row.customer, customers, row.customCustomerPhone)}
                 documentLabel="factura"
                 onSend={() => handleWhatsApp(row)}
               />
@@ -2270,7 +2270,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         formatDate={formatDateSafe}
         extraActions={detailInvoice ? <>
           <WhatsAppActionButton
-            phone={resolveCustomerPhone(detailInvoice.customerId, detailInvoice.customer, customers)}
+            phone={resolveCustomerPhone(detailInvoice.customerId, detailInvoice.customer, customers, detailInvoice.customCustomerPhone)}
             documentLabel="factura"
             onSend={() => handleWhatsApp(detailInvoice)}
           />
