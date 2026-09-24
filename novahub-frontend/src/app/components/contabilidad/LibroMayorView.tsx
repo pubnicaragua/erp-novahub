@@ -23,6 +23,8 @@ import { DateField } from '../ui/DateField';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { generateLedgerPDF } from '../../utils/pdfGenerator';
+import { PdfDownloadButton, type PdfExportScope } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 // import { motion } from 'motion/react';
 
@@ -191,12 +193,15 @@ export function LibroMayorView() {
     return acc ? `${acc.code} - ${acc.name}` : undefined;
   }, [filterAccountId, accounts]);
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (format: PdfDownloadFormat = 'configured', scope?: PdfExportScope) => {
     if (!canExport) return;
     setExportingPdf(true);
     try {
-      const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
-      const exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      let exportEntries = orderedEntries;
+      if (scope === 'all' || orderedEntries.length === 0) {
+        const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+        exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      }
       const orderedExportEntries = [...exportEntries].sort((left, right) => {
         const leftCreatedAt = new Date(left.createdAt || left.date).getTime();
         const rightCreatedAt = new Date(right.createdAt || right.date).getTime();
@@ -226,6 +231,7 @@ export function LibroMayorView() {
         dateFrom: filterDateFrom,
         dateTo: filterDateTo,
         accountName: selectedAccountName,
+        format,
         totals: {
           debitos: formatCurrency(exportDebits),
           creditos: formatCurrency(exportCredits),
@@ -240,13 +246,16 @@ export function LibroMayorView() {
     }
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = (scope?: PdfExportScope) => {
     if (!canExport) return;
     setExportingExcel(true);
     void (async () => {
     try {
-      const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
-      const exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      let exportEntries = orderedEntries;
+      if (scope === 'all' || orderedEntries.length === 0) {
+        const exportResponse = await contabilidadService.getLedger({ ...ledgerParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+        exportEntries = accountingList(exportResponse) as LedgerEntry[];
+      }
       const orderedExportEntries = [...exportEntries].sort((left, right) => {
         const leftCreatedAt = new Date(left.createdAt || left.date).getTime();
         const rightCreatedAt = new Date(right.createdAt || right.date).getTime();
@@ -335,24 +344,18 @@ export function LibroMayorView() {
         </div>
         {canExport && (
           <div className="flex items-center gap-2 self-start lg:self-auto">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={orderedEntries.length === 0 || exportingPdf || exportingExcel} className="gap-1.5">
-                  {exportingPdf || exportingExcel ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Exportar
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExportPDF} disabled={exportingPdf} className="cursor-pointer gap-2">
-                  <FileText className="size-4 text-rose-500" />
-                  Exportar a PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportExcel} disabled={exportingExcel} className="cursor-pointer gap-2">
-                  <FileSpreadsheet className="size-4 text-emerald-600" />
-                  Exportar a Excel (.xlsx)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <PdfDownloadButton
+              label={exportingPdf || exportingExcel ? 'Exportando…' : 'Exportar'}
+              disabled={orderedEntries.length === 0 || exportingPdf || exportingExcel}
+              includePageSizes
+              includeRoll={false}
+              scopeSelector={{
+                pageCount: orderedEntries.length,
+                totalCount: ledgerQuery.data?.total || orderedEntries.length,
+              }}
+              onDownload={(format, scope) => void handleExportPDF(format, scope)}
+              onExcel={(scope) => void handleExportExcel(scope)}
+            />
           </div>
         )}
       </div>

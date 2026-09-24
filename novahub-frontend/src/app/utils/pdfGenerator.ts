@@ -2495,7 +2495,7 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
   return renderPdfTemplateToPdf({ definition: definitionWithGeneratedFallback, settings: renderSettings, targetKey, data: enrichedData, fileName, save, onProgress });
 }
 
-export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, tableSummary, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; tableSummary?: { label: string; value: unknown; columnIndex?: number }; fileName: string; designOverride?: any }) {
+export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, tableSummary, fileName, designOverride, format = 'configured' }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; tableSummary?: { label: string; value: unknown; columnIndex?: number }; fileName: string; designOverride?: any; format?: PdfDownloadFormat }) {
   const design = designOverride || await getPdfDesign(targetKey);
   const mappedColumns = columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: 100 / Math.max(columns.length, 1), align: column.align || 'left' as const }));
   const mappedRows = rows.length > 0
@@ -2514,8 +2514,20 @@ export async function generateConfiguredReportTemplate({ targetKey, title, tenan
     ...(target.module === 'reportes' ? { reportSections: [{ id: target.key, title, columns: mappedColumns, rows: mappedRows }] } : {}),
     ...(target.structure === 'dashboard' ? { reportKpis: rows.map(row => ({ label: String(row.label ?? ''), value: String(row.value ?? ''), detail: String(row.detail ?? '') })) } : {}),
   };
-  const rendered = await renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, fileName, designOverride: design });
-  return rendered?.doc || null;
+  const rendered = await renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format, fileName, designOverride: design });
+  if (rendered?.doc) return rendered.doc;
+  return generateFastGlobalReportPDF({
+    targetKey,
+    title,
+    tenantName,
+    tenantLogo,
+    settings: configuredHistoryPaper(createSystemDefaultPdfDesign(targetKey).settings || {}, format),
+    columns,
+    rows,
+    totals,
+    tableSummary,
+    fileName,
+  });
 }
 
 export interface ConfiguredReportSectionInput {
@@ -2662,6 +2674,7 @@ export async function generateJournalPDF({
   dateTo,
   filterStatus,
   totals,
+  format = 'configured',
 }: {
   rows: Array<{
     number: string;
@@ -2679,6 +2692,7 @@ export async function generateJournalPDF({
   dateTo?: string;
   filterStatus?: string;
   totals?: Record<string, unknown>;
+  format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
   const statusLabel = filterStatus && filterStatus !== 'ALL' ? ` · Estado: ${filterStatus}` : '';
@@ -2705,6 +2719,7 @@ export async function generateJournalPDF({
       { header: 'Referencia', value: row => row.referenceNumber || '-' },
     ],
     totals,
+    format,
     fileName: buildDateFilteredPdfFileName(['libro_diario'], 'pdf', dateFrom, dateTo),
   });
   return doc;
@@ -2719,6 +2734,7 @@ export async function generateLedgerPDF({
   dateTo,
   accountName,
   totals,
+  format = 'configured',
 }: {
   rows: Array<{
     date: string;
@@ -2737,6 +2753,7 @@ export async function generateLedgerPDF({
   dateTo?: string;
   accountName?: string;
   totals?: Record<string, unknown>;
+  format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
   const filterAcc = accountName ? ` · Cuenta: ${accountName}` : '';
@@ -2760,6 +2777,7 @@ export async function generateLedgerPDF({
       { header: 'Saldo', value: row => formatAmount(row.balance), align: 'right' },
     ],
     totals,
+    format,
     fileName: buildDateFilteredPdfFileName(['libro_mayor'], 'pdf', dateFrom, dateTo),
   });
   return doc;

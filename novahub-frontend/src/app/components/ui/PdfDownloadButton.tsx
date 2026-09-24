@@ -72,7 +72,7 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size={size} disabled={disabled} className={cn('group gap-1.5 rounded-xl', className)}>
           <Download className="size-4 shrink-0 text-primary transition-colors group-hover:text-foreground" />
-          <span>{label}</span>
+          {Boolean(label) && <span>{label}</span>}
           <ChevronDown className="size-3.5 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
