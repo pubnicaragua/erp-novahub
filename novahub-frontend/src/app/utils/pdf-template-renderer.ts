@@ -687,8 +687,9 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   table.setAttribute('data-responsive-cards', 'false');
   table.style.width = '100%'; table.style.height = 'auto'; table.style.borderCollapse = 'collapse'; table.style.borderSpacing = '0';
   const columns = node.columns?.length ? node.columns : [{ id: 'description', label: 'Descripción', token: 'description', width: 70 }, { id: 'total', label: 'Total', token: 'total', width: 30, align: 'right' as const }];
-  const compact = columns.length >= 5;
-  table.style.fontSize = pdfPointsToCss(Math.max(compact ? 7 : 7.5, (node.fontSize || settings.fontSize || 9) - (compact ? 1.8 : 1)));
+  const isRollPaper = settings.paperSize === 'ROLL-80' || settings.paperSize === 'ROLL-58';
+  const compact = columns.length >= 5 || isRollPaper;
+  table.style.fontSize = pdfPointsToCss(Math.max(isRollPaper ? 6.5 : compact ? 7 : 7.5, (node.fontSize || settings.fontSize || 9) - (isRollPaper ? 1.2 : compact ? 1.8 : 1)));
   table.style.fontFamily = browserFontFamily(node.fontFamily || settings.fontFamily); table.style.tableLayout = 'fixed'; table.style.lineHeight = compact ? '1.12' : '1.25';
   const head = table.createTHead().insertRow();
   const tableLayout = settings.tableLayout || 'standard';
@@ -699,7 +700,7 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const headerColor = node.tableHeaderTextColor || (tableLayout === 'minimal' || tableLayout === 'ledger' ? textColor : '#ffffff');
   const rowTextColor = node.tableTextColor || textColor;
   const rowBackground = node.tableStripeColor || (tableLayout === 'striped' || tableLayout === 'standard' || tableLayout === 'accent' ? '#f8fafc' : 'transparent');
-  columns.forEach(column => { const cell = head.insertCell(); cell.textContent = column.label; cell.style.width = `${column.width || 25}%`; cell.style.minWidth = '0'; cell.style.maxWidth = '100%'; cell.style.boxSizing = 'border-box'; cell.style.textAlign = column.align || 'left'; cell.style.verticalAlign = 'middle'; cell.style.padding = compact ? '5px 6px' : '7px 8px'; cell.style.backgroundColor = safeHtml2CanvasColor(column.backgroundColor || headerBackground, headerBackground); cell.style.color = safeHtml2CanvasColor(column.color || headerColor, headerColor); cell.style.fontWeight = '700'; cell.style.fontSize = pdfPointsToCss(Math.max(compact ? 6.8 : 7.5, (node.fontSize || settings.fontSize || 9) - (compact ? 2 : 1.5))); cell.style.lineHeight = compact ? '1.2' : '1.25'; cell.style.letterSpacing = compact ? '0' : '0.15px'; cell.style.textTransform = 'uppercase'; cell.style.borderBottom = `${compact ? 1 : 2}px solid ${primaryColor}`; cell.style.whiteSpace = 'normal'; cell.style.overflow = 'visible'; cell.style.overflowWrap = 'anywhere'; cell.style.wordBreak = 'break-word'; });
+  columns.forEach(column => { const cell = head.insertCell(); cell.textContent = column.label; cell.style.width = `${column.width || 25}%`; cell.style.minWidth = '0'; cell.style.maxWidth = '100%'; cell.style.boxSizing = 'border-box'; cell.style.textAlign = column.align || 'left'; cell.style.verticalAlign = 'middle'; cell.style.padding = isRollPaper ? '3px 4px' : compact ? '5px 6px' : '7px 8px'; cell.style.backgroundColor = safeHtml2CanvasColor(column.backgroundColor || headerBackground, headerBackground); cell.style.color = safeHtml2CanvasColor(column.color || headerColor, headerColor); cell.style.fontWeight = '700'; cell.style.fontSize = pdfPointsToCss(Math.max(isRollPaper ? 6.5 : compact ? 6.8 : 7.5, (node.fontSize || settings.fontSize || 9) - (isRollPaper ? 1.5 : compact ? 2 : 1.5))); cell.style.lineHeight = compact ? '1.2' : '1.25'; cell.style.letterSpacing = isRollPaper ? '0' : compact ? '0' : '0.15px'; cell.style.textTransform = 'uppercase'; cell.style.borderBottom = `${compact ? 1 : 2}px solid ${primaryColor}`; cell.style.whiteSpace = isRollPaper ? 'nowrap' : 'normal'; cell.style.overflow = 'visible'; cell.style.overflowWrap = isRollPaper ? 'normal' : 'break-word'; cell.style.wordBreak = 'normal'; });
   const body = table.createTBody();
   body.style.height = 'auto';
   // Las filas ya se dividen en trabajos por página antes de renderizar. No
@@ -712,7 +713,7 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
       const cell = tr.insertCell();
       const rawValue = row[column.token] ?? row[column.id];
       cell.textContent = isStatusColumn(column) ? pdfStatusLabel(rawValue) : escapeValue(rawValue);
-      cell.style.padding = compact ? '5px 6px' : tableLayout === 'compact' ? '5px 7px' : '7px 9px';
+      cell.style.padding = isRollPaper ? '3px 4px' : compact ? '5px 6px' : tableLayout === 'compact' ? '5px 7px' : '7px 9px';
       cell.style.height = 'auto';
       cell.style.maxHeight = 'none';
       cell.style.minWidth = '0';
@@ -866,12 +867,16 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
 function createTotalsNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings) {
   const element = document.createElement('div');
   setBaseNodeStyle(element, node, settings);
+  element.style.height = 'auto';
+  element.style.minHeight = '0';
+  element.style.overflow = 'visible';
   element.style.borderStyle = 'none'; element.style.borderWidth = '0';
-  element.style.padding = '8px 10px';
-  element.style.fontSize = pdfPointsToCss(Math.max(8, (node.fontSize || settings.fontSize || 9) - 0.5));
+  const isRollPaper = settings.paperSize === 'ROLL-80' || settings.paperSize === 'ROLL-58';
+  element.style.padding = isRollPaper ? '4px 6px' : '8px 10px';
+  element.style.fontSize = pdfPointsToCss(Math.max(isRollPaper ? 7 : 8, (node.fontSize || settings.fontSize || 9) - 0.5));
   const totals = data.totals || {};
   [['subtotal', 'Subtotal'], ['tax', 'Impuestos'], ['discount', 'Descuento'], ['total', 'Total']].forEach(([key, label]) => {
-    const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.gap = '8px'; row.style.marginBottom = key === 'total' ? '0' : '2px'; row.style.lineHeight = '1.2'; row.style.fontSize = pdfPointsToCss(key === 'total' ? 9.5 : 8); if (key === 'total') { row.style.borderTop = `1px solid ${safeHtml2CanvasColor(settings.lineColor, '#e2e8f0')}`; row.style.paddingTop = '3px'; row.style.fontWeight = '700'; }
+    const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.gap = '8px'; row.style.marginBottom = key === 'total' ? '0' : isRollPaper ? '2px' : '3px'; row.style.lineHeight = '1.35'; row.style.fontSize = pdfPointsToCss(key === 'total' ? (isRollPaper ? 8.5 : 9.5) : (isRollPaper ? 7.5 : 8)); if (key === 'total') { row.style.borderTop = `1px solid ${safeHtml2CanvasColor(settings.lineColor, '#cbd5e1')}`; row.style.marginTop = isRollPaper ? '4px' : '6px'; row.style.paddingTop = isRollPaper ? '4px' : '5px'; row.style.fontWeight = '700'; }
     const labelElement = document.createElement('span'); labelElement.textContent = label;
     const valueElement = document.createElement('span'); valueElement.textContent = escapeValue(totals[key]);
     valueElement.style.fontWeight = key === 'total' ? '800' : '600';

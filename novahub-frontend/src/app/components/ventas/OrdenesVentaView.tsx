@@ -301,7 +301,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   };
 
   const handleWhatsApp = async (order: SalesOrder) => {
-    const phone = resolveCustomerPhone(order.customerId, order.customer, customers);
+    const phone = resolveCustomerPhone(order.customerId, order.customer, customers, order.customCustomerPhone);
     if (!phone) {
       toast.error('El cliente no tiene un número asociado para enviar la orden de venta por WhatsApp');
       return;
@@ -1494,7 +1494,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             actions={(row) => (
               <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 pr-1 xl:min-w-max xl:flex-nowrap" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                 <WhatsAppActionButton
-                  phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
+                  phone={resolveCustomerPhone(row.customerId, row.customer, customers, row.customCustomerPhone)}
                   documentLabel="orden de venta"
                   onSend={() => handleWhatsApp(row)}
                 />
@@ -1553,7 +1553,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         }}
         extraActions={detailOrder ? <>
           <WhatsAppActionButton
-            phone={resolveCustomerPhone(detailOrder.customerId, detailOrder.customer, customers)}
+            phone={resolveCustomerPhone(detailOrder.customerId, detailOrder.customer, customers, detailOrder.customCustomerPhone)}
             documentLabel="orden de venta"
             onSend={() => handleWhatsApp(detailOrder)}
           />

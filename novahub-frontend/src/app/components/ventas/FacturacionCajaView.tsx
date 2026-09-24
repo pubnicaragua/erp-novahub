@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  AlertCircle, Coins, Settings2, Store, MapPin, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp
+  AlertCircle, Coins, Settings2, Store, MapPin, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Download, FileText
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -42,6 +42,7 @@ import {
   type CashQueueDocument,
   consumeInvoiceCashQueueEvents,
 } from '../../services/caja.service';
+import { invoicesService } from '../../services/ventas.service';
 import { VariantPickerModal } from './VariantPickerModal';
 import { AdministrarCajasModal } from './caja/AdministrarCajasModal';
 import { BranchAvailabilityModal, type HoldReservationSelection } from './caja/BranchAvailabilityModal';
@@ -55,7 +56,9 @@ import { formatSalesAmount, getConfiguredPriceForVariant, getMissingSalesPriceMe
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
-import { getPdfDesign } from '../../utils/pdfGenerator';
+import { getPdfDesign, generateEstimatePDF } from '../../utils/pdfGenerator';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { renderPdfTemplateToPdf } from '../../utils/pdf-template-renderer';
 import { createDefaultTemplateDefinition, sanitizeTemplateDefinition } from '../../services/pdf-template-definition';
 import { getPdfTemplateLogo } from '../../utils/pdfGenerator';
@@ -211,19 +214,12 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
     const changeLocal = Math.max(0, paidLocal - Number(invoice.total));
     const paymentSummary = payments.map(payment => `${paymentLabel(payment.method)} ${payment.currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(Number(payment.amount || 0))}`).join(' · ');
     const itemRows = cart.map(item => {
-      const commercialNote = item.commercialNoteSnapshot || (item as any).commercialNote || (item as any).product?.commercialNote || '';
-      const variantSku = item.variant?.sku || item.variantId || '';
-      const variantName = item.variant?.name || '';
-      const variantAttributes = formatPdfVariantAttributes(item.variant?.attributes);
-      const productCode = item.productCode || (item as any).product?.code || '';
-      const details = [
-        productCode ? `Código: ${productCode}` : '',
-        variantSku ? `SKU variante: ${variantSku}` : '',
-        variantName ? `Nombre variante: ${variantName}` : '',
-        variantAttributes ? `Atributos: ${variantAttributes}` : '',
-        commercialNote ? `Nota: ${commercialNote}` : '',
-      ].filter(Boolean);
-      return { description: [item.description, ...details].join('\n'), quantity: item.quantity, unitPrice: money(Number(item.unitPrice || 0) / safeRate), total: money(Number(item.lineTotal || 0) / safeRate) };
+      return {
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: money(Number(item.unitPrice || 0) / safeRate),
+        total: money(Number(item.lineTotal || 0) / safeRate),
+      };
     });
     const extraChargeRows = normalizeSalesExtraCharges(invoice).filter(charge => charge.amount > 0).map(charge => ({ description: charge.description || 'Coste extra', quantity: '', unitPrice: '', total: money(Number(charge.amount) / safeRate) }));
     const deliveryAmount = Number(invoice.deliveryAmount || 0);
@@ -241,10 +237,10 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
       items: rows,
       totals: { subtotal: money(Number(invoice.subtotal || 0) / safeRate), discount: money(Number(invoice.discountAmount || 0) / safeRate), tax: money(Number(invoice.taxAmount || 0) / safeRate), total: money(Number(invoice.total || 0) / safeRate) },
       tableColumns: [
-        { id: 'description', label: 'Descripción', token: 'description', width: 48, align: 'left' as const },
-        { id: 'quantity', label: 'Cant.', token: 'quantity', width: 12, align: 'right' as const },
-        { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 19, align: 'right' as const },
-        { id: 'total', label: 'Total', token: 'total', width: 21, align: 'right' as const },
+        { id: 'description', label: 'Descripción', token: 'description', width: 35, align: 'left' as const },
+        { id: 'quantity', label: 'Cant.', token: 'quantity', width: 15, align: 'right' as const },
+        { id: 'unitPrice', label: 'Precio', token: 'unitPrice', width: 24, align: 'right' as const },
+        { id: 'total', label: 'Total', token: 'total', width: 26, align: 'right' as const },
       ],
     };
     const definition = sanitizeTemplateDefinition(design?.layoutZones?.definition || createDefaultTemplateDefinition(targetKey, settings), targetKey, settings);
@@ -460,10 +456,39 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [customers, setCustomers] = useState<PosCustomer[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<PosInvoice[]>([]);
+  const [exportingInvoiceId, setExportingInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const checkoutIdempotencyKey = useRef<string | null>(null);
+
+  const handleExportInvoicePDF = async (inv: PosInvoice, format: PdfDownloadFormat = 'configured') => {
+    setExportingInvoiceId(inv.id);
+    try {
+      let fullInvoice: any = inv;
+      if (!inv.items || inv.items.length === 0) {
+        if (createdInvoice?.id === inv.id && createdTicketCart.length > 0) {
+          fullInvoice = { ...inv, items: createdTicketCart };
+        } else {
+          fullInvoice = await invoicesService.getById(inv.id);
+        }
+      }
+      await generateEstimatePDF({
+        estimate: fullInvoice,
+        tenantName: companyName || user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub',
+        formatAmount: (amount, currency, rate) => formatExplicitAmount(Number(amount || 0), currency, rate),
+        tenantLogo: companyLogo || user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
+        documentType: 'invoice',
+        save: true,
+        format,
+      });
+      toast.success(`Factura ${inv.number} exportada a PDF`);
+    } catch (error: any) {
+      toast.error(getErrorMessage(error, 'Error al exportar la factura'));
+    } finally {
+      setExportingInvoiceId(null);
+    }
+  };
 
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
@@ -1382,12 +1407,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       toast.error(message);
       return;
     }
-    toast.error(message, {
-      action: {
-        label: 'Ver otras sucursales',
-        onClick: () => void openAvailabilityFor(product, quantity, variantId),
-      },
-    });
+    void openAvailabilityFor(product, quantity, variantId);
   };
 
   const handleAddOrCheck = (product: PosProduct) => {
@@ -3122,8 +3142,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {recentInvoices.map((inv) => {
                       const statusLabel = inv.status === 'PAID' ? 'PAGADA' : inv.status === 'DRAFT' ? 'BORRADOR' : inv.status === 'CANCELLED' ? 'ANULADA' : inv.status;
+                      const isExportingThis = exportingInvoiceId === inv.id;
                       return (
-                        <div key={inv.id} className="rounded-xl border border-border/30 px-3 py-2 flex items-center justify-between">
+                        <div key={inv.id} className="rounded-xl border border-border/30 px-3 py-2 flex items-center justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-[10px] text-muted-foreground">{inv.number}</span>
@@ -3133,14 +3154,25 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                               {getInvoiceCustomerName(inv)} &middot; {formatInvoiceDate(inv.date)}
                             </p>
                           </div>
-                          <span className="text-xs font-black font-mono shrink-0">{formatCurrency(inv.total)}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs font-black font-mono">{formatCurrency(inv.total)}</span>
+                            <PdfDownloadButton
+                              size="sm"
+                              className="h-7 px-2 text-[10px]"
+                              label=""
+                              disabled={isExportingThis}
+                              includePageSizes
+                              includeRoll
+                              onDownload={(format) => void handleExportInvoicePDF(inv, format)}
+                            />
+                          </div>
                         </div>
                       )
                     })}
                   </div>
-                 )}
-               </CardContent>
-             </Card>
+                )}
+              </CardContent>
+            </Card>
 </div>
           </div>
         )}
@@ -3195,9 +3227,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
             <div className="nh-modal-footer mt-6 flex flex-col-reverse justify-end gap-2 pt-4 sm:flex-row">
               <Button variant="outline" onClick={() => setCreatedInvoice(null)} className="rounded-xl font-black">Cerrar</Button>
               {canPrintPos && (
-                <Button onClick={() => void printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, createdPaymentCurrency, createdExchangeRate, companyName, companyLogo)} className="gap-2 rounded-xl font-black">
-                  <Receipt className="size-4" /> Imprimir
-                </Button>
+                <PdfDownloadButton
+                  label="Exportar / Imprimir"
+                  size="default"
+                  className="rounded-xl font-black shadow-lg shadow-primary/20"
+                  includePageSizes
+                  includeRoll
+                  disabled={exportingInvoiceId === createdInvoice.id}
+                  onDownload={(format) => void handleExportInvoicePDF(createdInvoice, format)}
+                />
               )}
             </div>
           </div>

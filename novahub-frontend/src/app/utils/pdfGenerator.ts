@@ -13,7 +13,7 @@ import { renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-te
 import { createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
-import { normalizeEstimateImages } from '../types';
+import { isEstimateCustomFieldExpired, normalizeEstimateImages } from '../types';
 
 type PdfRgb = [number, number, number];
 
@@ -450,6 +450,97 @@ function truncatePdfText(doc: jsPDF, text: string, maxWidth: number): string {
     truncated = truncated.slice(0, -1);
   }
   return `${truncated}...`;
+}
+
+function appendAttachedCustomFieldsToPdf({
+  doc,
+  customFields,
+  primaryColor = [15, 118, 110],
+  textColor = [30, 41, 59],
+  lineColor = [226, 232, 240],
+  fontName = 'helvetica',
+  documentTitle = 'Cotización',
+  documentNumber = '',
+}: {
+  doc: jsPDF;
+  customFields: EstimateCustomField[];
+  primaryColor?: PdfRgb;
+  textColor?: PdfRgb;
+  lineColor?: PdfRgb;
+  fontName?: string;
+  documentTitle?: string;
+  documentNumber?: string;
+}) {
+  if (!Array.isArray(customFields) || customFields.length === 0) return;
+  const validFields = customFields.filter((cf) => cf && typeof cf.title === 'string' && cf.title.trim());
+  if (validFields.length === 0) return;
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+
+  // Siempre se agrega una nueva página de anexo para evitar colisiones con el cuerpo del documento principal
+  doc.addPage();
+
+  // Encabezado institucional del anexo (mismo diseño visual que el anexo de imágenes)
+  doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.rect(margin, margin, contentWidth, 1.2, 'F');
+
+  doc.setFont(fontName, 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text('ANEXO: CAMPOS ADICIONALES Y CONDICIONES', margin, margin + 7);
+
+  doc.setFont(fontName, 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  const countIndicator = `${validFields.length} ${validFields.length === 1 ? 'campo adicional' : 'campos adicionales'}`;
+  const headerInfo = [
+    documentTitle,
+    documentNumber ? `Nº ${documentNumber}` : '',
+    countIndicator,
+  ].filter(Boolean).join(' · ');
+  doc.text(headerInfo, pageWidth - margin, margin + 7, { align: 'right' });
+
+  // Línea separadora superior
+  doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+  doc.setLineWidth(0.3);
+  doc.line(margin, margin + 10, pageWidth - margin, margin + 10);
+
+  const startY = margin + 16;
+
+  autoTable(doc, {
+    startY,
+    margin: { left: margin, right: margin },
+    head: [['Campo / Título', 'Descripción / Detalle']],
+    body: validFields.map((cf: any) => [
+      String(cf.title || '').trim(),
+      String(cf.description || '').trim(),
+    ]),
+    theme: 'grid',
+    headStyles: {
+      fillColor: primaryColor,
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8.5,
+      cellPadding: 3.5,
+      halign: 'left',
+    },
+    bodyStyles: {
+      textColor: textColor,
+      fontSize: 8.5,
+      cellPadding: 3.5,
+      lineColor: lineColor,
+      lineWidth: 0.15,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: Math.min(65, contentWidth * 0.35) },
+      1: { cellWidth: 'auto' },
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+  });
 }
 
 async function appendAttachedImagesToPdf({
@@ -976,7 +1067,11 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       extraCharges.length ? `Cargos adicionales: ${extraCharges.join(' · ')}` : '',
     ].filter(Boolean).join(' · ');
     const customerSource = (estimate.customer || estimate.client || {}) as Record<string, unknown>;
-    const customerAddress = customerSource.address || [customerSource.city, customerSource.department, customerSource.country].filter(Boolean).join(', ');
+    const customerAddress = String(customerSource.address || customerSource.direction || estimate.customCustomerAddress || customerSource.addressLine || '');
+    const normalizedEstimateImages = normalizeEstimateImages(estimate?.images);
+    const customFieldsList = (Array.isArray(estimate?.customFields) && estimate.customFields.length > 0)
+      ? estimate.customFields.filter((cf: any) => !isEstimateCustomFieldExpired(cf))
+      : (normalizedEstimateImages.customFields || []).filter((cf: any) => !isEstimateCustomFieldExpired(cf));
     const data: PdfTemplateData = {
       logo: templateLogoFromSettings(design) || resolvedTenantLogo,
       company: { name: design.companyName || tenantName, fiscalInfo: design.fiscalInfo, address: design.address, phone: design.phone, email: design.email, logo: templateLogoFromSettings(design) || resolvedTenantLogo },
@@ -989,31 +1084,41 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
         discount: formatAmount(Number(estimate.discountAmount ?? estimate.discount ?? estimate.discountTotal ?? 0), estimate.currency, estimate.exchangeRate),
         total: formatAmount(Number(estimate.total ?? estimate.grandTotal ?? 0), estimate.currency, estimate.exchangeRate),
       },
+      customFields: customFieldsList,
+      images: estimate.images,
     };
     const settings = { ...design, paperSize: downloadFormat === 'configured' ? design.paperSize : paperSettingForDownload(downloadFormat as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>), orientation: design.orientation || 'portrait' };
     const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(savedDesign.layoutZones.definition, targetKey, settings), settings, targetKey, data, fileName: buildSalesPdfFileName(documentType, estimate.number, downloadFormat), save: false });
-    const normalizedEstimateImages = normalizeEstimateImages(estimate?.images);
     if (withImages !== false && normalizedEstimateImages.items.length > 0 && rendered.doc) {
-        await appendAttachedImagesToPdf({
-          doc: rendered.doc,
-          images: estimate.images,
-          primaryColor: pdfHexToRgb(design.primaryColor, [15, 118, 110]),
-          textColor: pdfHexToRgb(design.textColor, [30, 41, 59]),
-          fontName: 'helvetica',
-          tenantName,
-          documentTitle: ({ estimate: 'Cotización', order: 'Orden de Venta', invoice: 'Factura' } as Record<string, string>)[documentType] || 'Cotización',
-          documentNumber: estimate.number || '',
-        });
-        const updatedBlob = rendered.doc.output('blob');
-        if (save) {
-          savePdfBlob(updatedBlob, buildSalesPdfFileName(documentType, estimate.number, downloadFormat));
-        }
-        return { doc: rendered.doc, blob: updatedBlob };
-      }
+      await appendAttachedImagesToPdf({
+        doc: rendered.doc,
+        images: estimate.images,
+        primaryColor: pdfHexToRgb(design.primaryColor, [15, 118, 110]),
+        textColor: pdfHexToRgb(design.textColor, [30, 41, 59]),
+        fontName: 'helvetica',
+        tenantName,
+        documentTitle: ({ estimate: 'Cotización', order: 'Orden de Venta', invoice: 'Factura' } as Record<string, string>)[documentType] || 'Cotización',
+        documentNumber: estimate.number || '',
+      });
+    }
+    if (customFieldsList.length > 0 && rendered.doc) {
+      appendAttachedCustomFieldsToPdf({
+        doc: rendered.doc,
+        customFields: customFieldsList,
+        primaryColor: pdfHexToRgb(design.primaryColor, [15, 118, 110]),
+        textColor: pdfHexToRgb(design.textColor, [30, 41, 59]),
+        fontName: 'helvetica',
+        documentTitle: ({ estimate: 'Cotización', order: 'Orden de Venta', invoice: 'Factura' } as Record<string, string>)[documentType] || 'Cotización',
+        documentNumber: estimate.number || '',
+      });
+    }
+    if (rendered.doc) {
+      const updatedBlob = rendered.doc.output('blob');
       if (save) {
-        savePdfBlob(rendered.blob, buildSalesPdfFileName(documentType, estimate.number, downloadFormat));
+        savePdfBlob(updatedBlob, buildSalesPdfFileName(documentType, estimate.number, downloadFormat));
       }
-      return rendered;
+      return { doc: rendered.doc, blob: updatedBlob };
+    }
   }
   if (!isVirtualSystemDefaultDesign(savedDesign) && (savedDesign?.engine === 'HTML_TEMPLATE' || savedDesign?.sourceType === 'UPLOADED_PDF')) {
     return generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo: resolvedTenantLogo, documentType, format: downloadFormat, save });
@@ -1337,6 +1442,22 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       textColor,
       fontName,
       tenantName,
+      documentTitle: ({ estimate: 'Cotización', order: 'Orden de Venta', invoice: 'Factura' } as Record<string, string>)[documentType] || 'Cotización',
+      documentNumber: estimate.number || '',
+    });
+  }
+
+  const fallbackCustomFieldsList = (Array.isArray(estimate?.customFields) && estimate.customFields.length > 0)
+    ? estimate.customFields.filter((cf: any) => !isEstimateCustomFieldExpired(cf))
+    : (fallbackNormalizedImages.customFields || []).filter((cf: any) => !isEstimateCustomFieldExpired(cf));
+
+  if (fallbackCustomFieldsList.length > 0) {
+    appendAttachedCustomFieldsToPdf({
+      doc,
+      customFields: fallbackCustomFieldsList,
+      primaryColor,
+      textColor,
+      fontName,
       documentTitle: ({ estimate: 'Cotización', order: 'Orden de Venta', invoice: 'Factura' } as Record<string, string>)[documentType] || 'Cotización',
       documentNumber: estimate.number || '',
     });
@@ -2525,25 +2646,74 @@ async function renderConfiguredDefinition({ targetKey, data, tenantName, tenantL
   return renderPdfTemplateToPdf({ definition: definitionWithGeneratedFallback, settings: renderSettings, targetKey, data: enrichedData, fileName, save, onProgress });
 }
 
-export async function generateConfiguredReportTemplate({ targetKey, title, tenantName, tenantLogo, rows, columns, totals, tableSummary, fileName, designOverride }: { targetKey: string; title: string; tenantName: string; tenantLogo?: string | null; rows: any[]; columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>; totals?: Record<string, unknown>; tableSummary?: { label: string; value: unknown; columnIndex?: number }; fileName: string; designOverride?: any }) {
+export async function generateConfiguredReportTemplate({
+  targetKey,
+  title,
+  tenantName,
+  tenantLogo,
+  rows,
+  columns,
+  totals,
+  tableSummary,
+  fileName,
+  designOverride,
+  format = 'configured',
+}: {
+  targetKey: string;
+  title: string;
+  tenantName: string;
+  tenantLogo?: string | null;
+  rows: any[];
+  columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>;
+  totals?: Record<string, unknown>;
+  tableSummary?: { label: string; value: unknown; columnIndex?: number };
+  fileName: string;
+  designOverride?: any;
+  format?: PdfDownloadFormat;
+}) {
   const design = designOverride || await getPdfDesign(targetKey);
+  const mappedColumns = columns.map((column, index) => ({
+    id: `column-${index}`,
+    label: column.header,
+    token: `column-${index}`,
+    width: 100 / Math.max(columns.length, 1),
+    align: column.align || ('left' as const),
+  }));
+  const mappedRows = rows.length > 0
+    ? rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])))
+    : [Object.fromEntries(columns.map((column, index) => [`column-${index}`, index === 0 ? 'Sin registros para el alcance seleccionado' : '']))];
+  const target = getPdfTemplateTarget(targetKey);
+  const generatedAt = new Date().toLocaleString('es-NI');
+  const data: PdfTemplateData = {
+    company: { name: tenantName, logo: tenantLogo },
+    document: { title, generated: `Generado: ${generatedAt}`, meta: '' },
+    items: mappedRows,
+    rows: mappedRows,
+    tableColumns: mappedColumns,
+    tableSummary,
+    totals,
+    ...(target.module === 'reportes' ? { reportSections: [{ id: target.key, title, columns: mappedColumns, rows: mappedRows }] } : {}),
+    ...(target.structure === 'dashboard' ? { reportKpis: rows.map(row => ({ label: String(row.label ?? ''), value: String(row.value ?? ''), detail: String(row.detail ?? '') })) } : {}),
+  };
+  const rendered = await renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format, fileName, designOverride: design });
+  if (rendered?.doc) return rendered.doc;
+
   const sourceSettings = (design?.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
-  const settings = getGlobalReportSettings(sourceSettings, tenantName, tenantLogo, targetKey);
-  const rendered = await generateFastGlobalReportPDF({
+  const settings = withPaperFormat(getGlobalReportSettings(sourceSettings, tenantName, tenantLogo, targetKey), format);
+  const fastReport = await generateFastGlobalReportPDF({
     targetKey,
     title,
     tenantName,
     tenantLogo,
     settings,
-    designOverride,
+    designOverride: design,
     columns,
     rows,
     totals,
     tableSummary,
     fileName,
-    save: true,
   });
-  return rendered?.doc || null;
+  return fastReport?.doc || null;
 }
 
 export interface ConfiguredReportSectionInput {
@@ -2793,6 +2963,7 @@ export async function generateJournalPDF({
   dateTo,
   filterStatus,
   totals,
+  format = 'configured',
 }: {
   rows: Array<{
     number: string;
@@ -2810,6 +2981,7 @@ export async function generateJournalPDF({
   dateTo?: string;
   filterStatus?: string;
   totals?: Record<string, unknown>;
+  format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
   const statusLabel = filterStatus && filterStatus !== 'ALL' ? ` · Estado: ${filterStatus}` : '';
@@ -2836,7 +3008,7 @@ export async function generateJournalPDF({
       { header: 'Referencia', value: row => row.referenceNumber || '-' },
     ],
     totals,
-    fileName: buildDateFilteredLabeledPdfFileName('Libro diario', 'pdf', dateFrom, dateTo),
+    fileName: buildDateFilteredPdfFileName(['libro_diario'], 'pdf', dateFrom, dateTo),
   });
   return doc;
 }
@@ -2850,6 +3022,7 @@ export async function generateLedgerPDF({
   dateTo,
   accountName,
   totals,
+  format = 'configured',
 }: {
   rows: Array<{
     date: string;
@@ -2868,6 +3041,7 @@ export async function generateLedgerPDF({
   dateTo?: string;
   accountName?: string;
   totals?: Record<string, unknown>;
+  format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
   const filterAcc = accountName ? ` · Cuenta: ${accountName}` : '';
@@ -2891,7 +3065,7 @@ export async function generateLedgerPDF({
       { header: 'Saldo', value: row => formatAmount(row.balance), align: 'right' },
     ],
     totals,
-    fileName: buildDateFilteredLabeledPdfFileName('Libro mayor', 'pdf', dateFrom, dateTo),
+    fileName: buildDateFilteredPdfFileName(['libro_mayor'], 'pdf', dateFrom, dateTo),
   });
   return doc;
 }

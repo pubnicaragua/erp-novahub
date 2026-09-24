@@ -26,6 +26,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { REFERENCE_TYPES, accountingDescriptionLabel, referenceTypeLabel } from '../../utils/accountingLabels';
 import { generateJournalPDF } from '../../utils/pdfGenerator';
+import { PdfDownloadButton, type PdfExportScope } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { Loader2 } from 'lucide-react';
 import { DateField } from '../ui/DateField';
@@ -178,12 +180,15 @@ export function DiarioView() {
 
   const canExport = canPerform('ACCOUNTING_JOURNAL', 'export');
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (format: PdfDownloadFormat = 'configured', scope?: PdfExportScope) => {
     if (!canExport) return;
     setExportingPdf(true);
     try {
-      const exportResponse = await contabilidadService.getJournals({ ...journalParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
-      const exportJournals = accountingList(exportResponse) as JournalEntry[];
+      let exportJournals = journals;
+      if (scope === 'all' || journals.length === 0) {
+        const exportResponse = await contabilidadService.getJournals({ ...journalParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+        exportJournals = accountingList(exportResponse) as JournalEntry[];
+      }
       if (exportJournals.length === 0) throw new Error('No hay asientos contables para exportar');
       const exportRows = exportJournals.map((j) => {
         const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
@@ -210,6 +215,7 @@ export function DiarioView() {
         dateFrom: filterDateFrom,
         dateTo: filterDateTo,
         filterStatus,
+        format,
         totals: {
           debitos: formatAmount(totalDebitsSum, baseCurrency),
           creditos: formatAmount(totalCreditsSum, baseCurrency),
@@ -223,14 +229,17 @@ export function DiarioView() {
     }
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = (scope?: PdfExportScope) => {
     if (!canExport) return;
     setExportingExcel(true);
     void (async () => {
       try {
-      const exportResponse = await contabilidadService.getJournals({ ...journalParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
-      const exportJournals = accountingList(exportResponse) as JournalEntry[];
-      if (exportJournals.length === 0) throw new Error('No hay asientos contables para exportar');
+        let exportJournals = journals;
+        if (scope === 'all' || journals.length === 0) {
+          const exportResponse = await contabilidadService.getJournals({ ...journalParams, page: 1, pageSize: 5000, report: true, export: true }, undefined);
+          exportJournals = accountingList(exportResponse) as JournalEntry[];
+        }
+        if (exportJournals.length === 0) throw new Error('No hay asientos contables para exportar');
       const excelRows: any[] = [];
       exportJournals.forEach((j) => {
         const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
@@ -603,24 +612,18 @@ export function DiarioView() {
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
           {canExport && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={journals.length === 0 || exportingPdf || exportingExcel} className="gap-1.5">
-                  {exportingPdf || exportingExcel ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Exportar
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExportPDF} disabled={exportingPdf} className="cursor-pointer gap-2">
-                  <FileText className="size-4 text-rose-500" />
-                  Exportar a PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportExcel} disabled={exportingExcel} className="cursor-pointer gap-2">
-                  <FileSpreadsheet className="size-4 text-emerald-600" />
-                  Exportar a Excel (.xlsx)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <PdfDownloadButton
+              label={exportingPdf || exportingExcel ? 'Exportando…' : 'Exportar'}
+              disabled={journals.length === 0 || exportingPdf || exportingExcel}
+              includePageSizes
+              includeRoll={false}
+              scopeSelector={{
+                pageCount: journals.length,
+                totalCount: journalsQuery.data?.total || journals.length,
+              }}
+              onDownload={(format, scope) => void handleExportPDF(format, scope)}
+              onExcel={(scope) => void handleExportExcel(scope)}
+            />
           )}
 
           <Button

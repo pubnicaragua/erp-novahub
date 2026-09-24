@@ -24,7 +24,7 @@ import type {
   ImageGallerySize,
   EstimateImagesPayload,
 } from '../../types';
-import { normalizeEstimateImages } from '../../types';
+import { normalizeEstimateImages, isEstimateImageExpired } from '../../types';
 
 export interface EstimateImageGalleryProps {
   images: unknown;
@@ -53,6 +53,33 @@ export function EstimateImageGallery({
       onChange(nextPayload);
     }
   };
+
+  // Limpieza inicial si se abren imágenes ya vencidas
+  React.useEffect(() => {
+    if (readOnly) return;
+    const rawList = Array.isArray(images)
+      ? images
+      : typeof images === 'object' && images !== null && Array.isArray((images as any).items)
+        ? (images as any).items
+        : [];
+    if (rawList.length > 0 && normalized.items.length !== rawList.length) {
+      emitChange(normalized);
+      if (onBlur) onBlur();
+    }
+  }, []);
+
+  // Limpieza periódica automática de imágenes temporales (> 5 min)
+  React.useEffect(() => {
+    if (readOnly) return;
+    const interval = setInterval(() => {
+      const activeItems = normalized.items.filter((item) => !isEstimateImageExpired(item));
+      if (activeItems.length !== normalized.items.length) {
+        emitChange({ ...normalized, items: activeItems });
+        if (onBlur) onBlur();
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [normalized, readOnly]);
 
   const handleMove = (index: number, direction: 'prev' | 'next') => {
     const targetIndex = direction === 'prev' ? index - 1 : index + 1;
@@ -261,6 +288,7 @@ export function EstimateImageGallery({
                     alt={img.title || img.name || `Imagen ${idx + 1}`}
                     className="size-full object-contain transition-transform duration-200 group-hover:scale-105"
                     loading="lazy"
+                    onError={() => handleRemove(img.id)}
                   />
                   <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100">
                     <div className="rounded-full bg-background/90 p-1.5 text-foreground shadow-md">
@@ -340,6 +368,7 @@ export function EstimateImageGallery({
                       alt={img.title || img.name || `Imagen ${idx + 1}`}
                       className="size-full object-contain transition-transform duration-200 group-hover:scale-[1.01]"
                       loading="lazy"
+                      onError={() => handleRemove(img.id)}
                     />
                   </div>
 
