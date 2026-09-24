@@ -20,11 +20,14 @@ export interface PdfTemplateReportSection {
   columns: PdfTemplateColumn[];
   rows: Array<Record<string, unknown>>;
   templateIndex?: number;
+  /** Color base heredado del renderer nativo del módulo Reportes. */
+  color?: readonly number[];
 }
 
 export interface PdfTemplateReportSectionStyle {
   headerColor?: string;
   headerTextColor?: string;
+  rowTextColor?: string;
   rowColor?: string;
   stripeColor?: string;
   columnColors?: Record<string, string>;
@@ -98,6 +101,7 @@ export interface PdfTemplateNode {
   columns?: PdfTemplateColumn[];
   tableHeaderColor?: string;
   tableHeaderTextColor?: string;
+  tableTextColor?: string;
   tableRowColor?: string;
   tableStripeColor?: string;
   chartType?: PdfTemplateChartType;
@@ -107,6 +111,22 @@ export interface PdfTemplateNode {
   firstPageOnly?: boolean;
   subsequentY?: number;
   subsequentHeight?: number;
+}
+
+export function pdfTemplateImageShapeStyles(shape: PdfTemplateNode['shape'], borderRadius = 0) {
+  const selectedShape = shape || 'rectangle';
+  const borderRadiusByShape: Record<string, string> = {
+    pill: '999px',
+    circle: '50%',
+    blob: '42% 58% 62% 38% / 45% 35% 65% 55%',
+    arc: '50% 50% 0 0 / 60% 60% 0 0',
+    wave: '50% 50% 0 0 / 42% 42% 0 0',
+    'wave-bottom': '0 0 50% 50% / 0 0 42% 42%',
+  };
+  return {
+    borderRadius: borderRadiusByShape[selectedShape] || `${Math.max(0, Number(borderRadius) || 0)}px`,
+    clipPath: selectedShape === 'angled' ? 'polygon(0 0,100% 0,88% 100%,0 100%)' : 'none',
+  };
 }
 
 export interface PdfTemplateDefinition {
@@ -798,6 +818,8 @@ function defaultTableColumns(targetKey: string): PdfTemplateColumn[] {
     'compras.purchase-request': ['Solicitud', 'Solicitante', 'Fecha', 'Estado'],
     'finanzas.balance': ['Concepto', 'Tipo', 'Fecha', 'Monto'],
     'finanzas.transactions': ['Fecha', 'Concepto', 'Tipo', 'Monto'],
+    'contabilidad.journal': ['# Asiento', 'Fecha', 'Descripción', 'Estado', 'Debe', 'Haber', 'Ref. Tipo', 'Referencia'],
+    'contabilidad.ledger': ['Fecha', 'Código', 'Cuenta', 'Tipo', 'Descripción', 'Referencia', 'Débito', 'Crédito', 'Saldo'],
     'recursos-humanos.payrolls': ['Colaborador', 'Periodo', 'Neto', 'Estado'],
     'recursos-humanos.dashboard': ['Indicador', 'Valor', 'Detalle'],
     'recursos-humanos.employees': ['Colaborador', 'Identificación', 'Cargo', 'Departamento', 'Estado', 'Ingreso'],
@@ -1227,6 +1249,7 @@ function safeReportSectionStyles(value: unknown): Record<string, PdfTemplateRepo
     entries.push([key.slice(0, 80), {
         headerColor: safeText(style.headerColor, ''),
         headerTextColor: safeText(style.headerTextColor, ''),
+        rowTextColor: safeText(style.rowTextColor, ''),
         rowColor: safeText(style.rowColor, ''),
         stripeColor: safeText(style.stripeColor, ''),
         columnColors: safeColorMap(style.columnColors),
@@ -1362,7 +1385,7 @@ export function sanitizeTemplateDefinition(value: unknown, targetKey: string, se
           backgroundColor: safeText(column?.backgroundColor, ''), color: safeText(column?.color, ''),
         })) : undefined,
         chartType: item.chartType === 'area' || item.chartType === 'donut' ? item.chartType : type === 'chart' ? 'bar' : undefined,
-        tableHeaderColor: safeText(item.tableHeaderColor, ''), tableHeaderTextColor: safeText(item.tableHeaderTextColor, ''),
+        tableHeaderColor: safeText(item.tableHeaderColor, ''), tableHeaderTextColor: safeText(item.tableHeaderTextColor, ''),tableTextColor: safeText(item.tableTextColor, ''),
         tableRowColor: safeText(item.tableRowColor, ''), tableStripeColor: safeText(item.tableStripeColor, ''),
         reportSectionVisibility: item.reportSectionVisibility && typeof item.reportSectionVisibility === 'object'
           ? Object.fromEntries(Object.entries(item.reportSectionVisibility as Record<string, unknown>).slice(0, 120).map(([key, visible]) => [key.slice(0, 80), Boolean(visible)]))

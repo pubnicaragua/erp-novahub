@@ -5,7 +5,7 @@ import { renderPdfTemplateToPdf } from './pdf-template-renderer';
 import { getPdfTemplatePartyConfig, getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
-import { buildPdfFileName } from './exportFileNames';
+import { buildHumanPdfFileName, buildLabeledPdfFileName } from './exportFileNames';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription } from './pdf-line-details';
 import { getBase64Image } from './reportExportUtils';
@@ -72,25 +72,6 @@ const purchaseLineDescription = (line: PurchasePdfLine) => {
   return line.secondary ? `${description}\n${line.secondary}` : description;
 };
 const isRoll = (format: PdfDownloadFormat) => format === 'roll-58' || format === 'roll-80';
-
-const isVirtualPdfDesign = (design: any) => Boolean(
-  !design
-  || design.isSystemDefault
-  || design.isSystemDefaultRuntime
-  || String(design.id || '').startsWith('system-default:')
-  || design.templateKey === 'system-default'
-  || design.layoutZones?.status === 'system-default',
-);
-
-async function resolveGlobalPurchaseDesign(targetKey: string) {
-  const requestedKey = getPdfTemplateTarget(targetKey).key;
-  const requestedDesign = await getPdfDesign(requestedKey);
-  if (!isVirtualPdfDesign(requestedDesign)) {
-    return { targetKey: requestedKey, design: requestedDesign };
-  }
-  if (requestedKey === 'compras.list') return { targetKey: requestedKey, design: requestedDesign };
-  return { targetKey: 'compras.list', design: await getPdfDesign('compras.list') };
-}
 
 const countLines = (doc: jsPDF, value: unknown, size: number, width: number) => {
   doc.setFontSize(size);
@@ -200,7 +181,7 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
       ],
       ...fieldData,
     };
-    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign?.layoutZones?.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildPdfFileName([document.title, document.number || 'sin_numero'], format), save: true });
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, renderSettings), settings: renderSettings, targetKey, data, fileName: buildLabeledPdfFileName(document.title, document.number, format), save: true });
     return rendered.doc;
   }
   const doc = isRoll(format)
@@ -247,31 +228,21 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
     if (document.notes) { doc.setTextColor(...text); doc.setFontSize(8); doc.text(doc.splitTextToSize(`Notas: ${document.notes}`, pageWidth - margin * 2), margin, currentY); }
     doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.text(`Generado por ${tenantName || 'Nova Hub'} - Módulo de Compras`, margin, pageHeight - 10);
   }
-  doc.save(buildPdfFileName([document.title, document.number || 'sin_numero'], format));
+  doc.save(buildLabeledPdfFileName(document.title, document.number, format));
   return doc;
 }
 
 export async function generatePurchaseListPDF({ title, rows, columns, tenantName, tenantLogo, format = 'configured', targetKey = 'compras.list', summary, summaryPlacement = 'box', subtitle }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; tenantLogo?: string | null; format?: PdfDownloadFormat; targetKey?: string; summary?: { label: string; value: unknown; columnIndex?: number }; summaryPlacement?: 'box' | 'footer'; subtitle?: string }) {
   if (isRoll(format)) throw new Error('Los reportes generales solo están disponibles en tamaños de página PDF.');
-  // La plantilla se resuelve por la salida real. Si esa salida aún no tiene
-  // diseño propio, se usa la plantilla global de listados como respaldo para
-  // conservar la estructura de reporte y no reservar datos individuales.
-  const resolvedDesign = await resolveGlobalPurchaseDesign(targetKey);
-  const sourceTargetKey = resolvedDesign.targetKey;
-  const configuredDesign = resolvedDesign.design;
+  // Cada listado resuelve únicamente su propia plantilla. Si no existe una
+  // plantilla personalizada, el generador conserva el diseño predeterminado.
+  const requestedTargetKey = getPdfTemplateTarget(targetKey).key;
+  const configuredDesign = await getPdfDesign(requestedTargetKey);
   const sourceSettings = configuredDesign?.settings && typeof configuredDesign.settings === 'object'
     ? configuredDesign.settings as Record<string, any>
-    : await getPdfDesignSettings(sourceTargetKey);
-  const requestedTargetKey = getPdfTemplateTarget(targetKey).key;
-  const settings = getGlobalReportSettings(
-    // Si se usa compras.list como respaldo, su logo personalizado pertenece
-    // solo a esa plantilla y no debe propagarse a los demás listados.
-    sourceTargetKey === requestedTargetKey ? sourceSettings : { ...sourceSettings, templateLogoUrl: undefined, templateLogoUri: undefined, templateLogoTarget: undefined },
-    tenantName,
-    tenantLogo,
-    sourceTargetKey,
-  );
-  const resolvedLogo = getPdfTemplateLogo(settings, tenantLogo, sourceTargetKey) || undefined;
+    : await getPdfDesignSettings(requestedTargetKey);
+  const settings = getGlobalReportSettings(sourceSettings, tenantName, tenantLogo, requestedTargetKey);
+  const resolvedLogo = getPdfTemplateLogo(settings, tenantLogo, requestedTargetKey) || undefined;
   const paperSettings = withPaperFormat(settings, format === 'configured' ? 'configured' : format);
   const fastGlobal = await generateFastGlobalReportPDF({
     targetKey: requestedTargetKey,
@@ -279,12 +250,12 @@ export async function generatePurchaseListPDF({ title, rows, columns, tenantName
     tenantName,
     tenantLogo: resolvedLogo,
     settings: paperSettings,
-    subtitle,
+    designOverride: configuredDesign,
     columns,
     rows,
     totals: summary && summaryPlacement !== 'footer' ? { total: valueText(summary.value) } : undefined,
     tableSummary: summary && summaryPlacement === 'footer' ? summary : undefined,
-    fileName: buildPdfFileName([title], format === 'configured' ? 'configured' : format),
+    fileName: buildHumanPdfFileName(title, format === 'configured' ? 'configured' : format),
   });
   return fastGlobal.doc;
 }

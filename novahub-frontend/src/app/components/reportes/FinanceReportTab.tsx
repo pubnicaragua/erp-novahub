@@ -18,7 +18,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Percent, ArrowUpRight, Activity, Scale, BarChart3, Wallet, TrendingUp, TrendingDown, Receipt, AlertTriangle, Target, CalendarDays, Info, CreditCard, PieChart as PieChartIcon, Layers, FileText, Banknote, ShieldCheck, RefreshCw } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
-import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 import {
   DAY_MS, endOfDay, fmtRange, getRangeDates, shiftYearClamped, startOfDay, toDate,
@@ -580,7 +580,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: kpiColumns, boxHeight: boxH, labelFontSize: 7, valueFontSize: 10, detailFontSize: 6 });
 
         const renderTable = (title: string, header: string[], rows: (string | number)[][], color: number[]) => {
-          reportSections.push({ title, headers: header, rows });
+          reportSections.push({ title, headers: header, rows, color });
           currentY = drawReportTable({ doc, title, headers: header, rows, color, marginX, contentWidth, currentY });
         };
 
@@ -679,7 +679,6 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '3b82f6';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#3b82f6';
         const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
-        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
         const fmt = (v: number) => formatConvertedAmount(Number(v || 0), 'NIO');
 
         const ws = wb.addWorksheet('Reporte Financiero');
@@ -778,34 +777,15 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;
 
-        const renderTable = (title: string, header: string[], rows: (string | number)[][], color: string) => {
-          const titleRow = ws.addRow([title, '', '', '', '']);
-          ws.mergeCells(`A${ws.rowCount}:E${ws.rowCount}`);
-          titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: color } };
-          titleRow.getCell(1).alignment = { horizontal: 'center' };
-          ws.addRow([]);
-          const head = ws.addRow(header);
-          head.eachCell((cell) => {
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-          });
-          rows.forEach((r, idx) => {
-            const row = ws.addRow(r);
-            row.eachCell((cell) => {
-              cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-              if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-            });
-          });
-          ws.addRow([]);
+        const renderTable = (title: string, header: string[], rows: (string | number)[][]) => {
+          appendDashboardExcelTable(ws, title, header, rows);
         };
 
-        renderTable('Rentabilidad (Estado de Resultados)', ['Concepto', 'Período actual', 'Período anterior'], profitability.rows.map(r => [r.label, fmt(r.monto ?? 0), r.prev === null ? 'N/D' : fmt(r.prev)]), 'FF3B82F6');
-        renderTable('Ingresos por Origen', ['Origen', 'Monto', 'Participación'], ingComposition.rows.slice(0, 8).map(r => [r.nombre, fmt(r.monto), `${r.pct.toFixed(1)}%`]), 'FF10B981');
-        renderTable('Pagos por Categoría', ['Categoría', 'Monto', 'Participación'], pagComposition.rows.slice(0, 8).map(r => [r.nombre, fmt(r.monto), `${r.pct.toFixed(1)}%`]), 'FFF43F5E');
-        renderTable('Antigüedad de Cuentas por Pagar', ['Rango', 'Monto', 'Facturas'], cxpAging.buckets.map(b => [b.label, fmt(b.monto), String(b.facturas)]), 'FFF59E0B');
-        renderTable('Balance de comprobación', ['Código', 'Cuenta', 'Tipo', 'Debe', 'Haber', 'Saldo'], trialRows.map((row) => { const normalized = normalizeTrialBalanceRow(row); return [normalized.code, normalized.name, normalized.type, fmt(normalized.debit), fmt(normalized.credit), fmt(normalized.balance)]; }).slice(0, 120), 'FF3B82F6');
+        renderTable('Rentabilidad (Estado de Resultados)', ['Concepto', 'Período actual', 'Período anterior'], profitability.rows.map(r => [r.label, fmt(r.monto ?? 0), r.prev === null ? 'N/D' : fmt(r.prev)]));
+        renderTable('Ingresos por Origen', ['Origen', 'Monto', 'Participación'], ingComposition.rows.slice(0, 8).map(r => [r.nombre, fmt(r.monto), `${r.pct.toFixed(1)}%`]));
+        renderTable('Pagos por Categoría', ['Categoría', 'Monto', 'Participación'], pagComposition.rows.slice(0, 8).map(r => [r.nombre, fmt(r.monto), `${r.pct.toFixed(1)}%`]));
+        renderTable('Antigüedad de Cuentas por Pagar', ['Rango', 'Monto', 'Facturas'], cxpAging.buckets.map(b => [b.label, fmt(b.monto), String(b.facturas)]));
+        renderTable('Balance de comprobación', ['Código', 'Cuenta', 'Tipo', 'Debe', 'Haber', 'Saldo'], trialRows.map((row) => { const normalized = normalizeTrialBalanceRow(row); return [normalized.code, normalized.name, normalized.type, fmt(normalized.debit), fmt(normalized.credit), fmt(normalized.balance)]; }).slice(0, 120));
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_finanzas'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");

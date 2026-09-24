@@ -16,7 +16,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList, fetchAllReportPages } from '../../hooks/useTenantQuery';
-import { addExcelCanvasImage, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
+import { addExcelCanvasImage, appendDashboardExcelTable, downloadExcelWorkbook, finalizeExcelKpiRows, fitExcelImageDimensions, getBase64Image, prepareExcelCanvasClone, prepareExcelKpiColumns, sanitizeHtml2CanvasOklch, shouldIgnoreExcelCanvasElement } from '../../utils/reportExportUtils';
 import { drawReportBrandMeta, drawReportKpiCards, drawReportTable, generateConfiguredReportSectionsPDF, getPdfDesignSettings, getPdfTemplateLogo, pdfDesignPaper, type ConfiguredReportSectionInput } from '../../utils/pdfGenerator';
 import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
@@ -1060,7 +1060,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 6, gap: 3, boxHeight: boxH, labelFontSize: 6.5, valueFontSize: 9, detailFontSize: 5.8 });
 
         const renderTable = (title: string, headers: string[], rows: (string | number)[][], widths: number[]) => {
-          reportSections.push({ title, headers, rows });
+          reportSections.push({ title, headers, rows, color: [245, 158, 11] });
           currentY = drawReportTable({ doc, title, headers, rows, color: [245, 158, 11], marginX, contentWidth, currentY, columnWidths: widths });
         };
 
@@ -1321,34 +1321,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         while (ws.rowCount < imgRow) ws.addRow([]);
         currentRow = ws.rowCount + 2;
 
-        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
-
         const addTable = (title: string, headers: string[], rows: (string | number)[][]) => {
-          const endColumn = String.fromCharCode(64 + headers.length);
-          const tRow = ws.addRow([title]);
-          ws.mergeCells(`A${ws.rowCount}:${endColumn}${ws.rowCount}`);
-          tRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFF59E0B' } };
-          tRow.getCell(1).alignment = { horizontal: 'center' };
-          ws.addRow([]);
-          const hRow = ws.addRow(headers);
-          hRow.eachCell((cell) => {
-            if (!cell.value) return;
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-          });
-          rows.forEach((row, idx) => {
-            const r = ws.addRow(row);
-            headers.forEach((_, headerIndex) => {
-              const cIdx = headerIndex + 1;
-              const cell = r.getCell(cIdx);
-              if (!cell.value) return;
-              cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-              if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
-            });
-          });
-          ws.addRow([]);
+          appendDashboardExcelTable(ws, title, headers, rows);
         };
 
         addTable('Mayor Antigüedad', ['Colaborador', 'Ingreso', 'Antigüedad', 'Departamento'],

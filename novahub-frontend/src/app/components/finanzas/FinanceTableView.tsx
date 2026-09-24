@@ -25,7 +25,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../ui/utils';
 import { toast } from '@/app/services/toast';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
-import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
+import { buildDateFilteredDownloadFileName, buildDateFilteredLabeledPdfFileName } from '../../utils/exportFileNames';
 import { translatePaymentMethodText } from '../../utils/paymentMethods';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { financeCategoryLabel } from './financeChartTheme';
@@ -409,7 +409,7 @@ export function FinanceTableView({
       const summary = exportSummary?.(filteredData);
       const pdfSettings = await getPdfDesignSettings('finanzas.transactions');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings));
-      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredDownloadFileName([title], 'pdf', dateRange.start, dateRange.end) });
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, tenantLogo: logoUrl, rows: filteredData, columns: reportColumns.slice(0, 10).map(column => ({ header: column.label, value: row => row[column.key], align: ['number', 'currency'].includes(column.type) ? 'right' as const : column.type === 'date' || column.type === 'datetime' ? 'center' as const : 'left' as const })), tableSummary: summary, fileName: buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end) });
       if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const pageWidth = doc.internal.pageSize.getWidth();
       const primaryColor = themeConfig.colors.primary || '#10b981';
@@ -500,7 +500,7 @@ export function FinanceTableView({
         doc.text(`${companyName} - Página ${i} de ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
       }
 
-      doc.save(buildDateFilteredDownloadFileName([title], 'pdf', dateRange.start, dateRange.end));
+      doc.save(buildDateFilteredLabeledPdfFileName(title, 'pdf', dateRange.start, dateRange.end));
       toast.success("PDF exportado exitosamente");
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || "Error al exportar PDF"); }
   };

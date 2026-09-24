@@ -231,7 +231,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         tenantName: user?.tenantName || 'Empresa',
         tenantLogo: user?.sessionBranding?.logo || null,
         format,
-        targetKey: 'compras.list',
+        targetKey: 'compras.expense',
         summary: { label: 'Total general', value: formatConvertedAmount(totalExpenses, displayCurrency, globalRate), columnIndex: 3 },
         summaryPlacement: 'footer',
         columns: [
