@@ -57,8 +57,59 @@ export function pdfFormatLabel(format?: PdfDownloadFormat | string): string {
 }
 
 export function buildPdfFileName(parts: readonly unknown[], format: PdfDownloadFormat | string = 'configured'): string {
+  const humanDocumentLabels: Record<string, string> = {
+    cotizacion: 'Cotización',
+    orden_de_venta: 'Orden de venta',
+    factura: 'Factura',
+    factura_recurrente: 'Factura recurrente',
+    pago_recibido: 'Pago recibido',
+    devolucion: 'Devolución',
+    nota_de_credito: 'Nota de crédito',
+    comprobante_gasto: 'Comprobante de gasto',
+    orden_de_compra: 'Orden de compra',
+    solicitud_de_compra: 'Solicitud de compra',
+    factura_de_proveedor: 'Factura de proveedor',
+    arqueo_de_caja: 'Resumen de sesión de caja',
+    cierre_gerencial_de_caja: 'Cierre gerencial de caja',
+    etiquetas_productos: 'Etiquetas de productos',
+  };
+  const firstPart = String(parts[0] ?? '').trim();
+  if (humanDocumentLabels[firstPart]) {
+    const suffix = parts.slice(1).map(part => String(part ?? '').trim()).filter(Boolean).join(' ');
+    return buildHumanPdfFileName([humanDocumentLabels[firstPart], suffix].filter(Boolean).join(' '), format);
+  }
   const paperLabel = pdfFormatLabel(format);
   return buildDownloadFileName(paperLabel ? [...parts, paperLabel] : parts, 'pdf');
+}
+
+function sanitizeHumanFileName(value: unknown, fallback = 'Documento'): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return fallback;
+  return raw
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^\.+|\.+$/g, '')
+    .trim()
+    .slice(0, 180) || fallback;
+}
+
+/** Nombre legible para documentos individuales; conserva espacios y acentos. */
+export function buildHumanPdfFileName(label: unknown, format: PdfDownloadFormat | string = 'configured'): string {
+  const paperLabel = pdfFormatLabel(format);
+  const base = sanitizeHumanFileName([label, paperLabel].filter(Boolean).join(' '));
+  return `${base}.pdf`;
+}
+
+/** Nombre legible para documentos individuales que tienen número comercial. */
+export function buildLabeledPdfFileName(label: unknown, number?: unknown, format: PdfDownloadFormat | string = 'configured'): string {
+  const documentLabel = String(label ?? '').trim() || 'Documento';
+  const rawNumber = String(number ?? '').trim();
+  const documentNumber = rawNumber && !isInternalIdentifier(rawNumber) ? rawNumber : 'Sin número';
+  return buildHumanPdfFileName(`${documentLabel} ${documentNumber}`, format);
+}
+
+export function buildDateFilteredLabeledPdfFileName(label: unknown, format: PdfDownloadFormat | string = 'configured', dateFrom?: unknown, dateTo?: unknown): string {
+  return buildHumanPdfFileName([label, ...dateRangeParts(dateFrom, dateTo)].join(' '), format);
 }
 
 export function buildDatedDownloadFileName(parts: readonly unknown[], extension: string): string {
@@ -130,5 +181,14 @@ const SALES_DOCUMENT_LABELS: Record<string, string> = {
 };
 
 export function buildSalesPdfFileName(documentType: string, number?: unknown, format: PdfDownloadFormat | string = 'configured'): string {
-  return buildPdfFileName([SALES_DOCUMENT_LABELS[documentType] || documentType, number || 'sin_numero'], format);
+  const labels: Record<string, string> = {
+    estimate: 'Cotización',
+    order: 'Orden de venta',
+    invoice: 'Factura',
+    recurring: 'Factura recurrente',
+    payment: 'Pago recibido',
+    return: 'Devolución',
+    'credit-note': 'Nota de crédito',
+  };
+  return buildLabeledPdfFileName(labels[documentType] || SALES_DOCUMENT_LABELS[documentType] || documentType, number, format);
 }

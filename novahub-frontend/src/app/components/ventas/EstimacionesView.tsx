@@ -23,7 +23,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdfGenerator';
-import { buildPdfFileName } from '../../utils/exportFileNames';
+import { buildSalesPdfFileName } from '../../utils/exportFileNames';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
@@ -113,6 +113,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [detailEstimate, setDetailEstimate] = useState<Estimate | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+  const customerDetailsCacheRef = useRef(new Map<string, Customer>());
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const localDraftRef = useRef<Estimate | null>(null);
@@ -404,8 +405,28 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     return resolveCustomerPhone(estimate.customerId, estimate.customer, customers);
   };
 
+  const resolveEstimateCustomer = async (estimate: Estimate): Promise<Customer | undefined> => {
+    const snapshot = customers.find((customer) => customer.id === estimate.customerId) || estimate.customer;
+    if (!estimate.customerId) return snapshot;
+    const cached = customerDetailsCacheRef.current.get(estimate.customerId);
+    if (cached) return { ...(snapshot || {}), ...cached } as Customer;
+    try {
+      const detail = await customersService.getById(estimate.customerId);
+      if (detail?.id) {
+        customerDetailsCacheRef.current.set(estimate.customerId, detail as Customer);
+        return { ...(snapshot || {}), ...detail } as Customer;
+      }
+    } catch (error) {
+      console.warn('No se pudo cargar el detalle completo del cliente para la cotización:', error);
+    }
+    return snapshot;
+  };
+
   const handleWhatsApp = async (estimateOverride?: Estimate) => {
-    const estimate = estimateOverride || localDoc;
+    const baseEstimate = estimateOverride || localDoc;
+    if (!baseEstimate) return;
+    const currentCustomer = await resolveEstimateCustomer(baseEstimate);
+    const estimate = currentCustomer ? { ...baseEstimate, customer: currentCustomer } : baseEstimate;
     const phone = getCustomerPhone(estimate);
     if (!phone) {
       toast.error('El cliente no tiene un número asociado para enviar la cotización por WhatsApp');
@@ -418,7 +439,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
     const preparingToastId = estimate ? toast.loading('Generando PDF y preparando enlaces seguros...') : undefined;
     if (estimate) {
-      const currentCustomer = customers.find((c) => c.id === estimate.customerId) || estimate.customer;
       try {
         if (estimate.customerId) {
           const [documentLink, portalLink] = await Promise.all([
@@ -437,7 +457,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             save: true,
           });
           // Compatibilidad: solo usa el enlace legado si el servicio seguro no está disponible.
-          const fileName = buildPdfFileName(['cotizacion', estimate.number || 'sin_numero']);
+          const fileName = buildSalesPdfFileName('estimate', estimate.number);
           const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
           const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'cotizaciones' });
           if (uploaded?.url) publicPdfUrl = uploaded.url;
@@ -475,7 +495,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     const previewToastId = toast.loading('Preparando la previsualización de la cotización...');
     try {
       await previewSalesTransactionPDF({
-        document: { ...estimate, customer: customers.find((customer) => customer.id === estimate.customerId) || estimate.customer },
+        document: resolveEstimateCustomer(estimate).then((currentCustomer) => ({ ...estimate, customer: currentCustomer })),
         tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount as any,

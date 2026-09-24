@@ -1060,7 +1060,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 6, gap: 3, boxHeight: boxH, labelFontSize: 6.5, valueFontSize: 9, detailFontSize: 5.8 });
 
         const renderTable = (title: string, headers: string[], rows: (string | number)[][], widths: number[]) => {
-          reportSections.push({ title, headers, rows });
+          reportSections.push({ title, headers, rows, color: [245, 158, 11] });
           currentY = drawReportTable({ doc, title, headers, rows, color: [245, 158, 11], marginX, contentWidth, currentY, columnWidths: widths });
         };
 

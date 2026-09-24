@@ -15,7 +15,7 @@ import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
-import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { buildHumanPdfFileName } from '../../utils/exportFileNames';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -389,7 +389,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         body: tableData,
       });
 
-      doc.save(buildDatedDownloadFileName(['reporte_nominas'], 'pdf'));
+      doc.save(buildHumanPdfFileName(`Reporte de nóminas ${new Date().toISOString().slice(0, 10)}`));
       toast.success('Reporte PDF descargado');
     } catch {
       toast.error('Error generando PDF');

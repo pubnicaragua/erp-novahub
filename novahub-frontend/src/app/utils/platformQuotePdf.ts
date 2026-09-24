@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable, { type RowInput } from 'jspdf-autotable';
 import type { PlatformQuote } from '../services/enterprise-groups.service';
 import { getNovaHubLogoPng } from './novahubBrand';
-import { buildPdfFileName } from './exportFileNames';
+import { buildLabeledPdfFileName } from './exportFileNames';
 
 type Rgb = [number, number, number];
 
@@ -442,7 +442,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   doc.text(isInvoice ? 'EL CLIENTE' : 'EL CLIENTE / PROSPECTO', width - margin - 38, y, { align: 'center' });
 
   drawFooter();
-  doc.save(buildPdfFileName([isInvoice ? 'factura' : 'cotizacion', quote.number || 'sin_numero']));
+  doc.save(buildLabeledPdfFileName(isInvoice ? 'Factura' : 'Cotización', quote.number));
 }
 
 export async function downloadPlatformQuoteCommercialReport(

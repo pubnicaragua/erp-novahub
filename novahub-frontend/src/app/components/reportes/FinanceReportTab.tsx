@@ -580,7 +580,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: kpiColumns, boxHeight: boxH, labelFontSize: 7, valueFontSize: 10, detailFontSize: 6 });
 
         const renderTable = (title: string, header: string[], rows: (string | number)[][], color: number[]) => {
-          reportSections.push({ title, headers: header, rows });
+          reportSections.push({ title, headers: header, rows, color });
           currentY = drawReportTable({ doc, title, headers: header, rows, color, marginX, contentWidth, currentY });
         };
 

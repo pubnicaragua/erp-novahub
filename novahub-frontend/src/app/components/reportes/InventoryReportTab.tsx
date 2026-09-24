@@ -735,7 +735,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         currentY = drawReportKpiCards({ doc, kpis, marginX, contentWidth, currentY, columns: 4, boxHeight: boxH, labelFontSize: 7.5, valueFontSize: 11, detailFontSize: 6.5 });
 
         const renderTable = (title: string, headers: string[], rows: any[][], accent: [number, number, number]) => {
-          reportSections.push({ title, headers, rows });
+          reportSections.push({ title, headers, rows, color: accent });
           currentY = drawReportTable({ doc, title, headers, rows, color: accent, marginX, contentWidth, currentY });
         };
 

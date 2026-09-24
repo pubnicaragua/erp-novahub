@@ -21,6 +21,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../ui/utils';
+import { buildSalesPdfFileName } from '../../utils/exportFileNames';
 import {
   cajaService,
   type CashRegister,
