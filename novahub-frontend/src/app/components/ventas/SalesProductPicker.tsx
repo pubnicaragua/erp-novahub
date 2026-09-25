@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowLeft, BriefcaseBusiness, Check, ChevronLeft, ChevronRight, Grid2X2, List, MapPin, Package, Search, Warehouse } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -164,7 +164,7 @@ export function SalesProductPicker({
           product.brand,
           product.commercialNote,
           getCategoryName(product),
-          ...(product.variants || []).map((variant) => (variant as any).sku),
+          ...(product.variants || []).map((variant) => (variant as { sku?: string | null }).sku),
         ].map(normalizeSearch).join(' ');
         return searchable.includes(query);
       })
@@ -175,21 +175,15 @@ export function SalesProductPicker({
         return categoryId === categoryFilter;
       })
       .filter((product) => availabilityFilter === 'all' || stockState(product, warehouseId, String(product.id) === String(value || '') ? selectedVariantId : getSingleSalesVariant(product)?.id) === availabilityFilter);
-  }, [availabilityFilter, brandFilter, categoryFilter, itemType, products, search, selectedVariantId, value, warehouseId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availabilityFilter, brandFilter, categoryFilter, itemType, products, search, value, variantId, warehouseId]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PICKER_PAGE_SIZE));
-  const pageStart = (currentPage - 1) * PICKER_PAGE_SIZE;
+  const page = Math.max(1, Math.min(currentPage, totalPages));
+  const pageStart = (page - 1) * PICKER_PAGE_SIZE;
   const paginatedProducts = filteredProducts.slice(pageStart, pageStart + PICKER_PAGE_SIZE);
   const firstVisibleResult = filteredProducts.length > 0 ? pageStart + 1 : 0;
   const lastVisibleResult = Math.min(pageStart + PICKER_PAGE_SIZE, filteredProducts.length);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, categoryFilter, brandFilter, availabilityFilter, warehouseId, itemType]);
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
 
   const warehouseName = (id?: string | null) => {
     const normalizedId = String(id || '').trim();
@@ -248,7 +242,7 @@ export function SalesProductPicker({
     if (rawPrice === undefined || rawPrice === null) return null;
     const numericPrice = Number(rawPrice);
     if (!Number.isFinite(numericPrice)) return null;
-    const currency = (product as any).priceCurrency || 'NIO';
+    const currency = (product as { priceCurrency?: string }).priceCurrency || 'NIO';
     return (
       <Badge
         variant="outline"
@@ -268,7 +262,7 @@ export function SalesProductPicker({
       <Badge
         variant="outline"
         className={cn(
-          'max-w-full whitespace-normal text-left',
+          'max-w-full shrink-0 whitespace-normal text-left',
           availability === null ? 'border-border text-muted-foreground' : availability > 0 ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400' : 'border-amber-500/30 text-amber-700 dark:text-amber-300',
         )}
       >
@@ -302,14 +296,14 @@ export function SalesProductPicker({
           onClick={() => choose(product)}
           disabled={selectionBlocked}
           className={cn(
-            'group flex min-h-0 min-w-0 w-full flex-1 gap-3 bg-transparent p-3 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent',
-            view === 'cards' ? 'flex-col justify-between' : 'items-center',
+            'group flex min-w-0 w-full flex-1 gap-3 bg-transparent p-3 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent',
+            view === 'cards' ? 'flex-col justify-between gap-3 min-h-32' : 'flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5',
           )}
           aria-pressed={isSelected}
           aria-label={`${product.name || 'Artículo'}${hasVariantsButNoneActive ? '. Sin variantes activas' : selectionBlocked ? '. Sin existencias en la bodega seleccionada' : ''}`}
         >
           <div className={cn('flex min-w-0 gap-3', view === 'cards' ? 'items-start' : 'flex-1 items-center')}>
-            <div className={cn('flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground', view === 'cards' ? 'size-16' : 'size-12')}>
+            <div className={cn('flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground', view === 'cards' ? 'size-14 sm:size-16' : 'size-12')}>
               <CatalogProductImage product={product} />
             </div>
             <div className="min-w-0 flex-1">
@@ -318,10 +312,10 @@ export function SalesProductPicker({
               {getCategoryName(product) && <p className="mt-1 truncate text-[10px] text-muted-foreground">{getCategoryName(product)}</p>}
             </div>
           </div>
-          <div className={cn('flex min-w-0 flex-wrap items-center gap-2', view === 'list' && 'ml-auto justify-end')}>
+          <div className={cn('flex min-w-0 flex-wrap items-center gap-1.5', view === 'list' && 'w-full sm:w-auto sm:ml-auto justify-start sm:justify-end')}>
             {renderPrice(product)}
             {renderAvailability(product, scopedVariantId)}
-            {hasVariantsButNoneActive && <Badge variant="outline" className="border-amber-500/30 text-amber-700 dark:text-amber-300">Sin variantes activas</Badge>}
+            {hasVariantsButNoneActive && <Badge variant="outline" className="shrink-0 border-amber-500/30 text-amber-700 dark:text-amber-300">Sin variantes activas</Badge>}
             {view === 'list' && stock !== null && tracksSalesInventory(product) && <span className="sr-only">{formatSalesStock(stock)} disponibles</span>}
             {isSelected && <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />}
           </div>
@@ -437,7 +431,7 @@ export function SalesProductPicker({
             </div>
             <p className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
               <Warehouse className="size-3 shrink-0" />
-              {warehouseId ? warehouseName(warehouseId) : 'Selecciona una bodega para consultar existencias'}
+              <span className="truncate">{warehouseId ? warehouseName(warehouseId) : 'Selecciona una bodega para consultar existencias'}</span>
             </p>
           </div>}
 
@@ -510,21 +504,21 @@ export function SalesProductPicker({
                 variant="outline"
                 size="sm"
                 className="h-8 px-2"
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={page <= 1}
+                onClick={() => setCurrentPage(Math.max(1, page - 1))}
                 aria-label="Página anterior"
               >
                 <ChevronLeft className="size-4" aria-hidden="true" />
                 <span className="sr-only">Anterior</span>
               </Button>
-              <span className="min-w-24 text-center text-xs text-muted-foreground">Página {currentPage} de {totalPages}</span>
+              <span className="min-w-24 text-center text-xs text-muted-foreground">Página {page} de {totalPages}</span>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-8 px-2"
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={page >= totalPages}
+                onClick={() => setCurrentPage(Math.min(totalPages, page + 1))}
                 aria-label="Página siguiente"
               >
                 <ChevronRight className="size-4" aria-hidden="true" />
