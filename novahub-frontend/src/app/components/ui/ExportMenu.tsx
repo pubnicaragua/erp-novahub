@@ -1,10 +1,12 @@
-import { ChevronDown, Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, Download, FileSpreadsheet, FileText, Sparkles } from 'lucide-react';
 import { Button } from './button';
 import { cn } from './utils';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './dropdown-menu';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './dropdown-menu';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 export interface ExportMenuProps {
-  onPdf?: () => void;
+  onPdf?: (format?: PdfDownloadFormat) => void;
   onExcel?: () => void;
   disabled?: boolean;
   className?: string;
@@ -14,11 +16,13 @@ export interface ExportMenuProps {
   excelLabel?: string;
   pdfDescription?: string;
   excelDescription?: string;
+  showNovaHubFormat?: boolean;
 }
 
 /** Menú común para salidas lógicas de una vista. Los botones especializados
  * de tickets/rollos siguen usando su renderer físico separado. */
-export function ExportMenu({ onPdf, onExcel, disabled = false, className, label = 'Exportar', size = 'sm', pdfLabel = 'Exportar PDF', excelLabel = 'Exportar Excel', pdfDescription = 'Reporte con la estructura de esta vista', excelDescription = 'Todos los registros filtrados' }: ExportMenuProps) {
+export function ExportMenu({ onPdf, onExcel, disabled = false, className, label = 'Exportar', size = 'sm', pdfLabel = 'Exportar PDF', excelLabel = 'Exportar Excel', pdfDescription = 'Reporte con la estructura de esta vista', excelDescription = 'Todos los registros filtrados', showNovaHubFormat = true }: ExportMenuProps) {
+  const [useNovaHubFormat, setUseNovaHubFormat] = useState(false);
   const hasPdf = Boolean(onPdf);
   const hasExcel = Boolean(onExcel);
   if (!hasPdf && !hasExcel) return null;
@@ -33,10 +37,39 @@ export function ExportMenu({ onPdf, onExcel, disabled = false, className, label 
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 max-w-[calc(100vw-1rem)] rounded-2xl p-1.5">
-        {hasPdf && <DropdownMenuItem onClick={onPdf} className="gap-2 rounded-xl py-2.5">
-          <FileText className="size-4 text-rose-600" />
-          <span className="min-w-0 flex-1"><span className="block font-bold">{pdfLabel}</span><span className="block text-[10px] text-popover-foreground/75">{pdfDescription}</span></span>
-        </DropdownMenuItem>}
+        {hasPdf && showNovaHubFormat && (
+          <>
+            <DropdownMenuCheckboxItem
+              checked={useNovaHubFormat}
+              onCheckedChange={setUseNovaHubFormat}
+              className="py-2 text-primary"
+              onSelect={(event) => event.preventDefault()}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 font-bold">
+                  <Sparkles className="size-3.5 text-primary" /> Exportar con NovaHubFormat
+                </span>
+                <span className="block text-[10px] text-popover-foreground/75">
+                  Diseño empresarial independiente con color de marca
+                </span>
+              </span>
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        {hasPdf && (
+          <DropdownMenuItem onClick={() => onPdf?.(useNovaHubFormat ? 'novahub-format' : 'configured')} className="gap-2 rounded-xl py-2.5">
+            <FileText className="size-4 text-rose-600" />
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold">
+                {useNovaHubFormat ? 'Exportar PDF · NovaHubFormat' : pdfLabel}
+              </span>
+              <span className="block text-[10px] text-popover-foreground/75">
+                {useNovaHubFormat ? 'Formato empresarial sólido e independiente' : pdfDescription}
+              </span>
+            </span>
+          </DropdownMenuItem>
+        )}
         {hasPdf && hasExcel && <DropdownMenuSeparator />}
         {hasExcel && <DropdownMenuItem onClick={onExcel} className="gap-2 rounded-xl py-2.5">
           <FileSpreadsheet className="size-4 text-emerald-600" />

@@ -6,9 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { DateField } from '../../ui/DateField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { cajaService, type HistoricalCashReport as HistoricalCashReportData, type HistoricalCashSessionDetail } from '../../../services/caja.service';
 import { getApiErrorMessage } from '../../../services/api';
 import { generateHistoricalCashReportPDF } from '../../../utils/pdfGenerator';
+import { PdfDownloadButton } from '../../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../../utils/pdfDownloadFormats';
 
 const today = new Date();
 const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -29,6 +32,7 @@ const signedAmount = (value: unknown) => `${Number(value || 0) >= 0 ? '+' : ''}$
 
 export function HistoricalCashReport({ initialRegisterId, canExport = true }: { initialRegisterId?: string; canExport?: boolean }) {
   const { user } = useAuth();
+  const { themeConfig } = useTheme();
   const [filters, setFilters] = useState({
     dateFrom: inputDate(thirtyDaysAgo),
     dateTo: inputDate(today),
@@ -74,10 +78,15 @@ export function HistoricalCashReport({ initialRegisterId, canExport = true }: { 
     void loadReport(next);
   };
 
-  const exportPdf = async () => {
+  const exportPdf = async (format: PdfDownloadFormat = 'configured') => {
     setExporting(true);
     try {
-      await generateHistoricalCashReportPDF({ report, tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa', tenantLogo: user?.sessionBranding?.logo || null });
+      await generateHistoricalCashReportPDF({
+        report,
+        tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Nuestra Empresa',
+        tenantLogo: themeConfig?.logo || user?.sessionBranding?.logo || user?.clientTenant?.logo || null,
+        format,
+      });
     } catch (err) {
       setError(getApiErrorMessage(err, 'No se pudo generar el PDF del reporte.'));
     } finally {
@@ -99,12 +108,17 @@ export function HistoricalCashReport({ initialRegisterId, canExport = true }: { 
     }
   };
 
-  const exportSessionDetail = async () => {
+  const exportSessionDetail = async (format: PdfDownloadFormat = 'configured') => {
     if (!sessionDetail) return;
     setDetailExporting(true);
     try {
       const { generateCashClosureReportPDF } = await import('../../../utils/pdfGenerator');
-      await generateCashClosureReportPDF({ detail: sessionDetail, tenantName: user?.tenantName || 'Nuestra Empresa', tenantLogo: user?.sessionBranding?.logo || null });
+      await generateCashClosureReportPDF({
+        detail: sessionDetail,
+        tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Nuestra Empresa',
+        tenantLogo: themeConfig?.logo || user?.sessionBranding?.logo || user?.clientTenant?.logo || null,
+        format,
+      });
     } catch (err) {
       setError(getApiErrorMessage(err, 'No se pudo generar el cierre gerencial en PDF.'));
     } finally {
@@ -129,9 +143,15 @@ export function HistoricalCashReport({ initialRegisterId, canExport = true }: { 
               <Button variant="outline" className="gap-2" onClick={() => void loadReport()} disabled={loading}>
                 <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} /> Actualizar
               </Button>
-              {canExport && <Button className="gap-2" onClick={() => void exportPdf()} disabled={exporting || loading || report.items.length === 0}>
-                {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Generar PDF
-              </Button>}
+              {canExport && (
+                <PdfDownloadButton
+                  onDownload={(format) => void exportPdf(format)}
+                  disabled={exporting || loading || report.items.length === 0}
+                  className="gap-2"
+                >
+                  {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Generar PDF
+                </PdfDownloadButton>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -210,7 +230,15 @@ export function HistoricalCashReport({ initialRegisterId, canExport = true }: { 
               <p className="mt-1 text-sm text-muted-foreground">{sessionDetail.session.branch?.name || 'Sin sucursal'} · {sessionDetail.session.register?.code || 'Sin caja'} · {new Date(sessionDetail.session.openedAt).toLocaleDateString('es-NI')}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {canExport && <Button className="gap-2" onClick={() => void exportSessionDetail()} disabled={detailExporting}><Download className="size-4" /> {detailExporting ? 'Generando…' : 'PDF 16:9'}</Button>}
+              {canExport && (
+                <PdfDownloadButton
+                  onDownload={(format) => void exportSessionDetail(format)}
+                  disabled={detailExporting}
+                  className="gap-2"
+                >
+                  <Download className="size-4" /> {detailExporting ? 'Generando…' : 'Exportar PDF'}
+                </PdfDownloadButton>
+              )}
               <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar detalle" title="Cerrar" onClick={() => { setSessionDetail(null); setSelectedSessionId(''); }}><X className="size-4" /></Button>
             </div>
           </div>

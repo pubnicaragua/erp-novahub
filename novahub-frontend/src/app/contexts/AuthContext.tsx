@@ -24,19 +24,31 @@ function rememberSessionBranding(payload: any) {
     && (['superadmin', 'super_admin', 'partner', 'platform_admin'].includes(normalizedRole)
       || (normalizedUserType === 'admin' && normalizedRole !== 'manager'));
   const hasActiveTenantBranding = Boolean(apiUser?.clientTenantId && apiUser?.clientTenant);
+  const nextTenantId = apiUser?.clientTenantId || apiUser?.tenantId || apiUser?.enterpriseGroupId || '';
+  let preservedLogo = '';
+  if (!isDetachedPlatformAdmin && nextTenantId) {
+    try {
+      const existing = JSON.parse(localStorage.getItem(SESSION_BRANDING_KEY) || 'null');
+      if (existing && existing.tenantId === nextTenantId && typeof existing.logo === 'string') {
+        preservedLogo = existing.logo;
+      }
+    } catch {
+      preservedLogo = '';
+    }
+  }
   const branding = isDetachedPlatformAdmin
     ? { kind: 'platform', name: 'NovaHub Platform', logo: null }
     : hasActiveTenantBranding
       ? { kind: 'branch', name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
       : (apiUser?.sessionBranding || {});
-  const logo = branding.logo ?? apiUser?.clientTenant?.logo ?? '';
+  const logo = branding.logo || apiUser?.clientTenant?.logo || preservedLogo || '';
   const name = branding.name || apiUser?.clientTenant?.name || '';
   if (!logo && !name) {
     localStorage.removeItem(SESSION_BRANDING_KEY);
     return;
   }
   localStorage.setItem(SESSION_BRANDING_KEY, JSON.stringify({
-    tenantId: apiUser?.clientTenantId || apiUser?.tenantId || apiUser?.enterpriseGroupId || '',
+    tenantId: nextTenantId,
     logo,
     name: name || 'NovaHub ERP',
     kind: branding.kind || (apiUser?.clientTenant ? 'branch' : 'group'),
@@ -436,12 +448,25 @@ const createUserObject = (apiPayload: any): User => {
     || (!apiUser.clientTenantId && userType === 'admin' && role !== 'manager');
 
   const hasActiveTenantBranding = Boolean(apiUser?.clientTenantId && apiUser?.clientTenant);
+  const rememberedTenantLogo = (() => {
+    if (isPlatformAdmin || typeof window === 'undefined') return null;
+    try {
+      const existing = JSON.parse(localStorage.getItem(SESSION_BRANDING_KEY) || 'null');
+      const targetTenantId = apiUser?.clientTenantId || apiUser?.tenantId || apiUser?.enterpriseGroupId || '';
+      if (existing && (!targetTenantId || existing.tenantId === targetTenantId) && typeof existing.logo === 'string' && existing.logo.trim()) {
+        return existing.logo;
+      }
+    } catch {
+      // Ignore storage read errors
+    }
+    return null;
+  })();
   const sessionBranding = isPlatformAdmin
     ? { kind: 'platform' as const, name: 'NovaHub Platform', logo: null }
     : hasActiveTenantBranding
-      ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
+      ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || apiUser.sessionBranding?.logo || rememberedTenantLogo || null }
       : apiUser.sessionBranding || (apiUser.clientTenant
-        ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
+        ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || rememberedTenantLogo || null }
         : undefined);
   
   const moduleEnumMapInverse: Record<string, string> = {

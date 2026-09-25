@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Columns2,
+  Columns3,
   RectangleVertical,
   ExternalLink,
   FileText,
@@ -225,6 +226,20 @@ export function EstimateImageGallery({
                   >
                     <Columns2 className="size-3" />
                     <span>2 por fila</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateColumns(3)}
+                    className={cn(
+                      'h-6.5 gap-1.5 px-2.5 text-[11px] font-bold rounded-md inline-flex items-center transition-all cursor-pointer',
+                      normalized.columns === 3
+                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                    title="Exportar en PDF a 3 imágenes por fila"
+                  >
+                    <Columns3 className="size-3" />
+                    <span>3 por fila</span>
                   </button>
                 </div>
               </div>

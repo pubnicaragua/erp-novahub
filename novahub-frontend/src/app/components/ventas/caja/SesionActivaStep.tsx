@@ -15,6 +15,8 @@ import { useCurrency } from '../../../contexts/CurrencyContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { generateSessionSummaryPDF } from '../../../utils/pdfGenerator';
+import { PdfDownloadButton } from '../../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../../utils/pdfDownloadFormats';
 import { formatSalesAmount } from '../../../utils/salesPriceList';
 import { api, getApiErrorMessage } from '../../../services/api';
 import {
@@ -324,7 +326,7 @@ export function SesionActivaStep({
   const { user } = useAuth();
   const { themeConfig } = useTheme();
 
-  const handlePrintSummary = async () => {
+  const handlePrintSummary = async (format: PdfDownloadFormat = 'configured') => {
     try {
       toast.promise(
         generateSessionSummaryPDF({
@@ -345,6 +347,7 @@ export function SesionActivaStep({
             hideSystemAmounts: isBlind && !hasSubmittedBlindCount,
           },
           hideSystemAmounts: isBlind && !hasSubmittedBlindCount,
+          format,
         }),
         {
           loading: 'Generando resumen...',
@@ -532,9 +535,16 @@ export function SesionActivaStep({
           </ScrollArea>
           <div className="p-4 border-t border-border/40 flex flex-wrap gap-3 justify-between items-center bg-muted/10 rounded-b-xl text-xs text-muted-foreground">
             <span className="min-w-0">Tip: Revisa los gastos detalladamente antes del cierre.</span>
-            {canExport && <Button variant="outline" size="sm" className="h-7 text-[11px] font-bold" onClick={handlePrintSummary}>
-              <Printer className="size-3 mr-2" /> Imprimir Resumen
-            </Button>}
+            {canExport && (
+              <PdfDownloadButton
+                onDownload={(format) => void handlePrintSummary(format)}
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] font-bold"
+              >
+                <Printer className="size-3 mr-2" /> Imprimir Resumen
+              </PdfDownloadButton>
+            )}
           </div>
         </CardContent>
       </Card>

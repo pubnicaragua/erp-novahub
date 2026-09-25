@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, type ReactNode } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 import {
   Plus, Search, Upload, FileDown, Pencil,
@@ -41,6 +41,7 @@ import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatDateEs } from '../../utils/dateFormat';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { ExportMenu } from '../ui/ExportMenu';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 interface AccountNode {
   id: string;
@@ -516,7 +517,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     }
   };
 
-  const handleExportPdf = async () => {
+  const handleExportPdf = async (format?: PdfDownloadFormat) => {
     if (!canExportAccounts) return;
     const rows = flatList.map(account => ({
       code: account.code,
@@ -529,8 +530,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     await generateConfiguredReportTemplate({
       targetKey: 'contabilidad.chart',
       title: 'Plan de cuentas',
-      tenantName: 'Mi Empresa',
+      tenantName: user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub ERP',
+      tenantLogo: user?.sessionBranding?.logo || user?.clientTenant?.logo || undefined,
       rows,
+      format: format || 'configured',
       columns: [
         { header: 'Código', value: row => row.code },
         { header: 'Cuenta', value: row => row.name },
@@ -542,7 +545,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       tableSummary: { label: 'Cuentas', value: rows.length },
       fileName: 'plan_cuentas.pdf',
     });
-    toast.success(`PDF exportado con ${rows.length} cuenta(s)`);
+    toast.success(format === 'novahub-format' ? `PDF exportado con NovaHubFormat (${rows.length} cuentas)` : `PDF exportado con ${rows.length} cuenta(s)`);
   };
 
   const parseImportFile = async () => {
@@ -806,7 +809,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         </div>
         <div className="erp-toolbar-primary-group flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {helpTrigger}
-          {canExportAccounts && <ExportMenu onPdf={() => void handleExportPdf()} onExcel={() => void handleExport()} />}
+          {canExportAccounts && <ExportMenu onPdf={(format) => void handleExportPdf(format)} onExcel={() => void handleExport()} />}
           {canPerform('ACCOUNTING_CHART', 'create') && (
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload className="w-4 h-4 mr-1" /> Importar
