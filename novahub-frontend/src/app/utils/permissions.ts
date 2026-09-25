@@ -148,6 +148,12 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   TRACKING_BILLING: ['read', 'delete', 'approve', 'export'],
   TRACKING_CONFIG: ['read', 'edit', 'delete'],
 
+  IMPORT_INTL: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
+  IMPORT_INTL_ORIGIN: ['read', 'create', 'edit', 'export'],
+  IMPORT_INTL_CONTAINERS: ['read', 'create', 'edit', 'approve', 'export'],
+  IMPORT_INTL_CUSTOMS: ['read', 'create', 'edit', 'approve', 'export'],
+  IMPORT_INTL_CONFIG: ['read', 'edit'],
+
   INVENTORY_PRODUCTS: ['read', 'create', 'edit', 'delete', 'import', 'export', 'viewCost'],
   INVENTORY_SERVICES: ['read', 'create', 'edit', 'delete', 'import', 'export', 'viewCost'],
   INVENTORY_ATTRIBUTES: ['read', 'create', 'edit', 'delete', 'export'],

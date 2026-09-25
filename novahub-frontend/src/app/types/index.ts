@@ -157,7 +157,7 @@ export interface Customer {
   updatedAt: string;
 }
 
-export type ImageGalleryColumns = 1 | 2;
+export type ImageGalleryColumns = 1 | 2 | 3;
 export type ImageGallerySize = 'small' | 'medium' | 'large';
 
 export const ESTIMATE_IMAGE_TTL_MS = 5 * 60 * 1000; // 5 minutos de vigencia temporal
@@ -272,7 +272,7 @@ export function normalizeEstimateImages(rawImages: unknown): {
       }));
     return {
       items: validItems,
-      columns: obj.columns === 1 ? 1 : 2,
+      columns: obj.columns === 1 ? 1 : obj.columns === 3 ? 3 : 2,
       size: obj.size === 'small' || obj.size === 'large' ? obj.size : 'medium',
       showFileName: obj.showFileName !== false,
       customFields,

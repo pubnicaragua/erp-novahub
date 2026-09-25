@@ -24,19 +24,31 @@ function rememberSessionBranding(payload: any) {
     && (['superadmin', 'super_admin', 'partner', 'platform_admin'].includes(normalizedRole)
       || (normalizedUserType === 'admin' && normalizedRole !== 'manager'));
   const hasActiveTenantBranding = Boolean(apiUser?.clientTenantId && apiUser?.clientTenant);
+  const nextTenantId = apiUser?.clientTenantId || apiUser?.tenantId || apiUser?.enterpriseGroupId || '';
+  let preservedLogo = '';
+  if (!isDetachedPlatformAdmin && nextTenantId) {
+    try {
+      const existing = JSON.parse(localStorage.getItem(SESSION_BRANDING_KEY) || 'null');
+      if (existing && existing.tenantId === nextTenantId && typeof existing.logo === 'string') {
+        preservedLogo = existing.logo;
+      }
+    } catch {
+      preservedLogo = '';
+    }
+  }
   const branding = isDetachedPlatformAdmin
     ? { kind: 'platform', name: 'NovaHub Platform', logo: null }
     : hasActiveTenantBranding
       ? { kind: 'branch', name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
       : (apiUser?.sessionBranding || {});
-  const logo = branding.logo ?? apiUser?.clientTenant?.logo ?? '';
+  const logo = branding.logo || apiUser?.clientTenant?.logo || preservedLogo || '';
   const name = branding.name || apiUser?.clientTenant?.name || '';
   if (!logo && !name) {
     localStorage.removeItem(SESSION_BRANDING_KEY);
     return;
   }
   localStorage.setItem(SESSION_BRANDING_KEY, JSON.stringify({
-    tenantId: apiUser?.clientTenantId || apiUser?.tenantId || apiUser?.enterpriseGroupId || '',
+    tenantId: nextTenantId,
     logo,
     name: name || 'NovaHub ERP',
     kind: branding.kind || (apiUser?.clientTenant ? 'branch' : 'group'),
@@ -100,6 +112,8 @@ export type Module =
   | 'qa-console'
   | 'fuerza-comercial'
   | 'guia-implementacion'
+  | 'tracking'
+  | 'intl-imports'
   | 'platform-users';
 
 export type SubModule = string;
@@ -246,13 +260,18 @@ const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
   FINANCIAL_LOSSES: ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
   SALES_CLIENTS: ['SALES_CLIENTS', 'SALES', 'CLIENTS'],
   PURCHASES_PROVIDERS: ['PURCHASES_PROVIDERS', 'PURCHASES', 'PROVIDERS'],
+  IMPORT_INTL: ['IMPORT_INTL', 'TRACKING', 'TRACKING_TRANSIT', 'INVENTORY'],
+  IMPORT_INTL_ORIGIN: ['IMPORT_INTL_ORIGIN', 'IMPORT_INTL', 'TRACKING', 'TRACKING_TRANSIT'],
+  IMPORT_INTL_CONTAINERS: ['IMPORT_INTL_CONTAINERS', 'IMPORT_INTL', 'TRACKING', 'TRACKING_TRANSIT'],
+  IMPORT_INTL_CUSTOMS: ['IMPORT_INTL_CUSTOMS', 'IMPORT_INTL', 'TRACKING', 'TRACKING_TRANSIT'],
+  IMPORT_INTL_CONFIG: ['IMPORT_INTL_CONFIG', 'IMPORT_INTL', 'TRACKING', 'TRACKING_TRANSIT'],
 };
 
 function tenantPermissionSubscriptionCandidates(module: string): string[] {
   const normalized = String(module || '').toUpperCase();
   const candidates = new Set(TENANT_PERMISSION_SUBSCRIPTION_ALIASES[normalized] || [normalized]);
   const parent = normalized.split('_')[0];
-  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'FINANCING'].includes(parent)) {
+  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'FINANCING', 'IMPORT'].includes(parent)) {
     candidates.add(parent);
   }
   return [...candidates];
@@ -436,12 +455,25 @@ const createUserObject = (apiPayload: any): User => {
     || (!apiUser.clientTenantId && userType === 'admin' && role !== 'manager');
 
   const hasActiveTenantBranding = Boolean(apiUser?.clientTenantId && apiUser?.clientTenant);
+  const rememberedTenantLogo = (() => {
+    if (isPlatformAdmin || typeof window === 'undefined') return null;
+    try {
+      const existing = JSON.parse(localStorage.getItem(SESSION_BRANDING_KEY) || 'null');
+      const targetTenantId = apiUser?.clientTenantId || apiUser?.tenantId || apiUser?.enterpriseGroupId || '';
+      if (existing && (!targetTenantId || existing.tenantId === targetTenantId) && typeof existing.logo === 'string' && existing.logo.trim()) {
+        return existing.logo;
+      }
+    } catch {
+      // Ignore storage read errors
+    }
+    return null;
+  })();
   const sessionBranding = isPlatformAdmin
     ? { kind: 'platform' as const, name: 'NovaHub Platform', logo: null }
     : hasActiveTenantBranding
-      ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
+      ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || apiUser.sessionBranding?.logo || rememberedTenantLogo || null }
       : apiUser.sessionBranding || (apiUser.clientTenant
-        ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
+        ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || rememberedTenantLogo || null }
         : undefined);
   
   const moduleEnumMapInverse: Record<string, string> = {
@@ -825,6 +857,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'ventas': 'SALES',
       'restaurante': 'RESTAURANT',
       'tracking': 'TRACKING',
+      'intl-imports': 'IMPORT_INTL',
       'compras': 'PURCHASES',
       'inventario': 'INVENTORY',
       'finanzas': 'FINANCIAL',
@@ -860,6 +893,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
        restaurante: ['RESTAURANT', 'RESTAURANT_SALON', 'RESTAURANT_ORDERS', 'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS'],
       tracking: ['TRACKING', 'TRACKING_TRANSIT', 'TRACKING_RECEPTION', 'TRACKING_BATCHES', 'TRACKING_PACKAGES', 'TRACKING_RECONCILIATION', 'TRACKING_BILLING', 'TRACKING_CONFIG'],
+      'intl-imports': ['IMPORT_INTL', 'IMPORT_INTL_ORIGIN', 'IMPORT_INTL_CONTAINERS', 'IMPORT_INTL_CUSTOMS', 'IMPORT_INTL_CONFIG', 'TRACKING', 'TRACKING_TRANSIT'],
       compras: [
         'PURCHASES', 'PROVIDERS',
         'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',
@@ -1015,6 +1049,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'CONFIG_': 'CONFIGURATION',
       'MY_COMPANY_': 'MY_COMPANY',
       'LEGAL_': 'LEGAL',
+      'IMPORT_INTL_': 'IMPORT_INTL',
     };
 
     const findPermission = (moduleName: string) => permissions.find(
@@ -1060,6 +1095,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'novachat': 'NOVACHAT',
       'fuerza-comercial': 'FORCE_SALES',
         'auditoria': 'AUDIT_LOGS',
+        'intl-imports': 'IMPORT_INTL',
       };
       const mappedModule = Object.entries(moduleEnumMap).find(([, v]) => v === normalizedModule)?.[0];
       if (mappedModule) permission = findPermission(mappedModule);

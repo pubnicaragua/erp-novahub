@@ -69,6 +69,7 @@ import {
   MapPinned,
   Ship,
   Globe,
+  Boxes,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -177,6 +178,18 @@ const menuItems: MenuItem[] = [
       { id: 'tracking-conciliacion', label: 'Conciliación de compras', icon: <Scale className="size-4" /> },
       { id: 'tracking-facturacion', label: 'Disponibles para facturar', icon: <FileText className="size-4" /> },
       { id: 'tracking-configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
+    ],
+  },
+  {
+    id: 'intl-imports',
+    label: 'Importaciones Internacional',
+    icon: <Globe className="size-5" />,
+    section: 'Operaciones',
+    submenu: [
+      { id: 'bodega-origen', label: 'Bodega Origen', icon: <Boxes className="size-4" /> },
+      { id: 'contenedores', label: 'Contenedores', icon: <PackageCheck className="size-4" /> },
+      { id: 'aduana-prorrateo', label: 'Aduana / Prorrateo', icon: <Scale className="size-4" /> },
+      { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ],
   },
   {
@@ -597,6 +610,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     'soporte-tecnico': 'SUPPORT_TECH',
     restaurante: 'RESTAURANT',
     tracking: 'TRACKING',
+    'intl-imports': 'IMPORT_INTL',
     configuracion: 'CONFIGURATION',
     auditoria: 'AUDIT_LOGS',
     'fuerza-comercial': 'FORCE_SALES',
@@ -615,7 +629,10 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       const hasSalesCashScope = parentId === 'ventas' && user.enabledModules.some((module) =>
         ['RETAIL_POS', 'RETAIL_CASH_CONTROL', 'SALES_POS', 'CAJA'].includes(module),
       );
-      if (user.enabledModules.includes(parentMod) || hasSalesCashScope) {
+      const hasTrackingOrImportScope = (parentId === 'tracking' || parentId === 'intl-imports') && user.enabledModules.some((module) =>
+        ['TRACKING', 'TRACKING_TRANSIT', 'IMPORT_INTL'].includes(module),
+      );
+      if (user.enabledModules.includes(parentMod) || hasSalesCashScope || hasTrackingOrImportScope) {
         isParentOrSubmoduleActive = true;
       } else {
         isParentOrSubmoduleActive = user.enabledModules.some(m => m.startsWith(`${parentMod}_`));

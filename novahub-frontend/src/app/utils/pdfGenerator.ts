@@ -5,6 +5,8 @@ import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { getBase64Image } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
+import { generateNovaHubFormatReport } from './novaHubFormatPdf';
+import { generateNovaHubCommercialPDF } from './novaHubCommercialFormatPdf';
 import { buildDateFilteredLabeledPdfFileName, buildDateFilteredPdfFileName, buildHumanPdfFileName, buildLabeledPdfFileName, buildPdfFileName, buildSalesPdfFileName } from './exportFileNames';
 import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
@@ -1052,6 +1054,17 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       return generateSalesPaymentVoucherPDF({ document: estimate, tenantName, formatAmount: formatAmount as any, tenantLogo: resolvedTenantLogo, format: downloadFormat, settings, save });
     }
     return generateSalesTicketPDF({ document: estimate, tenantName, formatAmount: formatAmount as any, tenantLogo: resolvedTenantLogo, documentType, format: downloadFormat, settings, save });
+  }
+  if (downloadFormat === 'novahub-format') {
+    return generateNovaHubCommercialPDF({
+      estimate,
+      tenantName,
+      formatAmount: formatAmount as any,
+      tenantLogo: resolvedTenantLogo,
+      documentType,
+      save,
+      withImages,
+    });
   }
   if (savedDesign?.layoutZones?.definition) {
     const design = savedDesign.settings || {};
@@ -2270,6 +2283,17 @@ export async function generateSalesTransactionPDF({
   designOverride?: any;
   withImages?: boolean;
 }) {
+  if (format === 'novahub-format') {
+    return generateNovaHubCommercialPDF({
+      estimate: transaction,
+      tenantName,
+      formatAmount,
+      tenantLogo,
+      documentType,
+      save,
+      withImages,
+    });
+  }
   const target = getPdfTemplateTarget(documentType).key;
   const design = designOverride || await getPdfDesign(target);
   if (documentType === 'payment') {
@@ -2671,6 +2695,19 @@ export async function generateConfiguredReportTemplate({
   designOverride?: any;
   format?: PdfDownloadFormat;
 }) {
+  if (format === 'novahub-format') {
+    return generateNovaHubFormatReport({
+      title,
+      tenantName,
+      tenantLogo,
+      columns,
+      rows,
+      totals,
+      tableSummary,
+      fileName,
+    });
+  }
+
   const design = designOverride || await getPdfDesign(targetKey);
   const mappedColumns = columns.map((column, index) => ({
     id: `column-${index}`,
@@ -2917,6 +2954,7 @@ export async function generateTrialBalancePDF({
   dateFrom,
   dateTo,
   totals,
+  format = 'configured',
 }: {
   rows: Array<{ codigo: string; cuenta: string; tipo: string; debitos: number; creditos: number; saldo: number }>;
   tenantName: string;
@@ -2924,6 +2962,7 @@ export async function generateTrialBalancePDF({
   dateFrom?: string;
   dateTo?: string;
   totals?: Record<string, unknown>;
+  format?: PdfDownloadFormat;
 }) {
   const period = dateFrom || dateTo ? `Período: ${dateFrom || 'Inicio'} - ${dateTo || 'Actual'}` : '';
   const formatAmount = (value: unknown) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -2949,6 +2988,7 @@ export async function generateTrialBalancePDF({
       { header: 'Saldo', value: row => formatAmount(row.saldo), align: 'right' },
     ],
     totals,
+    format,
     fileName: buildDateFilteredLabeledPdfFileName('Balance de comprobación', 'pdf', dateFrom, dateTo),
   });
   return doc;
@@ -3008,6 +3048,7 @@ export async function generateJournalPDF({
       { header: 'Referencia', value: row => row.referenceNumber || '-' },
     ],
     totals,
+    format,
     fileName: buildDateFilteredPdfFileName(['libro_diario'], 'pdf', dateFrom, dateTo),
   });
   return doc;
@@ -3065,6 +3106,7 @@ export async function generateLedgerPDF({
       { header: 'Saldo', value: row => formatAmount(row.balance), align: 'right' },
     ],
     totals,
+    format,
     fileName: buildDateFilteredPdfFileName(['libro_mayor'], 'pdf', dateFrom, dateTo),
   });
   return doc;
@@ -3128,6 +3170,26 @@ export const generateConfiguredHistoryPDF = async ({
   fileName,
   save = true,
 }: ConfiguredHistoryPdfOptions): Promise<{ doc: jsPDF; blob: Blob }> => {
+  if (format === 'novahub-format') {
+    const resolvedFileName = /\.pdf$/i.test(String(fileName)) ? String(fileName) : buildPdfFileName([fileName], format);
+    const doc = await generateNovaHubFormatReport({
+      title,
+      subtitle: [`${subjectLabel}: ${subjectName || 'N/A'}`, subtitle].filter(Boolean).join(' · '),
+      tenantName: tenantName || 'Nuestra Empresa',
+      tenantLogo,
+      metaBadge: 'HISTORIAL NOVAHUB',
+      columns: columns.map((column) => ({
+        header: column.header,
+        value: (row: any) => configuredPdfTableValue(column, row),
+        align: column.align || 'left',
+      })),
+      rows: Array.isArray(rows) ? rows : [],
+      tableSummary: { label: 'Total de registros', value: Array.isArray(rows) ? rows.length : 0 },
+      fileName: resolvedFileName,
+      save,
+    });
+    return { doc, blob: doc.output('blob') };
+  }
   const configuredDesign = designOverride || await getPdfDesign(targetKey);
   if (format !== 'roll-58') {
     const defaults = createSystemDefaultPdfDesign(targetKey).settings || {};
@@ -3686,14 +3748,27 @@ export const generateRecurringInvoicePDF = async ({
   tenantName,
   tenantLogo,
   formatAmount,
+  format = 'configured',
 }: {
   recurringInvoice: any;
   tenantName: string;
   tenantLogo?: string | null;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  format?: PdfDownloadFormat;
 }) => {
+  if (format === 'novahub-format') {
+    const res = await generateNovaHubCommercialPDF({
+      estimate: { ...recurringInvoice, number: recurringInvoice.number || `REC-${String(recurringInvoice.id || '').slice(0, 8)}` },
+      tenantName,
+      formatAmount,
+      tenantLogo,
+      documentType: 'recurring',
+      save: true,
+    });
+    return res.doc;
+  }
   const recurringLines = Array.isArray(recurringInvoice.items) ? recurringInvoice.items : Array.isArray(recurringInvoice.lines) ? recurringInvoice.lines : [];
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.recurring', tenantName, tenantLogo, fileName: buildLabeledPdfFileName('Factura recurrente', recurringInvoice.number), data: { document: { title: 'FACTURA RECURRENTE', number: recurringInvoice.number || recurringInvoice.id || 'N/A', date: recurringInvoice.startDate || recurringInvoice.date, status: recurringInvoice.status, notes: [recurringInvoice.notes, recurringInvoice.frequency ? `Frecuencia: ${recurringInvoice.frequency}` : '', recurringInvoice.nextInvoiceDate ? `Próxima factura: ${new Date(recurringInvoice.nextInvoiceDate).toLocaleDateString('es-NI')}` : ''].filter(Boolean).join(' · ') }, party: { ...(recurringInvoice.customer || recurringInvoice.client || {}), name: recurringInvoice.customer?.name || recurringInvoice.client?.name || '' }, items: recurringLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(line.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(recurringInvoice.subtotal ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), tax: formatAmount(Number(recurringInvoice.taxAmount ?? recurringInvoice.tax ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), discount: formatAmount(Number(recurringInvoice.discountAmount ?? recurringInvoice.discount ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(recurringInvoice.total ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate) } } });
+  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.recurring', tenantName, tenantLogo, format, fileName: buildLabeledPdfFileName('Factura recurrente', recurringInvoice.number, format), data: { document: { title: 'FACTURA RECURRENTE', number: recurringInvoice.number || recurringInvoice.id || 'N/A', date: recurringInvoice.startDate || recurringInvoice.date, status: recurringInvoice.status, notes: [recurringInvoice.notes, recurringInvoice.frequency ? `Frecuencia: ${recurringInvoice.frequency}` : '', recurringInvoice.nextInvoiceDate ? `Próxima factura: ${new Date(recurringInvoice.nextInvoiceDate).toLocaleDateString('es-NI')}` : ''].filter(Boolean).join(' · ') }, party: { ...(recurringInvoice.customer || recurringInvoice.client || {}), name: recurringInvoice.customer?.name || recurringInvoice.client?.name || '' }, items: recurringLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(line.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(recurringInvoice.subtotal ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), tax: formatAmount(Number(recurringInvoice.taxAmount ?? recurringInvoice.tax ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), discount: formatAmount(Number(recurringInvoice.discountAmount ?? recurringInvoice.discount ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate), total: formatAmount(Number(recurringInvoice.total ?? 0), recurringInvoice.currency, recurringInvoice.exchangeRate) } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.recurring');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -3910,6 +3985,7 @@ export const generateSessionSummaryPDF = async ({
   sessionRate,
   totals,
   hideSystemAmounts = false,
+  format = 'configured',
 }: {
   session: any;
   logs: any[];
@@ -3928,6 +4004,7 @@ export const generateSessionSummaryPDF = async ({
     hideSystemAmounts?: boolean;
   }
   hideSystemAmounts?: boolean;
+  format?: PdfDownloadFormat;
 }) => {
   const configuredRows = (logs || []).map((log: any) => ({
     reference: log.reference || (log.type === 'SALE' ? `TKT-${String(log.id || '').slice(0, 4).toUpperCase()}` : `MOV-${String(log.id || '').slice(0, 4).toUpperCase()}`),
@@ -3936,16 +4013,54 @@ export const generateSessionSummaryPDF = async ({
     time: log.createdAt ? new Date(log.createdAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '—',
     amount: `${log.type === 'EXIT' ? '-' : '+'}${isUSD ? '$' : 'C$'} ${Number(isUSD ? (Number(log.amountUSD || 0) + Number(log.amountNIO || 0) / sessionRate) : (Number(log.amountNIO || 0) + Number(log.amountUSD || 0) * sessionRate)).toFixed(2)}`,
   }));
+  const symbol = isUSD ? '$' : 'C$';
+  if (format === 'novahub-format') {
+    const summaryTotalsObj: Record<string, unknown> = hideSystemAmounts
+      ? { 'Efectivo contado': `${symbol} ${totals.contado.toFixed(2)}` }
+      : {
+          'Fondo inicial': `${symbol} ${totals.fondoInicial.toFixed(2)}`,
+          'Ventas totales': `${symbol} ${totals.ventas.toFixed(2)}`,
+          'Gastos registrados': `${symbol} ${totals.gastos.toFixed(2)}`,
+          'Saldo esperado': `${symbol} ${totals.esperado.toFixed(2)}`,
+          'Efectivo contado': `${symbol} ${totals.contado.toFixed(2)}`,
+          'Diferencia de arqueo': `${symbol} ${totals.diferencia.toFixed(2)}`,
+        };
+    return generateNovaHubFormatReport({
+      title: `ARQUEO Y RESUMEN DE CAJA · ${session.register?.code || 'CAJA POS'}`,
+      subtitle: `Cajero: ${session.user?.name || session.cashier?.name || 'Cajero activo'} · Apertura: ${session.openedAt ? new Date(session.openedAt).toLocaleString('es-NI') : 'N/A'} · Moneda: ${displayCurrency}`,
+      tenantName: tenantName || 'Nuestra Empresa',
+      tenantLogo,
+      metaBadge: 'CONTROL DE CAJA NOVAHUB',
+      columns: hideSystemAmounts
+        ? [
+            { header: 'Referencia', value: (r: any) => r.reference, align: 'left' },
+            { header: 'Tipo', value: (r: any) => r.type, align: 'center' },
+            { header: 'Descripción', value: (r: any) => r.description, align: 'left' },
+            { header: 'Hora', value: (r: any) => r.time, align: 'center' },
+          ]
+        : [
+            { header: 'Referencia', value: (r: any) => r.reference, align: 'left' },
+            { header: 'Tipo', value: (r: any) => r.type, align: 'center' },
+            { header: 'Descripción', value: (r: any) => r.description, align: 'left' },
+            { header: 'Hora', value: (r: any) => r.time, align: 'center' },
+            { header: `Monto (${displayCurrency})`, value: (r: any) => r.amount, align: 'right' },
+          ],
+      rows: configuredRows,
+      totals: summaryTotalsObj,
+      tableSummary: { label: 'Transacciones del turno', value: configuredRows.length },
+      fileName: buildPdfFileName(['arqueo_de_caja', session.register?.code || 'sin_caja'], 'novahub-format'),
+      save: true,
+    });
+  }
   const configuredColumns = hideSystemAmounts
     ? [{ id: 'reference', label: 'Referencia', token: 'reference', width: 22, align: 'left' as const }, { id: 'type', label: 'Tipo', token: 'type', width: 18, align: 'left' as const }, { id: 'description', label: 'Descripción', token: 'description', width: 42, align: 'left' as const }, { id: 'time', label: 'Hora', token: 'time', width: 18, align: 'right' as const }]
     : [{ id: 'reference', label: 'Referencia', token: 'reference', width: 22, align: 'left' as const }, { id: 'type', label: 'Tipo', token: 'type', width: 16, align: 'left' as const }, { id: 'description', label: 'Descripción', token: 'description', width: 34, align: 'left' as const }, { id: 'time', label: 'Hora', token: 'time', width: 12, align: 'center' as const }, { id: 'amount', label: `Monto (${displayCurrency})`, token: 'amount', width: 16, align: 'right' as const }];
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-session', tenantName, tenantLogo, fileName: buildPdfFileName(['arqueo_de_caja', session.register?.code || 'sin_caja']), data: { document: { title: 'RESUMEN DE SESIÓN DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.openedAt || session.createdAt, status: session.status, notes: `Moneda: ${displayCurrency}` }, party: { name: session.user?.name || session.cashier?.name || '' }, rows: configuredRows, items: configuredRows, tableColumns: configuredColumns, totals: { subtotal: totals.ventas, tax: totals.gastos, total: totals.diferencia } } });
+  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-session', tenantName, tenantLogo, format, fileName: buildPdfFileName(['arqueo_de_caja', session.register?.code || 'sin_caja'], format), data: { document: { title: 'RESUMEN DE SESIÓN DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.openedAt || session.createdAt, status: session.status, notes: `Moneda: ${displayCurrency}` }, party: { name: session.user?.name || session.cashier?.name || '' }, rows: configuredRows, items: configuredRows, tableColumns: configuredColumns, totals: { subtotal: totals.ventas, tax: totals.gastos, total: totals.diferencia } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-session');
   const doc = new jsPDF(pdfDesignPaper(settings));
   const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
-  const symbol = isUSD ? '$' : 'C$';
 
   let titleY = 25;
   if (tenantLogo) {
@@ -4060,10 +4175,12 @@ export const generateHistoricalCashReportPDF = async ({
   report,
   tenantName,
   tenantLogo,
+  format = 'configured',
 }: {
   report: { summary: any; items: any[]; filters?: any };
   tenantName: string;
   tenantLogo?: string | null;
+  format?: PdfDownloadFormat;
 }) => {
   const summary = report.summary || {};
   const money = (value: any) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -4080,6 +4197,37 @@ export const generateHistoricalCashReportPDF = async ({
     depositNio: `C$ ${money(item.depositNIO)}`,
   }));
   const reportDate = (value: any) => value ? String(value).slice(0, 10) : '—';
+  if (format === 'novahub-format') {
+    return generateNovaHubFormatReport({
+      title: 'REPORTE HISTÓRICO DE CAJA',
+      subtitle: `Consolidado de Sesiones, Ventas y Arqueos · Sesiones: ${summary.sessions || 0} (Cerradas: ${summary.closedSessions || 0})`,
+      tenantName: tenantName || 'Nuestra Empresa',
+      tenantLogo,
+      dateFrom: reportDate(report.filters?.dateFrom),
+      dateTo: reportDate(report.filters?.dateTo),
+      metaBadge: 'REPORTE DE CAJA NOVAHUB',
+      columns: [
+        { header: 'Fecha', value: (r: any) => r.date, align: 'left' },
+        { header: 'Sucursal / Caja', value: (r: any) => `${r.branch} · ${r.register}`, align: 'left' },
+        { header: 'Cajero', value: (r: any) => r.cashier, align: 'left' },
+        { header: 'Estado', value: (r: any) => r.status, align: 'center' },
+        { header: 'Ventas NIO', value: (r: any) => r.salesNio, align: 'right' },
+        { header: 'Ventas USD', value: (r: any) => r.salesUsd, align: 'right' },
+        { header: 'Dif. NIO', value: (r: any) => r.difference, align: 'right' },
+        { header: 'Depósito NIO', value: (r: any) => r.depositNio, align: 'right' },
+      ],
+      rows: configuredRows,
+      totals: {
+        'Sesiones consolidadas': `${summary.sessions || 0} (${summary.closedSessions || 0} cerradas)`,
+        'Ventas totales NIO': `C$ ${money(summary.salesNIO)}`,
+        'Ventas totales USD': `$ ${money(summary.salesUSD)}`,
+        'Diferencia acumulada NIO': `C$ ${money(summary.differenceNIO)}`,
+        'Depósitos acumulados NIO': `C$ ${money(summary.depositsNIO)}`,
+      },
+      fileName: buildDateFilteredPdfFileName(['reporte_historico_de_caja'], 'novahub-format', report.filters?.dateFrom, report.filters?.dateTo),
+      save: true,
+    });
+  }
   const paymentMethodRows = Object.entries(summary.byPaymentMethod || {}).map(([method, value]: [string, any]) => {
     const label = method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'TRANSFER' ? 'Transferencia' : method === 'CHECK' ? 'Cheque' : 'Otro';
     return {
@@ -4143,7 +4291,8 @@ export const generateHistoricalCashReportPDF = async ({
     targetKey: 'ventas.cash-historical-report',
     tenantName,
     tenantLogo,
-    fileName: buildDateFilteredPdfFileName(['reporte_historico_de_caja'], 'configured', report.filters?.dateFrom, report.filters?.dateTo),
+    format,
+    fileName: buildDateFilteredPdfFileName(['reporte_historico_de_caja'], format, report.filters?.dateFrom, report.filters?.dateTo),
     data: {
       document: {
         title: 'REPORTE HISTÓRICO DE CAJA',
@@ -4242,16 +4391,54 @@ export const generateCashClosureReportPDF = async ({
   detail,
   tenantName,
   tenantLogo,
+  format = 'configured',
 }: {
   detail: any;
   tenantName: string;
   tenantLogo?: string | null;
+  format?: PdfDownloadFormat;
 }) => {
   const session = detail.session || {};
   const invoices = detail.invoices || { rows: [], totals: {} };
   const payments = detail.payments || { rows: [], summary: {} };
-  const closureRows = [...(invoices.rows || []), ...(payments.rows || [])].slice(0, 30).map((row: any) => ({ reference: row.number || row.reference || '—', type: row.type || (row.number ? 'Factura' : 'Pago'), description: row.description || row.number || 'Movimiento', currency: row.currency || '—', amount: row.amount || row.total || '—' }));
-  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-historical-report', tenantName, tenantLogo, fileName: buildPdfFileName(['cierre_gerencial_de_caja', session.register?.code || 'sin_caja']), data: { document: { title: 'CIERRE GERENCIAL DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.closedAt || session.openedAt, status: session.status, notes: `Pagos registrados: ${payments.rows?.length || 0}` }, party: { name: session.openedBy?.name || '' }, rows: closureRows, items: closureRows, tableColumns: [{ id: 'reference', label: 'Referencia', token: 'reference', width: 20, align: 'left' }, { id: 'type', label: 'Tipo', token: 'type', width: 18, align: 'left' }, { id: 'description', label: 'Descripción', token: 'description', width: 34, align: 'left' }, { id: 'currency', label: 'Moneda', token: 'currency', width: 12, align: 'center' }, { id: 'amount', label: 'Monto', token: 'amount', width: 16, align: 'right' }], totals: { subtotal: invoices.totals?.subtotal || payments.summary?.total || '', tax: invoices.totals?.tax || '', total: invoices.totals?.total || payments.summary?.total || '' } } });
+  const cash = detail.cash || {};
+  const moneyFmt = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const closureRows = [...(invoices.rows || []), ...(payments.rows || [])].slice(0, 50).map((row: any) => ({
+    reference: row.number || row.reference || '—',
+    type: row.type || (row.number ? 'Factura' : 'Pago'),
+    description: row.description || row.customer || row.number || 'Movimiento',
+    currency: row.currency || 'NIO',
+    amount: typeof (row.amount ?? row.total) === 'number' ? moneyFmt(row.amount ?? row.total, row.currency) : String(row.amount || row.total || '—'),
+  }));
+  if (format === 'novahub-format') {
+    return generateNovaHubFormatReport({
+      title: `CIERRE GERENCIAL DE CAJA · ${session.register?.code || 'SIN CAJA'}`,
+      subtitle: `${session.branch?.name || 'Sucursal'} · Cajero: ${session.openedBy?.name || 'No aplica'} · Estado: ${pdfStatusLabel(session.status)}`,
+      tenantName: tenantName || 'Nuestra Empresa',
+      tenantLogo,
+      metaBadge: 'CIERRE GERENCIAL NOVAHUB',
+      columns: [
+        { header: 'Referencia', value: (r: any) => r.reference, align: 'left' },
+        { header: 'Tipo', value: (r: any) => r.type, align: 'center' },
+        { header: 'Cliente / Descripción', value: (r: any) => r.description, align: 'left' },
+        { header: 'Moneda', value: (r: any) => r.currency, align: 'center' },
+        { header: 'Monto', value: (r: any) => r.amount, align: 'right' },
+      ],
+      rows: closureRows,
+      totals: {
+        'Fondo inicial': `${moneyFmt(cash.initial?.NIO, 'NIO')} / ${moneyFmt(cash.initial?.USD, 'USD')}`,
+        'Saldo esperado': `${moneyFmt(cash.expected?.NIO, 'NIO')} / ${moneyFmt(cash.expected?.USD, 'USD')}`,
+        'Efectivo contado': `${moneyFmt(cash.counted?.NIO, 'NIO')} / ${moneyFmt(cash.counted?.USD, 'USD')}`,
+        'Diferencia': `${moneyFmt(cash.difference?.NIO, 'NIO')} / ${moneyFmt(cash.difference?.USD, 'USD')}`,
+        'Depósito': `${moneyFmt(cash.deposit?.NIO, 'NIO')} / ${moneyFmt(cash.deposit?.USD, 'USD')}`,
+        'Total facturado': `${moneyFmt(invoices.totals?.total?.NIO, 'NIO')} / ${moneyFmt(invoices.totals?.total?.USD, 'USD')}`,
+      },
+      tableSummary: { label: 'Facturas y pagos registrados', value: closureRows.length },
+      fileName: buildPdfFileName(['cierre_gerencial_de_caja', session.register?.code || 'sin_caja'], 'novahub-format'),
+      save: true,
+    });
+  }
+  const configured = await renderConfiguredDefinition({ targetKey: 'ventas.cash-historical-report', tenantName, tenantLogo, format, fileName: buildPdfFileName(['cierre_gerencial_de_caja', session.register?.code || 'sin_caja'], format), data: { document: { title: 'CIERRE GERENCIAL DE CAJA', number: session.register?.code || session.id || 'N/A', date: session.closedAt || session.openedAt, status: session.status, notes: `Pagos registrados: ${payments.rows?.length || 0}` }, party: { name: session.openedBy?.name || '' }, rows: closureRows, items: closureRows, tableColumns: [{ id: 'reference', label: 'Referencia', token: 'reference', width: 20, align: 'left' }, { id: 'type', label: 'Tipo', token: 'type', width: 18, align: 'left' }, { id: 'description', label: 'Descripción', token: 'description', width: 34, align: 'left' }, { id: 'currency', label: 'Moneda', token: 'currency', width: 12, align: 'center' }, { id: 'amount', label: 'Monto', token: 'amount', width: 16, align: 'right' }], totals: { subtotal: invoices.totals?.subtotal || payments.summary?.total || '', tax: invoices.totals?.tax || '', total: invoices.totals?.total || payments.summary?.total || '' } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-historical-report');
   const width = 216;
@@ -4265,7 +4452,6 @@ export const generateCashClosureReportPDF = async ({
   const date = (value: unknown) => value ? new Date(String(value)).toLocaleDateString('es-NI') : 'No aplica';
   const time = (value: unknown) => value ? new Date(String(value)).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : 'No aplica';
   const label = (value: unknown) => String(value || 'No aplica').replace(/_/g, ' ');
-  const cash = detail.cash || {};
   const statusLabel = (value: unknown) => pdfStatusLabel(value);
 
   const drawChrome = (title: string, subtitle: string) => {

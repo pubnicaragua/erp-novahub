@@ -20,6 +20,7 @@ export const SIDEBAR_PERMISSION_PARENT_ORDER = [
   'PURCHASES',
   'RESTAURANT',
   'TRACKING',
+  'IMPORT_INTL',
   'INVENTORY',
   'FINANCIAL',
   'ACCOUNTING',
@@ -80,6 +81,12 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'TRACKING_RECONCILIATION', label: 'Conciliación de compras', parent: 'TRACKING' },
   { id: 'TRACKING_BILLING', label: 'Disponibles para facturar', parent: 'TRACKING' },
   { id: 'TRACKING_CONFIG', label: 'Configuración de tracking', parent: 'TRACKING' },
+
+  // Importaciones Internacionales
+  { id: 'IMPORT_INTL_ORIGIN', label: 'Bodega Origen', parent: 'IMPORT_INTL' },
+  { id: 'IMPORT_INTL_CONTAINERS', label: 'Contenedores', parent: 'IMPORT_INTL' },
+  { id: 'IMPORT_INTL_CUSTOMS', label: 'Aduana / Prorrateo', parent: 'IMPORT_INTL' },
+  { id: 'IMPORT_INTL_CONFIG', label: 'Configuración importaciones', parent: 'IMPORT_INTL' },
 
   // Inventario
   // Productos, Servicios, Ajustes, Auditorías y Pérdidas son vistas del
@@ -246,6 +253,12 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'tracking-conciliacion': ['TRACKING_RECONCILIATION'],
   'tracking-facturacion': ['TRACKING_BILLING'],
   'tracking-configuracion': ['TRACKING_CONFIG'],
+
+  'intl-imports': ['IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  'bodega-origen': ['IMPORT_INTL_ORIGIN', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  contenedores: ['IMPORT_INTL_CONTAINERS', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  'aduana-prorrateo': ['IMPORT_INTL_CUSTOMS', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  'intl-configuracion': ['IMPORT_INTL_CONFIG', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
 
   'dashboard-hr': ['HR_DASHBOARD'],
   empleados: ['HR_EMPLOYEES'],
@@ -487,4 +500,9 @@ export const LEGACY_VIEW_PERMISSION_ALIASES: Record<string, string[]> = {
   HR_DEPARTMENTS: ['HR_EMPLOYEES'],
   ACTIVITIES_CALENDAR: ['ACTIVITIES_EVENTS'],
   ACTIVITIES_MEETINGS: ['ACTIVITIES_EVENTS'],
+  IMPORT_INTL: ['IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING', 'INVENTORY'],
+  IMPORT_INTL_ORIGIN: ['IMPORT_INTL_ORIGIN', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  IMPORT_INTL_CONTAINERS: ['IMPORT_INTL_CONTAINERS', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  IMPORT_INTL_CUSTOMS: ['IMPORT_INTL_CUSTOMS', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
+  IMPORT_INTL_CONFIG: ['IMPORT_INTL_CONFIG', 'IMPORT_INTL', 'TRACKING_TRANSIT', 'TRACKING'],
 };
