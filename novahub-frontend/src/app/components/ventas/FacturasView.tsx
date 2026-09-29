@@ -54,6 +54,8 @@ import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorT
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase } from '../../utils/paymentSettlement';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
+import { VoiceSaleComposer } from './VoiceSaleComposer';
+import type { VoiceSaleLine, VoiceSaleMetadata } from '../../utils/voice-sale-parser';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -1222,6 +1224,77 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
 
+  const applyVoiceLinesToInvoice = (lines: VoiceSaleLine<Product>[], metadata: VoiceSaleMetadata) => {
+    if (!localDoc || !lines.length) return;
+    const normalizeCustomer = (value: string) => value
+      .toLocaleLowerCase('es-NI')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const customerQuery = normalizeCustomer(metadata.customerText || '');
+    const matchedCustomer = customerQuery
+      ? customers.find((customer) => {
+        const customerName = normalizeCustomer(customer.name || '');
+        return customerName && (customerName.includes(customerQuery) || customerQuery.includes(customerName));
+      })
+      : undefined;
+    if (metadata.customerText && !matchedCustomer) {
+      toast.warning(`No encontré el cliente “${metadata.customerText}”. Revisalo antes de guardar.`);
+    }
+    const nextCustomerId = matchedCustomer?.id || localDoc.customerId;
+    const priceListId = localDoc.priceListId || getCustomerPriceListId(nextCustomerId);
+    const addedItems = lines.map((line, index) => {
+      const product = line.product;
+      const variant = line.variantName
+        ? product.variants?.find((candidate: any) => String(candidate.name || '').trim().toLowerCase() === String(line.variantName || '').trim().toLowerCase())
+        : undefined;
+      const itemType = getCatalogItemType(product);
+      const baseSalePrice = Number((product as any).salePrice ?? (product as any).price ?? 0);
+      const unitPrice = localDoc.currency === 'USD'
+        ? baseSalePrice / Number(localDoc.exchangeRate || globalRate || 1)
+        : baseSalePrice;
+      const quantity = Math.max(1, Number(line.quantity || 1));
+      return {
+        id: `voice-${Date.now()}-${index}`,
+        productId: product.id,
+        productCode: (product as any).code || null,
+        itemType,
+        variantId: itemType === 'SERVICE' ? null : variant?.id || null,
+        variantName: itemType === 'SERVICE' ? null : variant?.name || null,
+        variantSku: itemType === 'SERVICE' ? null : variant?.sku || null,
+        variantAttributes: itemType === 'SERVICE' ? null : variant?.attributes || null,
+        warehouseId: itemType === 'SERVICE' ? undefined : localDoc.warehouseId || getDefaultWarehouseId(),
+        description: product.name,
+        commercialNoteSnapshot: (product as any).commercialNote || null,
+        quantity,
+        unitPrice,
+        priceListId: itemType === 'SERVICE' ? null : priceListId || null,
+        discount: 0,
+        taxRate: itemType === 'SERVICE' ? 0 : Number((product as any).taxRate || 0),
+        total: quantity * unitPrice,
+      };
+    });
+    const nextItems = [...(localDoc.items || []), ...addedItems];
+    const calc = recalcTotals(nextItems, localRates.dRate, localRates.tRate);
+    const voiceAuditNote = metadata.unmatchedText ? `[DICTADO_NO_CATALOGADO] ${metadata.unmatchedText}` : '';
+    const nextDoc = {
+      ...localDoc,
+      customerId: nextCustomerId,
+      priceListId,
+      notes: voiceAuditNote
+        ? `${String(localDoc.notes || '').trim()}${localDoc.notes ? '\n' : ''}${voiceAuditNote}`
+        : localDoc.notes,
+      ...calc,
+    };
+    commitLocalDoc(nextDoc);
+    if (!isCreating) void handleUpdate(localDoc.id, { customerId: nextCustomerId, priceListId, items: nextItems, notes: nextDoc.notes, ...calc } as any);
+    if (metadata.total !== null && Math.abs(Number(calc.total || 0) - metadata.total) > 0.01) {
+      toast.warning(`El total dictado (${metadata.total.toLocaleString('es-NI', { minimumFractionDigits: 2 })}) no coincide con el cálculo (${Number(calc.total || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}). Revisá impuestos, descuentos o cargos.`);
+    }
+  };
+
   function getInvoiceBalance(invoice: Partial<Invoice>) {
     const status = String(invoice.status || '').toUpperCase();
     if (status === 'DRAFT' || status === 'CANCELLED') return 0;
@@ -1573,6 +1646,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             )}
           </div>
         </div>
+
+         <VoiceSaleComposer
+           products={products}
+           disabled={isInvoiceLocked || productsLoading}
+           title="Agregar productos por voz"
+           description="Dictá varias líneas y revisá el borrador. La factura nunca se guarda automáticamente."
+           onApply={applyVoiceLinesToInvoice}
+         />
 
         <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  AlertCircle, Coins, Settings2, Store, MapPin, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Download, FileText
+  AlertCircle, Coins, Settings2, Store, MapPin, BellRing, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Download, FileText,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -74,6 +74,7 @@ import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../ut
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase, getPaymentLinesDocumentAmount, getPaymentTotalBaseForSettlement, roundPaymentAmount } from '../../utils/paymentSettlement';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { formatCustomerPhoneForDisplay } from '../../utils/customer-data';
+import { VoiceSaleComposer } from './VoiceSaleComposer';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -1497,7 +1498,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     });
   };
 
-  const addItem = (product: PosProduct) => {
+  const addItem = (product: PosProduct, requestedQuantity = 1) => {
+    const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
     const isService = product.itemType === 'SERVICE';
     const warehouseId = isService ? undefined : (selectedWarehouseId || undefined);
     if (product.trackInventory && !warehouseId) {
@@ -1511,7 +1513,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     }
     const existing = cart.find((i) => i.productId === product.id && i.warehouseId === warehouseId);
     const globalQty = getGlobalCartQuantity(product.id, undefined, warehouseId);
-    const requestedQty = (existing?.quantity || 0) + 1;
+    const requestedQty = (existing?.quantity || 0) + quantity;
 
     if (!isService && hasSalesProductPriceListConflict(cart, product.id, selectedPriceListId, existing ? cart.indexOf(existing) : -1, selectedPriceListId)) {
       toast.error('Este producto ya está agregado con la misma lista de precios.');
@@ -1531,8 +1533,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           i.productId === product.id && i.warehouseId === warehouseId
             ? {
               ...i,
-              quantity: i.quantity + 1,
-              lineTotal: calculateLineTotal(i.quantity + 1, i.unitPrice),
+              quantity: i.quantity + quantity,
+              lineTotal: calculateLineTotal(i.quantity + quantity, i.unitPrice),
             }
             : i,
         );
@@ -1547,14 +1549,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           warehouseId,
           description: product.name,
           commercialNoteSnapshot: product.commercialNote || null,
-          quantity: 1,
+          quantity,
           unitPrice: configuredPrice ?? 0,
           priceListId: isService ? undefined : selectedPriceListId,
           priceMissing,
           discount: 0,
           // En modo global este valor se ignora; en modo por producto solo los productos parten con IVA.
           taxRate: isService ? 0 : NICARAGUA_IVA_RATE,
-          lineTotal: calculateLineTotal(1, configuredPrice ?? 0),
+          lineTotal: calculateLineTotal(quantity, configuredPrice ?? 0),
         },
       ];
     });
@@ -2370,6 +2372,30 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                 </div>
               </CardContent>
             </Card>
+
+            <VoiceSaleComposer
+              products={products}
+              disabled={isRegisterDisabled}
+              onApply={(lines, metadata) => {
+                if (metadata.customerText) {
+                  const normalizeCustomer = (value: string) => value.toLocaleLowerCase('es-NI').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                  const customerQuery = normalizeCustomer(metadata.customerText);
+                  const matchedCustomer = customers.find((customer) => normalizeCustomer(customer.name || '').includes(customerQuery) || customerQuery.includes(normalizeCustomer(customer.name || '')));
+                  if (matchedCustomer) handleCustomerChange(matchedCustomer.id);
+                  else toast.warning(`No encontré el cliente “${metadata.customerText}”; la venta quedará sin cliente seleccionado.`);
+                }
+                if (metadata.paymentMethod && metadata.total !== null) {
+                  setPayments([paymentLine(metadata.paymentMethod as PosPaymentLine['method'], metadata.total)]);
+                }
+                lines.forEach((line) => {
+                if (line.variantName || line.product.variants?.length) {
+                  toast.error(`Revisá manualmente la variante de ${line.product.name} antes de cobrar.`);
+                  return;
+                }
+                addItem(line.product, line.quantity);
+                });
+              }}
+            />
 
             <Card className="border-border/50 shadow-sm" data-tour="pos-catalog">
               <CardContent className="p-5">
