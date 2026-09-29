@@ -5,7 +5,7 @@ export const PROJECT_STATUS_META: Record<ProjectStatus, { label: string; badge: 
   PLANNED: { label: 'Planificado', badge: 'bg-blue-500/10 text-blue-600 border-blue-200' },
   IN_PROGRESS: { label: 'En progreso', badge: 'bg-emerald-500/10 text-emerald-600 border-emerald-200' },
   PAUSED: { label: 'Pausado', badge: 'bg-amber-500/10 text-amber-600 border-amber-200' },
-  COMPLETED: { label: 'Completado', badge: 'bg-green-600/10 text-green-700 border-green-200' },
+  COMPLETED: { label: 'Completado', badge: 'bg-emerald-500/10 text-emerald-600 border-emerald-200' },
   CANCELLED: { label: 'Cancelado', badge: 'bg-rose-500/10 text-rose-600 border-rose-200' },
 };
 
@@ -105,7 +105,20 @@ export const toLocalDate = (value?: string | null): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+export const MEMBER_ROLE_LABEL: Record<string, string> = {
+  MEMBER: 'Miembro',
+  MANAGER: 'Gestor',
+  CONSULTANT: 'Consultor',
+  OBSERVER: 'Observador',
+  OWNER: 'Propietario',
+  ADMIN: 'Administrador',
+};
+
 export const ACTIVITY_TYPE_LABEL: Record<string, string> = {
+  CREATE: 'Creación',
+  CREATION: 'Creación',
+  UPDATE: 'Actualización',
+  DELETE: 'Eliminación',
   COMMENT: 'Comentario',
   ACTIVITY: 'Actividad',
   STATUS_CHANGE: 'Cambio de estado',
@@ -113,8 +126,34 @@ export const ACTIVITY_TYPE_LABEL: Record<string, string> = {
   COST_CHANGE: 'Cambio de costo',
   MEMBER_ADDED: 'Miembro agregado',
   MEMBER_REMOVED: 'Miembro removido',
+  TASK_CREATED: 'Tarea creada',
   TASK_COMPLETED: 'Tarea completada',
+  MILESTONE_CREATED: 'Hito creado',
   MILESTONE_COMPLETED: 'Hito completado',
+  STAGE_CREATED: 'Etapa creada',
+  STAGE_UPDATED: 'Etapa actualizada',
+  PUBLIC_LINK_CREATED: 'Enlace público creado',
+  PUBLIC_LINK_REVOKED: 'Enlace público revocado',
+  PROGRESS_CAPTURE_ADDED: 'Evidencia agregada',
+  QUOTATION_CREATED: 'Cotización creada',
+  SUBQUOTATION_CREATED: 'Subcotización creada',
+  SUBQUOTATION_RECEIVED: 'Subcotización recibida',
+  OFFER_SELECTED: 'Oferta seleccionada',
+  MANUAL_FILL: 'Llenado manual',
+  SUBQUOTATION_SUBMITTED: 'Subcotización enviada',
+  SUBQUOTATION_OVERWRITTEN: 'Subcotización sobrescrita',
+  SUBQUOTATION_DISMISSED: 'Sobrescritura descartada',
+  SUBQUOTATION_REGENERATED: 'Enlace regenerado',
+  TERMS_ACCEPTED: 'Términos aceptados',
+};
+
+export const formatActivityType = (type?: string): string => {
+  if (!type) return 'Actividad';
+  if (ACTIVITY_TYPE_LABEL[type]) return ACTIVITY_TYPE_LABEL[type];
+  return type
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/^\w/, (c) => c.toUpperCase());
 };
 
 export const statusTextColor = (status: ProjectStatus): string => {

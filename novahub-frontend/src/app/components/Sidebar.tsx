@@ -70,6 +70,7 @@ import {
   Ship,
   Globe,
   Boxes,
+  Eye,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -312,11 +313,11 @@ const menuItems: MenuItem[] = [
     section: 'Herramientas',
     submenu: [
       { id: 'proyectos', label: 'Portafolio', icon: <FolderKanban className="size-4" /> },
-      { id: 'proyectos-tareas', label: 'Planificación y tareas', icon: <ListTodo className="size-4" /> },
-      { id: 'proyectos-hitos', label: 'Hitos', icon: <ClipboardCheck className="size-4" /> },
-      { id: 'proyectos-costos', label: 'Costos y presupuesto', icon: <Wallet className="size-4" /> },
-      { id: 'proyectos-documentos', label: 'Documentos', icon: <FileText className="size-4" /> },
-      { id: 'proyectos-tiempo', label: 'Tiempo y cronograma', icon: <CalendarClock className="size-4" /> },
+      { id: 'proyectos-resumen', label: 'Resumen, Avance y Documentos', icon: <Eye className="size-4" /> },
+      { id: 'proyectos-cotizaciones', label: 'Cotizaciones Materiales', icon: <ShoppingCart className="size-4" /> },
+      { id: 'proyectos-planificacion', label: 'Planificación y Tareas', icon: <ListTodo className="size-4" /> },
+      { id: 'proyectos-costos', label: 'Presupuesto y Costos', icon: <Wallet className="size-4" /> },
+      { id: 'proyectos-actividades', label: 'Actividades e Historial', icon: <History className="size-4" /> },
     ],
   },
   {
@@ -624,18 +625,19 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     
     // Check if parent or any of its submodules is active
     let isParentOrSubmoduleActive = false;
-    const isAlwaysAvailableSystemMenu = parentId === 'configuracion' || parentId === 'suscripciones';
+    const isAlwaysAvailableSystemMenu = parentId === 'configuracion' || parentId === 'suscripciones' || parentId === 'proyectos';
+    const enabledSet = new Set((user.enabledModules || []).map((m) => String(m).toUpperCase()));
     if (parentMod && !isAlwaysAvailableSystemMenu) {
-      const hasSalesCashScope = parentId === 'ventas' && user.enabledModules.some((module) =>
+      const hasSalesCashScope = parentId === 'ventas' && [...enabledSet].some((module) =>
         ['RETAIL_POS', 'RETAIL_CASH_CONTROL', 'SALES_POS', 'CAJA'].includes(module),
       );
-      const hasTrackingOrImportScope = (parentId === 'tracking' || parentId === 'intl-imports') && user.enabledModules.some((module) =>
+      const hasTrackingOrImportScope = (parentId === 'tracking' || parentId === 'intl-imports') && [...enabledSet].some((module) =>
         ['TRACKING', 'TRACKING_TRANSIT', 'IMPORT_INTL'].includes(module),
       );
-      if (user.enabledModules.includes(parentMod) || hasSalesCashScope || hasTrackingOrImportScope) {
+      if (enabledSet.has(parentMod) || enabledSet.has(parentId.toUpperCase()) || hasSalesCashScope || hasTrackingOrImportScope) {
         isParentOrSubmoduleActive = true;
       } else {
-        isParentOrSubmoduleActive = user.enabledModules.some(m => m.startsWith(`${parentMod}_`));
+        isParentOrSubmoduleActive = [...enabledSet].some(m => m.startsWith(`${parentMod}_`));
       }
     }
     
@@ -646,11 +648,11 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       return parentMod ? canPerform(parentMod, 'view') || isForceSalesPlatformUser : false;
     }
 
-    const hasRequired = requiredModules.some(mod => user.enabledModules.includes(mod));
+    const hasRequired = requiredModules.some(mod => enabledSet.has(mod.toUpperCase()));
     // La suscripción al módulo padre habilita todas sus vistas. La
     // suscripción granular (sin padre) solo habilita los submódulos
     // específicos contratados.
-    const hasParentModule = Boolean(parentMod && user.enabledModules.includes(parentMod));
+    const hasParentModule = Boolean(parentMod && (enabledSet.has(parentMod) || enabledSet.has(parentId.toUpperCase()) || parentId === 'proyectos'));
     const hasSubscription = isAlwaysAvailableSystemMenu || hasRequired || hasParentModule;
     if (!hasSubscription) return false;
 

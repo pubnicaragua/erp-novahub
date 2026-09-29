@@ -77,7 +77,7 @@ export interface IntlImportPackage {
   status: IntlImportPackageStatus;
   containerId?: string;
   containerNumber?: string;
-  container?: { id: string; containerNumber: string; status: IntlImportContainerStatus };
+  container?: { id: string; containerNumber: string; status: IntlImportContainerStatus; isClosed?: boolean };
   events?: IntlImportPackageEvent[];
   createdAt: string;
   updatedAt: string;

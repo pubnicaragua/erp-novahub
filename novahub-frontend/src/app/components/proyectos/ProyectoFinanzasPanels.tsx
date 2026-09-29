@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { DateField } from '../ui/DateField';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import {useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { suppliersService } from '../../services/compras.service';
 import { projectsService, type ProjectBudgetLine, type ProjectCost, type ProjectCostSource, type ProjectReport } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -35,7 +35,7 @@ export function ProyectoPresupuestoPanel({ projectId }: PanelsProps) {
   const baseCurrency = data?.baseCurrency || 'NIO';
   const canEdit = canPerform('PROJECTS', 'edit');
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['tenant-module', 'projects'] });
+  const invalidate = () => invalidateTenantQueries(queryClient);
   const mutation = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'delete'; id?: string; payload?: any }) => {
       if (args.type === 'create') return projectsService.createBudgetLine(projectId, args.payload);
@@ -192,7 +192,7 @@ export function ProyectoCostosPanel({ projectId }: PanelsProps) {
 
   const canCreate = canPerform('PROJECTS_EXPENSES', 'create');
   const canEdit = canPerform('PROJECTS_EXPENSES', 'edit');
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['tenant-module', 'projects'] });
+  const invalidate = () => invalidateTenantQueries(queryClient);
 
   const mutation = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'delete' | 'journal'; id?: string; payload?: any }) => {
@@ -341,7 +341,7 @@ function CostDialog({ editing, suppliers, onClose, onSubmit }: { editing?: Proje
           <div><Label>Monto</Label><Input type="number" min={0} value={form.amount} onChange={(e) => setForm((f: any) => ({ ...f, amount: e.target.value }))} placeholder="0.00" /></div>
           <div><Label>Moneda</Label><Select value={form.currency} onValueChange={(v) => setForm((f: any) => ({ ...f, currency: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>
           <div><Label>Fecha</Label><DateField value={form.costDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, costDate: v }))} /></div>
-          <div><Label>Proveedor</Label><Select value={form.supplierId || ''} onValueChange={(v) => setForm((f: any) => ({ ...f, supplierId: v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="">Sin proveedor</SelectItem>{suppliers.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Proveedor</Label><Select value={form.supplierId || 'NONE'} onValueChange={(v) => setForm((f: any) => ({ ...f, supplierId: v === 'NONE' ? '' : v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="NONE">Sin proveedor</SelectItem>{suppliers.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Referencia de documento</Label><Input value={form.documentReference} onChange={(e) => setForm((f: any) => ({ ...f, documentReference: e.target.value }))} placeholder="OC-0001 / factura..." /></div>
           <div><Label>Fuente</Label><Select value={form.source} onValueChange={(v) => setForm((f: any) => ({ ...f, source: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COST_SOURCE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Estado</Label><Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COST_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>

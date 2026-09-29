@@ -4,7 +4,9 @@ import process from 'node:process';
 
 const frontendDir = process.cwd();
 const backendDir = process.env.E2E_BACKEND_DIR?.trim()
-  || path.resolve(frontendDir, '..', '..', 'Backend');
+  || (fs.existsSync(path.resolve(frontendDir, '..', '..', 'BackendERPNH', 'src'))
+    ? path.resolve(frontendDir, '..', '..', 'BackendERPNH')
+    : path.resolve(frontendDir, '..', '..', 'Backend'));
 const sourceDir = path.join(backendDir, 'src');
 
 /**

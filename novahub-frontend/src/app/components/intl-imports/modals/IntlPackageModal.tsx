@@ -4,6 +4,7 @@ import { toast } from '@/app/services/toast';
 import { getApiErrorMessage } from '@/app/services/api';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
+import { Combobox } from '../../ui/Combobox';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +15,7 @@ import {
 } from '../../ui/dialog';
 import { intlImportsService, type IntlImportPackage } from '../../../services/intl-imports.service';
 import { customersService } from '@/app/services/ventas.service';
+import { suppliersService } from '@/app/services/compras.service';
 
 export interface IntlPackageModalProps {
   open: boolean;
@@ -33,6 +35,7 @@ export function IntlPackageModal({
   const isEditing = Boolean(packageToEdit);
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string; code?: string }>>([]);
+  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string; code?: string }>>([]);
 
   const [volumeMethod, setVolumeMethod] = useState<'dimensions' | 'direct'>('dimensions');
 
@@ -41,6 +44,7 @@ export function IntlPackageModal({
     originalTrackingNumber: '',
     customerId: '',
     customerName: '',
+    supplierId: '',
     supplierName: '',
     senderName: '',
     description: '',
@@ -65,13 +69,43 @@ export function IntlPackageModal({
         setCustomers(list as Array<{ id: string; name: string; code?: string }>);
       })
       .catch(() => undefined);
+
+    (suppliersService.getLookup as any)({ limit: 100 })
+      .then((res: unknown) => {
+        if (!mounted) return;
+        const list = Array.isArray(res)
+          ? res
+          : Array.isArray((res as { data?: unknown })?.data)
+            ? (res as { data: unknown[] }).data
+            : [];
+        setSuppliers(list as Array<{ id: string; name: string; code?: string }>);
+      })
+      .catch(() => undefined);
+
     return () => { mounted = false; };
   }, []);
+
+  const customerOptions = useMemo(() => {
+    return customers.map((c) => ({
+      value: c.name,
+      label: c.name,
+      description: c.code ? `[${c.code}] ${c.name}` : undefined,
+    }));
+  }, [customers]);
+
+  const supplierOptions = useMemo(() => {
+    return suppliers.map((s) => ({
+      value: s.name,
+      label: s.name,
+      description: s.code ? `[${s.code}] ${s.name}` : undefined,
+    }));
+  }, [suppliers]);
 
   useEffect(() => {
     if (open) {
       if (packageToEdit) {
         const custName = packageToEdit.customer?.name || packageToEdit.customerName || '';
+        const suppId = packageToEdit.supplierId || packageToEdit.supplier?.id || '';
         const suppName = packageToEdit.supplier?.name || packageToEdit.supplierName || '';
         const hasDims = Boolean(packageToEdit.lengthCm || packageToEdit.widthCm || packageToEdit.heightCm);
         setVolumeMethod(hasDims ? 'dimensions' : 'direct');
@@ -81,6 +115,7 @@ export function IntlPackageModal({
           originalTrackingNumber: packageToEdit.originalTrackingNumber || '',
           customerId: packageToEdit.customerId || packageToEdit.customer?.id || '',
           customerName: custName,
+          supplierId: suppId,
           supplierName: suppName,
           senderName: packageToEdit.senderName || '',
           description: packageToEdit.description || '',
@@ -98,6 +133,7 @@ export function IntlPackageModal({
           originalTrackingNumber: '',
           customerId: '',
           customerName: '',
+          supplierId: '',
           supplierName: '',
           senderName: '',
           description: '',
@@ -144,6 +180,7 @@ export function IntlPackageModal({
     try {
       setLoading(true);
       const finalCustomerId = form.customerId.trim() || undefined;
+      const finalSupplierId = form.supplierId.trim() || undefined;
       const finalVolume = computedVolumeCbm > 0 ? computedVolumeCbm : 0.001;
       const finalLength = volumeMethod === 'dimensions' ? (numericLength || undefined) : undefined;
       const finalWidth = volumeMethod === 'dimensions' ? (numericWidth || undefined) : undefined;
@@ -155,6 +192,7 @@ export function IntlPackageModal({
           originalTrackingNumber: form.originalTrackingNumber.trim() || undefined,
           customerId: finalCustomerId,
           customerName: form.customerName.trim() || undefined,
+          supplierId: finalSupplierId,
           supplierName: form.supplierName.trim() || undefined,
           senderName: form.senderName.trim() || undefined,
           description: form.description.trim() || undefined,
@@ -175,6 +213,7 @@ export function IntlPackageModal({
           originalTrackingNumber: form.originalTrackingNumber.trim() || undefined,
           customerId: finalCustomerId,
           customerName: form.customerName.trim() || undefined,
+          supplierId: finalSupplierId,
           supplierName: form.supplierName.trim() || undefined,
           senderName: form.senderName.trim() || undefined,
           description: form.description.trim() || undefined,
@@ -234,29 +273,24 @@ export function IntlPackageModal({
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
                 Cliente / Destinatario
               </label>
-              <Input
-                list="intl-unified-customers-list"
-                placeholder="Ej. Comercializadora Nova S.A."
+              <Combobox
+                options={customerOptions}
                 value={form.customerName}
-                onChange={(e) => {
-                  const text = e.target.value;
+                onChange={(val) => {
                   const matched = customers.find(
-                    (c) => c.name.toLowerCase() === text.toLowerCase() || c.code?.toLowerCase() === text.toLowerCase()
+                    (c) => c.name.toLowerCase() === val.toLowerCase() || c.code?.toLowerCase() === val.toLowerCase()
                   );
                   setForm((prev) => ({
                     ...prev,
-                    customerName: text,
+                    customerName: val,
                     customerId: matched ? matched.id : '',
                   }));
                 }}
+                placeholder="Ej. Comercializadora Nova S.A."
+                searchPlaceholder="Buscar cliente por nombre o código..."
+                emptyMessage="No se encontraron clientes coincidentes."
+                allowCustomValue={true}
               />
-              <datalist id="intl-unified-customers-list">
-                {customers.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.code ? `[${c.code}] ` : ''}{c.name}
-                  </option>
-                ))}
-              </datalist>
             </div>
           </div>
 
@@ -265,10 +299,23 @@ export function IntlPackageModal({
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
                 Remitente / Proveedor Origen
               </label>
-              <Input
-                placeholder="Ej. Shenzhen Trade Co."
+              <Combobox
+                options={supplierOptions}
                 value={form.supplierName}
-                onChange={(e) => setForm((prev) => ({ ...prev, supplierName: e.target.value }))}
+                onChange={(val) => {
+                  const matched = suppliers.find(
+                    (s) => s.name.toLowerCase() === val.toLowerCase() || s.code?.toLowerCase() === val.toLowerCase()
+                  );
+                  setForm((prev) => ({
+                    ...prev,
+                    supplierName: val,
+                    supplierId: matched ? matched.id : '',
+                  }));
+                }}
+                placeholder="Ej. Shenzhen Trade Co."
+                searchPlaceholder="Buscar proveedor por nombre o código..."
+                emptyMessage="No se encontraron proveedores coincidentes."
+                allowCustomValue={true}
               />
             </div>
 

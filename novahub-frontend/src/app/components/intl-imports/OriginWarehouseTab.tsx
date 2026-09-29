@@ -198,45 +198,44 @@ export function OriginWarehouseTab({ canCreate = true }: OriginWarehouseTabProps
         </form>
       </Card>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 border-border/70 flex items-center gap-3.5">
-          <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <Boxes className="size-5" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <Card className="p-3.5 border-border/70 flex items-center gap-3">
+          <div className="p-2 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+            <Boxes className="size-4" />
           </div>
-          <div>
-            <span className="text-[11px] font-medium text-muted-foreground block">En Bodega Origen</span>
-            <span className="text-xl font-bold font-mono text-foreground">{kpis.inWarehouse}</span>
-          </div>
-        </Card>
-
-        <Card className="p-4 border-border/70 flex items-center gap-3.5">
-          <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            <Scale className="size-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-muted-foreground block">Sin Contenedor</span>
-            <span className="text-xl font-bold font-mono text-foreground">{kpis.unassigned}</span>
+          <div className="min-w-0">
+            <span className="text-xs font-medium text-muted-foreground block truncate">En Bodega Origen</span>
+            <span className="text-lg font-bold font-mono text-foreground tabular-nums">{kpis.inWarehouse}</span>
           </div>
         </Card>
 
-        <Card className="p-4 border-border/70 flex items-center gap-3.5">
-          <div className="p-2.5 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
-            <FileSpreadsheet className="size-5" />
+        <Card className="p-3.5 border-border/70 flex items-center gap-3">
+          <div className="p-2 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
+            <Scale className="size-4" />
           </div>
-          <div>
-            <span className="text-[11px] font-medium text-muted-foreground block">Volumen Acumulado</span>
-            <span className="text-xl font-bold font-mono text-foreground">{kpis.totalCbm} CBM</span>
+          <div className="min-w-0">
+            <span className="text-xs font-medium text-muted-foreground block truncate">Sin Contenedor</span>
+            <span className="text-lg font-bold font-mono text-foreground tabular-nums">{kpis.unassigned}</span>
           </div>
         </Card>
 
-        <Card className="p-4 border-border/70 flex items-center gap-3.5">
-          <div className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-            <PackageCheck className="size-5" />
+        <Card className="p-3.5 border-border/70 flex items-center gap-3">
+          <div className="p-2 rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
+            <FileSpreadsheet className="size-4" />
           </div>
-          <div>
-            <span className="text-[11px] font-medium text-muted-foreground block">Disponibles para Retiro</span>
-            <span className="text-xl font-bold font-mono text-foreground">{kpis.available}</span>
+          <div className="min-w-0">
+            <span className="text-xs font-medium text-muted-foreground block truncate">Volumen Acumulado</span>
+            <span className="text-lg font-bold font-mono text-foreground tabular-nums">{kpis.totalCbm} CBM</span>
+          </div>
+        </Card>
+
+        <Card className="p-3.5 border-border/70 flex items-center gap-3">
+          <div className="p-2 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <PackageCheck className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-xs font-medium text-muted-foreground block truncate">Disponibles para Retiro</span>
+            <span className="text-lg font-bold font-mono text-foreground tabular-nums">{kpis.available}</span>
           </div>
         </Card>
       </div>

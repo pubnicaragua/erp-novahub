@@ -53,3 +53,12 @@ playwright-report/
 e2e/.auth/
 test-results/
 playwright-report/
+
+# AGENTS, AI rules and Playwright test artifacts
+AGENTS.md
+.playwright-mcp/
+.playwright-cli/
+output/playwright/
+ts_errors*.txt
+tsc_errors*.txt
+tmp-*.txt

@@ -23,6 +23,8 @@ import { PublicRsvpPage } from './components/public/PublicRsvpPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
 import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
 import { PublicTrackingPage } from './components/public/PublicTrackingPage';
+import { PublicProjectProgressPage } from './components/public/PublicProjectProgressPage';
+import { PublicSupplierQuotationPage } from './components/public/PublicSupplierQuotationPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
@@ -196,12 +198,16 @@ function DashboardLayout() {
   }, [searchParams, canPerform]);
 
   useEffect(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams);
     if (activeModule && activeModule !== 'overview') {
       params.set('m', activeModule);
+    } else {
+      params.delete('m');
     }
     if (activeSubModule) {
       params.set('sm', activeSubModule);
+    } else {
+      params.delete('sm');
     }
     const next = params.toString();
     const current = searchParams.toString();
@@ -578,6 +584,8 @@ function AppContent() {
   if (location.pathname.startsWith('/rsvp/') || location.pathname.startsWith('/public/rsvp/')) return <PublicRsvpPage />;
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
+  if (location.pathname.startsWith('/public/project/')) return <PublicProjectProgressPage />;
+  if (location.pathname.startsWith('/public/subquotation/')) return <PublicSupplierQuotationPage />;
   if (location.pathname.startsWith('/restaurant/menu/')) {
     const tableToken = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
     return <PublicRestaurantMenuPage tableToken={tableToken} />;

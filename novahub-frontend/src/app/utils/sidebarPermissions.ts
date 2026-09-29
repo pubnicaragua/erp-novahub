@@ -144,7 +144,8 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Proyectos
   { id: 'PROJECTS_LIST', label: 'Portafolio', parent: 'PROJECTS' },
   { id: 'PROJECTS_TASKS', label: 'Planificación y tareas', parent: 'PROJECTS' },
-  { id: 'PROJECTS_MILESTONES', label: 'Hitos', parent: 'PROJECTS' },
+  { id: 'PROJECTS_MILESTONES', label: 'Hitos y Avances', parent: 'PROJECTS' },
+  { id: 'PROJECTS_QUOTATIONS', label: 'Cotizaciones Materiales', parent: 'PROJECTS' },
   { id: 'PROJECTS_EXPENSES', label: 'Costos y presupuesto', parent: 'PROJECTS' },
   { id: 'PROJECTS_DOCUMENTS', label: 'Documentos', parent: 'PROJECTS' },
   { id: 'PROJECTS_TIME', label: 'Tiempo y cronograma', parent: 'PROJECTS' },
@@ -324,12 +325,17 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   calendario: ['ACTIVITIES_CALENDAR'],
   reuniones: ['ACTIVITIES_MEETINGS'],
 
-  proyectos: ['PROJECTS_LIST'],
-  'proyectos-tareas': ['PROJECTS_TASKS'],
-  'proyectos-hitos': ['PROJECTS_MILESTONES'],
-  'proyectos-costos': ['PROJECTS_EXPENSES'],
-  'proyectos-documentos': ['PROJECTS_DOCUMENTS'],
-  'proyectos-tiempo': ['PROJECTS_TIME'],
+  proyectos: ['PROJECTS_LIST', 'PROJECTS'],
+  'proyectos-resumen': ['PROJECTS_LIST', 'PROJECTS'],
+  'proyectos-cotizaciones': ['PROJECTS_QUOTATIONS', 'PROJECTS'],
+  'proyectos-planificacion': ['PROJECTS_TASKS', 'PROJECTS'],
+  'proyectos-costos': ['PROJECTS_EXPENSES', 'PROJECTS'],
+  'proyectos-actividades': ['PROJECTS_LIST', 'PROJECTS'],
+  // Legacy aliases fallback
+  'proyectos-tareas': ['PROJECTS_TASKS', 'PROJECTS'],
+  'proyectos-hitos': ['PROJECTS_MILESTONES', 'PROJECTS'],
+  'proyectos-documentos': ['PROJECTS_DOCUMENTS', 'PROJECTS'],
+  'proyectos-tiempo': ['PROJECTS_TIME', 'PROJECTS'],
 
   tickets: ['TICKETS_LIST'],
   // TICKETS_FAQS es el identificador histórico de esta misma vista.

@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { DateField } from '../ui/DateField';
-import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import {useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { usersService } from '../../services/users.service';
 import { projectsService, type ProjectMilestone, type ProjectTask } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -19,6 +19,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { TASK_STATUS_META, PRIORITY_META, TASK_STATUS_OPTIONS, PRIORITY_OPTIONS, formatDate, fromLocalDate, toLocalDate } from './shared';
+
+const EMPTY_SELECT_VALUE = '__none__';
 
 interface ProyectoPlanificacionPanelProps {
   projectId: string;
@@ -38,7 +40,7 @@ export function ProyectoPlanificacionPanel({ projectId }: ProyectoPlanificacionP
   const milestones = asList(milestonesQuery.data) as ProjectMilestone[];
   const users = asList(usersQuery.data);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['tenant-module', 'projects'] });
+  const invalidate = () => invalidateTenantQueries(queryClient);
 
   const taskMutations = useMutation({
     mutationFn: (args: { type: 'create' | 'update' | 'complete' | 'delete'; id?: string; payload?: any }) => {
@@ -215,7 +217,10 @@ function Cronograma({ tasks, milestones }: { tasks: ProjectTask[]; milestones: P
                   <div
                     title={item.label}
                     className={cn('absolute top-1/2 h-3.5 -translate-y-1/2 rounded-full',
-                      item.kind === 'milestone' ? 'bg-amber-400' : done ? 'bg-emerald-500' : 'bg-primary/70')}
+                      // El primary del tenant es verde, igual que emerald: por eso lo
+                      // planificado va atenuado y lo completado sólido, para que no
+                      // se confundan dos estados distintos en la misma barra.
+                      item.kind === 'milestone' ? 'bg-amber-400' : done ? 'bg-emerald-500' : 'bg-primary/30')}
                     style={{ left: `${start * 100}%`, width: `${width}%` }}
                   />
                 </div>
@@ -246,7 +251,8 @@ function TaskFormDialog({ editing, users, milestones, onClose, onSubmit }: {
     assignedToId: editing?.assignedToId || '',
     progress: editing?.progress != null ? String(editing.progress) : '',
   });
-  const valid = form.title?.trim();
+  const isDateInvalid = Boolean(form.startDate && form.dueDate && form.dueDate < form.startDate);
+  const valid = form.title?.trim() && !isDateInvalid;
   const submit = () => {
     if (!valid) return;
     onSubmit({
@@ -271,10 +277,15 @@ function TaskFormDialog({ editing, users, milestones, onClose, onSubmit }: {
           <div className="sm:col-span-2"><Label>Descripción</Label><Textarea rows={2} value={form.description} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} /></div>
           <div><Label>Estado</Label><Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Prioridad</Label><Select value={form.priority} onValueChange={(v) => setForm((f: any) => ({ ...f, priority: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PRIORITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Responsable</Label><Select value={form.assignedToId || ''} onValueChange={(v) => setForm((f: any) => ({ ...f, assignedToId: v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="">Sin asignar</SelectItem>{users.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Hito</Label><Select value={form.milestoneId || ''} onValueChange={(v) => setForm((f: any) => ({ ...f, milestoneId: v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="">Sin hito</SelectItem>{milestones.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Responsable</Label><Select value={form.assignedToId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, assignedToId: v === EMPTY_SELECT_VALUE ? '' : v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value={EMPTY_SELECT_VALUE}>Sin asignar</SelectItem>{users.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Hito</Label><Select value={form.milestoneId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, milestoneId: v === EMPTY_SELECT_VALUE ? '' : v }))}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value={EMPTY_SELECT_VALUE}>Sin hito</SelectItem>{milestones.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Inicio</Label><DateField value={form.startDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, startDate: v }))} /></div>
           <div><Label>Vence</Label><DateField value={form.dueDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, dueDate: v }))} /></div>
+          {isDateInvalid && (
+            <p className="sm:col-span-2 text-xs font-semibold text-destructive">
+              La fecha de vencimiento no puede ser anterior a la fecha de inicio.
+            </p>
+          )}
           <div><Label>Avance (%)</Label><Input type="number" min={0} max={100} value={form.progress} onChange={(e) => setForm((f: any) => ({ ...f, progress: e.target.value }))} placeholder="0" /></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={submit} disabled={!valid}>{editing ? 'Guardar' : 'Crear tarea'}</Button></DialogFooter>

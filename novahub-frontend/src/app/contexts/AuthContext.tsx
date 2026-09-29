@@ -235,6 +235,8 @@ const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
   'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_SECURITY',
   'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
   'CONFIG_DEPARTMENTS', 'CONFIG_NOVA_PULSE', 'AUDIT_LOGS',
+  'PROJECTS', 'PROYECTOS', 'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES',
+  'PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME',
 ]);
 
 const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
@@ -265,13 +267,21 @@ const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
   IMPORT_INTL_CONTAINERS: ['IMPORT_INTL_CONTAINERS', 'IMPORT_INTL', 'TRACKING', 'TRACKING_TRANSIT'],
   IMPORT_INTL_CUSTOMS: ['IMPORT_INTL_CUSTOMS', 'IMPORT_INTL', 'TRACKING', 'TRACKING_TRANSIT'],
   IMPORT_INTL_CONFIG: ['IMPORT_INTL_CONFIG', 'IMPORT_INTL', 'TRACKING', 'TRACKING_TRANSIT'],
+  PROJECTS: ['PROJECTS', 'PROYECTOS', 'PROJECTS_LIST'],
+  PROJECTS_LIST: ['PROJECTS_LIST', 'PROJECTS', 'PROYECTOS'],
+  PROJECTS_TASKS: ['PROJECTS_TASKS', 'PROJECTS', 'PROYECTOS'],
+  PROJECTS_MILESTONES: ['PROJECTS_MILESTONES', 'PROJECTS', 'PROYECTOS'],
+  PROJECTS_QUOTATIONS: ['PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS', 'PROYECTOS'],
+  PROJECTS_EXPENSES: ['PROJECTS_EXPENSES', 'PROJECTS', 'PROYECTOS'],
+  PROJECTS_DOCUMENTS: ['PROJECTS_DOCUMENTS', 'PROJECTS', 'PROYECTOS'],
+  PROJECTS_TIME: ['PROJECTS_TIME', 'PROJECTS', 'PROYECTOS'],
 };
 
 function tenantPermissionSubscriptionCandidates(module: string): string[] {
   const normalized = String(module || '').toUpperCase();
   const candidates = new Set(TENANT_PERMISSION_SUBSCRIPTION_ALIASES[normalized] || [normalized]);
   const parent = normalized.split('_')[0];
-  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'FINANCING', 'IMPORT'].includes(parent)) {
+  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'FINANCING', 'IMPORT', 'PROJECTS'].includes(parent)) {
     candidates.add(parent);
   }
   return [...candidates];
@@ -280,6 +290,7 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
 function tenantAdminHasModuleEnabled(user: User, module: string): boolean {
   const normalized = String(module || '').toUpperCase();
   if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized)) return true;
+  if (normalized === 'PROJECTS' || normalized === 'PROYECTOS' || normalized.startsWith('PROJECTS_')) return true;
   const enabledModules = new Set((user.enabledModules || []).map((item) => String(item).toUpperCase()));
   const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(normalized)
     && [...enabledModules].some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
@@ -851,7 +862,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Algunos módulos de sistema siempre están activos
     const coreModules = [
       'configuracion', 'dashboard', 'suscripciones', 'notificaciones',
-      'auditoria',
+      'auditoria', 'proyectos',
     ];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
@@ -918,8 +929,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS',
       ],
       proyectos: [
-        'PROJECTS',
-        'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME',
+        'PROJECTS', 'PROYECTOS',
+        'PROJECTS_LIST', 'PROJECTS_TASKS', 'PROJECTS_MILESTONES', 'PROJECTS_QUOTATIONS', 'PROJECTS_EXPENSES', 'PROJECTS_DOCUMENTS', 'PROJECTS_TIME',
       ],
       documentos: [
         'DOCUMENTS',

@@ -206,6 +206,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   PROJECTS_LIST: ['read', 'create', 'edit', 'delete', 'export'],
   PROJECTS_TASKS: ['read', 'create', 'edit', 'delete', 'export'],
   PROJECTS_MILESTONES: ['read', 'create', 'edit', 'delete', 'export'],
+  PROJECTS_QUOTATIONS: ['read', 'create', 'edit', 'delete', 'approve', 'export'],
   PROJECTS_EXPENSES: ['read', 'create', 'edit', 'export'],
   PROJECTS_DOCUMENTS: ['read', 'create', 'delete', 'export'],
   PROJECTS_TIME: ['read', 'export'],

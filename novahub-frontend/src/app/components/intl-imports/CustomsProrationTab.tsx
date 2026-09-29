@@ -215,41 +215,41 @@ export function CustomsProrationTab({ canApprove = true }: CustomsProrationTabPr
       ) : (
         <div className="space-y-6">
           {/* Header Resumen del Contenedor */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <Card className="p-4 border-border/70">
-              <span className="text-[11px] font-medium text-muted-foreground block">Contenedor</span>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
+            <Card className="p-3.5 border-border/70">
+              <span className="text-xs font-medium text-muted-foreground block truncate">Contenedor</span>
               <span className="text-lg font-bold font-mono text-foreground">{containerDetail.containerNumber}</span>
-              <div className="mt-1">
+              <div className="mt-0.5">
                 <Badge variant={containerDetail.isClosed ? 'default' : 'secondary'} className="text-[10px]">
                   {containerDetail.isClosed ? 'Cerrado y Prorrateado' : 'Abierto / En Proceso'}
                 </Badge>
               </div>
             </Card>
 
-            <Card className="p-4 border-border/70">
-              <span className="text-[11px] font-medium text-muted-foreground block">Volumen Consolidado</span>
+            <Card className="p-3.5 border-border/70">
+              <span className="text-xs font-medium text-muted-foreground block truncate">Volumen Consolidado</span>
               <span className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
                 {totalVolume.toFixed(3)} CBM
               </span>
-              <span className="text-[10px] text-muted-foreground block mt-1">
+              <span className="text-[10px] text-muted-foreground block mt-0.5 truncate">
                 {containerDetail.packagesCount || containerDetail.packages?.length || 0} paquetes contenidos
               </span>
             </Card>
 
-            <Card className="p-4 border-border/70">
-              <span className="text-[11px] font-medium text-muted-foreground block">Total Gastos Nacionalización</span>
+            <Card className="p-3.5 border-border/70">
+              <span className="text-xs font-medium text-muted-foreground block truncate">Total Gastos Nacionalización</span>
               <span className="text-lg font-bold font-mono text-foreground">${totalExpenses.toFixed(2)} USD</span>
-              <span className="text-[10px] text-muted-foreground block mt-1">Fletes, DAI, Manejo, Almacenaje</span>
+              <span className="text-[10px] text-muted-foreground block mt-0.5 truncate">Fletes, DAI, Manejo, Almacenaje</span>
             </Card>
 
-            <Card className="p-4 border-border/70 bg-emerald-500/10 border-emerald-500/30">
-              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 block">
+            <Card className="p-3.5 border-border/70 bg-emerald-500/10 border-emerald-500/30">
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 block truncate">
                 Costo Prorrateado Líquido
               </span>
               <span className="text-lg font-bold font-mono text-emerald-700 dark:text-emerald-300">
                 ${(totalVolume > 0 ? totalExpenses / totalVolume : 0).toFixed(2)} USD / CBM
               </span>
-              <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 block mt-1">
+              <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 block mt-0.5 truncate">
                 Costo asignado por cada metro cúbico
               </span>
             </Card>

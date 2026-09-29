@@ -149,7 +149,7 @@ export function ContainersTab({ canCreate = true }: ContainersTabProps) {
           </Button>
 
           {canCreate && (
-            <Button size="sm" onClick={() => setNewModalOpen(true)} className="bg-sky-600 hover:bg-sky-700 text-white">
+            <Button size="sm" onClick={() => setNewModalOpen(true)} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white">
               <Plus className="size-4 mr-1.5" />
               Nuevo Contenedor
             </Button>
