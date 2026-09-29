@@ -53,6 +53,20 @@ function amountOf(item: PlatformQuote['items'][number]) {
   return Math.max(0, Number(item.quantity || 0)) * Math.max(0, Number(item.unitPrice || 0));
 }
 
+function billingOptionsOf(item: PlatformQuote['items'][number]) {
+  const options = Array.isArray(item.billingOptions)
+    ? item.billingOptions
+      .map((option) => ({ periodicity: periodicityLabel(option?.periodicity), unitPrice: Math.max(0, Number(option?.unitPrice || 0)) }))
+      .filter((option) => option.periodicity !== '-')
+    : [];
+  return options.length ? options : [{ periodicity: periodicityLabel(item.periodicity), unitPrice: Math.max(0, Number(item.unitPrice || 0)) }];
+}
+
+function monthlyAmountOf(item: PlatformQuote['items'][number]) {
+  const monthly = billingOptionsOf(item).find((option) => option.periodicity.toLowerCase().includes('mens'));
+  return monthly ? Math.max(0, Number(item.quantity || 0)) * monthly.unitPrice : 0;
+}
+
 function discountAmountOf(item: PlatformQuote['items'][number]) {
   const amount = amountOf(item);
   const value = Math.max(0, Number(item.discountValue || 0));
@@ -78,7 +92,7 @@ export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
   const optionalSubtotal = charged.filter((item) => !isBase(item) || item.isOptional).reduce((sum, item) => sum + amountOf(item), 0);
   const gross = subtotal + optionalSubtotal;
   const initialTotal = charged.filter((item) => !String(item.periodicity || '').toLowerCase().includes('mens')).reduce((sum, item) => sum + amountOf(item), 0);
-  const monthlyTotal = charged.filter((item) => String(item.periodicity || '').toLowerCase().includes('mens')).reduce((sum, item) => sum + amountOf(item), 0);
+  const monthlyTotal = charged.reduce((sum, item) => sum + monthlyAmountOf(item), 0);
   const displaySubtotal = Math.max(0, Number(quote.displaySubtotal ?? gross));
   const displayInitialTotal = Math.max(0, Number(quote.displayInitialTotal ?? initialTotal));
   const displayMonthlyTotal = Math.max(0, Number(quote.displayMonthlyTotal ?? monthlyTotal));
@@ -90,11 +104,14 @@ export function calculatePlatformQuoteTotals(quote: PlatformQuote) {
 }
 
 function itemPriceLabel(item: PlatformQuote['items'][number], currency: PlatformQuote['currency']) {
-  return isIncludedItem(item) ? 'Incluido' : money(item.unitPrice, currency);
+  if (isIncludedItem(item)) return 'Incluido';
+  return billingOptionsOf(item).map((option) => `${option.periodicity}: ${money(option.unitPrice, currency)}`).join('\n');
 }
 
 function itemBillingLabel(item: PlatformQuote['items'][number]) {
-  return isIncludedItem(item) ? 'Valor agregado' : periodicityLabel(item.periodicity);
+  if (isIncludedItem(item)) return 'Valor agregado';
+  const primary = periodicityLabel(item.periodicity);
+  return billingOptionsOf(item).map((option) => `${option.periodicity}${option.periodicity === primary ? ' · principal' : ''}`).join('\n');
 }
 
 export interface PdfOptions {
@@ -275,7 +292,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   autoTable(doc, {
     startY: y,
     margin: { top: 39, left: margin, right: margin, bottom: 22 },
-    head: [showDiscount ? ['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Cantidad', 'Precio unit.', 'Cobro', 'Descripción / alcance']],
+    head: [showDiscount ? ['#', 'Concepto', 'Cantidad', 'Precio / modalidades', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Cantidad', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: {
@@ -566,8 +583,8 @@ export async function downloadPlatformQuoteCommercialReport(
     startY: y,
     margin: { top: 38, left: margin, right: margin, bottom: 22 },
     head: [hasCondition
-      ? ['#', 'Concepto', 'Cant.', 'Precio unit.', 'Cobro', 'Descripción / alcance', 'Condición comercial']
-      : ['#', 'Concepto', 'Cant.', 'Precio unit.', 'Cobro', 'Descripción / alcance']],
+      ? ['#', 'Concepto', 'Cant.', 'Precio / modalidades', 'Cobro', 'Descripción / alcance', 'Condición comercial']
+      : ['#', 'Concepto', 'Cant.', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 6.8, textColor: ink, lineColor: line, lineWidth: 0.15, cellPadding: 1.9, overflow: 'linebreak', valign: 'middle' },
