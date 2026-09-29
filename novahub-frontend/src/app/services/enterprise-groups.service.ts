@@ -455,6 +455,7 @@ export interface PlatformQuoteItem {
   description: string;
   detail?: string | null;
   periodicity?: string | null;
+  billingOptions?: PlatformQuoteBillingOption[] | null;
   quantity: number;
   unitPrice: number;
   amount?: number;
@@ -462,6 +463,11 @@ export interface PlatformQuoteItem {
   discountValue?: number;
   isOptional: boolean;
   sortOrder?: number;
+}
+
+export interface PlatformQuoteBillingOption {
+  periodicity: string;
+  unitPrice: number;
 }
 
 export interface PlatformQuote {
